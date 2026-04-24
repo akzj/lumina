@@ -31,7 +31,16 @@ type Component struct {
 	// Component tree
 	Parent       *Component     // Parent component (nil for root)
 	ChildComps   []*Component   // Child component instances
-	mu           sync.RWMutex
+	// Error boundary
+	IsErrorBoundary bool            // true if this component catches child render errors
+	FallbackFn      *luaFunctionRef // fallback(errorMsg) → VNode
+	CaughtError     string          // last caught error message (empty = no error)
+	// Memoization
+	Memoized  bool           // true if wrapped with lumina.memo()
+	LastProps map[string]any // props from last successful render (for memo comparison)
+	// Context
+	ContextValues map[int64]any // context ID → value (provided by this component)
+	mu            sync.RWMutex
 }
 
 // luaFunctionRef holds a reference to a Lua function on the stack.
@@ -201,6 +210,15 @@ func GetCurrentComponent() *Component {
 	globalRegistry.mu.RLock()
 	defer globalRegistry.mu.RUnlock()
 	return globalRegistry.current
+}
+
+// ClearComponents removes all components from the global registry.
+// Used for test isolation.
+func ClearComponents() {
+	globalRegistry.mu.Lock()
+	globalRegistry.components = make(map[string]*Component)
+	globalRegistry.current = nil
+	globalRegistry.mu.Unlock()
 }
 
 // GetComponentByID returns a component by its ID.

@@ -23,6 +23,11 @@ type VNode struct {
 	ComponentRef *Component
 	// ComponentKey is a stable identity for reconciliation of component children.
 	ComponentKey string
+	// Portal fields
+	IsPortal     bool   // true if this is a portal node
+	PortalTarget string // target container ID for portal rendering
+	// Ref support (forwardRef)
+	Ref string // ref ID for forwardRef
 }
 
 // NewVNode creates a new VNode.
@@ -64,6 +69,11 @@ func LuaVNodeToVNode(L *lua.State, idx int) *VNode {
 	// Handle component type: instantiate and render the component
 	if vnode.Type == "component" {
 		return luaComponentToVNode(L, tableIdx)
+	}
+
+	// Handle portal type: store content and target for later rendering
+	if vnode.Type == "portal" {
+		return luaPortalToVNode(L, tableIdx)
 	}
 
 	// Get content field (text nodes)
@@ -124,7 +134,6 @@ func luaComponentToVNode(L *lua.State, idx int) *VNode {
 	L.GetField(absIdx, "_factory")
 	if L.Type(-1) != lua.TypeTable {
 		L.Pop(1)
-		// Fallback: return an empty box
 		return NewVNode("box")
 	}
 	factoryIdx := L.GetTop()
@@ -134,7 +143,23 @@ func luaComponentToVNode(L *lua.State, idx int) *VNode {
 	factoryName, _ := L.ToString(-1)
 	L.Pop(1)
 
-	// Get _props
+	// Check for error boundary flag
+	L.GetField(factoryIdx, "_isErrorBoundary")
+	isErrorBoundary := L.ToBoolean(-1)
+	L.Pop(1)
+
+	// Check for memoized flag
+	L.GetField(factoryIdx, "_memoized")
+	isMemoized := L.ToBoolean(-1)
+	L.Pop(1)
+
+	// Check for forwardRef flag
+	L.GetField(factoryIdx, "_forwardRef")
+	isForwardRef := L.ToBoolean(-1)
+	L.Pop(1)
+	_ = isForwardRef // used for tagging only
+
+	// Get _props as Go map for prop comparison/storage
 	L.GetField(absIdx, "_props")
 	var props map[string]any
 	if L.Type(-1) == lua.TypeTable {
@@ -174,6 +199,22 @@ func luaComponentToVNode(L *lua.State, idx int) *VNode {
 			return NewVNode("box")
 		}
 
+		// Set special flags
+		if isErrorBoundary {
+			comp.IsErrorBoundary = true
+			// Store fallback function ref
+			L.GetField(factoryIdx, "_fallback")
+			if L.Type(-1) == lua.TypeFunction {
+				refID := L.Ref(lua.RegistryIndex)
+				comp.FallbackFn = &luaFunctionRef{RefID: refID}
+			} else {
+				L.Pop(1)
+			}
+		}
+		if isMemoized {
+			comp.Memoized = true
+		}
+
 		// Call init function if present
 		if comp.PushInitFn(L) {
 			L.PushAny(props)
@@ -201,6 +242,13 @@ func luaComponentToVNode(L *lua.State, idx int) *VNode {
 
 	L.Pop(1) // pop _factory
 
+	// React.memo: skip render if props unchanged
+	if comp.Memoized && comp.LastVNode != nil && comp.LastProps != nil {
+		if propsEqual(comp.LastProps, props) {
+			return comp.LastVNode
+		}
+	}
+
 	// Render the component
 	prevComp := GetCurrentComponent()
 	SetCurrentComponent(comp)
@@ -215,38 +263,59 @@ func luaComponentToVNode(L *lua.State, idx int) *VNode {
 	fields := map[string]any{
 		"_instance": comp.ID,
 	}
-	// Copy state fields
 	comp.mu.RLock()
 	for k, v := range comp.State {
 		fields[k] = v
 	}
 	comp.mu.RUnlock()
-	// Add props as nested table
 	fields["props"] = props
 
 	L.NewTableFrom(fields)
-	// Also set individual props at top level for backward compat
 	for k, v := range props {
 		if k != "children" {
 			L.PushAny(v)
 			L.SetField(-2, k)
 		}
 	}
-	// Handle children prop: push as Lua table for unpack
-	if childrenProp, ok := props["children"]; ok {
-		L.PushAny(childrenProp)
-		L.SetField(-2, "children")
+	// Copy children directly from the original Lua _props table (preserves Lua table refs
+	// like createElement results that contain _factory with function references)
+	instanceIdx := L.AbsIndex(-1)
+	L.GetField(absIdx, "_props")
+	if L.Type(-1) == lua.TypeTable {
+		L.GetField(-1, "children")
+		if !L.IsNoneOrNil(-1) {
+			L.SetField(instanceIdx, "children")
+		} else {
+			L.Pop(1) // pop nil children
+		}
+		L.Pop(1) // pop _props
+	} else {
+		L.Pop(1) // pop non-table _props
 	}
 
 	status := L.PCall(1, 1, 0)
-	SetCurrentComponent(prevComp)
+	// NOTE: Don't restore prevComp yet — child components in render output
+	// need to see 'comp' as their parent for error boundary + tree tracking.
 
 	if status != lua.OK {
-		L.Pop(1) // pop error
-		return NewVNode("box")
+		// Render error — try to find an error boundary
+		errMsg, _ := L.ToString(-1)
+		L.Pop(1)
+		SetCurrentComponent(prevComp)
+
+		boundary := findErrorBoundary(comp)
+		if boundary != nil {
+			boundary.CaughtError = errMsg
+			return renderErrorFallback(L, boundary, errMsg)
+		}
+		// No boundary — return error text node
+		errNode := NewVNode("text")
+		errNode.Content = "Render error: " + errMsg
+		return errNode
 	}
 
-	// Recursively convert the rendered VNode
+	// Recursively convert the rendered VNode (comp is still current component,
+	// so child components will be registered as children of comp)
 	var resultVNode *VNode
 	if L.Type(-1) == lua.TypeTable {
 		resultVNode = LuaVNodeToVNode(L, -1)
@@ -254,15 +323,79 @@ func luaComponentToVNode(L *lua.State, idx int) *VNode {
 		resultVNode = NewVNode("box")
 	}
 	L.Pop(1) // pop render result
+	SetCurrentComponent(prevComp)
 
 	// Tag the VNode with the component reference
 	resultVNode.ComponentRef = comp
 	resultVNode.ComponentKey = compKey
 
-	// Store for diffing
+	// Store for diffing and memo
 	comp.LastVNode = resultVNode
+	if comp.Memoized {
+		comp.LastProps = copyProps(props)
+	}
 
 	return resultVNode
+}
+
+// findErrorBoundary walks up the component tree to find the nearest error boundary.
+func findErrorBoundary(comp *Component) *Component {
+	for c := comp.Parent; c != nil; c = c.Parent {
+		if c.IsErrorBoundary {
+			return c
+		}
+	}
+	return nil
+}
+
+// renderErrorFallback calls an error boundary's fallback function.
+func renderErrorFallback(L *lua.State, boundary *Component, errMsg string) *VNode {
+	if boundary.FallbackFn == nil {
+		node := NewVNode("text")
+		node.Content = "Error: " + errMsg
+		return node
+	}
+
+	L.RawGetI(lua.RegistryIndex, int64(boundary.FallbackFn.RefID))
+	if L.Type(-1) != lua.TypeFunction {
+		L.Pop(1)
+		node := NewVNode("text")
+		node.Content = "Error: " + errMsg
+		return node
+	}
+
+	L.PushString(errMsg)
+	status := L.PCall(1, 1, 0)
+	if status != lua.OK {
+		L.Pop(1)
+		node := NewVNode("text")
+		node.Content = "Error: " + errMsg
+		return node
+	}
+
+	var resultVNode *VNode
+	if L.Type(-1) == lua.TypeTable {
+		resultVNode = LuaVNodeToVNode(L, -1)
+	} else {
+		resultVNode = NewVNode("text")
+		resultVNode.Content = "Error: " + errMsg
+	}
+	L.Pop(1)
+
+	resultVNode.ComponentRef = boundary
+	return resultVNode
+}
+
+// copyProps creates a shallow copy of a props map.
+func copyProps(props map[string]any) map[string]any {
+	if props == nil {
+		return nil
+	}
+	cp := make(map[string]any, len(props))
+	for k, v := range props {
+		cp[k] = v
+	}
+	return cp
 }
 
 // findChildComponent looks for an existing child component by factory name and key.
@@ -277,6 +410,35 @@ func findChildComponent(parent *Component, factoryName, key string) *Component {
 		}
 	}
 	return nil
+}
+
+
+
+// luaPortalToVNode handles a VNode table with type="portal".
+// It extracts _content and _target, converts content to VNode, and marks it as portal.
+func luaPortalToVNode(L *lua.State, tableIdx int) *VNode {
+	absIdx := L.AbsIndex(tableIdx)
+
+	// Get target ID
+	L.GetField(absIdx, "_target")
+	targetID, _ := L.ToString(-1)
+	L.Pop(1)
+
+	// Get content VNode
+	L.GetField(absIdx, "_content")
+	var contentVNode *VNode
+	if L.Type(-1) == lua.TypeTable {
+		contentVNode = LuaVNodeToVNode(L, -1)
+	} else {
+		contentVNode = NewVNode("box")
+	}
+	L.Pop(1)
+
+	// Mark as portal
+	contentVNode.IsPortal = true
+	contentVNode.PortalTarget = targetID
+
+	return contentVNode
 }
 
 
