@@ -4,6 +4,7 @@ package lumina
 import (
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/akzj/go-lua/pkg/lua"
 )
@@ -1073,4 +1074,105 @@ func IsStrictMode() bool {
 // SetStrictMode enables or disables strict mode.
 func SetStrictMode(enabled bool) {
 	strictModeEnabled = enabled
+}
+
+// useAnimation implements the React-style animation hook.
+// Usage: local anim = lumina.useAnimation({ from=0, to=1, duration=300, easing="easeInOut", loop=false })
+// Returns: { value = <current>, done = <bool> }
+func useAnimation(L *lua.State) int {
+	comp := GetCurrentComponent()
+	if comp == nil {
+		// No component context — return a static table
+		L.NewTable()
+		L.PushNumber(0)
+		L.SetField(-2, "value")
+		L.PushBoolean(true)
+		L.SetField(-2, "done")
+		return 1
+	}
+
+	idx := comp.hookIndex
+	comp.hookIndex++
+
+	// Parse config from Lua table argument
+	from := 0.0
+	to := 1.0
+	duration := int64(300)
+	easingName := "linear"
+	loop := false
+
+	if L.Type(1) == lua.TypeTable {
+		L.GetField(1, "from")
+		if !L.IsNoneOrNil(-1) {
+			from, _ = L.ToNumber(-1)
+		}
+		L.Pop(1)
+
+		L.GetField(1, "to")
+		if !L.IsNoneOrNil(-1) {
+			to, _ = L.ToNumber(-1)
+		}
+		L.Pop(1)
+
+		L.GetField(1, "duration")
+		if !L.IsNoneOrNil(-1) {
+			d, _ := L.ToNumber(-1)
+			duration = int64(d)
+		}
+		L.Pop(1)
+
+		L.GetField(1, "easing")
+		if !L.IsNoneOrNil(-1) {
+			easingName, _ = L.ToString(-1)
+		}
+		L.Pop(1)
+
+		L.GetField(1, "loop")
+		if !L.IsNoneOrNil(-1) {
+			loop = L.ToBoolean(-1)
+		}
+		L.Pop(1)
+	}
+
+	// On first render for this hook index, create the animation
+	animID := fmt.Sprintf("%s:anim:%d", comp.ID, idx)
+
+	if idx >= len(comp.animationHooks) {
+		anim := &AnimationState{
+			ID:        animID,
+			StartTime: timeNowMs(),
+			Duration:  duration,
+			From:      from,
+			To:        to,
+			Current:   from,
+			Easing:    easingByName(easingName),
+			Loop:      loop,
+			CompID:    comp.ID,
+		}
+		globalAnimationManager.Start(anim)
+		comp.animationHooks = append(comp.animationHooks, animID)
+	}
+
+	// Get current animation state
+	anim := globalAnimationManager.Get(animID)
+	currentVal := from
+	done := false
+	if anim != nil {
+		currentVal = anim.Current
+		done = anim.Done
+	}
+
+	// Return { value = current, done = done }
+	L.NewTable()
+	L.PushNumber(currentVal)
+	L.SetField(-2, "value")
+	L.PushBoolean(done)
+	L.SetField(-2, "done")
+	return 1
+}
+
+// timeNowMs returns the current time in milliseconds.
+// This is a variable so tests can override it.
+var timeNowMs = func() int64 {
+	return time.Now().UnixMilli()
 }
