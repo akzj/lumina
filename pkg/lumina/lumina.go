@@ -34,13 +34,11 @@ func luaLoader(L *lua.State) int {
 			return 1
 		},
 		"info": func(L *lua.State) int {
-			L.NewTable()
-			L.PushString("0.3.0")
-			L.SetField(-2, "version")
-			L.PushString("Lumina Terminal UI Framework")
-			L.SetField(-2, "description")
-			L.PushInteger(2024)
-			L.SetField(-2, "year")
+			L.NewTableFrom(map[string]any{
+				"version":     "0.3.0",
+				"description": "Lumina Terminal UI Framework",
+				"year":        int64(2024),
+			})
 			return 1
 		},
 		
@@ -247,13 +245,11 @@ func createComponent(L *lua.State) int {
 	}
 
 	// Create component instance table for Lua
-	L.NewTable()
-	L.PushString(comp.ID)
-	L.SetField(-2, "_id")
-	L.PushString(comp.Type)
-	L.SetField(-2, "type")
-	L.PushBoolean(true)
-	L.SetField(-2, "_isInstance")
+	L.NewTableFrom(map[string]any{
+		"_id":         comp.ID,
+		"type":        comp.Type,
+		"_isInstance": true,
+	})
 
 	// Push component userdata as hidden field
 	L.NewUserdata(0, 0)
@@ -340,20 +336,14 @@ func renderComponent(L *lua.State) int {
 	}
 
 	// Create instance table for render
-	L.NewTable()
-	L.PushString("_instance")
-	L.PushString(comp.ID)
-	L.SetTable(-3)
-	L.PushString("_props")
-	L.PushAny(props)
-	L.SetTable(-3)
-
-	// Copy component state into instance table so Lua render can access it
-	for k, v := range comp.State {
-		L.PushString(k)
-		L.PushAny(v)
-		L.SetTable(-3)
+	fields := map[string]any{
+		"_instance": comp.ID,
+		"_props":    props,
 	}
+	for k, v := range comp.State {
+		fields[k] = v
+	}
+	L.NewTableFrom(fields)
 
 	// Call render(instance)
 	status := L.PCall(1, 1, 0)
@@ -386,17 +376,14 @@ func renderComponent(L *lua.State) int {
 
 // createState creates a component state container.
 func createState(L *lua.State) int {
-	L.NewTable()
-	L.PushString("type")
-	L.SetField(-2, "state")
-	L.PushString("LuminaState")
-	L.SetField(-2, "stateType")
-
-	if !L.IsNoneOrNil(1) {
-		L.PushValue(1)
-		L.SetField(-2, "value")
+	fields := map[string]any{
+		"state":     "type",
+		"stateType": "LuminaState",
 	}
-
+	if !L.IsNoneOrNil(1) {
+		fields["value"] = L.ToAny(1)
+	}
+	L.NewTableFrom(fields)
 	return 1
 }
 
