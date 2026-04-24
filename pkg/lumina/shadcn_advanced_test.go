@@ -227,3 +227,163 @@ func TestShadcn_InitModule_WithForms(t *testing.T) {
 		t.Fatalf("InitModule with forms: %v", err)
 	}
 }
+
+// Phase 23: Overlay component require tests
+
+func TestShadcn_Dialog(t *testing.T) {
+	L := shadcnAdvState(t)
+	defer L.Close()
+	err := L.DoString(`
+		local Dialog = require("shadcn.dialog")
+		assert(Dialog ~= nil)
+		assert(Dialog.isComponent == true)
+		assert(Dialog.name == "ShadcnDialog")
+	`)
+	if err != nil {
+		t.Fatalf("Dialog: %v", err)
+	}
+}
+
+func TestShadcn_AlertDialog(t *testing.T) {
+	L := shadcnAdvState(t)
+	defer L.Close()
+	err := L.DoString(`
+		local AlertDialog = require("shadcn.alert_dialog")
+		assert(AlertDialog ~= nil)
+		assert(AlertDialog.isComponent == true)
+	`)
+	if err != nil {
+		t.Fatalf("AlertDialog: %v", err)
+	}
+}
+
+func TestShadcn_Sheet(t *testing.T) {
+	L := shadcnAdvState(t)
+	defer L.Close()
+	err := L.DoString(`
+		local Sheet = require("shadcn.sheet")
+		assert(Sheet ~= nil)
+		assert(Sheet.isComponent == true)
+	`)
+	if err != nil {
+		t.Fatalf("Sheet: %v", err)
+	}
+}
+
+func TestShadcn_Drawer(t *testing.T) {
+	L := shadcnAdvState(t)
+	defer L.Close()
+	err := L.DoString(`
+		local Drawer = require("shadcn.drawer")
+		assert(Drawer ~= nil)
+		assert(Drawer.isComponent == true)
+	`)
+	if err != nil {
+		t.Fatalf("Drawer: %v", err)
+	}
+}
+
+func TestShadcn_DropdownMenu(t *testing.T) {
+	L := shadcnAdvState(t)
+	defer L.Close()
+	err := L.DoString(`
+		local DropdownMenu = require("shadcn.dropdown_menu")
+		assert(DropdownMenu ~= nil)
+		assert(DropdownMenu.isComponent == true)
+	`)
+	if err != nil {
+		t.Fatalf("DropdownMenu: %v", err)
+	}
+}
+
+func TestShadcn_ContextMenu(t *testing.T) {
+	L := shadcnAdvState(t)
+	defer L.Close()
+	err := L.DoString(`
+		local ContextMenu = require("shadcn.context_menu")
+		assert(ContextMenu ~= nil)
+		assert(ContextMenu.isComponent == true)
+	`)
+	if err != nil {
+		t.Fatalf("ContextMenu: %v", err)
+	}
+}
+
+func TestShadcn_Popover(t *testing.T) {
+	L := shadcnAdvState(t)
+	defer L.Close()
+	err := L.DoString(`
+		local Popover = require("shadcn.popover")
+		assert(Popover ~= nil)
+		assert(Popover.isComponent == true)
+	`)
+	if err != nil {
+		t.Fatalf("Popover: %v", err)
+	}
+}
+
+func TestShadcn_Tooltip(t *testing.T) {
+	L := shadcnAdvState(t)
+	defer L.Close()
+	err := L.DoString(`
+		local Tooltip = require("shadcn.tooltip")
+		assert(Tooltip ~= nil)
+		assert(Tooltip.isComponent == true)
+	`)
+	if err != nil {
+		t.Fatalf("Tooltip: %v", err)
+	}
+}
+
+func TestShadcn_HoverCard(t *testing.T) {
+	L := shadcnAdvState(t)
+	defer L.Close()
+	err := L.DoString(`
+		local HoverCard = require("shadcn.hover_card")
+		assert(HoverCard ~= nil)
+		assert(HoverCard.isComponent == true)
+	`)
+	if err != nil {
+		t.Fatalf("HoverCard: %v", err)
+	}
+}
+
+// Render tests for overlay components
+
+func TestShadcn_DialogRender(t *testing.T) {
+	L := shadcnAdvState(t)
+	defer L.Close()
+	err := L.DoString(`
+		local Dialog = require("shadcn.dialog")
+		local tree = lumina.render(Dialog, {
+			open = true,
+			title = "Edit Profile",
+			description = "Make changes to your profile here.",
+		})
+		assert(tree ~= nil)
+	`)
+	if err != nil {
+		t.Fatalf("DialogRender: %v", err)
+	}
+}
+
+func TestShadcn_DropdownMenuRender(t *testing.T) {
+	L := shadcnAdvState(t)
+	defer L.Close()
+	err := L.DoString(`
+		local DropdownMenu = require("shadcn.dropdown_menu")
+		local tree = lumina.render(DropdownMenu, {
+			open = true,
+			trigger = "Actions",
+			items = {
+				{ label = "Edit", shortcut = "Ctrl+E" },
+				{ separator = true },
+				{ label = "Delete", shortcut = "Ctrl+D" },
+			},
+		})
+		assert(tree ~= nil)
+	`)
+	if err != nil {
+		t.Fatalf("DropdownMenuRender: %v", err)
+	}
+}

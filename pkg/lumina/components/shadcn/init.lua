@@ -37,4 +37,14 @@ shadcn.Combobox     = require("shadcn.combobox")
 shadcn.NativeSelect = require("shadcn.native_select")
 shadcn.Form         = require("shadcn.form")
 
+-- Phase 23: Overlay components
+shadcn.Dialog        = require("shadcn.dialog")
+shadcn.AlertDialog   = require("shadcn.alert_dialog")
+shadcn.Sheet         = require("shadcn.sheet")
+shadcn.Drawer        = require("shadcn.drawer")
+shadcn.DropdownMenu  = require("shadcn.dropdown_menu")
+shadcn.ContextMenu   = require("shadcn.context_menu")
+shadcn.Popover       = require("shadcn.popover")
+shadcn.Tooltip       = require("shadcn.tooltip")
+shadcn.HoverCard     = require("shadcn.hover_card")
 return shadcn
