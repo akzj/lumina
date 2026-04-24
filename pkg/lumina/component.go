@@ -29,6 +29,7 @@ type Component struct {
 	layoutEffectHooks  []*LayoutEffectHook  // useLayoutEffect hooks in call order
 	memoHooks          []*MemoHook          // useMemo hooks in call order
 	externalStoreHooks []*ExternalStoreHook // useSyncExternalStore hooks
+	animationHooks     []string             // animation IDs owned by this component
 	hookIndex          int                  // current hook index during render
 	debugValues        []string             // useDebugValue labels (reset each render)
 	// Component tree
