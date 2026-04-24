@@ -72,7 +72,55 @@ type EventBus struct {
 	focusStack   []string                // component ID stack for focus management
 	focusedID    string
 	focusableIDs []string // ordered list of focusable component IDs
+	vnodeTree    *VNodeTree // current VNode tree for event bubbling
 	mu           sync.RWMutex
+}
+
+// VNodeTree tracks parent-child relationships in the VNode tree for event bubbling.
+type VNodeTree struct {
+	Root    *VNode
+	Parents map[*VNode]*VNode  // child → parent mapping
+	ByID    map[string]*VNode  // id → vnode lookup
+}
+
+// BuildVNodeTree constructs a VNodeTree from a root VNode.
+func BuildVNodeTree(root *VNode) *VNodeTree {
+	tree := &VNodeTree{
+		Root:    root,
+		Parents: make(map[*VNode]*VNode),
+		ByID:    make(map[string]*VNode),
+	}
+	buildVNodeTreeRecursive(tree, root, nil)
+	return tree
+}
+
+func buildVNodeTreeRecursive(tree *VNodeTree, node, parent *VNode) {
+	if node == nil {
+		return
+	}
+	if parent != nil {
+		tree.Parents[node] = parent
+	}
+	if id, ok := node.Props["id"].(string); ok && id != "" {
+		tree.ByID[id] = node
+	}
+	for _, child := range node.Children {
+		buildVNodeTreeRecursive(tree, child, node)
+	}
+}
+
+// SetVNodeTree sets the current VNode tree for event bubbling.
+func (eb *EventBus) SetVNodeTree(tree *VNodeTree) {
+	eb.mu.Lock()
+	eb.vnodeTree = tree
+	eb.mu.Unlock()
+}
+
+// GetVNodeTree returns the current VNode tree.
+func (eb *EventBus) GetVNodeTree() *VNodeTree {
+	eb.mu.RLock()
+	defer eb.mu.RUnlock()
+	return eb.vnodeTree
 }
 
 // Global event bus
@@ -105,7 +153,7 @@ func (eb *EventBus) Off(eventType string, compID string) {
 	eb.handlers[eventType] = filtered
 }
 
-// Emit fires an event to all registered handlers.
+// Emit fires an event to all registered handlers, then bubbles up the VNode tree.
 func (eb *EventBus) Emit(event *Event) {
 	eb.mu.RLock()
 	defer eb.mu.RUnlock()
@@ -120,13 +168,57 @@ func (eb *EventBus) Emit(event *Event) {
 		}
 	}
 
-	// Emit to registered handlers
+	// Emit to registered handlers (direct match)
 	handlers := eb.handlers[event.Type]
 	for _, h := range handlers {
-		h.handler(event)
+		if event.Target == "" || h.componentID == event.Target {
+			h.handler(event)
+			if event.IsStopped() {
+				return
+			}
+		}
+	}
+
+	// Bubble up the VNode tree if we have one and event has a target
+	if !event.IsStopped() && eb.vnodeTree != nil && event.Target != "" {
+		eb.bubbleUp(event)
+	}
+}
+
+// bubbleUp walks up the VNode tree from the target, invoking handlers at each level.
+func (eb *EventBus) bubbleUp(event *Event) {
+	tree := eb.vnodeTree
+	if tree == nil {
+		return
+	}
+
+	// Find the target VNode
+	targetNode, ok := tree.ByID[event.Target]
+	if !ok {
+		return
+	}
+
+	// Walk up parent chain
+	current := tree.Parents[targetNode]
+	for current != nil {
 		if event.IsStopped() {
 			return
 		}
+
+		// Check if this node has an ID with registered handlers
+		if parentID, ok := current.Props["id"].(string); ok && parentID != "" {
+			handlers := eb.handlers[event.Type]
+			for _, h := range handlers {
+				if h.componentID == parentID {
+					h.handler(event)
+					if event.IsStopped() {
+						return
+					}
+				}
+			}
+		}
+
+		current = tree.Parents[current]
 	}
 }
 
