@@ -1,0 +1,226 @@
+// Lumina Protocol Buffer Definitions
+// Version: v1
+// Purpose: Define message types for AI Agent communication with Lumina TUI framework
+
+syntax = "proto3";
+
+package lumina.v1;
+
+option go_package = "github.com/akzj/lumina/proto/v1;lumiv1";
+
+// =============================================================================
+// Component Messages
+// =============================================================================
+
+// ComponentInstance represents a running component instance.
+message ComponentInstance {
+  string id = 1;
+  string type = 2;
+  string name = 3;
+  map<string, Value> props = 4;
+  map<string, Value> state = 5;
+  bool dirty = 6;
+}
+
+// ComponentFactory defines a component template.
+message ComponentFactory {
+  string name = 1;
+  string id = 2;
+  bool is_component = 3;
+}
+
+// =============================================================================
+// Virtual DOM Messages
+// =============================================================================
+
+// VNode represents a virtual DOM node.
+message VNode {
+  string node_type = 1;  // "box", "text", "button", etc.
+  map<string, Value> props = 2;
+  repeated VNode children = 3;
+}
+
+// RenderResult contains the output of a component render.
+message RenderResult {
+  string component_id = 1;
+  VNode vdom = 2;
+  int64 render_time_us = 3;
+}
+
+// =============================================================================
+// Hooks Messages
+// =============================================================================
+
+// HookCall represents a single hook invocation.
+message HookCall {
+  string hook_name = 1;  // "useState", "useEffect", etc.
+  repeated Value args = 2;
+  Value result = 3;
+}
+
+// StateUpdate represents a state change.
+message StateUpdate {
+  string component_id = 1;
+  string key = 2;
+  Value old_value = 3;
+  Value new_value = 4;
+}
+
+// =============================================================================
+// Event Messages
+// =============================================================================
+
+// MouseEvent represents a mouse interaction.
+message MouseEvent {
+  string event_type = 1;  // "click", "move", "wheel"
+  int32 x = 2;
+  int32 y = 3;
+  string button = 4;  // "left", "right", "middle"
+  int32 click_count = 5;
+}
+
+// KeyboardEvent represents a keyboard interaction.
+message KeyboardEvent {
+  string event_type = 1;  // "keydown", "keyup", "keypress"
+  string key = 2;
+  string code = 3;
+  bool ctrl = 4;
+  bool shift = 5;
+  bool alt = 6;
+  bool meta = 7;
+}
+
+// EventMessage wraps all event types.
+message EventMessage {
+  string component_id = 1;
+  string event_type = 2;
+  oneof event {
+    MouseEvent mouse = 3;
+    KeyboardEvent keyboard = 4;
+  }
+}
+
+// =============================================================================
+// MCP Commands
+// =============================================================================
+
+// CreateComponent creates a new component instance.
+message CreateComponentRequest {
+  string parent_id = 1;
+  string component_type = 2;
+  map<string, Value> props = 3;
+}
+
+message CreateComponentResponse {
+  string component_id = 1;
+  ComponentInstance instance = 2;
+}
+
+// UpdateComponent updates a component's props or state.
+message UpdateComponentRequest {
+  string component_id = 1;
+  map<string, Value> props = 2;
+  map<string, Value> state = 3;
+}
+
+message UpdateComponentResponse {
+  bool success = 1;
+  ComponentInstance instance = 2;
+}
+
+// DeleteComponent removes a component instance.
+message DeleteComponentRequest {
+  string component_id = 1;
+}
+
+message DeleteComponentResponse {
+  bool success = 1;
+}
+
+// QueryComponent queries component information.
+message QueryComponentRequest {
+  string component_id = 1;
+  repeated string fields = 2;
+}
+
+message QueryComponentResponse {
+  ComponentInstance instance = 1;
+}
+
+// =============================================================================
+// Debug Messages
+// =============================================================================
+
+// ComponentTree requests the full component tree.
+message ComponentTreeRequest {
+  bool include_state = 1;
+}
+
+message ComponentTreeResponse {
+  repeated ComponentInstance roots = 1;
+  int32 total_count = 2;
+}
+
+// InspectComponent requests detailed component inspection.
+message InspectComponentRequest {
+  string component_id = 1;
+}
+
+message InspectComponentResponse {
+  ComponentInstance instance = 1;
+  repeated HookCall hook_calls = 2;
+  int64 created_at_us = 3;
+  int64 last_render_us = 4;
+  int32 render_count = 5;
+}
+
+// =============================================================================
+// Value Type (for props/state)
+// =============================================================================
+
+// Value represents a dynamic value that can be any JSON-compatible type.
+message Value {
+  oneof value {
+    string string_value = 1;
+    int64 int_value = 2;
+    double number_value = 3;
+    bool bool_value = 4;
+    ListValue list_value = 5;
+    MapValue map_value = 6;
+  }
+}
+
+// ListValue represents a list of values.
+message ListValue {
+  repeated Value items = 1;
+}
+
+// MapValue represents a map of string keys to values.
+message MapValue {
+  map<string, Value> entries = 1;
+}
+
+// =============================================================================
+// Batch Operations
+// =============================================================================
+
+// BatchRequest contains multiple operations in one request.
+message BatchRequest {
+  repeated Operation operations = 1;
+}
+
+message Operation {
+  string operation_type = 1;  // "create", "update", "delete", "query"
+  string component_id = 2;
+  map<string, Value> params = 3;
+}
+
+message BatchResponse {
+  repeated OperationResult results = 1;
+}
+
+message OperationResult {
+  bool success = 1;
+  string error = 2;
+  bytes data = 3;
+}

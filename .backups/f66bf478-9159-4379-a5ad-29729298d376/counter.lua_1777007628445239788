@@ -34,7 +34,7 @@ print("Rendering Counter...")
 local vdom = lumina.render(Counter, { initial = 42 })
 
 print()
-print("Render complete. VDOM type: " .. (vdom.type or "nil"))
+print("Render complete. VDOM nodeType: " .. vdom.nodeType)
 print()
 
 -- Create a state

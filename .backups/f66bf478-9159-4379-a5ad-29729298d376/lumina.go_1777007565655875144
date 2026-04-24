@@ -223,35 +223,6 @@ func renderComponent(L *lua.State) int {
 				L.Error()
 				return 0
 			}
-			// Call init function to populate initial state
-			if comp.PushInitFn(L) {
-				// Push props table
-				if len(props) > 0 {
-					L.NewTable()
-					for k, v := range props {
-						L.PushString(k)
-						pushLuaValue(L, v)
-						L.SetTable(-3)
-					}
-				} else {
-					L.NewTable()
-				}
-				// Call init(props) -> instanceState
-				SetCurrentComponent(comp)
-				status := L.PCall(1, lua.MultiRet, 0)
-				if status == lua.OK && L.GetTop() > 0 {
-					if L.Type(-1) == lua.TypeTable {
-						initState := tableToMap(L, -1)
-						for k, v := range initState {
-							comp.State[k] = v
-						}
-					}
-					L.Pop(1)
-				} else if L.GetTop() > 0 {
-					L.Pop(1)
-				}
-				SetCurrentComponent(nil)
-			}
 		} else {
 			// This is neither a factory nor an instance - error
 			L.PushString("renderComponent: expected component factory or instance, got unknown type")
