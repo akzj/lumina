@@ -1,0 +1,45 @@
+-- Counter example for Lumina
+-- Usage: go run ./cmd/lumina ./examples/counter.lua
+
+local lumina = require("lumina")
+
+print("Lumina version: " .. lumina.version())
+print()
+
+-- Define a simple counter component
+local Counter = lumina.defineComponent({
+    name = "Counter",
+    
+    init = function(props)
+        return {
+            count = props.initial or 0
+        }
+    end,
+    
+    render = function(instance)
+        print("  Count: " .. tostring(instance.count))
+        return {
+            type = "nil",
+            children = {}
+        }
+    end
+})
+
+print("Component defined: " .. Counter.name)
+print("Component ID: " .. Counter.id)
+print()
+
+-- Render the component
+print("Rendering Counter...")
+local vdom = lumina.render(Counter, { initial = 42 })
+
+print()
+print("Render complete. VDOM nodeType: " .. vdom.nodeType)
+print()
+
+-- Create a state
+local state = lumina.createState("initial_value")
+print("State created, type: " .. state.stateType)
+
+print()
+print("Counter example completed successfully!")
