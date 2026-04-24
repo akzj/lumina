@@ -1,0 +1,369 @@
+// Package lumina provides Lua bindings for the Lumina UI framework.
+package lumina
+
+import (
+	"github.com/akzj/go-lua/pkg/lua"
+)
+
+// VNode represents a virtual DOM node.
+type VNode struct {
+	Type     string
+	Props    map[string]any
+	Children []*VNode
+	// Layout properties
+	X, Y, W, H int
+	// Content for text nodes
+	Content string
+}
+
+// NewVNode creates a new VNode.
+func NewVNode(nodeType string) *VNode {
+	return &VNode{
+		Type:     nodeType,
+		Props:    make(map[string]any),
+		Children: make([]*VNode, 0),
+	}
+}
+
+// AddChild adds a child VNode.
+func (v *VNode) AddChild(child *VNode) {
+	v.Children = append(v.Children, child)
+}
+
+// SetContent sets the content for text nodes.
+func (v *VNode) SetContent(content string) {
+	v.Content = content
+}
+
+// LuaVNodeToVNode converts a Lua table at stack index to a VNode.
+func LuaVNodeToVNode(L *lua.State, idx int) *VNode {
+	L.PushValue(idx)
+	defer L.Pop(1)
+
+	vnode := NewVNode("box")
+
+	// Get type field
+	L.GetField(-1, "type")
+	if !L.IsNoneOrNil(-1) {
+		if t, ok := L.ToString(-1); ok {
+			vnode.Type = t
+		}
+	}
+	L.Pop(1)
+
+	// Get content field (text nodes)
+	L.GetField(-1, "content")
+	if !L.IsNoneOrNil(-1) {
+		if c, ok := L.ToString(-1); ok {
+			vnode.Content = c
+		}
+	}
+	L.Pop(1)
+
+	// Get children field
+	L.GetField(-1, "children")
+	if L.Type(-1) == lua.TypeTable {
+		// Iterate children array
+		L.PushNil()
+		for L.Next(-2) {
+			// stack: [..., children, key, childValue]
+			if L.Type(-1) == lua.TypeTable {
+				child := LuaVNodeToVNode(L, -1)
+				vnode.AddChild(child)
+			}
+			L.Pop(1) // pop value, keep key for iteration
+		}
+		L.Pop(1) // pop nil
+	}
+	L.Pop(1) // pop children table
+
+	// Copy remaining fields as props
+	L.PushNil()
+	for L.Next(-2) {
+		// stack: [..., vnode, key, value]
+		if L.Type(-2) == lua.TypeString {
+			key, _ := L.ToString(-2)
+			// Skip known fields
+			if key != "type" && key != "content" && key != "children" {
+				vnode.Props[key] = popLuaValue(L, -1)
+			} else {
+				L.Pop(1)
+			}
+		} else {
+			L.Pop(1)
+		}
+	}
+
+	return vnode
+}
+
+// VNodeToFrame converts a VNode tree to a Frame with layout.
+func VNodeToFrame(vnode *VNode, width, height int) *Frame {
+	frame := NewFrame(width, height)
+	
+	// Compute layout
+	computeLayout(vnode, 0, 0, width, height)
+	
+	// Render VNode to frame
+	renderVNode(frame, vnode)
+	
+	// Mark entire frame dirty
+	frame.MarkDirty()
+	
+	return frame
+}
+
+// computeLayout computes the layout for a VNode tree.
+func computeLayout(vnode *VNode, x, y, w, h int) {
+	vnode.X = x
+	vnode.Y = y
+	vnode.W = w
+	vnode.H = h
+
+	switch vnode.Type {
+	case "text":
+		// Text nodes just need their content measured
+		if len(vnode.Content) > w {
+			vnode.W = w
+		} else {
+			vnode.W = len(vnode.Content)
+		}
+		vnode.H = 1
+
+	case "vbox":
+		// Vertical box: children stacked vertically
+		if len(vnode.Children) == 0 {
+			return
+		}
+		flexTotal := 0
+		for _, child := range vnode.Children {
+			if flex, ok := child.Props["flex"].(int); ok && flex > 0 {
+				flexTotal += flex
+			} else {
+				flexTotal++ // each child gets at least 1 unit
+			}
+		}
+		if flexTotal == 0 {
+			flexTotal = len(vnode.Children)
+		}
+		
+		availHeight := h
+		fixedHeight := 0
+		flexChildren := 0
+		for _, child := range vnode.Children {
+			if minH, ok := child.Props["minHeight"].(int); ok {
+				fixedHeight += minH
+				availHeight -= minH
+			}
+			if flex, ok := child.Props["flex"].(int); ok && flex > 0 {
+				flexChildren++
+			}
+		}
+		
+		childY := y
+		flexUnit := 0
+		if flexChildren > 0 {
+			flexUnit = availHeight / flexChildren
+			if flexUnit < 1 {
+				flexUnit = 1
+			}
+		}
+		
+		for _, child := range vnode.Children {
+			childH := 1
+			if minH, ok := child.Props["minHeight"].(int); ok {
+				childH = minH
+			} else if flex, ok := child.Props["flex"].(int); ok && flex > 0 {
+				childH = flex * flexUnit
+			}
+			computeLayout(child, x, childY, w, childH)
+			childY += childH
+		}
+
+	case "hbox":
+		// Horizontal box: children side by side
+		if len(vnode.Children) == 0 {
+			return
+		}
+		flexTotal := 0
+		for _, child := range vnode.Children {
+			if flex, ok := child.Props["flex"].(int); ok && flex > 0 {
+				flexTotal += flex
+			} else {
+				flexTotal++
+			}
+		}
+		if flexTotal == 0 {
+			flexTotal = len(vnode.Children)
+		}
+		
+		flexUnit := w / flexTotal
+		if flexUnit < 1 {
+			flexUnit = 1
+		}
+		
+		childX := x
+		for _, child := range vnode.Children {
+			childW := flexUnit
+			if minW, ok := child.Props["minWidth"].(int); ok {
+				childW = minW
+			} else if flex, ok := child.Props["flex"].(int); ok && flex > 0 {
+				childW = flex * flexUnit
+			}
+			computeLayout(child, childX, y, childW, h)
+			childX += childW
+		}
+
+	default:
+		// Box or other container: children fill space
+		childX, childY := x, y
+		childW := w
+		childH := h
+		
+		childIdx := 0
+		for _, child := range vnode.Children {
+			computeLayout(child, childX, childY, childW, childH)
+			childIdx++
+			// Simple stacking for generic containers
+			childY += child.H
+		}
+	}
+}
+
+// renderVNode renders a VNode into the frame.
+func renderVNode(frame *Frame, vnode *VNode) {
+	// Apply style from props
+	cell := Cell{Char: ' '}
+	
+	if fg, ok := vnode.Props["foreground"].(string); ok {
+		cell.Foreground = fg
+	}
+	if bg, ok := vnode.Props["background"].(string); ok {
+		cell.Background = bg
+	}
+	if bold, ok := vnode.Props["bold"].(bool); ok {
+		cell.Bold = bold
+	}
+	if dim, ok := vnode.Props["dim"].(bool); ok {
+		cell.Dim = dim
+	}
+	
+	switch vnode.Type {
+	case "text":
+		// Render text content
+		for i, ch := range vnode.Content {
+			if vnode.X+i < frame.Width && vnode.Y < frame.Height {
+				frame.Cells[vnode.Y][vnode.X+i] = Cell{Char: ch, Foreground: cell.Foreground, Background: cell.Background}
+			}
+		}
+		
+	case "box", "vbox", "hbox", "container":
+		// Render background if specified
+		if vnode.Props["background"] != nil {
+			for y := vnode.Y; y < vnode.Y+vnode.H && y < frame.Height; y++ {
+				for x := vnode.X; x < vnode.X+vnode.W && x < frame.Width; x++ {
+					frame.Cells[y][x] = Cell{Char: ' ', Background: cell.Background}
+				}
+			}
+		}
+		
+		// Render border if specified
+		if border, ok := vnode.Props["border"].(string); ok {
+			renderBorder(frame, vnode, border)
+		}
+		
+		// Render children
+		for _, child := range vnode.Children {
+			renderVNode(frame, child)
+		}
+	}
+}
+
+// renderBorder draws a border around a VNode.
+func renderBorder(frame *Frame, vnode *VNode, borderType string) {
+	x, y := vnode.X, vnode.Y
+	w, h := vnode.W, vnode.H
+	
+	if w < 2 || h < 2 {
+		return
+	}
+	
+	// Box drawing characters
+	var tl, tr, bl, br, hLine, vLine rune
+	switch borderType {
+	case "single":
+		tl, tr, bl, br, hLine, vLine = '┌', '┐', '└', '┘', '─', '│'
+	case "double":
+		tl, tr, bl, br, hLine, vLine = '╔', '╗', '╚', '╝', '═', '║'
+	case "rounded":
+		tl, tr, bl, br, hLine, vLine = '╭', '╮', '╰', '╯', '─', '│'
+	default:
+		return
+	}
+	
+	// Top border
+	if y < frame.Height && x < frame.Width {
+		frame.Cells[y][x] = Cell{Char: tl}
+	}
+	for i := 1; i < w-1 && x+i < frame.Width; i++ {
+		frame.Cells[y][x+i] = Cell{Char: h}
+	}
+	if y < frame.Height && x+w-1 < frame.Width {
+		frame.Cells[y][x+w-1] = Cell{Char: tr}
+	}
+	
+	// Bottom border
+	if y+h-1 < frame.Height && x < frame.Width {
+		frame.Cells[y+h-1][x] = Cell{Char: bl}
+	}
+	for i := 1; i < w-1 && x+i < frame.Width; i++ {
+		if y+h-1 < frame.Height {
+			frame.Cells[y+h-1][x+i] = Cell{Char: h}
+		}
+	}
+	if y+h-1 < frame.Height && x+w-1 < frame.Width {
+		frame.Cells[y+h-1][x+w-1] = Cell{Char: br}
+	}
+	
+	// Vertical borders
+	for i := 1; i < h-1 && y+i < frame.Height; i++ {
+		if x < frame.Width {
+			frame.Cells[y+i][x] = Cell{Char: v}
+		}
+		if x+w-1 < frame.Width {
+			frame.Cells[y+i][x+w-1] = Cell{Char: v}
+		}
+	}
+}
+
+// RenderLuaVNode converts a Lua VDOM table to a Frame and writes it.
+func RenderLuaVNode(L *lua.State, vnodeIdx int, width, height int) *Frame {
+	vnode := LuaVNodeToVNode(L, vnodeIdx)
+	return VNodeToFrame(vnode, width, height)
+}
+
+// RenderToTerminal renders a VDOM to the terminal using the global adapter.
+func RenderToTerminal(L *lua.State, vnodeIdx int) error {
+	frame := RenderLuaVNode(L, vnodeIdx, 80, 24)
+	
+	adapter := GetOutputAdapter()
+	if adapter == nil {
+		adapter = NewANSIAdapter(new(noopWriter))
+	}
+	
+	return adapter.Write(frame)
+}
+
+// noopWriter is a writer that discards output.
+type noopWriter struct{}
+
+func (n *noopWriter) Write(p []byte) (int, error) {
+	return len(p), nil
+}
+
+// SetTerminalTitle sets the terminal window title.
+func SetTerminalTitle(title string) error {
+	// OSC sequence to set title: \x1b]0;title\x07
+	// This requires using the raw writer, not the buffered adapter
+	return nil // TODO: implement if needed
+}
