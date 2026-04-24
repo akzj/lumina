@@ -107,19 +107,64 @@ func (app *App) Run(scriptPath string) error {
 	return app.eventLoop()
 }
 
-// RunInteractive runs the app with stdin event handling.
+// RunInteractive runs the app with real terminal input (raw mode).
 func (app *App) RunInteractive(scriptPath string) error {
+	// Set up terminal
+	term, err := NewTerminal()
+	if err != nil {
+		return fmt.Errorf("terminal init: %w", err)
+	}
+
+	// Get terminal size
+	w, h, _ := term.GetSize()
+	app.width = w
+	app.height = h
+
+	// Enable raw mode
+	if err := term.EnableRawMode(); err != nil {
+		return fmt.Errorf("raw mode: %w", err)
+	}
+	defer term.RestoreMode()
+
+	// Clear screen
+	fmt.Print("\x1b[2J\x1b[H")
+
+	// Load script
 	if scriptPath != "" {
 		if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
+			term.RestoreMode()
 			return fmt.Errorf("file not found: %s", scriptPath)
 		}
 		if err := app.L.DoFile(scriptPath); err != nil {
+			term.RestoreMode()
 			return fmt.Errorf("script error: %w", err)
 		}
 	}
 
+	// Initial render
 	app.renderAllDirty()
-	return app.eventLoop()
+
+	// Start input reader (runs in goroutine, sends to app.events)
+	input := NewInputReader(term, app.events)
+	input.Start()
+
+	// Event loop (same as eventLoop but inlined for clarity)
+	ticker := time.NewTicker(16 * time.Millisecond)
+	defer ticker.Stop()
+
+	app.running = true
+	for app.running {
+		select {
+		case <-ticker.C:
+			app.sched.Tick()
+			app.renderAllDirty()
+
+		case event := <-app.events:
+			app.handleEvent(event)
+		}
+	}
+
+	return nil
 }
 
 // eventLoop is the single-threaded event loop.
@@ -147,6 +192,29 @@ func (app *App) handleEvent(event AppEvent) {
 	switch event.Type {
 	case "quit":
 		app.running = false
+
+	case "input_event":
+		e, ok := event.Payload.(*Event)
+		if !ok {
+			return
+		}
+
+		// Handle Ctrl+C / Ctrl+Q to quit
+		if e.Type == "keydown" && e.Modifiers.Ctrl && (e.Key == "c" || e.Key == "q") {
+			app.running = false
+			return
+		}
+
+		// Dispatch to EventBus (handles focus, shortcuts, registered handlers)
+		globalEventBus.Emit(e)
+
+		// Handle keyboard navigation (Tab, Enter, Escape, etc.)
+		if e.Type == "keydown" {
+			globalEventBus.HandleKeyEvent(e.Key, e.Modifiers)
+		}
+
+		// Re-render after input handling
+		app.renderAllDirty()
 
 	case "lua_callback":
 		cb, ok := event.Payload.(LuaCallbackEvent)

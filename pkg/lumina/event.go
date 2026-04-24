@@ -300,13 +300,13 @@ func (eb *EventBus) HandleKeyEvent(key string, modifiers EventModifiers) {
 	defer eb.mu.Unlock()
 
 	switch key {
-	case KeyTab:
+	case KeyTab, "Tab":
 		if modifiers.Shift {
 			eb.focusPrevUnsafe()
 		} else {
 			eb.focusNextUnsafe()
 		}
-	case KeyEnter, KeySpace:
+	case KeyEnter, KeySpace, "Enter":
 		// Trigger click on focused component
 		if eb.focusedID != "" {
 			eb.EmitUnsafe(&Event{
@@ -315,7 +315,7 @@ func (eb *EventBus) HandleKeyEvent(key string, modifiers EventModifiers) {
 				Modifiers: modifiers,
 			})
 		}
-	case KeyEscape:
+	case KeyEscape, "Escape":
 		// Close dialogs or blur
 		if eb.focusedID != "" {
 			eb.EmitUnsafe(&Event{Type: "blur", Target: eb.focusedID})
