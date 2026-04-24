@@ -2,6 +2,8 @@
 package lumina
 
 import (
+	"fmt"
+
 	"github.com/akzj/go-lua/pkg/lua"
 )
 
@@ -17,6 +19,10 @@ type VNode struct {
 	Content string
 	// Focused indicates if this component is currently focused
 	Focused bool
+	// ComponentRef holds the Component instance that produced this VNode (if any).
+	ComponentRef *Component
+	// ComponentKey is a stable identity for reconciliation of component children.
+	ComponentKey string
 }
 
 // NewVNode creates a new VNode.
@@ -41,12 +47,13 @@ func (v *VNode) SetContent(content string) {
 // LuaVNodeToVNode converts a Lua table at stack index to a VNode.
 func LuaVNodeToVNode(L *lua.State, idx int) *VNode {
 	L.PushValue(idx)
+	tableIdx := L.AbsIndex(-1)
 	defer L.Pop(1)
 
 	vnode := NewVNode("box")
 
 	// Get type field
-	L.GetField(-1, "type")
+	L.GetField(tableIdx, "type")
 	if !L.IsNoneOrNil(-1) {
 		if t, ok := L.ToString(-1); ok {
 			vnode.Type = t
@@ -54,8 +61,13 @@ func LuaVNodeToVNode(L *lua.State, idx int) *VNode {
 	}
 	L.Pop(1)
 
+	// Handle component type: instantiate and render the component
+	if vnode.Type == "component" {
+		return luaComponentToVNode(L, tableIdx)
+	}
+
 	// Get content field (text nodes)
-	L.GetField(-1, "content")
+	L.GetField(tableIdx, "content")
 	if !L.IsNoneOrNil(-1) {
 		if c, ok := L.ToString(-1); ok {
 			vnode.Content = c
@@ -64,26 +76,26 @@ func LuaVNodeToVNode(L *lua.State, idx int) *VNode {
 	L.Pop(1)
 
 	// Get children field
-	L.GetField(-1, "children")
+	L.GetField(tableIdx, "children")
 	if L.Type(-1) == lua.TypeTable {
-		// Iterate children array
-		L.PushNil()
-		for L.Next(-2) {
-			// stack: [..., children, key, childValue]
+		childrenIdx := L.AbsIndex(-1)
+		// Iterate children array using integer keys for stability
+		n := int(L.RawLen(childrenIdx))
+		for i := 1; i <= n; i++ {
+			L.RawGetI(childrenIdx, int64(i))
 			if L.Type(-1) == lua.TypeTable {
 				child := LuaVNodeToVNode(L, -1)
 				vnode.AddChild(child)
 			}
-			L.Pop(1) // pop value, keep key for iteration
+			L.Pop(1) // pop child value
 		}
-		L.Pop(1) // pop nil
 	}
 	L.Pop(1) // pop children table
 
 	// Copy remaining fields as props
 	L.PushNil()
-	for L.Next(-2) {
-		// stack: [..., vnode, key, value]
+	for L.Next(tableIdx) {
+		// stack: [..., tableIdx, ..., key, value]
 		if L.Type(-2) == lua.TypeString {
 			key, _ := L.ToString(-2)
 			// Skip known fields
@@ -100,6 +112,173 @@ func LuaVNodeToVNode(L *lua.State, idx int) *VNode {
 
 	return vnode
 }
+
+// luaComponentToVNode handles a VNode table with type="component".
+// It extracts _factory and _props, creates/reuses a Component instance,
+// calls its render function, and recursively converts the result.
+// The Lua table is expected at the given stack index (already pushed by caller).
+func luaComponentToVNode(L *lua.State, idx int) *VNode {
+	absIdx := L.AbsIndex(idx)
+
+	// Get _factory table
+	L.GetField(absIdx, "_factory")
+	if L.Type(-1) != lua.TypeTable {
+		L.Pop(1)
+		// Fallback: return an empty box
+		return NewVNode("box")
+	}
+	factoryIdx := L.GetTop()
+
+	// Get factory name
+	L.GetField(factoryIdx, "name")
+	factoryName, _ := L.ToString(-1)
+	L.Pop(1)
+
+	// Get _props
+	L.GetField(absIdx, "_props")
+	var props map[string]any
+	if L.Type(-1) == lua.TypeTable {
+		if m, ok := L.ToMap(-1); ok {
+			props = m
+		}
+	}
+	if props == nil {
+		props = make(map[string]any)
+	}
+	L.Pop(1) // pop _props
+
+	// Get optional key from props for reconciliation
+	compKey := ""
+	if k, ok := props["key"].(string); ok {
+		compKey = k
+	} else if k, ok := props["key"].(int64); ok {
+		compKey = fmt.Sprintf("%d", k)
+	}
+
+	// Look up existing component by key or factory name
+	parentComp := GetCurrentComponent()
+	var comp *Component
+	if parentComp != nil {
+		comp = findChildComponent(parentComp, factoryName, compKey)
+	}
+
+	if comp != nil {
+		// Existing component — update props if changed
+		comp.UpdateProps(props)
+	} else {
+		// New component — create instance
+		var err error
+		comp, err = NewComponent(L, factoryIdx, props)
+		if err != nil {
+			L.Pop(1) // pop _factory
+			return NewVNode("box")
+		}
+
+		// Call init function if present
+		if comp.PushInitFn(L) {
+			L.PushAny(props)
+			prevComp := GetCurrentComponent()
+			SetCurrentComponent(comp)
+			status := L.PCall(1, lua.MultiRet, 0)
+			if status == lua.OK && L.GetTop() > factoryIdx {
+				if initState, ok := L.ToMap(-1); ok {
+					for k, v := range initState {
+						comp.State[k] = v
+					}
+				}
+				L.Pop(1)
+			} else if status != lua.OK {
+				L.Pop(1) // pop error
+			}
+			SetCurrentComponent(prevComp)
+		}
+
+		// Register in parent's child list
+		if parentComp != nil {
+			parentComp.AddChild(comp)
+		}
+	}
+
+	L.Pop(1) // pop _factory
+
+	// Render the component
+	prevComp := GetCurrentComponent()
+	SetCurrentComponent(comp)
+	comp.ResetHookIndex()
+
+	if !comp.PushRenderFn(L) {
+		SetCurrentComponent(prevComp)
+		return NewVNode("box")
+	}
+
+	// Build instance table: state + props
+	fields := map[string]any{
+		"_instance": comp.ID,
+	}
+	// Copy state fields
+	comp.mu.RLock()
+	for k, v := range comp.State {
+		fields[k] = v
+	}
+	comp.mu.RUnlock()
+	// Add props as nested table
+	fields["props"] = props
+
+	L.NewTableFrom(fields)
+	// Also set individual props at top level for backward compat
+	for k, v := range props {
+		if k != "children" {
+			L.PushAny(v)
+			L.SetField(-2, k)
+		}
+	}
+	// Handle children prop: push as Lua table for unpack
+	if childrenProp, ok := props["children"]; ok {
+		L.PushAny(childrenProp)
+		L.SetField(-2, "children")
+	}
+
+	status := L.PCall(1, 1, 0)
+	SetCurrentComponent(prevComp)
+
+	if status != lua.OK {
+		L.Pop(1) // pop error
+		return NewVNode("box")
+	}
+
+	// Recursively convert the rendered VNode
+	var resultVNode *VNode
+	if L.Type(-1) == lua.TypeTable {
+		resultVNode = LuaVNodeToVNode(L, -1)
+	} else {
+		resultVNode = NewVNode("box")
+	}
+	L.Pop(1) // pop render result
+
+	// Tag the VNode with the component reference
+	resultVNode.ComponentRef = comp
+	resultVNode.ComponentKey = compKey
+
+	// Store for diffing
+	comp.LastVNode = resultVNode
+
+	return resultVNode
+}
+
+// findChildComponent looks for an existing child component by factory name and key.
+func findChildComponent(parent *Component, factoryName, key string) *Component {
+	parent.mu.RLock()
+	defer parent.mu.RUnlock()
+	for _, child := range parent.ChildComps {
+		if child.Type == factoryName {
+			if key == "" || child.Props["key"] == key {
+				return child
+			}
+		}
+	}
+	return nil
+}
+
 
 // VNodeToFrame converts a VNode tree to a Frame with layout.
 func VNodeToFrame(vnode *VNode, width, height int) *Frame {

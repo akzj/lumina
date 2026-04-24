@@ -44,6 +44,7 @@ func luaLoader(L *lua.State) int {
 		
 		"defineComponent": defineComponent,
 		"createComponent": createComponent,
+		"createElement":   createElement,
 		"render":          renderComponent,
 		"createState":     createState,
 		// Style & Theme API
@@ -477,4 +478,35 @@ func GetComponentName(L *lua.State, idx int) string {
 	name, _ := L.ToString(-1)
 	L.Pop(1)
 	return name
+}
+
+// createElement creates a VNode-like table representing a component to be rendered.
+// createElement(factory, props) → {type="component", _factory=factory, _props=props}
+func createElement(L *lua.State) int {
+	// Arg 1: factory table (component definition)
+	if L.Type(1) != lua.TypeTable {
+		L.PushString("createElement: first argument must be a component factory table")
+		L.Error()
+		return 0
+	}
+
+	L.NewTable()
+
+	// type = "component"
+	L.PushString("component")
+	L.SetField(-2, "type")
+
+	// _factory = factory (arg 1)
+	L.PushValue(1)
+	L.SetField(-2, "_factory")
+
+	// _props = props (arg 2, or empty table)
+	if L.GetTop() >= 2 && !L.IsNoneOrNil(2) {
+		L.PushValue(2)
+	} else {
+		L.NewTable()
+	}
+	L.SetField(-2, "_props")
+
+	return 1
 }

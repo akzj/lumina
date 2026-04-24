@@ -28,6 +28,9 @@ type Component struct {
 	effectHooks  []*EffectHook  // useEffect hooks in call order
 	memoHooks    []*MemoHook    // useMemo hooks in call order
 	hookIndex    int            // current hook index during render
+	// Component tree
+	Parent       *Component     // Parent component (nil for root)
+	ChildComps   []*Component   // Child component instances
 	mu           sync.RWMutex
 }
 
@@ -226,6 +229,53 @@ func UserdataToComponent(L *lua.State, idx int) *Component {
 // ResetHookIndex resets the hook call counter for a new render pass.
 func (c *Component) ResetHookIndex() {
 	c.hookIndex = 0
+}
+
+// UpdateProps updates the component's props and marks it dirty if they changed.
+// Returns true if props actually changed.
+func (c *Component) UpdateProps(newProps map[string]any) bool {
+	if propsEqual(c.Props, newProps) {
+		return false
+	}
+	c.mu.Lock()
+	c.Props = newProps
+	c.Dirty.Store(true)
+	c.mu.Unlock()
+	return true
+}
+
+// AddChild adds a child component to this component's tree.
+func (c *Component) AddChild(child *Component) {
+	c.mu.Lock()
+	c.ChildComps = append(c.ChildComps, child)
+	c.mu.Unlock()
+	child.mu.Lock()
+	child.Parent = c
+	child.mu.Unlock()
+}
+
+// RemoveChild removes a child component from this component's tree.
+func (c *Component) RemoveChild(child *Component) {
+	c.mu.Lock()
+	for i, ch := range c.ChildComps {
+		if ch.ID == child.ID {
+			c.ChildComps = append(c.ChildComps[:i], c.ChildComps[i+1:]...)
+			break
+		}
+	}
+	c.mu.Unlock()
+	child.mu.Lock()
+	child.Parent = nil
+	child.mu.Unlock()
+}
+
+// GetChildren returns a copy of the child components slice.
+func (c *Component) GetChildren() []*Component {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	result := make([]*Component, len(c.ChildComps))
+	copy(result, c.ChildComps)
+	return result
 }
 
 // Error variables for component creation
