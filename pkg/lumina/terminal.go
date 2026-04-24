@@ -4,15 +4,68 @@ package lumina
 
 import (
 	"os"
+	"os/signal"
+	"strings"
 	"syscall"
 	"unsafe"
 )
+
+// ColorMode represents the terminal's color capability.
+type ColorMode int
+
+const (
+	// ColorNone means no color support (e.g., TERM=dumb).
+	ColorNone ColorMode = iota
+	// Color16 means basic 16-color ANSI support.
+	Color16
+	// Color256 means 256-color xterm support.
+	Color256
+	// ColorTrue means 24-bit true color support.
+	ColorTrue
+)
+
+// String returns a human-readable name for ColorMode.
+func (c ColorMode) String() string {
+	switch c {
+	case ColorNone:
+		return "none"
+	case Color16:
+		return "16"
+	case Color256:
+		return "256"
+	case ColorTrue:
+		return "truecolor"
+	default:
+		return "unknown"
+	}
+}
+
+// DetectColorMode detects the terminal's color capability from environment variables.
+func DetectColorMode() ColorMode {
+	// COLORTERM is the most reliable indicator for true color.
+	colorterm := os.Getenv("COLORTERM")
+	if colorterm == "truecolor" || colorterm == "24bit" {
+		return ColorTrue
+	}
+
+	// TERM variable.
+	term := os.Getenv("TERM")
+	if term == "dumb" || term == "" {
+		return ColorNone
+	}
+	if strings.Contains(term, "256color") {
+		return Color256
+	}
+	// Most terminals with a TERM value support at least 16 colors.
+	return Color16
+}
 
 // Terminal handles raw mode and input reading for the terminal.
 type Terminal struct {
 	fd       int
 	origTerm syscall.Termios
 	rawMode  bool
+	resizeCh chan os.Signal // SIGWINCH channel
 }
 
 // NewTerminal creates a terminal reader for stdin.
@@ -119,4 +172,28 @@ func tcsetattr(fd int, termios *syscall.Termios) error {
 		return errno
 	}
 	return nil
+}
+
+// WatchResize starts a goroutine that calls callback whenever the terminal
+// is resized (SIGWINCH). Call StopResize to stop watching.
+func (t *Terminal) WatchResize(callback func(width, height int)) {
+	t.resizeCh = make(chan os.Signal, 1)
+	signal.Notify(t.resizeCh, syscall.SIGWINCH)
+	go func() {
+		for range t.resizeCh {
+			w, h, err := t.GetSize()
+			if err == nil {
+				callback(w, h)
+			}
+		}
+	}()
+}
+
+// StopResize stops watching for terminal resize signals.
+func (t *Terminal) StopResize() {
+	if t.resizeCh != nil {
+		signal.Stop(t.resizeCh)
+		close(t.resizeCh)
+		t.resizeCh = nil
+	}
 }
