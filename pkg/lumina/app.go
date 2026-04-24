@@ -431,6 +431,29 @@ func (app *App) handleScrollEvent(e *Event) {
 }
 
 // renderAllDirty checks all components for dirty state and re-renders.
+// ReloadScript performs a hot reload of the given Lua script.
+// It snapshots all component states, clears the registry, re-executes
+// the script, then restores states by component type name matching.
+func (app *App) ReloadScript(scriptPath string) error {
+	// 1. Snapshot all component states
+	globalHotReloader.SnapshotAllComponents()
+
+	// 2. Clear component registry (but keep snapshots)
+	ClearComponents()
+
+	// 3. Re-execute Lua script
+	if err := app.L.DoFile(scriptPath); err != nil {
+		return err
+	}
+
+	// 4. Restore component states by type name matching
+	globalHotReloader.RestoreAllByType()
+
+	// 5. Re-render
+	app.renderAllDirty()
+	return nil
+}
+
 func (app *App) renderAllDirty() {
 	globalRegistry.mu.RLock()
 	components := make([]*Component, 0, len(globalRegistry.components))
