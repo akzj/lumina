@@ -200,6 +200,51 @@ func blur(L *lua.State) int {
 	return 0
 }
 
+// focusNext() — move focus to next focusable component
+func focusNext(L *lua.State) int {
+	globalEventBus.FocusNext()
+	return 0
+}
+
+// focusPrev() — move focus to previous focusable component
+func focusPrev(L *lua.State) int {
+	globalEventBus.FocusPrev()
+	return 0
+}
+
+// registerFocusable(componentID) — register a component as focusable
+func registerFocusable(L *lua.State) int {
+	compID := L.CheckString(1)
+	globalEventBus.RegisterFocusable(compID)
+	return 0
+}
+
+// unregisterFocusable(componentID) — unregister a component from focusable list
+func unregisterFocusable(L *lua.State) int {
+	compID := L.CheckString(1)
+	globalEventBus.UnregisterFocusable(compID)
+	return 0
+}
+
+// isFocusable(componentID) → boolean — check if component is focusable
+func isFocusable(L *lua.State) int {
+	compID := L.CheckString(1)
+	L.PushBoolean(globalEventBus.IsFocusable(compID))
+	return 1
+}
+
+// getFocusableIDs() → table — get list of focusable component IDs
+func getFocusableIDs(L *lua.State) int {
+	ids := globalEventBus.GetFocusableIDs()
+	L.NewTable()
+	for i, id := range ids {
+		L.PushInteger(int64(i + 1))
+		L.PushString(id)
+		L.SetTable(-3)
+	}
+	return 1
+}
+
 // emitKeyEvent(key, modifiers?) — emit a key event for testing
 func emitKeyEvent(L *lua.State) int {
 	key := L.CheckString(1)

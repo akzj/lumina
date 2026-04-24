@@ -5,6 +5,18 @@ import (
 	"time"
 )
 
+// Key codes for keyboard navigation
+const (
+	KeyTab    = "\t"
+	KeyEnter  = "\n"
+	KeyEscape = "\x1b"
+	KeyUp     = "\x1b[A"
+	KeyDown   = "\x1b[B"
+	KeyRight  = "\x1b[C"
+	KeyLeft   = "\x1b[D"
+	KeySpace  = " "
+)
+
 // Event represents a user input event.
 type Event struct {
 	Type      string // "click" | "keydown" | "keyup" | "focus" | "blur" | "change"
@@ -55,11 +67,12 @@ type eventHandler struct {
 
 // EventBus handles event dispatching.
 type EventBus struct {
-	handlers   map[string][]eventHandler
-	shortcuts  map[string]eventHandler // "ctrl+c" → handler
-	focusStack []string                // component ID stack for focus management
-	focusedID  string
-	mu         sync.RWMutex
+	handlers     map[string][]eventHandler
+	shortcuts    map[string]eventHandler // "ctrl+c" → handler
+	focusStack   []string                // component ID stack for focus management
+	focusedID    string
+	focusableIDs []string // ordered list of focusable component IDs
+	mu           sync.RWMutex
 }
 
 // Global event bus
@@ -178,6 +191,222 @@ func (eb *EventBus) GetFocused() string {
 	eb.mu.RLock()
 	defer eb.mu.RUnlock()
 	return eb.focusedID
+}
+
+// RegisterFocusable adds a component ID to the focusable list.
+func (eb *EventBus) RegisterFocusable(compID string) {
+	eb.mu.Lock()
+	defer eb.mu.Unlock()
+
+	// Check if already registered
+	for _, id := range eb.focusableIDs {
+		if id == compID {
+			return
+		}
+	}
+	eb.focusableIDs = append(eb.focusableIDs, compID)
+}
+
+// UnregisterFocusable removes a component ID from the focusable list.
+func (eb *EventBus) UnregisterFocusable(compID string) {
+	eb.mu.Lock()
+	defer eb.mu.Unlock()
+
+	filtered := make([]string, 0, len(eb.focusableIDs))
+	for _, id := range eb.focusableIDs {
+		if id != compID {
+			filtered = append(filtered, id)
+		}
+	}
+	eb.focusableIDs = filtered
+
+	// If this was focused, move to next
+	if eb.focusedID == compID {
+		eb.focusedID = ""
+	}
+}
+
+// FocusNext moves focus to the next focusable component.
+func (eb *EventBus) FocusNext() {
+	eb.mu.Lock()
+	defer eb.mu.Unlock()
+
+	if len(eb.focusableIDs) == 0 {
+		return
+	}
+
+	// Find current index
+	currentIdx := -1
+	for i, id := range eb.focusableIDs {
+		if id == eb.focusedID {
+			currentIdx = i
+			break
+		}
+	}
+
+	// Blur current
+	if eb.focusedID != "" {
+		eb.EmitUnsafe(&Event{Type: "blur", Target: eb.focusedID})
+	}
+
+	// Move to next
+	if currentIdx == -1 || currentIdx >= len(eb.focusableIDs)-1 {
+		eb.focusedID = eb.focusableIDs[0]
+	} else {
+		eb.focusedID = eb.focusableIDs[currentIdx+1]
+	}
+
+	// Focus new
+	eb.EmitUnsafe(&Event{Type: "focus", Target: eb.focusedID})
+}
+
+// FocusPrev moves focus to the previous focusable component.
+func (eb *EventBus) FocusPrev() {
+	eb.mu.Lock()
+	defer eb.mu.Unlock()
+
+	if len(eb.focusableIDs) == 0 {
+		return
+	}
+
+	// Find current index
+	currentIdx := -1
+	for i, id := range eb.focusableIDs {
+		if id == eb.focusedID {
+			currentIdx = i
+			break
+		}
+	}
+
+	// Blur current
+	if eb.focusedID != "" {
+		eb.EmitUnsafe(&Event{Type: "blur", Target: eb.focusedID})
+	}
+
+	// Move to previous
+	if currentIdx <= 0 {
+		eb.focusedID = eb.focusableIDs[len(eb.focusableIDs)-1]
+	} else {
+		eb.focusedID = eb.focusableIDs[currentIdx-1]
+	}
+
+	// Focus new
+	eb.EmitUnsafe(&Event{Type: "focus", Target: eb.focusedID})
+}
+
+// HandleKeyEvent handles keyboard navigation.
+func (eb *EventBus) HandleKeyEvent(key string, modifiers EventModifiers) {
+	eb.mu.Lock()
+	defer eb.mu.Unlock()
+
+	switch key {
+	case KeyTab:
+		if modifiers.Shift {
+			eb.focusPrevUnsafe()
+		} else {
+			eb.focusNextUnsafe()
+		}
+	case KeyEnter, KeySpace:
+		// Trigger click on focused component
+		if eb.focusedID != "" {
+			eb.EmitUnsafe(&Event{
+				Type:      "click",
+				Target:    eb.focusedID,
+				Modifiers: modifiers,
+			})
+		}
+	case KeyEscape:
+		// Close dialogs or blur
+		if eb.focusedID != "" {
+			eb.EmitUnsafe(&Event{Type: "blur", Target: eb.focusedID})
+			eb.focusedID = ""
+		}
+	}
+}
+
+// focusNextUnsafe moves to next focusable (caller must hold lock).
+func (eb *EventBus) focusNextUnsafe() {
+	if len(eb.focusableIDs) == 0 {
+		return
+	}
+
+	currentIdx := -1
+	for i, id := range eb.focusableIDs {
+		if id == eb.focusedID {
+			currentIdx = i
+			break
+		}
+	}
+
+	if eb.focusedID != "" {
+		eb.EmitUnsafe(&Event{Type: "blur", Target: eb.focusedID})
+	}
+
+	if currentIdx == -1 || currentIdx >= len(eb.focusableIDs)-1 {
+		eb.focusedID = eb.focusableIDs[0]
+	} else {
+		eb.focusedID = eb.focusableIDs[currentIdx+1]
+	}
+
+	eb.EmitUnsafe(&Event{Type: "focus", Target: eb.focusedID})
+}
+
+// focusPrevUnsafe moves to prev focusable (caller must hold lock).
+func (eb *EventBus) focusPrevUnsafe() {
+	if len(eb.focusableIDs) == 0 {
+		return
+	}
+
+	currentIdx := -1
+	for i, id := range eb.focusableIDs {
+		if id == eb.focusedID {
+			currentIdx = i
+			break
+		}
+	}
+
+	if eb.focusedID != "" {
+		eb.EmitUnsafe(&Event{Type: "blur", Target: eb.focusedID})
+	}
+
+	if currentIdx <= 0 {
+		eb.focusedID = eb.focusableIDs[len(eb.focusableIDs)-1]
+	} else {
+		eb.focusedID = eb.focusableIDs[currentIdx-1]
+	}
+
+	eb.EmitUnsafe(&Event{Type: "focus", Target: eb.focusedID})
+}
+
+// TriggerFocusedClick triggers a click event on the currently focused component.
+func (eb *EventBus) TriggerFocusedClick() {
+	eb.mu.Lock()
+	defer eb.mu.Unlock()
+
+	if eb.focusedID != "" {
+		eb.EmitUnsafe(&Event{Type: "click", Target: eb.focusedID})
+	}
+}
+
+// GetFocusableIDs returns the list of focusable component IDs.
+func (eb *EventBus) GetFocusableIDs() []string {
+	eb.mu.RLock()
+	defer eb.mu.RUnlock()
+	ids := make([]string, len(eb.focusableIDs))
+	copy(ids, eb.focusableIDs)
+	return ids
+}
+
+// IsFocusable checks if a component ID is registered as focusable.
+func (eb *EventBus) IsFocusable(compID string) bool {
+	eb.mu.RLock()
+	defer eb.mu.RUnlock()
+	for _, id := range eb.focusableIDs {
+		if id == compID {
+			return true
+		}
+	}
+	return false
 }
 
 // Blur removes focus from current component.

@@ -54,13 +54,19 @@ func luaLoader(L *lua.State) int {
 		"defineTheme":        defineTheme,
 		"setTheme":           setTheme,
 		// Event API
-		"on":               registerEvent,
-		"off":              unregisterEvent,
-		"emit":             emitEvent,
-		"registerShortcut": registerShortcut,
-		"setFocus":         setFocus,
-		"getFocused":       getFocused,
-		"emitKeyEvent":     emitKeyEvent,
+		"on":                  registerEvent,
+		"off":                 unregisterEvent,
+		"emit":                emitEvent,
+		"registerShortcut":    registerShortcut,
+		"setFocus":            setFocus,
+		"getFocused":          getFocused,
+		"focusNext":           focusNext,
+		"focusPrev":           focusPrev,
+		"registerFocusable":   registerFocusable,
+		"unregisterFocusable": unregisterFocusable,
+		"isFocusable":         isFocusable,
+		"getFocusableIDs":     getFocusableIDs,
+		"emitKeyEvent":        emitKeyEvent,
 		// Output mode API
 		"setOutputMode":           setOutputMode,
 		"getOutputMode":           getOutputMode,
@@ -98,7 +104,7 @@ func luaLoader(L *lua.State) int {
 		"profileSize":  profileSize,
 	}, 0)
 
-		// Register hooks as sub-table
+	// Register hooks as sub-table
 	L.PushString("hooks")
 	L.NewTable()
 	RegisterHooks(L)
