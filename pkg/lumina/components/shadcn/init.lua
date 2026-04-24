@@ -55,4 +55,16 @@ shadcn.ContextMenu   = require("shadcn.context_menu")
 shadcn.Popover       = require("shadcn.popover")
 shadcn.Tooltip       = require("shadcn.tooltip")
 shadcn.HoverCard     = require("shadcn.hover_card")
+
+-- Phase 38: Additional components
+shadcn.AspectRatio     = require("shadcn.aspect_ratio")
+shadcn.ButtonGroup     = require("shadcn.button_group")
+shadcn.Calendar        = require("shadcn.calendar")
+shadcn.DatePicker      = require("shadcn.date_picker")
+shadcn.NavigationMenu  = require("shadcn.navigation_menu")
+shadcn.Resizable       = require("shadcn.resizable")
+shadcn.Sidebar         = require("shadcn.sidebar")
+shadcn.Chart           = require("shadcn.chart")
+shadcn.DataTable       = require("shadcn.data_table")
+shadcn.ColorPicker     = require("shadcn.color_picker")
 return shadcn

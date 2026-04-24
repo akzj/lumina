@@ -63,6 +63,17 @@ var shadcnComponents = map[string]string{
 	"shadcn.collapsible":    "components/shadcn/collapsible.lua",
 	"shadcn.carousel":       "components/shadcn/carousel.lua",
 	"shadcn.sonner":         "components/shadcn/sonner.lua",
+	// Phase 38: Additional components
+	"shadcn.aspect_ratio":     "components/shadcn/aspect_ratio.lua",
+	"shadcn.button_group":     "components/shadcn/button_group.lua",
+	"shadcn.calendar":         "components/shadcn/calendar.lua",
+	"shadcn.date_picker":      "components/shadcn/date_picker.lua",
+	"shadcn.navigation_menu":  "components/shadcn/navigation_menu.lua",
+	"shadcn.resizable":        "components/shadcn/resizable.lua",
+	"shadcn.sidebar":          "components/shadcn/sidebar.lua",
+	"shadcn.chart":            "components/shadcn/chart.lua",
+	"shadcn.data_table":       "components/shadcn/data_table.lua",
+	"shadcn.color_picker":     "components/shadcn/color_picker.lua",
 	"shadcn":              "components/shadcn/init.lua",
 }
 
