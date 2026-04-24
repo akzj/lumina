@@ -129,11 +129,65 @@ func setTheme(L *lua.State) int {
 		}
 		SetTheme(t)
 	} else if L.Type(1) == lua.TypeTable {
-		// Create theme from table (inline theme)
-		L.PushValue(1)
-		// Use default theme for now if table is complex
-		SetTheme(DefaultTheme())
+		// Build custom theme from table
+		theme := &Theme{
+			Colors:  make(map[string]string),
+			Space:   map[string]int{"xs": 0, "sm": 1, "md": 2, "lg": 3, "xl": 4},
+			Spacing: map[string]int{"xs": 0, "sm": 1, "md": 2, "lg": 3, "xl": 4},
+			Borders: map[string]string{"none": "", "rounded": "rounded", "double": "double", "single": "single"},
+		}
+		// Read name
+		L.GetField(1, "name")
+		if s, ok := L.ToString(-1); ok {
+			theme.Name = s
+		} else {
+			theme.Name = "custom"
+		}
 		L.Pop(1)
+		// Read colors
+		L.GetField(1, "colors")
+		if L.Type(-1) == lua.TypeTable {
+			L.PushNil()
+			for L.Next(-2) {
+				if k, ok := L.ToString(-2); ok {
+					if v, ok2 := L.ToString(-1); ok2 {
+						theme.Colors[k] = v
+					}
+				}
+				L.Pop(1)
+			}
+		}
+		L.Pop(1)
+		// Read spacing
+		L.GetField(1, "spacing")
+		if L.Type(-1) == lua.TypeTable {
+			L.PushNil()
+			for L.Next(-2) {
+				if k, ok := L.ToString(-2); ok {
+					if v, ok2 := L.ToInteger(-1); ok2 {
+						theme.Spacing[k] = int(v)
+						theme.Space[k] = int(v)
+					}
+				}
+				L.Pop(1)
+			}
+		}
+		L.Pop(1)
+		// Read borders
+		L.GetField(1, "borders")
+		if L.Type(-1) == lua.TypeTable {
+			L.PushNil()
+			for L.Next(-2) {
+				if k, ok := L.ToString(-2); ok {
+					if v, ok2 := L.ToString(-1); ok2 {
+						theme.Borders[k] = v
+					}
+				}
+				L.Pop(1)
+			}
+		}
+		L.Pop(1)
+		SetTheme(theme)
 	}
 	return 0
 }
