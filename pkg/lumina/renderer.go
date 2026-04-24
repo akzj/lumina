@@ -9,6 +9,7 @@ import (
 type VNode struct {
 	Type     string
 	Props    map[string]any
+	Style    Style // parsed layout/visual style
 	Children []*VNode
 	// Layout properties
 	X, Y, W, H int
@@ -104,8 +105,8 @@ func LuaVNodeToVNode(L *lua.State, idx int) *VNode {
 func VNodeToFrame(vnode *VNode, width, height int) *Frame {
 	frame := NewFrame(width, height)
 
-	// Compute layout
-	computeLayout(vnode, 0, 0, width, height)
+	// Compute layout using flexbox engine
+	computeFlexLayout(vnode, 0, 0, width, height)
 
 	// Render VNode to frame
 	renderVNode(frame, vnode)
@@ -121,8 +122,8 @@ func VNodeToFrameWithFocus(vnode *VNode, width, height int, focusedID string) *F
 	frame := NewFrame(width, height)
 	frame.FocusedID = focusedID
 
-	// Compute layout
-	computeLayout(vnode, 0, 0, width, height)
+	// Compute layout using flexbox engine
+	computeFlexLayout(vnode, 0, 0, width, height)
 
 	// Mark focused VNode
 	markFocusedVNode(vnode, focusedID)
@@ -153,163 +154,39 @@ func markFocusedVNode(vnode *VNode, focusedID string) {
 	}
 }
 
-// computeLayout computes the layout for a VNode tree.
-func computeLayout(vnode *VNode, x, y, w, h int) {
-	vnode.X = x
-	vnode.Y = y
-	vnode.W = w
-	vnode.H = h
-
-	switch vnode.Type {
-	case "text":
-		// Text nodes just need their content measured
-		if len(vnode.Content) > w {
-			vnode.W = w
-		} else {
-			vnode.W = len(vnode.Content)
-		}
-		vnode.H = 1
-
-	case "vbox":
-		// Vertical box: children stacked vertically
-		if len(vnode.Children) == 0 {
-			return
-		}
-		flexTotal := 0
-		for _, child := range vnode.Children {
-			if flex, ok := child.Props["flex"].(int); ok && flex > 0 {
-				flexTotal += flex
-			} else {
-				flexTotal++ // each child gets at least 1 unit
-			}
-		}
-		if flexTotal == 0 {
-			flexTotal = len(vnode.Children)
-		}
-
-		availHeight := h
-		fixedHeight := 0
-		flexChildren := 0
-		for _, child := range vnode.Children {
-			if minH, ok := child.Props["minHeight"].(int); ok {
-				fixedHeight += minH
-				availHeight -= minH
-			}
-			if flex, ok := child.Props["flex"].(int); ok && flex > 0 {
-				flexChildren++
-			}
-		}
-
-		childY := y
-		flexUnit := 0
-		if flexChildren > 0 {
-			flexUnit = availHeight / flexChildren
-			if flexUnit < 1 {
-				flexUnit = 1
-			}
-		}
-
-		for _, child := range vnode.Children {
-			childH := 1
-			if minH, ok := child.Props["minHeight"].(int); ok {
-				childH = minH
-			} else if flex, ok := child.Props["flex"].(int); ok && flex > 0 {
-				childH = flex * flexUnit
-			}
-			computeLayout(child, x, childY, w, childH)
-			childY += childH
-		}
-
-	case "hbox":
-		// Horizontal box: children side by side
-		if len(vnode.Children) == 0 {
-			return
-		}
-		flexTotal := 0
-		for _, child := range vnode.Children {
-			if flex, ok := child.Props["flex"].(int); ok && flex > 0 {
-				flexTotal += flex
-			} else {
-				flexTotal++
-			}
-		}
-		if flexTotal == 0 {
-			flexTotal = len(vnode.Children)
-		}
-
-		flexUnit := w / flexTotal
-		if flexUnit < 1 {
-			flexUnit = 1
-		}
-
-		childX := x
-		for _, child := range vnode.Children {
-			childW := flexUnit
-			if minW, ok := child.Props["minWidth"].(int); ok {
-				childW = minW
-			} else if flex, ok := child.Props["flex"].(int); ok && flex > 0 {
-				childW = flex * flexUnit
-			}
-			computeLayout(child, childX, y, childW, h)
-			childX += childW
-		}
-
-	default:
-		// Box or other container: children fill space
-		childX, childY := x, y
-		childW := w
-		childH := h
-
-		childIdx := 0
-		for _, child := range vnode.Children {
-			computeLayout(child, childX, childY, childW, childH)
-			childIdx++
-			// Simple stacking for generic containers
-			childY += child.H
-		}
-	}
-}
 
 // renderVNode renders a VNode into the frame.
 func renderVNode(frame *Frame, vnode *VNode) {
-	// Apply style from props
-	cell := Cell{Char: ' '}
+	// Use parsed style (populated by computeFlexLayout)
+	style := vnode.Style
 
-	if fg, ok := vnode.Props["foreground"].(string); ok {
-		cell.Foreground = fg
-	}
-	if bg, ok := vnode.Props["background"].(string); ok {
-		cell.Background = bg
-	}
-	if bold, ok := vnode.Props["bold"].(bool); ok {
-		cell.Bold = bold
-	}
-	if dim, ok := vnode.Props["dim"].(bool); ok {
-		cell.Dim = dim
-	}
+	cell := Cell{Char: ' '}
+	cell.Foreground = style.Foreground
+	cell.Background = style.Background
+	cell.Bold = style.Bold
+	cell.Dim = style.Dim
+	cell.Underline = style.Underline
 
 	switch vnode.Type {
 	case "text":
-		// Render text content
-		for i, ch := range vnode.Content {
-			if vnode.X+i < frame.Width && vnode.Y < frame.Height {
-				frame.Cells[vnode.Y][vnode.X+i] = Cell{Char: ch, Foreground: cell.Foreground, Background: cell.Background}
-			}
-		}
+		// Render text content with wrapping support
+		renderText(frame, vnode, cell)
 
-	case "box", "vbox", "hbox", "container":
+	default:
+		// Container types: box, vbox, hbox, container, etc.
+
 		// Render background if specified
-		if vnode.Props["background"] != nil {
+		if style.Background != "" {
 			for y := vnode.Y; y < vnode.Y+vnode.H && y < frame.Height; y++ {
 				for x := vnode.X; x < vnode.X+vnode.W && x < frame.Width; x++ {
-					frame.Cells[y][x] = Cell{Char: ' ', Background: cell.Background}
+					frame.Cells[y][x] = Cell{Char: ' ', Background: style.Background}
 				}
 			}
 		}
 
 		// Render border if specified
-		if border, ok := vnode.Props["border"].(string); ok {
-			renderBorder(frame, vnode, border)
+		if style.Border != "" {
+			renderBorder(frame, vnode, style.Border)
 		}
 
 		// Render focus indicator if focused
@@ -320,6 +197,49 @@ func renderVNode(frame *Frame, vnode *VNode) {
 		// Render children
 		for _, child := range vnode.Children {
 			renderVNode(frame, child)
+		}
+	}
+}
+
+// renderText renders text content into the frame, supporting wrapping.
+func renderText(frame *Frame, vnode *VNode, cell Cell) {
+	if vnode.Content == "" {
+		return
+	}
+
+	// Calculate content area (inside border + padding)
+	style := vnode.Style
+	borderW := 0
+	if style.Border == "single" || style.Border == "double" || style.Border == "rounded" {
+		borderW = 1
+	}
+
+	startX := vnode.X + borderW + style.PaddingLeft
+	startY := vnode.Y + borderW + style.PaddingTop
+	availW := vnode.W - 2*borderW - style.PaddingLeft - style.PaddingRight
+	if availW <= 0 {
+		availW = vnode.W
+	}
+
+	col := 0
+	row := 0
+	for _, ch := range vnode.Content {
+		px := startX + col
+		py := startY + row
+		if px < frame.Width && py < frame.Height && px >= 0 && py >= 0 {
+			frame.Cells[py][px] = Cell{
+				Char:       ch,
+				Foreground: cell.Foreground,
+				Background: cell.Background,
+				Bold:       cell.Bold,
+				Dim:        cell.Dim,
+				Underline:  cell.Underline,
+			}
+		}
+		col++
+		if col >= availW {
+			col = 0
+			row++
 		}
 	}
 }
