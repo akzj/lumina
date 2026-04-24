@@ -63,6 +63,7 @@ func (e *Event) IsStopped() bool {
 type eventHandler struct {
 	componentID string
 	handler     func(*Event)
+	capture     bool // true = capture phase (parent→child), false = bubble phase (child→parent)
 }
 
 // EventBus handles event dispatching.
@@ -124,9 +125,14 @@ func (eb *EventBus) GetVNodeTree() *VNodeTree {
 }
 
 // Global event bus
-var globalEventBus = &EventBus{
-	handlers:  make(map[string][]eventHandler),
-	shortcuts: make(map[string]eventHandler),
+var globalEventBus = NewEventBus()
+
+// NewEventBus creates a new EventBus instance.
+func NewEventBus() *EventBus {
+	return &EventBus{
+		handlers:  make(map[string][]eventHandler),
+		shortcuts: make(map[string]eventHandler),
+	}
 }
 
 // On registers an event handler.
@@ -136,6 +142,17 @@ func (eb *EventBus) On(eventType string, compID string, handler func(*Event)) {
 	eb.handlers[eventType] = append(eb.handlers[eventType], eventHandler{
 		componentID: compID,
 		handler:     handler,
+	})
+}
+
+// OnCapture registers an event handler for the capture phase (parent→child, before bubble).
+func (eb *EventBus) OnCapture(eventType string, compID string, handler func(*Event)) {
+	eb.mu.Lock()
+	defer eb.mu.Unlock()
+	eb.handlers[eventType] = append(eb.handlers[eventType], eventHandler{
+		componentID: compID,
+		handler:     handler,
+		capture:     true,
 	})
 }
 
@@ -153,7 +170,7 @@ func (eb *EventBus) Off(eventType string, compID string) {
 	eb.handlers[eventType] = filtered
 }
 
-// Emit fires an event to all registered handlers, then bubbles up the VNode tree.
+// Emit fires an event: capture phase (top→target), then target, then bubble phase (target→top).
 func (eb *EventBus) Emit(event *Event) {
 	eb.mu.RLock()
 	defer eb.mu.RUnlock()
@@ -168,10 +185,19 @@ func (eb *EventBus) Emit(event *Event) {
 		}
 	}
 
-	// Emit to registered handlers (direct match)
+	// Capture phase: walk top-down from root to target's parent
+	if !event.IsStopped() && eb.vnodeTree != nil && event.Target != "" {
+		eb.captureDown(event)
+	}
+
+	if event.IsStopped() {
+		return
+	}
+
+	// Target phase: emit to registered handlers (direct match, non-capture)
 	handlers := eb.handlers[event.Type]
 	for _, h := range handlers {
-		if event.Target == "" || h.componentID == event.Target {
+		if (event.Target == "" || h.componentID == event.Target) && !h.capture {
 			h.handler(event)
 			if event.IsStopped() {
 				return
@@ -179,9 +205,49 @@ func (eb *EventBus) Emit(event *Event) {
 		}
 	}
 
-	// Bubble up the VNode tree if we have one and event has a target
+	// Bubble phase: walk up the VNode tree if we have one and event has a target
 	if !event.IsStopped() && eb.vnodeTree != nil && event.Target != "" {
 		eb.bubbleUp(event)
+	}
+}
+
+// captureDown walks from root down to the target's parent, firing capture-phase handlers.
+func (eb *EventBus) captureDown(event *Event) {
+	tree := eb.vnodeTree
+	if tree == nil {
+		return
+	}
+
+	targetNode, ok := tree.ByID[event.Target]
+	if !ok {
+		return
+	}
+
+	// Build path from root to target's parent
+	var path []*VNode
+	current := tree.Parents[targetNode]
+	for current != nil {
+		path = append(path, current)
+		current = tree.Parents[current]
+	}
+
+	// Walk top-down (reverse the path)
+	for i := len(path) - 1; i >= 0; i-- {
+		if event.IsStopped() {
+			return
+		}
+		node := path[i]
+		if nodeID, ok := node.Props["id"].(string); ok && nodeID != "" {
+			handlers := eb.handlers[event.Type]
+			for _, h := range handlers {
+				if h.componentID == nodeID && h.capture {
+					h.handler(event)
+					if event.IsStopped() {
+						return
+					}
+				}
+			}
+		}
 	}
 }
 
@@ -198,7 +264,7 @@ func (eb *EventBus) bubbleUp(event *Event) {
 		return
 	}
 
-	// Walk up parent chain
+	// Walk up parent chain (bubble phase — skip capture handlers)
 	current := tree.Parents[targetNode]
 	for current != nil {
 		if event.IsStopped() {
@@ -209,7 +275,7 @@ func (eb *EventBus) bubbleUp(event *Event) {
 		if parentID, ok := current.Props["id"].(string); ok && parentID != "" {
 			handlers := eb.handlers[event.Type]
 			for _, h := range handlers {
-				if h.componentID == parentID {
+				if h.componentID == parentID && !h.capture {
 					h.handler(event)
 					if event.IsStopped() {
 						return
