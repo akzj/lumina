@@ -110,7 +110,7 @@ func simulate(L *lua.State) int {
 
 	// Parse options table (optional 3rd arg)
 	if L.GetTop() >= 3 && L.Type(3) == lua.TypeTable {
-		opts := tableToMap(L, 3)
+		opts, _ := L.ToMap(3)
 
 		if x, ok := opts["x"].(int64); ok {
 			event.X = int(x)
@@ -176,7 +176,7 @@ func simulateKey(L *lua.State) int {
 	}
 
 	if L.GetTop() >= 2 && L.Type(2) == lua.TypeTable {
-		opts := tableToMap(L, 2)
+		opts, _ := L.ToMap(2)
 		if mods, ok := opts["modifiers"].(map[string]any); ok {
 			if ctrl, ok := mods["ctrl"].(bool); ok {
 				event.Modifiers.Ctrl = ctrl
