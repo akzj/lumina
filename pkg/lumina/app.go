@@ -636,6 +636,40 @@ func (app *App) Stop() {
 	app.PostEvent(AppEvent{Type: "quit"})
 }
 
+// LoadScript loads and executes a Lua script using the given TermIO for output,
+// but does NOT start the event loop. Useful for testing: load script, render
+// one frame, inspect output.
+func (app *App) LoadScript(scriptPath string, tio TermIO) error {
+	if scriptPath == "" {
+		return fmt.Errorf("empty script path")
+	}
+	if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
+		return fmt.Errorf("file not found: %s", scriptPath)
+	}
+
+	// Configure terminal I/O
+	w, h := tio.Size()
+	app.width = w
+	app.height = h
+	app.termIO = tio
+
+	// Set output adapter to write through the TermIO
+	SetOutputAdapter(NewANSIAdapter(tio))
+
+	// Execute the Lua script (on caller goroutine — safe)
+	if err := app.L.DoFile(scriptPath); err != nil {
+		return fmt.Errorf("script error: %w", err)
+	}
+
+	return nil
+}
+
+// RenderOnce renders all dirty components once and returns.
+// Useful for headless testing — render a single frame without an event loop.
+func (app *App) RenderOnce() {
+	app.renderAllDirty()
+}
+
 // Close closes the application and cleans up resources.
 func (app *App) Close() {
 	if app.L != nil {
