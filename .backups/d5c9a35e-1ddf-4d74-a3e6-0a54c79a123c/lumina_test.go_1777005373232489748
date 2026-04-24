@@ -1,0 +1,159 @@
+package lumina
+
+import (
+	"testing"
+
+	"github.com/akzj/go-lua/pkg/lua"
+)
+
+// TestRequireLumina verifies that require("lumina") works and exports expected functions.
+func TestRequireLumina(t *testing.T) {
+	L := lua.NewState()
+	lua.OpenBase(L)
+	lua.OpenPackage(L)
+
+	// Register lumina package (simulating require("lumina"))
+	L.RequireFT("lumina", lua.Function(Open), true)
+	L.SetGlobal("lumina")
+
+	// Test: lumina.version() returns version string
+	L.GetGlobal("lumina")
+	if !L.IsTable(-1) {
+		t.Fatal("lumina should be a table")
+	}
+	L.GetField(-1, "version")
+	if !L.IsFunction(-1) {
+		t.Fatal("lumina.version should be a function")
+	}
+	L.Call(0, 1)
+	if L.ToString(-1) != "0.1.0" {
+		t.Fatalf("expected version 0.1.0, got %s", L.ToString(-1))
+	}
+	L.Pop(1)
+
+	// Test: lumina.create_component(name) returns component string
+	L.GetField(-1, "create_component")
+	L.PushString("Button")
+	L.Call(1, 1)
+	if L.ToString(-1) != "component:Button" {
+		t.Fatalf("expected component:Button, got %s", L.ToString(-1))
+	}
+	L.Pop(2)
+
+	t.Log("TestRequireLumina passed")
+}
+
+// TestSetFuncs verifies that SetFuncs correctly registers multiple functions.
+func TestSetFuncs(t *testing.T) {
+	L := lua.NewState()
+	lua.OpenBase(L)
+
+	// Register lumina table with functions
+	L.NewTable()
+	L.SetFuncs(map[string]lua.Function{
+		"fn1": func(L *lua.State) int {
+			L.PushInteger(1)
+			return 1
+		},
+		"fn2": func(L *lua.State) int {
+			L.PushInteger(2)
+			return 1
+		},
+	}, 0)
+	L.SetGlobal("test")
+
+	// Verify both functions exist and work
+	L.GetGlobal("test")
+	L.GetField(-1, "fn1")
+	L.Call(0, 1)
+	if L.ToInteger(-1) != 1 {
+		t.Fatalf("expected fn1() = 1, got %d", L.ToInteger(-1))
+	}
+	L.Pop(1)
+
+	L.GetField(-1, "fn2")
+	L.Call(0, 1)
+	if L.ToInteger(-1) != 2 {
+		t.Fatalf("expected fn2() = 2, got %d", L.ToInteger(-1))
+	}
+	L.Pop(2)
+
+	t.Log("TestSetFuncs passed")
+}
+
+// TestUserdataMetatable verifies Userdata + Metatable pattern works.
+func TestUserdataMetatable(t *testing.T) {
+	L := lua.NewState()
+	lua.OpenBase(L)
+
+	// Create metatable for "Component"
+	L.NewMetatable("Component")
+
+	// Set __index to the metatable itself (simple inheritance)
+	L.PushValue(-1)
+	L.SetField(-2, "__index")
+
+	// Set a method on the metatable
+	L.PushString("getType")
+	L.PushGoFunction(func(L *lua.State) int {
+		L.PushString("Component")
+		return 1
+	}, 0)
+	L.SetTable(-3)
+
+	L.Pop(1) // pop metatable
+
+	// Create userdata and set metatable
+	L.NewUserdata(0)
+	L.SetMetatable(-2)
+
+	// Call method via __index
+	L.GetField(-1, "getType")
+	L.PushValue(-2) // pass self
+	L.Call(1, 1)
+	if L.ToString(-1) != "Component" {
+		t.Fatalf("expected Component, got %s", L.ToString(-1))
+	}
+	L.Pop(3)
+
+	t.Log("TestUserdataMetatable passed")
+}
+
+// TestUpvalueState verifies that upvalue state is preserved across calls.
+func TestUpvalueState(t *testing.T) {
+	L := lua.NewState()
+	lua.OpenBase(L)
+
+	// Create a counter factory that captures state via upvalue
+	L.PushInteger(0) // upvalue initial state
+
+	L.PushGoFunction(func(L *lua.State) int {
+		// Get current count from upvalue
+		count := L.ToInteger(-1)
+		count++
+		L.Pop(1)
+		L.PushInteger(count) // update upvalue
+		L.PushInteger(count) // return new count
+		return 1
+	}, 1) // 1 upvalue
+
+	L.SetGlobal("counter")
+
+	// First call
+	L.GetGlobal("counter")
+	L.Call(0, 1)
+	if L.ToInteger(-1) != 1 {
+		t.Fatalf("first call: expected 1, got %d", L.ToInteger(-1))
+	}
+	L.Pop(1)
+
+	// Second call - state should be preserved
+	L.GetGlobal("counter")
+	L.Call(0, 1)
+	if L.ToInteger(-1) != 2 {
+		t.Fatalf("second call: expected 2, got %d", L.ToInteger(-1))
+	}
+	L.Pop(1)
+
+	t.Log("TestUpvalueState passed")
+}

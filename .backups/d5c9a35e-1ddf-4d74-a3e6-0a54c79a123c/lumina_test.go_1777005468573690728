@@ -1,0 +1,236 @@
+package lumina_test
+
+import (
+	"testing"
+
+	"github.com/akzj/go-lua/pkg/lua"
+	"github.com/akzj/lumina/pkg/lumina"
+)
+
+// TestRequireLumina tests that require("lumina") works and module exports are accessible.
+func TestRequireLumina(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+
+	// Register lumina as a global module
+	lumina.RegisterAsGlobal(L)
+
+	// Test: require("lumina") succeeds
+	err := L.DoString(`
+		local lumina = require("lumina")
+		if type(lumina) ~= "table" then
+			error("lumina should be a table, got: " .. type(lumina))
+		end
+	`)
+	if err != nil {
+		t.Fatalf("require failed: %v", err)
+	}
+}
+
+// TestVersion tests that lumina.version() returns the correct version.
+func TestVersion(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+
+	lumina.RegisterAsGlobal(L)
+
+	err := L.DoString(`
+		local lumina = require("lumina")
+		local v = lumina.version()
+		if v ~= "0.1.0" then
+			error("expected version 0.1.0, got: " .. tostring(v))
+		end
+		print("version: " .. v)
+	`)
+	if err != nil {
+		t.Fatalf("version check failed: %v", err)
+	}
+}
+
+// TestEcho tests that lumina.echo() works correctly.
+func TestEcho(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+
+	lumina.RegisterAsGlobal(L)
+
+	err := L.DoString(`
+		local lumina = require("lumina")
+		local result = lumina.echo("hello world")
+		if result ~= "hello world" then
+			error("echo failed: expected 'hello world', got: " .. tostring(result))
+		end
+	`)
+	if err != nil {
+		t.Fatalf("echo test failed: %v", err)
+	}
+}
+
+// TestInfo tests that lumina.info() returns a table with expected fields.
+func TestInfo(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+
+	lumina.RegisterAsGlobal(L)
+
+	err := L.DoString(`
+		local lumina = require("lumina")
+		local info = lumina.info()
+		if type(info) ~= "table" then
+			error("info should return a table")
+		end
+		if info.version ~= "0.1.0" then
+			error("info.version should be 0.1.0")
+		end
+		if info.year ~= 2024 then
+			error("info.year should be 2024")
+		end
+		print("description: " .. info.description)
+	`)
+	if err != nil {
+		t.Fatalf("info test failed: %v", err)
+	}
+}
+
+// TestDirectOpen tests using Open() function directly.
+func TestDirectOpen(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+
+	// Call lumina.Open() directly, which leaves module on stack
+	n := lumina.Open(L)
+	if n != 1 {
+		t.Fatalf("Open should return 1, got %d", n)
+	}
+	// Now module is on stack at -1, set as global
+	L.SetGlobal("luminaDirect")
+
+	err := L.DoString(`
+		local v = luminaDirect.version()
+		if v ~= "0.1.0" then
+			error("direct open version failed: " .. tostring(v))
+		end
+	`)
+	if err != nil {
+		t.Fatalf("direct open test failed: %v", err)
+	}
+}
+
+// TestGoFunctionRegistration verifies that SetFuncs correctly registers multiple functions.
+func TestGoFunctionRegistration(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+
+	// Create a table and register functions
+	L.NewTable()
+	L.SetFuncs(map[string]lua.Function{
+		"fn1": func(L *lua.State) int {
+			L.PushInteger(1)
+			return 1
+		},
+		"fn2": func(L *lua.State) int {
+			L.PushInteger(2)
+			return 1
+		},
+	}, 0)
+	L.SetGlobal("test")
+
+	// Verify both functions exist and work
+	L.GetGlobal("test")
+	L.GetField(-1, "fn1")
+	L.Call(0, 1)
+	val, _ := L.ToInteger(-1)
+	if val != 1 {
+		t.Fatalf("expected fn1() = 1, got %d", val)
+	}
+	L.Pop(1)
+
+	L.GetField(-1, "fn2")
+	L.Call(0, 1)
+	val, _ = L.ToInteger(-1)
+	if val != 2 {
+		t.Fatalf("expected fn2() = 2, got %d", val)
+	}
+	L.Pop(2)
+
+	t.Log("TestGoFunctionRegistration passed")
+}
+
+// TestUserdataMetatable verifies Userdata + Metatable pattern works.
+func TestUserdataMetatable(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+
+	// Create metatable for "Component"
+	L.NewMetatable("Component")
+
+	// Set __index to the metatable itself (simple inheritance)
+	L.PushValue(-1)
+	L.SetField(-2, "__index")
+
+	// Set a method on the metatable
+	L.PushString("getType")
+	L.PushFunction(func(L *lua.State) int {
+		L.PushString("Component")
+		return 1
+	})
+	L.SetTable(-3)
+
+	L.Pop(1) // pop metatable
+
+	// Create userdata and set metatable
+	L.NewUserdata(0, 0)
+	L.SetMetatable(-2)
+
+	// Call method via __index
+	L.GetField(-1, "getType")
+	L.PushValue(-2) // pass self
+	L.Call(1, 1)
+	result, ok := L.ToString(-1)
+	if !ok || result != "Component" {
+		t.Fatalf("expected Component, got %s", result)
+	}
+	L.Pop(3)
+
+	t.Log("TestUserdataMetatable passed")
+}
+
+// TestUpvalueState verifies that upvalue state is preserved across calls.
+func TestUpvalueState(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+
+	// Create a counter closure with an upvalue
+	L.PushInteger(0) // initial counter value (upvalue 1)
+
+	counter := func(L *lua.State) int {
+		val, _ := L.ToInteger(lua.UpvalueIndex(1))
+		val++
+		L.PushInteger(val)
+		L.Copy(-1, lua.UpvalueIndex(1)) // update the upvalue
+		return 1
+	}
+
+	L.PushClosure(counter, 1) // 1 upvalue
+	L.SetGlobal("counter")
+
+	// First call
+	L.GetGlobal("counter")
+	L.Call(0, 1)
+	val, _ := L.ToInteger(-1)
+	if val != 1 {
+		t.Fatalf("first call: expected 1, got %d", val)
+	}
+	L.Pop(1)
+
+	// Second call - state should be preserved
+	L.GetGlobal("counter")
+	L.Call(0, 1)
+	val, _ = L.ToInteger(-1)
+	if val != 2 {
+		t.Fatalf("second call: expected 2, got %d", val)
+	}
+	L.Pop(1)
+
+	t.Log("TestUpvalueState passed")
+}
