@@ -53,14 +53,6 @@ func luaLoader(L *lua.State) int {
 		"getStyle":           getStyle,
 		"defineTheme":        defineTheme,
 		"setTheme":           setTheme,
-		// Event API
-		"on":                registerEvent,
-		"off":               unregisterEvent,
-		"emit":              emitEvent,
-		"registerShortcut":   registerShortcut,
-		"setFocus":          setFocus,
-		"getFocused":        getFocused,
-		"emitKeyEvent":      emitKeyEvent,
 	}, 0)
 
 	// Register hooks as sub-table
