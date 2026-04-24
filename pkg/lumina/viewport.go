@@ -1,6 +1,7 @@
 package lumina
 
 import (
+	"math"
 	"sync"
 
 	"github.com/akzj/go-lua/pkg/lua"
@@ -14,6 +15,12 @@ type Viewport struct {
 	ContentH int // total content height (sum of children + gaps)
 	ViewW    int // visible width (container content area width)
 	ViewH    int // visible height (container content area height)
+
+	// Smooth scrolling fields
+	ScrollYF  float64 // floating-point scroll position
+	VelocityY float64 // scroll velocity (rows/frame)
+	Damping   float64 // friction coefficient (0.92 = smooth deceleration)
+	Animating bool    // true while inertia is active
 }
 
 // ScrollDown scrolls down by n rows, clamped to valid range.
@@ -145,6 +152,66 @@ func (v *Viewport) clampScroll() {
 	}
 }
 
+// -----------------------------------------------------------------------
+// Smooth scrolling
+// -----------------------------------------------------------------------
+
+// DefaultDamping is the default friction coefficient for smooth scrolling.
+const DefaultDamping = 0.85
+
+// ScrollSmooth adds velocity for smooth inertial scrolling.
+func (v *Viewport) ScrollSmooth(deltaY float64) {
+	v.VelocityY += deltaY
+	v.Animating = true
+	if v.Damping == 0 {
+		v.Damping = DefaultDamping
+	}
+}
+
+// Tick advances the smooth scroll animation by one frame.
+// Returns true if the viewport was updated (needs re-render).
+func (v *Viewport) Tick() bool {
+	if !v.Animating {
+		return false
+	}
+
+	v.ScrollYF += v.VelocityY
+	v.VelocityY *= v.Damping
+
+	// Clamp to bounds
+	if v.ScrollYF < 0 {
+		v.ScrollYF = 0
+		v.VelocityY = 0
+	}
+	maxScroll := float64(v.maxScrollY())
+	if maxScroll < 0 {
+		maxScroll = 0
+	}
+	if v.ScrollYF > maxScroll {
+		v.ScrollYF = maxScroll
+		v.VelocityY = 0
+	}
+
+	// Update integer offset for rendering
+	v.ScrollY = int(math.Round(v.ScrollYF))
+
+	// Stop when velocity is negligible
+	if math.Abs(v.VelocityY) < 0.1 {
+		v.VelocityY = 0
+		v.Animating = false
+	}
+
+	return true
+}
+
+// SyncFloatFromInt synchronizes ScrollYF from the integer ScrollY.
+// Call this after any instant (non-smooth) scroll operation.
+func (v *Viewport) SyncFloatFromInt() {
+	v.ScrollYF = float64(v.ScrollY)
+	v.VelocityY = 0
+	v.Animating = false
+}
+
 // ScrollbarThumb calculates the scrollbar thumb position and size
 // for a track of the given height. Returns (thumbStart, thumbSize).
 // thumbSize is at least 1 if scrolling is needed.
@@ -226,6 +293,20 @@ func ClearViewports() {
 	viewportMu.Lock()
 	defer viewportMu.Unlock()
 	viewportRegistry = make(map[string]*Viewport)
+}
+
+// TickAllViewports ticks smooth scrolling for all viewports.
+// Returns true if any viewport was updated (needs re-render).
+func TickAllViewports() bool {
+	viewportMu.RLock()
+	defer viewportMu.RUnlock()
+	updated := false
+	for _, vp := range viewportRegistry {
+		if vp.Tick() {
+			updated = true
+		}
+	}
+	return updated
 }
 
 // ScrollViewport scrolls the viewport for the given ID by dy rows.
