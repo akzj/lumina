@@ -26,12 +26,13 @@ type LuaCallbackEvent struct {
 // App represents an interactive Lumina application.
 // All Lua State operations happen on the goroutine that calls Run().
 type App struct {
-	L       *lua.State
-	sched   *lua.Scheduler // async coroutine scheduler
-	events  chan AppEvent
-	width   int
-	height  int
-	running bool
+	L          *lua.State
+	sched      *lua.Scheduler // async coroutine scheduler
+	events     chan AppEvent
+	width      int
+	height     int
+	running    bool
+	batchDepth int // >0 means we're inside a batch (suppress per-setState renders)
 }
 
 // NewApp creates a new interactive Lumina application.
@@ -81,6 +82,30 @@ func (app *App) PostEvent(event AppEvent) {
 		// Drop if channel full (non-blocking)
 	}
 }
+
+// BeginBatch starts a batch update cycle. While batching is active,
+// setState calls mark components dirty but don't trigger immediate re-renders.
+// Re-renders are deferred until EndBatch.
+func (app *App) BeginBatch() {
+	app.batchDepth++
+}
+
+// EndBatch ends a batch cycle. If this is the outermost batch (depth→0),
+// all dirty components are re-rendered once.
+func (app *App) EndBatch() {
+	if app.batchDepth > 0 {
+		app.batchDepth--
+	}
+	if app.batchDepth == 0 {
+		app.renderAllDirty()
+	}
+}
+
+// IsBatching returns true if we're inside a batch update cycle.
+func (app *App) IsBatching() bool {
+	return app.batchDepth > 0
+}
+
 
 // Run executes a Lua script and starts the single-threaded event loop.
 // This blocks until Stop() is called or an error occurs.
@@ -190,6 +215,9 @@ func (app *App) eventLoop() error {
 
 // handleEvent dispatches an event on the main thread.
 func (app *App) handleEvent(event AppEvent) {
+	app.BeginBatch()
+	defer app.EndBatch()
+
 	switch event.Type {
 	case "quit":
 		app.running = false
@@ -224,8 +252,7 @@ func (app *App) handleEvent(event AppEvent) {
 		// Handle scroll events (mouse wheel and PageUp/PageDown)
 		app.handleScrollEvent(e)
 
-		// Re-render after input handling
-		app.renderAllDirty()
+		// Re-render deferred to EndBatch()
 
 	case "lua_callback":
 		cb, ok := event.Payload.(LuaCallbackEvent)
@@ -242,8 +269,7 @@ func (app *App) handleEvent(event AppEvent) {
 		} else {
 			app.L.Pop(1) // pop non-function
 		}
-		// Re-render after event handling (state may have changed)
-		app.renderAllDirty()
+		// Re-render deferred to EndBatch()
 	}
 }
 
