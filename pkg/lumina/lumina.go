@@ -493,6 +493,9 @@ func Open(L *lua.State) {
 	L.PushFunction(luaLoader)
 	L.SetField(-2, ModuleName)
 	L.Pop(2)
+
+	// Register shadcn component preloads
+	RegisterShadcn(L)
 }
 
 func init() {
