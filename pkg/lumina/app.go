@@ -33,6 +33,7 @@ type App struct {
 	height     int
 	running    bool
 	batchDepth int // >0 means we're inside a batch (suppress per-setState renders)
+	termIO     TermIO // terminal I/O abstraction (nil = default local)
 }
 
 // NewApp creates a new interactive Lumina application.
@@ -141,10 +142,15 @@ func (app *App) RunInteractive(scriptPath string) error {
 		return fmt.Errorf("terminal init: %w", err)
 	}
 
+	// Create local TermIO
+	localIO := NewLocalTermIO()
+
 	// Get terminal size
 	w, h, _ := term.GetSize()
 	app.width = w
 	app.height = h
+	localIO.SetSize(w, h)
+	app.termIO = localIO
 
 	// Enable raw mode
 	if err := term.EnableRawMode(); err != nil {
@@ -152,8 +158,11 @@ func (app *App) RunInteractive(scriptPath string) error {
 	}
 	defer term.RestoreMode()
 
+	// Set output adapter to write through TermIO
+	SetOutputAdapter(NewANSIAdapter(localIO))
+
 	// Clear screen
-	fmt.Print("\x1b[2J\x1b[H")
+	localIO.Write([]byte("\x1b[2J\x1b[H"))
 
 	// Load script
 	if scriptPath != "" {
@@ -193,6 +202,62 @@ func (app *App) RunInteractive(scriptPath string) error {
 	}
 
 	return nil
+}
+
+// RunWithTermIO runs the app using a custom TermIO (e.g. WebSocket).
+// This enables the same Lua app to run over a network connection.
+func (app *App) RunWithTermIO(tio TermIO, scriptPath string) error {
+	w, h := tio.Size()
+	app.width = w
+	app.height = h
+	app.termIO = tio
+
+	// Set output adapter to write through the TermIO
+	SetOutputAdapter(NewANSIAdapter(tio))
+
+	// Load script
+	if scriptPath != "" {
+		if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
+			return fmt.Errorf("file not found: %s", scriptPath)
+		}
+		if err := app.L.DoFile(scriptPath); err != nil {
+			return fmt.Errorf("script error: %w", err)
+		}
+	}
+
+	// Clear screen via TermIO
+	tio.Write([]byte("\x1b[2J\x1b[H"))
+
+	// Initial render
+	app.renderAllDirty()
+
+	// Start input reader from TermIO
+	input := NewInputReaderFromIO(tio, app.events)
+	input.Start()
+
+	// Event loop
+	ticker := time.NewTicker(16 * time.Millisecond)
+	defer ticker.Stop()
+
+	app.running = true
+	for app.running {
+		select {
+		case <-ticker.C:
+			app.sched.Tick()
+			TickAllViewports()
+			app.renderAllDirty()
+
+		case event := <-app.events:
+			app.handleEvent(event)
+		}
+	}
+
+	return nil
+}
+
+// GetTermIO returns the app's TermIO (may be nil if not running interactively).
+func (app *App) GetTermIO() TermIO {
+	return app.termIO
 }
 
 // eventLoop is the single-threaded event loop.

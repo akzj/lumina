@@ -3,6 +3,7 @@
 package lumina
 
 import (
+	"io"
 	"os"
 	"time"
 )
@@ -10,6 +11,7 @@ import (
 // InputReader reads and parses terminal input events.
 type InputReader struct {
 	term   *Terminal
+	reader io.Reader // custom reader (overrides os.Stdin when set)
 	events chan AppEvent
 	buf    [256]byte
 }
@@ -19,14 +21,23 @@ func NewInputReader(term *Terminal, events chan AppEvent) *InputReader {
 	return &InputReader{term: term, events: events}
 }
 
+// NewInputReaderFromIO creates an input reader that reads from a TermIO.
+func NewInputReaderFromIO(tio TermIO, events chan AppEvent) *InputReader {
+	return &InputReader{reader: tio, events: events}
+}
+
 // Start begins reading input in a background goroutine.
 func (ir *InputReader) Start() {
 	go ir.readLoop()
 }
 
 func (ir *InputReader) readLoop() {
+	r := ir.reader
+	if r == nil {
+		r = os.Stdin
+	}
 	for {
-		n, err := os.Stdin.Read(ir.buf[:])
+		n, err := r.Read(ir.buf[:])
 		if err != nil {
 			return
 		}
