@@ -4,188 +4,264 @@ import (
 	"testing"
 
 	"github.com/akzj/go-lua/pkg/lua"
-	"github.com/stretchr/testify/assert"
 )
 
-func TestThemeDefault(t *testing.T) {
-	theme := DefaultTheme()
-	assert.Equal(t, "dark", theme.Name)
-	assert.Equal(t, "cyan", theme.Colors["primary"])
-	assert.Equal(t, "white", theme.Colors["text"])
-	assert.Equal(t, "black", theme.Colors["background"])
-	assert.Equal(t, 4, theme.Spacing["sm"])
-	assert.Equal(t, 8, theme.Spacing["md"])
+func TestSetThemeByName(t *testing.T) {
+	tm := GetThemeManager()
+	tm.ResetTheme()
+
+	if !tm.SetThemeByName("tokyo-night") {
+		t.Fatal("expected tokyo-night to be found")
+	}
+	theme := tm.GetTheme()
+	if theme.Name != "tokyo-night" {
+		t.Fatalf("expected tokyo-night, got %s", theme.Name)
+	}
+	if theme.Colors["background"] != "#1A1B26" {
+		t.Fatalf("expected #1A1B26, got %s", theme.Colors["background"])
+	}
+	tm.ResetTheme()
 }
 
-func TestThemeLight(t *testing.T) {
-	theme := LightTheme()
-	assert.Equal(t, "light", theme.Name)
-	assert.Equal(t, "blue", theme.Colors["primary"])
-	assert.Equal(t, "black", theme.Colors["text"])
-	assert.Equal(t, "white", theme.Colors["background"])
+func TestSetThemeCustom(t *testing.T) {
+	tm := GetThemeManager()
+	tm.ResetTheme()
+
+	custom := Theme{
+		Name:    "my-theme",
+		Colors:  map[string]string{"primary": "#FF0000", "background": "#000000"},
+		Space:   map[string]int{"xs": 0, "sm": 1},
+		Spacing: map[string]int{"xs": 0, "sm": 1},
+		Borders: map[string]string{"none": ""},
+	}
+	tm.SetTheme(custom)
+	got := tm.GetTheme()
+	if got.Name != "my-theme" {
+		t.Fatalf("expected my-theme, got %s", got.Name)
+	}
+	if got.Colors["primary"] != "#FF0000" {
+		t.Fatalf("expected #FF0000, got %s", got.Colors["primary"])
+	}
+	tm.ResetTheme()
 }
 
-func TestThemeRegistry(t *testing.T) {
-	RegisterTheme("test", DefaultTheme())
-	theme := GetThemeByName("test")
-	assert.NotNil(t, theme)
-	assert.Equal(t, "dark", theme.Name)
+func TestGetColor(t *testing.T) {
+	tm := GetThemeManager()
+	tm.ResetTheme()
 
-	// Non-existent theme
-	theme = GetThemeByName("nonexistent")
-	assert.Nil(t, theme)
+	// Known token
+	c := tm.GetColor("primary")
+	if c != "#89B4FA" {
+		t.Fatalf("expected #89B4FA, got %s", c)
+	}
+
+	// Unknown token returns as-is
+	c = tm.GetColor("#AABBCC")
+	if c != "#AABBCC" {
+		t.Fatalf("expected #AABBCC, got %s", c)
+	}
 }
 
-func TestUseThemeHook(t *testing.T) {
+func TestThemeTokenResolution(t *testing.T) {
+	tm := GetThemeManager()
+	tm.ResetTheme()
+
+	style := map[string]string{
+		"background": "primary",
+		"foreground": "foreground",
+		"other":      "some-value",
+	}
+	resolved := tm.ResolveStyle(style)
+	if resolved["background"] != "#89B4FA" {
+		t.Fatalf("expected #89B4FA, got %s", resolved["background"])
+	}
+	if resolved["foreground"] != "#CDD6F4" {
+		t.Fatalf("expected #CDD6F4, got %s", resolved["foreground"])
+	}
+	if resolved["other"] != "some-value" {
+		t.Fatalf("expected some-value, got %s", resolved["other"])
+	}
+}
+
+func TestThemeVersionIncrement(t *testing.T) {
+	tm := GetThemeManager()
+	tm.ResetTheme()
+
+	v0 := tm.Version()
+	tm.SetThemeByName("nord")
+	v1 := tm.Version()
+	if v1 <= v0 {
+		t.Fatalf("expected version to increment: %d -> %d", v0, v1)
+	}
+	tm.ResetTheme()
+}
+
+func TestMultipleBuiltinThemes(t *testing.T) {
+	names := ListThemes()
+	if len(names) < 4 {
+		t.Fatalf("expected at least 4 themes, got %d", len(names))
+	}
+	// Verify each can be set
+	tm := GetThemeManager()
+	for _, name := range names {
+		if !tm.SetThemeByName(name) {
+			t.Fatalf("failed to set theme: %s", name)
+		}
+		got := tm.GetTheme()
+		if got.Name != name {
+			t.Fatalf("expected %s, got %s", name, got.Name)
+		}
+	}
+	tm.ResetTheme()
+}
+
+func TestDefineAndGetStyles(t *testing.T) {
+	tm := GetThemeManager()
+	tm.ResetTheme()
+
+	tm.DefineStyles(map[string]map[string]string{
+		"button": {
+			"background": "primary",
+			"foreground": "foreground",
+			"padding":    "sm",
+		},
+		"button:focused": {
+			"background": "accent",
+			"border":     "double",
+		},
+	})
+
+	s := tm.GetStyle("button")
+	if s == nil {
+		t.Fatal("expected button style")
+	}
+	if s["background"] != "primary" {
+		t.Fatalf("expected primary, got %s", s["background"])
+	}
+
+	sf := tm.GetStyle("button:focused")
+	if sf == nil {
+		t.Fatal("expected button:focused style")
+	}
+	if sf["background"] != "accent" {
+		t.Fatalf("expected accent, got %s", sf["background"])
+	}
+	tm.ResetTheme()
+}
+
+func TestLuaSetThemeByName(t *testing.T) {
+	ClearComponents()
+	ClearContextValues()
+	globalThemeManager.ResetTheme()
 	L := lua.NewState()
+	Open(L)
 	defer L.Close()
 
-	Open(L)
-
 	err := L.DoString(`
-		local lumina = require("lumina")
-		local theme = lumina.hooks.useTheme()
-		assert(theme.name == "dark", "default theme should be dark, got: " .. tostring(theme.name))
-		assert(theme.colors ~= nil, "colors should exist")
-		assert(theme.colors.primary == "cyan", "primary should be cyan")
-		assert(theme.spacing ~= nil, "spacing should exist")
-		assert(theme.spacing.md == 8, "md spacing should be 8")
+		lumina.setTheme("tokyo-night")
 	`)
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatalf("setTheme: %v", err)
+	}
+	theme := globalThemeManager.GetTheme()
+	if theme.Name != "tokyo-night" {
+		t.Fatalf("expected tokyo-night, got %s", theme.Name)
+	}
+	globalThemeManager.ResetTheme()
 }
 
-func TestDefineStyle(t *testing.T) {
+func TestLuaSetThemeCustom(t *testing.T) {
+	ClearComponents()
+	ClearContextValues()
+	globalThemeManager.ResetTheme()
 	L := lua.NewState()
+	Open(L)
 	defer L.Close()
 
-	Open(L)
-
 	err := L.DoString(`
-		local lumina = require("lumina")
-		
-		-- Define a style
-		lumina.defineStyle("button", {
-			padding = 8,
-			color = "primary"
+		lumina.setTheme({
+			name = "my-custom",
+			colors = { primary = "#FF0000", background = "#111111" },
 		})
-		
-		-- Get the style back
-		local style = lumina.getStyle("button")
-		assert(style ~= nil, "style should exist")
-		assert(style.padding == 8, "padding should be 8")
-		assert(style.color == "primary", "color should be primary")
 	`)
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatalf("setTheme custom: %v", err)
+	}
+	theme := globalThemeManager.GetTheme()
+	if theme.Name != "my-custom" {
+		t.Fatalf("expected my-custom, got %s", theme.Name)
+	}
+	if theme.Colors["primary"] != "#FF0000" {
+		t.Fatalf("expected #FF0000, got %s", theme.Colors["primary"])
+	}
+	globalThemeManager.ResetTheme()
 }
 
-func TestDefineGlobalStyles(t *testing.T) {
+func TestLuaUseTheme(t *testing.T) {
+	ClearComponents()
+	ClearContextValues()
+	globalThemeManager.ResetTheme()
 	L := lua.NewState()
+	Open(L)
 	defer L.Close()
 
-	Open(L)
-
 	err := L.DoString(`
-		local lumina = require("lumina")
-		
-		-- Define multiple styles at once
-		lumina.defineGlobalStyles({
-			primary = { color = "blue" },
-			secondary = { color = "gray" }
-		})
-		
-		-- Get styles back
-		local p = lumina.getStyle("primary")
-		assert(p ~= nil and p.color == "blue")
-		
-		local s = lumina.getStyle("secondary")
-		assert(s ~= nil and s.color == "gray")
+		local theme = lumina.useTheme()
+		assert(theme.name == "catppuccin-mocha", "expected catppuccin-mocha, got " .. tostring(theme.name))
+		assert(theme.colors.primary == "#89B4FA", "expected #89B4FA, got " .. tostring(theme.colors.primary))
+		assert(theme.space.md == 2, "expected 2, got " .. tostring(theme.space.md))
 	`)
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatalf("useTheme: %v", err)
+	}
 }
 
-func TestSetTheme(t *testing.T) {
-	// Test setting to light theme
-	SetTheme(LightTheme())
-	theme := GetCurrentTheme()
-	assert.Equal(t, "light", theme.Name)
-
-	// Test setting to dark theme
-	SetTheme(DefaultTheme())
-	theme = GetCurrentTheme()
-	assert.Equal(t, "dark", theme.Name)
-}
-
-func TestSetThemeLua(t *testing.T) {
+func TestLuaDefineStyles(t *testing.T) {
+	ClearComponents()
+	ClearContextValues()
+	globalThemeManager.ResetTheme()
 	L := lua.NewState()
+	Open(L)
 	defer L.Close()
 
-	Open(L)
-
 	err := L.DoString(`
-		local lumina = require("lumina")
-		
-		-- Set to light theme
-		lumina.setTheme("light")
-		
-		-- Verify via useTheme
-		local theme = lumina.hooks.useTheme()
-		assert(theme.name == "light", "theme should be light")
-		
-		-- Reset to dark
-		lumina.setTheme("dark")
-		theme = lumina.hooks.useTheme()
-		assert(theme.name == "dark", "theme should be dark")
-	`)
-	assert.NoError(t, err)
-}
-
-func TestDefineTheme(t *testing.T) {
-	L := lua.NewState()
-	defer L.Close()
-
-	Open(L)
-
-	err := L.DoString(`
-		local lumina = require("lumina")
-		
-		-- Define a custom theme
-		local theme = lumina.defineTheme("custom", {
-			colors = {
-				primary = "red",
-				background = "black"
+		lumina.defineStyles({
+			myButton = {
+				background = "primary",
+				foreground = "foreground",
+				padding = "sm",
 			},
-			spacing = {
-				sm = 2,
-				md = 4
-			}
 		})
-		
-		assert(theme ~= nil, "theme should be returned")
-		assert(theme.name == "custom")
-		assert(theme.colors.primary == "red")
-		
-		-- Use the theme
-		lumina.setTheme("custom")
-		local current = lumina.hooks.useTheme()
-		assert(current.name == "custom")
 	`)
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatalf("defineStyles: %v", err)
+	}
+
+	s := globalThemeManager.GetStyle("myButton")
+	if s == nil {
+		t.Fatal("expected myButton style")
+	}
+	if s["background"] != "primary" {
+		t.Fatalf("expected primary, got %s", s["background"])
+	}
+	globalThemeManager.ResetTheme()
 }
 
-func TestStyleResolver(t *testing.T) {
-	theme := DefaultTheme()
-	resolver := NewStyleResolver(theme)
+func TestLuaGetThemeColor(t *testing.T) {
+	ClearComponents()
+	ClearContextValues()
+	globalThemeManager.ResetTheme()
+	L := lua.NewState()
+	Open(L)
+	defer L.Close()
 
-	assert.Equal(t, "cyan", resolver.ResolveColor("primary"))
-	assert.Equal(t, "white", resolver.ResolveColor("unknown_color"))
-
-	assert.Equal(t, 4, resolver.ResolveSpacing("sm"))
-	assert.Equal(t, 8, resolver.ResolveSpacing("md"))
-	assert.Equal(t, 4, resolver.ResolveSpacing("unknown_spacing")) // default
-}
-
-func TestStyleResolverNilTheme(t *testing.T) {
-	resolver := NewStyleResolver(nil)
-	assert.NotNil(t, resolver)
-	assert.Equal(t, "cyan", resolver.ResolveColor("primary")) // from default
+	err := L.DoString(`
+		local c = lumina.getThemeColor("primary")
+		assert(c == "#89B4FA", "expected #89B4FA, got " .. tostring(c))
+		local raw = lumina.getThemeColor("#AABBCC")
+		assert(raw == "#AABBCC", "expected #AABBCC, got " .. tostring(raw))
+	`)
+	if err != nil {
+		t.Fatalf("getThemeColor: %v", err)
+	}
 }

@@ -184,13 +184,22 @@ func luaLoader(L *lua.State) int {
 		// State management
 		"createStore":            luaCreateStore,
 		"useStore":               luaUseStore,
+		// Theme system (extends existing setTheme/defineTheme in style_api.go)
+		"useTheme":               luaUseTheme,
+		"defineStyles":           luaDefineStyles,
+		"getThemeColor":          luaGetThemeColor,
 		// Web runtime
 		"serve":                  luaServe,
 		"serveBackground":        luaServeBackground,
+		// i18n
+		"useTranslation":         luaUseTranslation,
 	}, 0)
 
 	// Register lumina.animation sub-table with preset factories
 	registerAnimationPresets(L)
+
+	// Register lumina.i18n sub-table
+	registerI18nModule(L)
 
 	// Register lumina.Suspense as a component factory table (not a function)
 	registerSuspenseFactory(L)
