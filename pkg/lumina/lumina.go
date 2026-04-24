@@ -109,6 +109,12 @@ func luaLoader(L *lua.State) int {
 		// Async API
 		"useAsync": useAsync,
 		"delay":    luminaDelay,
+		// Viewport / Scroll API
+		"scrollTo":       luaScrollTo,
+		"scrollToBottom": luaScrollToBottom,
+		"scrollToTop":    luaScrollToTop,
+		"scrollBy":       luaScrollBy,
+		"getScrollInfo":  luaGetScrollInfo,
 	}, 0)
 
 	// Register hooks as sub-table
