@@ -15,6 +15,16 @@ const (
 	ModeJSON
 )
 
+// String returns the string representation of OutputMode.
+func (m OutputMode) String() string {
+	switch m {
+	case ModeJSON:
+		return "json"
+	default:
+		return "ansi"
+	}
+}
+
 // OutputAdapter is the interface for rendering frames to an output device.
 type OutputAdapter interface {
 	// Write writes a frame to the output.
@@ -189,4 +199,27 @@ func (a *NopAdapter) Close() error {
 // Mode returns ModeANSI.
 func (a *NopAdapter) Mode() OutputMode {
 	return ModeANSI
+}
+
+// Output mode management
+var currentOutputMode OutputMode = ModeANSI
+
+// SetOutputMode sets the global output mode.
+func SetOutputMode(mode OutputMode) {
+	currentOutputMode = mode
+}
+
+// GetOutputMode returns the current output mode.
+func GetOutputMode() OutputMode {
+	return currentOutputMode
+}
+
+// OutputModeFromString converts a string to OutputMode.
+func OutputModeFromString(s string) OutputMode {
+	switch s {
+	case "json":
+		return ModeJSON
+	default:
+		return ModeANSI
+	}
 }
