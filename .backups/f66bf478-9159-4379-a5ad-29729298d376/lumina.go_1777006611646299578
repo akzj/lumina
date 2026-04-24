@@ -1,0 +1,215 @@
+// Package lumina provides Lua bindings for the Lumina UI framework.
+package lumina
+
+import (
+	"sync"
+
+	"github.com/akzj/go-lua/pkg/lua"
+)
+
+// ModuleName is the name used to require this module from Lua.
+const ModuleName = "lumina"
+
+// ComponentRegistry stores registered component factories.
+var (
+	componentRegistry = make(map[string]*lua.State) // name -> state (for future use)
+	registryMu         sync.RWMutex
+)
+
+// ComponentDef represents the definition of a component from Lua.
+type ComponentDef struct {
+	Name   string
+	Init   int // stack index of init function (or -1 if none)
+	Render int // stack index of render function
+}
+
+// luaLoader is the module loader function that creates the lumina module table.
+func luaLoader(L *lua.State) int {
+	// Create module table
+	L.NewTable()
+
+	// Register module functions using SetFuncs
+	L.SetFuncs(map[string]lua.Function{
+		"version": func(L *lua.State) int {
+			L.PushString("0.1.0")
+			return 1
+		},
+		"echo": func(L *lua.State) int {
+			// Echo back the argument
+			L.PushValue(1) // copy argument to return
+			return 1
+		},
+		"info": func(L *lua.State) int {
+			// Return module info as a table
+			L.NewTable()
+			L.PushString("0.1.0")
+			L.SetField(-2, "version")
+			L.PushString("Lumina Terminal UI Framework")
+			L.SetField(-2, "description")
+			L.PushInteger(2024)
+			L.SetField(-2, "year")
+			return 1
+		},
+		"defineComponent": func(L *lua.State) int {
+			// defineComponent(config) -> Component
+			//
+			// Expected config table structure:
+			// {
+			//   name = "ComponentName",
+			//   init = function(props) ... end,  -- optional
+			//   render = function(instance) ... end,  -- required
+			//   cleanup = function(instance) ... end,  -- optional
+			// }
+			//
+			// Returns a component factory table that can be used with lumina.render().
+
+			if L.Type(-1) != lua.TypeTable {
+				typeName := L.TypeName(L.Type(-1))
+				L.PushString("defineComponent: expected table, got " + typeName)
+				L.Error()
+				return 0
+			}
+
+			// Swap: move config to upvalue slot, new table to -1
+			// Stack: [config] -> after NewTable -> [config, componentTable]
+			// We need: [componentTable, config] so we can read from config
+			L.PushValue(-1) // duplicate config -> [config, componentTable, config]
+			L.Insert(-3)    // move config to bottom -> [config, componentTable, ...wait]
+
+			// Actually simpler: push config ref to registry, work with new table
+			// Create new component table first
+			L.NewTable() // stack: [config, componentTable]
+
+			// Get component name from config (now at -2)
+			L.PushValue(-2) // copy config -> [config, componentTable, config]
+			L.GetField(-1, "name")
+			name, _ := L.ToString(-1)
+			L.Remove(-2) // remove the config copy we just used
+			// stack: [config, componentTable], name on stack
+
+			if name == "" {
+				L.Pop(3) // pop config, componentTable, name
+				L.PushString("defineComponent: 'name' is required")
+				L.Error()
+				return 0
+			}
+
+			L.PushString(name)
+			L.SetField(-3, "name") // set on componentTable (now at -3)
+			L.Pop(1) // pop name
+
+			// Verify render function exists
+			L.PushValue(-2) // copy config again
+			L.GetField(-1, "render")
+			L.Remove(-2) // remove config copy
+			if L.Type(-1) != lua.TypeFunction {
+				L.Pop(3) // pop config, componentTable, non-function
+				L.PushString("defineComponent: 'render' function is required")
+				L.Error()
+				return 0
+			}
+			// stack: [config, componentTable, renderFn]
+			// Set render on component table
+			L.SetField(-3, "render")
+			L.Pop(1) // pop render function reference
+
+			// Set other fields on componentTable (at -2)
+			L.PushString("component:" + name)
+			L.SetField(-2, "id")
+			L.PushBoolean(true)
+			L.SetField(-2, "isComponent")
+
+			// Pop config from stack, leaving componentTable as return value
+			L.Remove(-2) // remove config
+
+			// Component registry (in Go side for tracking)
+			registryMu.Lock()
+			componentRegistry[name] = L
+			registryMu.Unlock()
+
+			return 1 // return componentTable
+		},
+		"createState": func(L *lua.State) int {
+			// createState(initial) -> state
+			// Creates a component state with the given initial value.
+			//
+			// Returns a state object that can be passed to component instances.
+
+			// For now, create a simple state container
+			L.NewTable()
+			L.PushString("type")
+			L.SetField(-2, "state")
+			L.PushString("LuminaState")
+			L.SetField(-2, "stateType")
+
+			// Copy the initial value to the state
+			if !L.IsNoneOrNil(1) {
+				L.PushValue(1) // copy initial
+				L.SetField(-2, "value")
+			}
+
+			return 1
+		},
+		"render": func(L *lua.State) int {
+			// render(component, props) -> vdom
+			// Renders a component with the given props.
+			//
+			// This is a placeholder that returns an empty vdom structure.
+			// Full implementation coming in Week 2.
+
+			L.NewTable()
+			L.PushString("type")
+			L.SetField(-2, "vdom")
+			L.PushString("nil")
+			L.SetField(-2, "nodeType")
+
+			return 1
+		},
+	}, 0)
+
+	return 1 // module count (1 table returned)
+}
+
+// Open registers the lumina module into the global namespace AND into package.preload.
+// This allows both global.lumina and require("lumina") to work.
+func Open(L *lua.State) {
+	// Set as global "lumina" by calling luaLoader directly
+	luaLoader(L)
+	L.SetGlobal(ModuleName)
+
+	// Register in package.preload["lumina"] for require() support
+	// Get package table
+	L.GetGlobal("package")
+	// Get package.preload
+	L.GetField(-1, "preload")
+	// Push the loader function so luaLoader result goes to preload[key]
+	L.PushFunction(luaLoader)
+	// Set package.preload["lumina"] = luaLoader
+	L.SetField(-2, ModuleName)
+	// Pop package.preload and package tables
+	L.Pop(2)
+}
+
+// IsComponent checks if the value at idx is a Lumina component.
+func IsComponent(L *lua.State, idx int) bool {
+	L.GetField(idx, "isComponent")
+	if L.IsNone(-1) {
+		L.Pop(1)
+		return false
+	}
+	result := L.ToBoolean(-1)
+	L.Pop(1)
+	return result
+}
+
+// GetComponentName returns the name of a component.
+func GetComponentName(L *lua.State, idx int) string {
+	L.GetField(idx, "name")
+	if L.IsNoneOrNil(-1) {
+		L.Pop(1)
+		return ""
+	}
+	name, _ := L.ToString(-1)
+	L.Pop(1)
+	return name
+}
