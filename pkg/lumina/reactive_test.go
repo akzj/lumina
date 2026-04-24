@@ -3,7 +3,6 @@ package lumina
 
 import (
 	"testing"
-	"time"
 
 	"github.com/akzj/go-lua/pkg/lua"
 )
@@ -48,17 +47,13 @@ func TestRenderLoopStartStop(t *testing.T) {
 
 	rl := NewRenderLoop(L, 80, 24)
 
-	// Test start
+	// In the new architecture, RenderLoop is a thin wrapper.
+	// Start/Stop are no-ops, IsRunning always returns false.
 	rl.Start()
-	if !rl.IsRunning() {
-		t.Error("RenderLoop should be running after Start()")
-	}
-
-	// Test stop
 	rl.Stop()
-	time.Sleep(50 * time.Millisecond) // Give time for goroutine to stop
+
 	if rl.IsRunning() {
-		t.Error("RenderLoop should not be running after Stop()")
+		t.Error("RenderLoop.IsRunning should return false in new architecture")
 	}
 }
 
@@ -70,17 +65,10 @@ func TestAppCreation(t *testing.T) {
 		t.Error("App should have Lua state")
 	}
 
-	if app.RenderLoop == nil {
-		t.Error("App should have RenderLoop")
-	}
-
-	if !app.RenderLoop.IsRunning() {
-		// Start and verify
-		app.RenderLoop.Start()
-		if !app.RenderLoop.IsRunning() {
-			t.Error("RenderLoop should be running after Start()")
-		}
-		app.RenderLoop.Stop()
+	// Verify the App is stored as a UserValue on the state
+	retrieved := GetApp(app.L)
+	if retrieved != app {
+		t.Error("GetApp should return the same App instance")
 	}
 }
 
@@ -105,9 +93,6 @@ func TestReactiveIntegration(t *testing.T) {
 	globalRegistry.components[comp.ID] = comp
 	globalRegistry.mu.Unlock()
 
-	// Create render loop
-	_ = NewRenderLoop(L, 80, 24)
-
 	// Simulate state change
 	comp.SetState("count", 1)
 
@@ -122,4 +107,22 @@ func TestReactiveIntegration(t *testing.T) {
 	globalRegistry.mu.Unlock()
 
 	t.Log("Reactive chain verified: SetState -> Dirty flag set")
+}
+
+func TestAppPostEvent(t *testing.T) {
+	app := NewApp()
+	defer app.Close()
+
+	// Test that PostEvent doesn't block
+	app.PostEvent(AppEvent{Type: "quit"})
+
+	// Verify the event is in the channel
+	select {
+	case event := <-app.events:
+		if event.Type != "quit" {
+			t.Errorf("Expected quit event, got %s", event.Type)
+		}
+	default:
+		t.Error("Expected event in channel")
+	}
 }
