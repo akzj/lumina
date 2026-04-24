@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/akzj/lumina/pkg/lumina"
 	"github.com/akzj/go-lua/pkg/lua"
+	"github.com/akzj/lumina/pkg/lumina"
 )
 
 func main() {

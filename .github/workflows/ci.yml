@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+      
+      - name: Restore go modules
+        uses: actions/cache@v4
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+      
+      - name: Download dependencies
+        run: go mod download
+      
+      - name: Build
+        run: go build ./...
+      
+      - name: Run unit tests
+        run: go test -v ./pkg/lumina/...
+      
+      - name: Run E2E tests
+        run: go test -v ./pkg/lumina/e2e_test.go
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+      
+      - name: Vet
+        run: go vet ./...
+      
+      - name: Format check
+        run: |
+          if [ -n "$(go fmt ./... 2>&1)" ]; then
+            echo "Formatting issues found:"
+            go fmt ./...
+            exit 1
+          fi
+
+  example:
+    name: Example
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+      
+      - name: Run counter example
+        run: go run ./cmd/lumina ./examples/counter.lua

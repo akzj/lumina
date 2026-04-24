@@ -268,8 +268,8 @@ func TestComponentMetatable(t *testing.T) {
 	// Create a component userdata with initial state
 	L.NewUserdata(0, 0)
 	L.SetUserdataValue(-1, map[string]any{
-		"name":     "MyComponent",
-		"props":    map[string]any{"title": "Hello"},
+		"name":  "MyComponent",
+		"props": map[string]any{"title": "Hello"},
 	})
 	L.GetField(lua.RegistryIndex, "Component")
 	L.SetMetatable(-2)
@@ -286,8 +286,6 @@ func TestComponentMetatable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("comp:render() failed: %v", err)
 	}
-
-	
 
 	err = L.DoString(`
 		local name = comp:getName()

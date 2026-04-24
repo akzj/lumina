@@ -1,7 +1,7 @@
-# Lumina 架构设计文档 v0.1
+# Lumina 架构设计文档 v0.2
 
-> **版本**: v0.1 (Phase 1 Complete)  
-> **状态**: ✅ 实现完成  
+> **版本**: v0.2  
+> **状态**: 已决策，待实现  
 > **日期**: 2024-04-24  
 > **核心理念**: 基础牢固，可持续迭代，真实的 TUI 框架，不是 demo
 
@@ -670,54 +670,3 @@ local counter = lumina.defineComponent({
 
 - go-lua 项目：/home/ubuntu/workspace/go-lua
 - go-lua 设计文档：/home/ubuntu/workspace/go-lua/DESIGN.md
-
----
-
-# Phase 1 完成状态 (v0.1)
-
-## ✅ 已实现功能
-
-| 功能 | 状态 | 文件 |
-|------|------|------|
-| go-lua 集成 | ✅ | `pkg/lumina/lumina.go` |
-| 组件模型 | ✅ | `lumina.go` (defineComponent, hooks) |
-| OutputAdapter | ✅ | `pkg/lumina/output.go` |
-| ANSI 渲染 | ✅ | `pkg/lumina/ansi_adapter.go` |
-| VNode → Frame | ✅ | `pkg/lumina/renderer.go` |
-| Proto 生成 | ✅ | `pkg/lumina/v1/lumina.pb.go` |
-| Counter 示例 | ✅ | `examples/counter.lua` |
-| E2E 测试 | ✅ | `pkg/lumina/e2e_test.go` |
-| CI/CD | ✅ | `.github/workflows/ci.yml` |
-
-## 已知限制
-
-| 限制 | 说明 | 未来方向 |
-|------|------|----------|
-| 无热重载 | 需要手动重启 | Week 5+ |
-| 无 Diff Engine | 全量重绘 | 差分渲染 |
-| 无 Event 系统 | 按钮点击未实现 | 事件委托 |
-| 单 VM | 状态隔离在 VM 内 | 进程隔离 |
-| 固定 terminal size | 80x24 | 动态检测 |
-
-## 项目结构
-
-```
-lumina/
-├── pkg/lumina/
-│   ├── lumina.go           # 核心: Open, render, hooks
-│   ├── lumina_test.go      # 单元测试
-│   ├── e2e_test.go         # E2E 测试
-│   ├── output.go          # OutputAdapter 接口
-│   ├── ansi_adapter.go     # ANSI 终端输出
-│   ├── renderer.go         # VNode → Frame
-│   └── v1/lumina.pb.go     # Proto 生成代码
-├── examples/
-│   └── counter.lua        # Counter 示例
-├── proto/v1/
-│   └── lumina.proto       # Proto 定义
-├── .github/workflows/
-│   └── ci.yml            # CI/CD 流水线
-├── DESIGN.md              # 架构设计
-├── DEVELOPMENT.md         # 开发文档
-└── go.mod
-```
