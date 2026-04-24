@@ -3,6 +3,7 @@
 package lumina
 
 import (
+	"io"
 	"os"
 	"os/signal"
 	"strings"
@@ -66,6 +67,7 @@ type Terminal struct {
 	origTerm syscall.Termios
 	rawMode  bool
 	resizeCh chan os.Signal // SIGWINCH channel
+	output   io.Writer     // where to send escape sequences (default: os.Stdout)
 }
 
 // NewTerminal creates a terminal reader for stdin.
@@ -75,7 +77,17 @@ func NewTerminal() (*Terminal, error) {
 	if err := tcgetattr(fd, &orig); err != nil {
 		return nil, err
 	}
-	return &Terminal{fd: fd, origTerm: orig}, nil
+	return &Terminal{fd: fd, origTerm: orig, output: os.Stdout}, nil
+}
+
+// NewTerminalWithOutput creates a terminal reader with a custom output writer.
+func NewTerminalWithOutput(w io.Writer) (*Terminal, error) {
+	fd := int(os.Stdin.Fd())
+	var orig syscall.Termios
+	if err := tcgetattr(fd, &orig); err != nil {
+		return nil, err
+	}
+	return &Terminal{fd: fd, origTerm: orig, output: w}, nil
 }
 
 // EnableRawMode puts the terminal into raw mode.
@@ -108,8 +120,8 @@ func (t *Terminal) EnableRawMode() error {
 	t.rawMode = true
 
 	// Enable mouse reporting (SGR extended mode)
-	os.Stdout.WriteString("\x1b[?1003h") // ANY_EVENT mouse tracking (motion + click)
-	os.Stdout.WriteString("\x1b[?1006h") // SGR extended mouse format
+	t.output.Write([]byte("\x1b[?1003h")) // ANY_EVENT mouse tracking (motion + click)
+	t.output.Write([]byte("\x1b[?1006h")) // SGR extended mouse format
 
 	return nil
 }
@@ -118,8 +130,8 @@ func (t *Terminal) EnableRawMode() error {
 func (t *Terminal) RestoreMode() {
 	if t.rawMode {
 		// Disable mouse reporting
-		os.Stdout.WriteString("\x1b[?1006l")
-		os.Stdout.WriteString("\x1b[?1003l")
+		t.output.Write([]byte("\x1b[?1006l"))
+		t.output.Write([]byte("\x1b[?1003l"))
 
 		tcsetattr(t.fd, &t.origTerm)
 		t.rawMode = false
