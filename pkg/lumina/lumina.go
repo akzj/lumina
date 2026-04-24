@@ -141,6 +141,8 @@ func luaLoader(L *lua.State) int {
 		"back":             luaBack,
 		"useRoute":         useRoute,
 		"getCurrentPath":   luaGetCurrentPath,
+		// Scroll behavior API
+		"setScrollBehavior": luaSetScrollBehavior,
 		// Text Input API
 		"setInputValue":    luaSetInputValue,
 		"getInputValue":    luaGetInputValue,
@@ -1454,4 +1456,24 @@ func luaBack(L *lua.State) int {
 func luaGetCurrentPath(L *lua.State) int {
 	L.PushString(globalRouter.GetCurrentPath())
 	return 1
+}
+
+// -----------------------------------------------------------------------
+// Scroll Behavior Lua API
+// -----------------------------------------------------------------------
+
+// scrollBehavior controls whether scrolling is "instant" or "smooth".
+var scrollBehavior = "instant" // default for backward compat
+
+// GetScrollBehavior returns the current scroll behavior.
+func GetScrollBehavior() string { return scrollBehavior }
+
+// luaSetScrollBehavior sets the scroll behavior.
+// lumina.setScrollBehavior("smooth") or lumina.setScrollBehavior("instant")
+func luaSetScrollBehavior(L *lua.State) int {
+	behavior := L.CheckString(1)
+	if behavior == "smooth" || behavior == "instant" {
+		scrollBehavior = behavior
+	}
+	return 0
 }
