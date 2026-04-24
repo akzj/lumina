@@ -1,0 +1,25 @@
+// Package lumina provides Lua bindings for the Lumina UI framework.
+package lumina
+
+import (
+	"github.com/akzj/go-lua/pkg/lua"
+)
+
+// Open registers the lumina module and its functions into the Lua state.
+// It is called when require("lumina") is executed from Lua.
+func Open(L *lua.State) int {
+	// Register module functions
+	L.SetFuncs(map[string]lua.Function{
+		"version": func(L *lua.State) int {
+			L.PushString("0.1.0")
+			return 1
+		},
+		"create_component": func(L *lua.State) int {
+			name := L.CheckString(1)
+			L.PushString("component:" + name)
+			return 1
+		},
+	}, 0)
+
+	return 1
+}
