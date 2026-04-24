@@ -66,45 +66,42 @@ func defineTheme(L *lua.State) int {
 	// Extract colors
 	L.GetField(2, "colors")
 	if L.Type(-1) == lua.TypeTable {
-		L.PushNil()
-		for L.Next(-2) {
+		L.ForEach(-1, func(L *lua.State) bool {
 			if k, _ := L.ToString(-2); k != "" {
 				if v, _ := L.ToString(-1); v != "" {
 					theme.Colors[k] = v
 				}
 			}
-			L.Pop(1)
-		}
+			return true
+		})
 	}
 	L.Pop(1)
 
 	// Extract spacing
 	L.GetField(2, "spacing")
 	if L.Type(-1) == lua.TypeTable {
-		L.PushNil()
-		for L.Next(-2) {
+		L.ForEach(-1, func(L *lua.State) bool {
 			if k, _ := L.ToString(-2); k != "" {
 				if v, ok := L.ToInteger(-1); ok {
 					theme.Spacing[k] = int(v)
 				}
 			}
-			L.Pop(1)
-		}
+			return true
+		})
 	}
 	L.Pop(1)
 
 	// Extract borders
 	L.GetField(2, "borders")
 	if L.Type(-1) == lua.TypeTable {
-		L.PushNil()
-		for L.Next(-2) {
+		L.ForEach(-1, func(L *lua.State) bool {
 			if k, _ := L.ToString(-2); k != "" {
 				if v, _ := L.ToString(-1); v != "" {
 					theme.Borders[k] = v
 				}
 			}
-			L.Pop(1)
-		}
+			return true
+		})
 	}
 	L.Pop(1)
 
@@ -112,18 +109,10 @@ func defineTheme(L *lua.State) int {
 	RegisterTheme(name, theme)
 
 	// Push theme object as Lua table
-	L.NewTable()
-	L.PushString("name")
-	L.PushString(name)
-	L.SetTable(-3)
-	L.PushString("colors")
-	L.NewTable()
-	for k, v := range theme.Colors {
-		L.PushString(k)
-		L.PushString(v)
-		L.SetTable(-3)
-	}
-	L.SetTable(-3)
+	L.NewTableFrom(map[string]any{
+		"name":   name,
+		"colors": theme.Colors,
+	})
 
 	return 1
 }

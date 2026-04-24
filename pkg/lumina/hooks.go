@@ -161,20 +161,15 @@ func useRef(L *lua.State) int {
 		return 0
 	}
 
-	// Create ref table
-	L.NewTable()
-
 	// Get initial value
 	var initial any
 	if L.GetTop() >= 1 && !L.IsNoneOrNil(1) {
 		initial = L.ToAny(1)
 	}
 
-	// Set current to initial
-	L.PushString("current")
-	L.PushAny(initial)
-	L.SetTable(-3)
-
+	L.NewTableFrom(map[string]any{
+		"current": initial,
+	})
 	return 1
 }
 
@@ -187,25 +182,12 @@ func useTheme(L *lua.State) int {
 		theme = DefaultTheme()
 	}
 
-	// Push theme as a Lua table using PushAny for sub-tables
-	L.NewTable()
-
-	L.PushString("colors")
-	L.PushAny(theme.Colors)
-	L.SetTable(-3)
-
-	L.PushString("spacing")
-	L.PushAny(theme.Spacing)
-	L.SetTable(-3)
-
-	L.PushString("borders")
-	L.PushAny(theme.Borders)
-	L.SetTable(-3)
-
-	L.PushString("name")
-	L.PushString(theme.Name)
-	L.SetTable(-3)
-
+	L.NewTableFrom(map[string]any{
+		"name":    theme.Name,
+		"colors":  theme.Colors,
+		"spacing": theme.Spacing,
+		"borders": theme.Borders,
+	})
 	return 1
 }
 
