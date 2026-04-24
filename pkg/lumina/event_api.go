@@ -9,48 +9,15 @@ import (
 
 // pushEventToLua pushes an Event as a Lua table onto the stack.
 func pushEventToLua(L *lua.State, e *Event) {
-	L.NewTable()
-	L.PushString("type")
-	L.PushString(e.Type)
-	L.SetTable(-3)
-	L.PushString("key")
-	L.PushString(e.Key)
-	L.SetTable(-3)
-	L.PushString("code")
-	L.PushString(e.Code)
-	L.SetTable(-3)
-	L.PushString("x")
-	L.PushInteger(int64(e.X))
-	L.SetTable(-3)
-	L.PushString("y")
-	L.PushInteger(int64(e.Y))
-	L.SetTable(-3)
-	L.PushString("button")
-	L.PushString(e.Button)
-	L.SetTable(-3)
-	L.PushString("target")
-	L.PushString(e.Target)
-	L.SetTable(-3)
-	L.PushString("timestamp")
-	L.PushInteger(e.Timestamp)
-	L.SetTable(-3)
-
-	// Modifiers sub-table
-	L.PushString("modifiers")
-	L.NewTable()
-	L.PushString("ctrl")
-	L.PushBoolean(e.Modifiers.Ctrl)
-	L.SetTable(-3)
-	L.PushString("shift")
-	L.PushBoolean(e.Modifiers.Shift)
-	L.SetTable(-3)
-	L.PushString("alt")
-	L.PushBoolean(e.Modifiers.Alt)
-	L.SetTable(-3)
-	L.PushString("meta")
-	L.PushBoolean(e.Modifiers.Meta)
-	L.SetTable(-3)
-	L.SetTable(-3)
+	L.PushAny(map[string]any{
+		"type": e.Type, "key": e.Key, "code": e.Code,
+		"x": int64(e.X), "y": int64(e.Y), "button": e.Button,
+		"target": e.Target, "timestamp": e.Timestamp,
+		"modifiers": map[string]any{
+			"ctrl": e.Modifiers.Ctrl, "shift": e.Modifiers.Shift,
+			"alt": e.Modifiers.Alt, "meta": e.Modifiers.Meta,
+		},
+	})
 }
 
 // registerEvent(eventType, componentID?, handler) — register event handler
@@ -87,14 +54,8 @@ func registerEvent(L *lua.State) int {
 			})
 		} else {
 			// Fallback: direct call (for tests without App)
-			L.RawGetI(lua.RegistryIndex, int64(refID))
-			if L.Type(-1) == lua.TypeFunction {
-				pushEventToLua(L, e)
-				status := L.PCall(1, 0, 0)
-				if status != lua.OK {
-					L.Pop(1)
-				}
-			}
+			pushEventToLua(L, e)
+			_ = L.CallRef(refID, 1, 0)
 		}
 	})
 
@@ -126,23 +87,11 @@ func emitEvent(L *lua.State) int {
 
 	// Optional event data table
 	if L.GetTop() >= 3 && L.Type(3) == lua.TypeTable {
-		L.GetField(3, "key")
-		if s, _ := L.ToString(-1); s != "" {
+		if s := L.GetFieldString(3, "key"); s != "" {
 			e.Key = s
 		}
-		L.Pop(1)
-
-		L.GetField(3, "x")
-		if n, ok := L.ToInteger(-1); ok {
-			e.X = int(n)
-		}
-		L.Pop(1)
-
-		L.GetField(3, "y")
-		if n, ok := L.ToInteger(-1); ok {
-			e.Y = int(n)
-		}
-		L.Pop(1)
+		e.X = int(L.GetFieldInt(3, "x"))
+		e.Y = int(L.GetFieldInt(3, "y"))
 	}
 
 	globalEventBus.Emit(e)
@@ -157,9 +106,7 @@ func registerShortcut(L *lua.State) int {
 		return 0
 	}
 
-	L.GetField(1, "key")
-	key, _ := L.ToString(-1)
-	L.Pop(1)
+	key := L.GetFieldString(1, "key")
 
 	if key == "" {
 		L.PushString("registerShortcut: 'key' is required")
@@ -261,12 +208,7 @@ func isFocusable(L *lua.State) int {
 // getFocusableIDs() → table — get list of focusable component IDs
 func getFocusableIDs(L *lua.State) int {
 	ids := globalEventBus.GetFocusableIDs()
-	L.NewTable()
-	for i, id := range ids {
-		L.PushInteger(int64(i + 1))
-		L.PushString(id)
-		L.SetTable(-3)
-	}
+	L.PushAny(ids)
 	return 1
 }
 
@@ -282,17 +224,9 @@ func emitKeyEvent(L *lua.State) int {
 
 	// Optional modifiers table
 	if L.GetTop() >= 2 && L.Type(2) == lua.TypeTable {
-		L.GetField(2, "ctrl")
-		e.Modifiers.Ctrl = L.ToBoolean(-1)
-		L.Pop(1)
-
-		L.GetField(2, "shift")
-		e.Modifiers.Shift = L.ToBoolean(-1)
-		L.Pop(1)
-
-		L.GetField(2, "alt")
-		e.Modifiers.Alt = L.ToBoolean(-1)
-		L.Pop(1)
+		e.Modifiers.Ctrl = L.GetFieldBool(2, "ctrl")
+		e.Modifiers.Shift = L.GetFieldBool(2, "shift")
+		e.Modifiers.Alt = L.GetFieldBool(2, "alt")
 	}
 
 	globalEventBus.Emit(e)
