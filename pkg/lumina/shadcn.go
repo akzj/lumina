@@ -34,6 +34,18 @@ var shadcnComponents = map[string]string{
 	"shadcn.pagination":   "components/shadcn/pagination.lua",
 	"shadcn.toggle":       "components/shadcn/toggle.lua",
 	"shadcn.toggle_group": "components/shadcn/toggle_group.lua",
+	// Phase 22: Form components
+	"shadcn.select":        "components/shadcn/select.lua",
+	"shadcn.checkbox":      "components/shadcn/checkbox.lua",
+	"shadcn.radio_group":   "components/shadcn/radio_group.lua",
+	"shadcn.slider":        "components/shadcn/slider.lua",
+	"shadcn.textarea":      "components/shadcn/textarea.lua",
+	"shadcn.field":         "components/shadcn/field.lua",
+	"shadcn.input_group":   "components/shadcn/input_group.lua",
+	"shadcn.input_otp":     "components/shadcn/input_otp.lua",
+	"shadcn.combobox":      "components/shadcn/combobox.lua",
+	"shadcn.native_select": "components/shadcn/native_select.lua",
+	"shadcn.form":          "components/shadcn/form.lua",
 	"shadcn":              "components/shadcn/init.lua",
 }
 

@@ -2,9 +2,10 @@
 -- Exports all shadcn-style terminal UI components.
 local shadcn = {}
 
+-- Phase 21: Basic components
 shadcn.Button      = require("shadcn.button")
 shadcn.Badge       = require("shadcn.badge")
-shadcn.Card        = require("shadcn.card")  -- returns table: Card, CardHeader, CardTitle, etc.
+shadcn.Card        = require("shadcn.card")
 shadcn.Alert       = require("shadcn.alert")
 shadcn.Label       = require("shadcn.label")
 shadcn.Separator   = require("shadcn.separator")
@@ -22,5 +23,18 @@ shadcn.Table       = require("shadcn.table")
 shadcn.Pagination  = require("shadcn.pagination")
 shadcn.Toggle      = require("shadcn.toggle")
 shadcn.ToggleGroup = require("shadcn.toggle_group")
+
+-- Phase 22: Form components
+shadcn.Select       = require("shadcn.select")
+shadcn.Checkbox     = require("shadcn.checkbox")
+shadcn.RadioGroup   = require("shadcn.radio_group")
+shadcn.Slider       = require("shadcn.slider")
+shadcn.Textarea     = require("shadcn.textarea")
+shadcn.Field        = require("shadcn.field")
+shadcn.InputGroup   = require("shadcn.input_group")
+shadcn.InputOTP     = require("shadcn.input_otp")
+shadcn.Combobox     = require("shadcn.combobox")
+shadcn.NativeSelect = require("shadcn.native_select")
+shadcn.Form         = require("shadcn.form")
 
 return shadcn
