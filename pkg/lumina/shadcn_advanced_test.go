@@ -387,3 +387,172 @@ func TestShadcn_DropdownMenuRender(t *testing.T) {
 		t.Fatalf("DropdownMenuRender: %v", err)
 	}
 }
+
+// Phase 23: Complex component require tests
+
+func TestShadcn_Command(t *testing.T) {
+	L := shadcnAdvState(t)
+	defer L.Close()
+	err := L.DoString(`
+		local Command = require("shadcn.command")
+		assert(Command ~= nil)
+		assert(Command.isComponent == true)
+		assert(Command.name == "ShadcnCommand")
+	`)
+	if err != nil {
+		t.Fatalf("Command: %v", err)
+	}
+}
+
+func TestShadcn_Menubar(t *testing.T) {
+	L := shadcnAdvState(t)
+	defer L.Close()
+	err := L.DoString(`
+		local Menubar = require("shadcn.menubar")
+		assert(Menubar ~= nil)
+		assert(Menubar.isComponent == true)
+	`)
+	if err != nil {
+		t.Fatalf("Menubar: %v", err)
+	}
+}
+
+func TestShadcn_ScrollArea(t *testing.T) {
+	L := shadcnAdvState(t)
+	defer L.Close()
+	err := L.DoString(`
+		local ScrollArea = require("shadcn.scroll_area")
+		assert(ScrollArea ~= nil)
+		assert(ScrollArea.isComponent == true)
+	`)
+	if err != nil {
+		t.Fatalf("ScrollArea: %v", err)
+	}
+}
+
+func TestShadcn_Collapsible(t *testing.T) {
+	L := shadcnAdvState(t)
+	defer L.Close()
+	err := L.DoString(`
+		local Collapsible = require("shadcn.collapsible")
+		assert(Collapsible ~= nil)
+		assert(Collapsible.isComponent == true)
+	`)
+	if err != nil {
+		t.Fatalf("Collapsible: %v", err)
+	}
+}
+
+func TestShadcn_Carousel(t *testing.T) {
+	L := shadcnAdvState(t)
+	defer L.Close()
+	err := L.DoString(`
+		local Carousel = require("shadcn.carousel")
+		assert(Carousel ~= nil)
+		assert(Carousel.isComponent == true)
+	`)
+	if err != nil {
+		t.Fatalf("Carousel: %v", err)
+	}
+}
+
+func TestShadcn_Sonner(t *testing.T) {
+	L := shadcnAdvState(t)
+	defer L.Close()
+	err := L.DoString(`
+		local Sonner = require("shadcn.sonner")
+		assert(Sonner ~= nil)
+		assert(Sonner.isComponent == true)
+	`)
+	if err != nil {
+		t.Fatalf("Sonner: %v", err)
+	}
+}
+
+// Render tests for complex components
+
+func TestShadcn_CommandRender(t *testing.T) {
+	L := shadcnAdvState(t)
+	defer L.Close()
+	err := L.DoString(`
+		local Command = require("shadcn.command")
+		local tree = lumina.render(Command, {
+			open = true,
+			items = {
+				{ label = "New File", shortcut = "Ctrl+N" },
+				{ label = "Open File", shortcut = "Ctrl+O" },
+				{ label = "Save", shortcut = "Ctrl+S" },
+			},
+			selectedIndex = 1,
+		})
+		assert(tree ~= nil)
+	`)
+	if err != nil {
+		t.Fatalf("CommandRender: %v", err)
+	}
+}
+
+func TestShadcn_SonnerRender(t *testing.T) {
+	L := shadcnAdvState(t)
+	defer L.Close()
+	err := L.DoString(`
+		local Sonner = require("shadcn.sonner")
+		local tree = lumina.render(Sonner, {
+			toasts = {
+				{ title = "Success!", variant = "success", description = "File saved." },
+				{ title = "Error", variant = "error" },
+			},
+		})
+		assert(tree ~= nil)
+	`)
+	if err != nil {
+		t.Fatalf("SonnerRender: %v", err)
+	}
+}
+
+func TestShadcn_CarouselRender(t *testing.T) {
+	L := shadcnAdvState(t)
+	defer L.Close()
+	err := L.DoString(`
+		local Carousel = require("shadcn.carousel")
+		local tree = lumina.render(Carousel, {
+			items = { "Slide 1", "Slide 2", "Slide 3" },
+			currentIndex = 2,
+		})
+		assert(tree ~= nil)
+	`)
+	if err != nil {
+		t.Fatalf("CarouselRender: %v", err)
+	}
+}
+
+func TestShadcn_InitModule_Full(t *testing.T) {
+	L := shadcnAdvState(t)
+	defer L.Close()
+	err := L.DoString(`
+		local shadcn = require("shadcn")
+		-- Phase 21 basics
+		assert(shadcn.Button ~= nil)
+		assert(shadcn.Badge ~= nil)
+		assert(shadcn.Card ~= nil)
+		-- Phase 22 forms
+		assert(shadcn.Select ~= nil)
+		assert(shadcn.Checkbox ~= nil)
+		assert(shadcn.Form ~= nil)
+		-- Phase 23 overlays
+		assert(shadcn.Dialog ~= nil)
+		assert(shadcn.AlertDialog ~= nil)
+		assert(shadcn.DropdownMenu ~= nil)
+		assert(shadcn.Tooltip ~= nil)
+		-- Phase 23 complex
+		assert(shadcn.Command ~= nil)
+		assert(shadcn.Menubar ~= nil)
+		assert(shadcn.ScrollArea ~= nil)
+		assert(shadcn.Collapsible ~= nil)
+		assert(shadcn.Carousel ~= nil)
+		assert(shadcn.Sonner ~= nil)
+	`)
+	if err != nil {
+		t.Fatalf("InitModule full: %v", err)
+	}
+}

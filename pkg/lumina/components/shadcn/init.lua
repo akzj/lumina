@@ -37,6 +37,14 @@ shadcn.Combobox     = require("shadcn.combobox")
 shadcn.NativeSelect = require("shadcn.native_select")
 shadcn.Form         = require("shadcn.form")
 
+-- Phase 23: Complex components
+shadcn.Command      = require("shadcn.command")
+shadcn.Menubar      = require("shadcn.menubar")
+shadcn.ScrollArea   = require("shadcn.scroll_area")
+shadcn.Collapsible  = require("shadcn.collapsible")
+shadcn.Carousel     = require("shadcn.carousel")
+shadcn.Sonner       = require("shadcn.sonner")
+
 -- Phase 23: Overlay components
 shadcn.Dialog        = require("shadcn.dialog")
 shadcn.AlertDialog   = require("shadcn.alert_dialog")
