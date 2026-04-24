@@ -213,6 +213,9 @@ func (app *App) handleEvent(event AppEvent) {
 			globalEventBus.HandleKeyEvent(e.Key, e.Modifiers)
 		}
 
+		// Handle scroll events (mouse wheel and PageUp/PageDown)
+		app.handleScrollEvent(e)
+
 		// Re-render after input handling
 		app.renderAllDirty()
 
@@ -233,6 +236,57 @@ func (app *App) handleEvent(event AppEvent) {
 		}
 		// Re-render after event handling (state may have changed)
 		app.renderAllDirty()
+	}
+}
+
+// handleScrollEvent handles scroll-related events (mouse wheel, PageUp/PageDown).
+func (app *App) handleScrollEvent(e *Event) {
+	switch e.Type {
+	case "scroll":
+		// Mouse wheel scroll — find the scrollable container under the cursor
+		// e.Y contains the scroll direction: negative = up, positive = down
+		// For mouse scroll, we use the focused container or find by position
+		focusedID := globalEventBus.GetFocused()
+		if focusedID != "" {
+			ScrollViewport(focusedID, e.Y)
+		}
+
+	case "keydown":
+		focusedID := globalEventBus.GetFocused()
+		if focusedID == "" {
+			return
+		}
+
+		switch e.Key {
+		case "PageUp":
+			viewportMu.RLock()
+			vp, ok := viewportRegistry[focusedID]
+			viewportMu.RUnlock()
+			if ok {
+				vp.ScrollUp(vp.ViewH)
+			}
+		case "PageDown":
+			viewportMu.RLock()
+			vp, ok := viewportRegistry[focusedID]
+			viewportMu.RUnlock()
+			if ok {
+				vp.ScrollDown(vp.ViewH)
+			}
+		case "Home":
+			viewportMu.RLock()
+			vp, ok := viewportRegistry[focusedID]
+			viewportMu.RUnlock()
+			if ok {
+				vp.ScrollToTop()
+			}
+		case "End":
+			viewportMu.RLock()
+			vp, ok := viewportRegistry[focusedID]
+			viewportMu.RUnlock()
+			if ok {
+				vp.ScrollToBottom()
+			}
+		}
 	}
 }
 

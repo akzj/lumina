@@ -194,9 +194,15 @@ func renderVNode(frame *Frame, vnode *VNode) {
 			renderFocusIndicator(frame, vnode)
 		}
 
-		// Render children
-		for _, child := range vnode.Children {
-			renderVNode(frame, child)
+		// Determine content clipping area for scrollable containers
+		scrollable := style.Overflow == "scroll"
+		if scrollable {
+			renderScrollableChildren(frame, vnode, style)
+		} else {
+			// Render children normally
+			for _, child := range vnode.Children {
+				renderVNode(frame, child)
+			}
 		}
 	}
 }
@@ -390,4 +396,219 @@ func SetTerminalTitle(title string) error {
 	// OSC sequence to set title: \x1b]0;title\x07
 	// This requires using the raw writer, not the buffered adapter
 	return nil // TODO: implement if needed
+}
+
+// renderScrollableChildren renders children of a scrollable container,
+// clipping them to the container's visible area and rendering a scrollbar.
+func renderScrollableChildren(frame *Frame, vnode *VNode, style Style) {
+	// Calculate the clip region (content area inside border + padding)
+	borderW := 0
+	if style.Border == "single" || style.Border == "double" || style.Border == "rounded" {
+		borderW = 1
+	}
+
+	clipX := vnode.X + borderW + style.PaddingLeft
+	clipY := vnode.Y + borderW + style.PaddingTop
+	clipW := vnode.W - 2*borderW - style.PaddingLeft - style.PaddingRight
+	clipH := vnode.H - 2*borderW - style.PaddingTop - style.PaddingBottom
+
+	// Reserve 1 column for scrollbar
+	if clipW > 1 {
+		clipW-- // scrollbar takes rightmost column
+	}
+
+	if clipW <= 0 || clipH <= 0 {
+		return
+	}
+
+	// Render children with clipping
+	for _, child := range vnode.Children {
+		renderVNodeClipped(frame, child, clipX, clipY, clipW, clipH)
+	}
+
+	// Render scrollbar if needed
+	nodeID, _ := vnode.Props["id"].(string)
+	if nodeID != "" {
+		vp := GetViewport(nodeID)
+		if vp.NeedsScroll() {
+			scrollbarX := clipX + clipW // right edge of content area
+			renderScrollbar(frame, scrollbarX, clipY, clipH, vp)
+		}
+	}
+}
+
+// renderVNodeClipped renders a VNode and its children, clipping to the given rect.
+func renderVNodeClipped(frame *Frame, vnode *VNode, clipX, clipY, clipW, clipH int) {
+	// Quick reject: if the node is entirely outside the clip region, skip it
+	if vnode.Y+vnode.H <= clipY || vnode.Y >= clipY+clipH {
+		return // entirely above or below
+	}
+	if vnode.X+vnode.W <= clipX || vnode.X >= clipX+clipW {
+		return // entirely left or right
+	}
+
+	style := vnode.Style
+
+	switch vnode.Type {
+	case "text":
+		// Render text with clipping
+		renderTextClipped(frame, vnode, style, clipX, clipY, clipW, clipH)
+
+	default:
+		// Container: render background clipped
+		if style.Background != "" {
+			for y := vnode.Y; y < vnode.Y+vnode.H; y++ {
+				if y < clipY || y >= clipY+clipH {
+					continue
+				}
+				if y < 0 || y >= frame.Height {
+					continue
+				}
+				for x := vnode.X; x < vnode.X+vnode.W; x++ {
+					if x < clipX || x >= clipX+clipW {
+						continue
+					}
+					if x < 0 || x >= frame.Width {
+						continue
+					}
+					frame.Cells[y][x] = Cell{Char: ' ', Background: style.Background}
+				}
+			}
+		}
+
+		// Render border clipped (only if visible)
+		if style.Border != "" {
+			renderBorderClipped(frame, vnode, style.Border, clipX, clipY, clipW, clipH)
+		}
+
+		// Render children clipped
+		for _, child := range vnode.Children {
+			renderVNodeClipped(frame, child, clipX, clipY, clipW, clipH)
+		}
+	}
+}
+
+// renderTextClipped renders text content clipped to the given rect.
+func renderTextClipped(frame *Frame, vnode *VNode, style Style, clipX, clipY, clipW, clipH int) {
+	if vnode.Content == "" {
+		return
+	}
+
+	borderW := 0
+	if style.Border == "single" || style.Border == "double" || style.Border == "rounded" {
+		borderW = 1
+	}
+
+	startX := vnode.X + borderW + style.PaddingLeft
+	startY := vnode.Y + borderW + style.PaddingTop
+	availW := vnode.W - 2*borderW - style.PaddingLeft - style.PaddingRight
+	if availW <= 0 {
+		availW = vnode.W
+	}
+
+	col := 0
+	row := 0
+	for _, ch := range vnode.Content {
+		px := startX + col
+		py := startY + row
+
+		// Clip check
+		if py >= clipY && py < clipY+clipH && px >= clipX && px < clipX+clipW {
+			if px >= 0 && px < frame.Width && py >= 0 && py < frame.Height {
+				frame.Cells[py][px] = Cell{
+					Char:       ch,
+					Foreground: style.Foreground,
+					Background: style.Background,
+					Bold:       style.Bold,
+					Dim:        style.Dim,
+					Underline:  style.Underline,
+				}
+			}
+		}
+
+		col++
+		if col >= availW {
+			col = 0
+			row++
+		}
+	}
+}
+
+// renderBorderClipped draws a border clipped to the given rect.
+func renderBorderClipped(frame *Frame, vnode *VNode, borderType string, clipX, clipY, clipW, clipH int) {
+	x, y := vnode.X, vnode.Y
+	w, h := vnode.W, vnode.H
+
+	if w < 2 || h < 2 {
+		return
+	}
+
+	var tl, tr, bl, br, hLine, vLine rune
+	switch borderType {
+	case "single":
+		tl, tr, bl, br, hLine, vLine = '┌', '┐', '└', '┘', '─', '│'
+	case "double":
+		tl, tr, bl, br, hLine, vLine = '╔', '╗', '╚', '╝', '═', '║'
+	case "rounded":
+		tl, tr, bl, br, hLine, vLine = '╭', '╮', '╰', '╯', '─', '│'
+	default:
+		return
+	}
+
+	setClipped := func(px, py int, ch rune) {
+		if px >= clipX && px < clipX+clipW && py >= clipY && py < clipY+clipH {
+			if px >= 0 && px < frame.Width && py >= 0 && py < frame.Height {
+				frame.Cells[py][px] = Cell{Char: ch}
+			}
+		}
+	}
+
+	// Top border
+	setClipped(x, y, tl)
+	for i := 1; i < w-1; i++ {
+		setClipped(x+i, y, hLine)
+	}
+	setClipped(x+w-1, y, tr)
+
+	// Bottom border
+	setClipped(x, y+h-1, bl)
+	for i := 1; i < w-1; i++ {
+		setClipped(x+i, y+h-1, hLine)
+	}
+	setClipped(x+w-1, y+h-1, br)
+
+	// Vertical borders
+	for i := 1; i < h-1; i++ {
+		setClipped(x, y+i, vLine)
+		setClipped(x+w-1, y+i, vLine)
+	}
+}
+
+// renderScrollbar draws a vertical scrollbar at the given position.
+// Uses │ for the track and █ for the thumb.
+func renderScrollbar(frame *Frame, x, y, trackH int, vp *Viewport) {
+	if x < 0 || x >= frame.Width || trackH <= 0 {
+		return
+	}
+
+	thumbStart, thumbSize := vp.ScrollbarThumb(trackH)
+
+	for i := 0; i < trackH; i++ {
+		py := y + i
+		if py < 0 || py >= frame.Height {
+			continue
+		}
+
+		var ch rune
+		if i >= thumbStart && i < thumbStart+thumbSize {
+			ch = '█' // thumb
+		} else {
+			ch = '│' // track
+		}
+
+		frame.Cells[py][x] = Cell{
+			Char:       ch,
+			Foreground: "#666666", // dim gray for scrollbar
+		}
+	}
 }
