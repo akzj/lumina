@@ -54,6 +54,8 @@ func luaLoader(L *lua.State) int {
 		"render":          renderComponent,
 		"mount":           luaMount,
 		"run":             luaRun,
+		"quit":            luaQuit,
+		"onKey":           luaOnKey,
 		"createState":     createState,
 		// Style & Theme API
 		"defineStyle":        defineStyle,
@@ -837,17 +839,81 @@ func luaRun(L *lua.State) int {
 		return 0
 	}
 
-	// If we have an app, start the event loop
-	// (This blocks until app.Stop() is called)
+	// If we have an app, mark it as running.
+	// The actual event loop is managed by App.Run/RunInteractive/RunWithTermIO,
+	// not by the Lua-side lumina.run() call.
 	app.running = true
-	go func() {
-		// The event loop runs on the goroutine that called Run(),
-		// but here we're inside a Lua call, so we can't block.
-		// Instead, mark that run was requested — the App.Run() caller
-		// handles the actual loop.
-	}()
+	return 0
+}
+
+// luaQuit stops the application.
+// lumina.quit()
+func luaQuit(L *lua.State) int {
+	app := GetApp(L)
+	if app != nil {
+		app.Stop()
+	}
+	return 0
+}
+
+// keyBindings stores key → Lua function ref mappings for lumina.onKey().
+var (
+	keyBindings   = make(map[string]int) // key → Lua registry ref
+	keyBindingsMu sync.Mutex
+)
+
+// luaOnKey registers a key binding: lumina.onKey("q", function() ... end)
+func luaOnKey(L *lua.State) int {
+	key := L.CheckString(1)
+	if L.Type(2) != lua.TypeFunction {
+		L.PushString("onKey: second argument must be a function")
+		L.Error()
+		return 0
+	}
+
+	// Store the callback in the Lua registry
+	L.PushValue(2)
+	ref := L.Ref(lua.RegistryIndex)
+
+	keyBindingsMu.Lock()
+	keyBindings[key] = ref
+	keyBindingsMu.Unlock()
+
+	// Register as a keyboard shortcut in the event bus
+	normKey := normalizeShortcutKey(key)
+	app := GetApp(L)
+
+	globalEventBus.mu.Lock()
+	globalEventBus.shortcuts[normKey] = eventHandler{
+		componentID: "global",
+		handler: func(e *Event) {
+			if app != nil {
+				app.PostEvent(AppEvent{
+					Type:    "lua_callback",
+					Payload: LuaCallbackEvent{RefID: ref, Event: e},
+				})
+			} else {
+				L.RawGetI(lua.RegistryIndex, int64(ref))
+				if L.Type(-1) == lua.TypeFunction {
+					pushEventToLua(L, e)
+					status := L.PCall(1, 0, 0)
+					if status != lua.OK {
+						L.Pop(1)
+					}
+				}
+			}
+		},
+	}
+	globalEventBus.mu.Unlock()
 
 	return 0
+}
+
+// ClearKeyBindings removes all key bindings (for testing).
+func ClearKeyBindings() {
+	keyBindingsMu.Lock()
+	defer keyBindingsMu.Unlock()
+	keyBindings = make(map[string]int)
 }
 
 // -----------------------------------------------------------------------
