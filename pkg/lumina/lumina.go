@@ -131,8 +131,15 @@ func luaLoader(L *lua.State) int {
 
 	// Also register common hooks directly on lumina for convenience
 	L.SetFuncs(map[string]lua.Function{
-		"useState":  useState,
-		"useEffect": useEffect,
+		"useState":        useState,
+		"useEffect":       useEffect,
+		"useMemo":         useMemo,
+		"useCallback":     useCallback,
+		"useRef":          useRef,
+		"useReducer":      useReducer,
+		"createContext":   createContext,
+		"useContext":      useContext,
+		"setContextValue": setContextValueLua,
 	}, 0)
 
 	// Register console as sub-table
@@ -368,18 +375,29 @@ func renderComponent(L *lua.State) int {
 	}
 
 	// vdom is now on stack at -1
-	// Convert to Frame and write to terminal
-	frame := RenderLuaVNode(L, -1, 80, 24)
+	// Convert Lua table to VNode tree.
+	newVNode := LuaVNodeToVNode(L, -1)
+
+	// Diff against previous render.
+	var frame *Frame
+	if comp != nil && comp.LastVNode != nil {
+		patches := DiffVNode(comp.LastVNode, newVNode)
+		_ = patches // diff available for future incremental updates
+		frame = VNodeToFrame(newVNode, 80, 24)
+	} else {
+		frame = VNodeToFrame(newVNode, 80, 24)
+	}
+	if comp != nil {
+		comp.LastVNode = newVNode
+	}
 
 	// Write to terminal
 	adapter := GetOutputAdapter()
 	if adapter == nil {
-		// Use noop adapter if not set, to avoid nil panic
 		adapter = &NopAdapter{}
 	}
 	if err := adapter.Write(frame); err != nil {
 		// Error writing, but we still return the vdom
-		// Could log or handle differently
 	}
 
 	return 1
