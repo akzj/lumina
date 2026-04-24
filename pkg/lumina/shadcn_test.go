@@ -372,3 +372,166 @@ func TestShadcn_ProgressRender(t *testing.T) {
 		t.Fatalf("ProgressRender: %v", err)
 	}
 }
+
+// Phase 38: Additional shadcn component tests
+
+func TestShadcnAspectRatio(t *testing.T) {
+	ClearComponents()
+	ClearContextValues()
+	L := lua.NewState()
+	Open(L)
+	defer L.Close()
+	err := L.DoString(`local c = require("shadcn.aspect_ratio"); assert(c ~= nil, "aspect_ratio nil")`)
+	if err != nil {
+		t.Fatalf("AspectRatio: %v", err)
+	}
+}
+
+func TestShadcnButtonGroup(t *testing.T) {
+	ClearComponents()
+	ClearContextValues()
+	L := lua.NewState()
+	Open(L)
+	defer L.Close()
+	err := L.DoString(`local c = require("shadcn.button_group"); assert(c ~= nil, "button_group nil")`)
+	if err != nil {
+		t.Fatalf("ButtonGroup: %v", err)
+	}
+}
+
+func TestShadcnCalendar(t *testing.T) {
+	ClearComponents()
+	ClearContextValues()
+	L := lua.NewState()
+	Open(L)
+	defer L.Close()
+	err := L.DoString(`local c = require("shadcn.calendar"); assert(c ~= nil, "calendar nil")`)
+	if err != nil {
+		t.Fatalf("Calendar: %v", err)
+	}
+}
+
+func TestShadcnDatePicker(t *testing.T) {
+	ClearComponents()
+	ClearContextValues()
+	L := lua.NewState()
+	Open(L)
+	defer L.Close()
+	err := L.DoString(`local c = require("shadcn.date_picker"); assert(c ~= nil, "date_picker nil")`)
+	if err != nil {
+		t.Fatalf("DatePicker: %v", err)
+	}
+}
+
+func TestShadcnNavigationMenu(t *testing.T) {
+	ClearComponents()
+	ClearContextValues()
+	L := lua.NewState()
+	Open(L)
+	defer L.Close()
+	err := L.DoString(`local c = require("shadcn.navigation_menu"); assert(c ~= nil, "navigation_menu nil")`)
+	if err != nil {
+		t.Fatalf("NavigationMenu: %v", err)
+	}
+}
+
+func TestShadcnResizable(t *testing.T) {
+	ClearComponents()
+	ClearContextValues()
+	L := lua.NewState()
+	Open(L)
+	defer L.Close()
+	err := L.DoString(`
+		local r = require("shadcn.resizable")
+		assert(r ~= nil, "resizable nil")
+		assert(r.Panel ~= nil, "Panel nil")
+		assert(r.Handle ~= nil, "Handle nil")
+		assert(r.PanelGroup ~= nil, "PanelGroup nil")
+	`)
+	if err != nil {
+		t.Fatalf("Resizable: %v", err)
+	}
+}
+
+func TestShadcnSidebar(t *testing.T) {
+	ClearComponents()
+	ClearContextValues()
+	L := lua.NewState()
+	Open(L)
+	defer L.Close()
+	err := L.DoString(`
+		local s = require("shadcn.sidebar")
+		assert(s ~= nil, "sidebar nil")
+		assert(s.Sidebar ~= nil, "Sidebar nil")
+		assert(s.Layout ~= nil, "Layout nil")
+	`)
+	if err != nil {
+		t.Fatalf("Sidebar: %v", err)
+	}
+}
+
+func TestShadcnChart(t *testing.T) {
+	ClearComponents()
+	ClearContextValues()
+	L := lua.NewState()
+	Open(L)
+	defer L.Close()
+	err := L.DoString(`
+		local c = require("shadcn.chart")
+		assert(c ~= nil, "chart nil")
+		assert(c.Bar ~= nil, "Bar nil")
+		assert(c.Line ~= nil, "Line nil")
+		assert(c.Pie ~= nil, "Pie nil")
+	`)
+	if err != nil {
+		t.Fatalf("Chart: %v", err)
+	}
+}
+
+func TestShadcnDataTable(t *testing.T) {
+	ClearComponents()
+	ClearContextValues()
+	L := lua.NewState()
+	Open(L)
+	defer L.Close()
+	err := L.DoString(`local c = require("shadcn.data_table"); assert(c ~= nil, "data_table nil")`)
+	if err != nil {
+		t.Fatalf("DataTable: %v", err)
+	}
+}
+
+func TestShadcnColorPicker(t *testing.T) {
+	ClearComponents()
+	ClearContextValues()
+	L := lua.NewState()
+	Open(L)
+	defer L.Close()
+	err := L.DoString(`local c = require("shadcn.color_picker"); assert(c ~= nil, "color_picker nil")`)
+	if err != nil {
+		t.Fatalf("ColorPicker: %v", err)
+	}
+}
+
+func TestShadcnInitAll57(t *testing.T) {
+	ClearComponents()
+	ClearContextValues()
+	L := lua.NewState()
+	Open(L)
+	defer L.Close()
+	err := L.DoString(`
+		local shadcn = require("shadcn")
+		assert(shadcn ~= nil, "shadcn nil")
+		-- Verify new components accessible via init
+		assert(shadcn.AspectRatio ~= nil, "AspectRatio nil in init")
+		assert(shadcn.Calendar ~= nil, "Calendar nil in init")
+		assert(shadcn.Chart ~= nil, "Chart nil in init")
+		assert(shadcn.DataTable ~= nil, "DataTable nil in init")
+		assert(shadcn.ColorPicker ~= nil, "ColorPicker nil in init")
+		assert(shadcn.NavigationMenu ~= nil, "NavigationMenu nil in init")
+		assert(shadcn.Resizable ~= nil, "Resizable nil in init")
+		assert(shadcn.Sidebar ~= nil, "Sidebar nil in init")
+	`)
+	if err != nil {
+		t.Fatalf("shadcn init all 57: %v", err)
+	}
+}
