@@ -1,54 +1,8 @@
--- Counter example for Lumina
--- Usage: go run ./cmd/lumina ./examples/counter.lua
-
-local lumina = require("lumina")
-
-print("Lumina version: " .. lumina.version())
-print()
-
--- Define a counter component with proper VDOM
+-- Counter example
 local Counter = lumina.defineComponent({
     name = "Counter",
-    
-    init = function(props)
-        return {
-            count = props.initial or 0
-        }
-    end,
-    
-    render = function(instance)
-        -- Return a proper VDOM structure with vbox and text
-        return {
-            type = "vbox",
-            children = {
-                {
-                    type = "text",
-                    content = "Count: " .. tostring(instance.count)
-                },
-                {
-                    type = "text",
-                    content = "Click button to increment"
-                }
-            }
-        }
+    render = function()
+        return { type = "text", content = "Hello World" }
     end
 })
-
-print("Component defined: " .. Counter.name)
-print("Component ID: " .. Counter.id)
-print()
-
--- Render the component (now outputs to terminal via ANSIAdapter)
-print("Rendering Counter...")
-local vdom = lumina.render(Counter, { initial = 42 })
-
-print()
-print("Render complete.")
-print()
-
--- Create a state
-local state = lumina.createState("initial_value")
-print("State created, type: " .. state.stateType)
-
-print()
-print("Counter example completed successfully!")
+lumina.render(Counter)
