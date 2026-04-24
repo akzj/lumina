@@ -4,11 +4,11 @@ import "time"
 
 // Frame represents a complete or partial terminal frame for MCP protocol.
 type Frame struct {
-	Timestamp    int64  `json:"timestamp"`
-	Patches      []Patch `json:"patches,omitempty"`
-	Cells        [][]Cell `json:"cells,omitempty"`
-	Events       []string `json:"events,omitempty"`
-	ComponentTree string  `json:"component_tree,omitempty"`
+	Timestamp     int64    `json:"timestamp"`
+	Patches       []Patch  `json:"patches,omitempty"`
+	Cells         [][]Cell `json:"cells,omitempty"`
+	Events        []string `json:"events,omitempty"`
+	ComponentTree string   `json:"component_tree,omitempty"`
 }
 
 // Patch represents a single cell update.
@@ -56,9 +56,9 @@ type ComponentResponse struct {
 // EventNotification is sent when a component fires an event.
 type EventNotification struct {
 	ComponentID string            `json:"component_id"`
-	EventType  string            `json:"event_type"`
-	EventData  map[string]string `json:"event_data"`
-	Timestamp  int64             `json:"timestamp"`
+	EventType   string            `json:"event_type"`
+	EventData   map[string]string `json:"event_data"`
+	Timestamp   int64             `json:"timestamp"`
 }
 
 // MCPRequest wraps all MCP requests.
@@ -110,7 +110,7 @@ func NewEventNotification(compID, eventType string, data map[string]string) *Eve
 func NewMCPResponse(requestID string, success bool, errMsg string) *MCPResponse {
 	return &MCPResponse{
 		RequestID: requestID,
-		Success:  success,
-		Error:    errMsg,
+		Success:   success,
+		Error:     errMsg,
 	}
 }

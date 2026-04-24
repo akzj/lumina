@@ -68,7 +68,7 @@ func LightTheme() *Theme {
 
 // Theme registry
 var (
-	themeRegistry  = make(map[string]*Theme)
+	themeRegistry   = make(map[string]*Theme)
 	themeRegistryMu sync.RWMutex
 )
 
