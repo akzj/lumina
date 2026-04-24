@@ -87,19 +87,14 @@ func LuaVNodeToVNode(L *lua.State, idx int) *VNode {
 			key, _ := L.ToString(-2)
 			// Skip known fields
 			if key != "type" && key != "content" && key != "children" && key != "_focused" {
-				vnode.Props[key] = popLuaValue(L, -1)
+				vnode.Props[key] = L.ToAny(-1)
 			} else if key == "_focused" {
-				// Mark this VNode as focused if _focused is true
 				if L.ToBoolean(-1) {
 					vnode.Focused = true
 				}
-				L.Pop(1)
-			} else {
-				L.Pop(1)
 			}
-		} else {
-			L.Pop(1)
 		}
+		L.Pop(1) // pop value, keep key for Next iteration
 	}
 
 	return vnode

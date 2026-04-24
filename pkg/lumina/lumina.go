@@ -43,6 +43,7 @@ func luaLoader(L *lua.State) int {
 			L.SetField(-2, "year")
 			return 1
 		},
+		
 		"defineComponent": defineComponent,
 		"createComponent": createComponent,
 		"render":          renderComponent,
@@ -50,6 +51,11 @@ func luaLoader(L *lua.State) int {
 		// Style & Theme API
 		"defineStyle":        defineStyle,
 		"defineGlobalStyles": defineGlobalStyles,
+		// UI Components
+		"Select":    SelectComponent,
+		"Checkbox":  CheckboxComponent,
+		"Menu":      MenuComponent,
+		"TextField": TextFieldComponent,
 		"getStyle":           getStyle,
 		"defineTheme":        defineTheme,
 		"setTheme":           setTheme,
@@ -202,7 +208,9 @@ func createComponent(L *lua.State) int {
 	// Get props table (optional, defaults to empty)
 	props := make(map[string]any)
 	if L.GetTop() >= 2 && !L.IsNoneOrNil(2) {
-		props = tableToMap(L, 2)
+		if m, ok := L.ToMap(2); ok {
+			props = m
+		}
 	}
 
 	// Create component instance
@@ -216,24 +224,14 @@ func createComponent(L *lua.State) int {
 	// Call init function if present
 	if comp.PushInitFn(L) {
 		// Push props table
-		if len(props) > 0 {
-			L.NewTable()
-			for k, v := range props {
-				L.PushString(k)
-				pushLuaValue(L, v)
-				L.SetTable(-3)
-			}
-		} else {
-			L.NewTable() // empty props
-		}
+		L.PushAny(props)
 
 		// Call init(props) -> instanceState
 		SetCurrentComponent(comp)
 		status := L.PCall(1, lua.MultiRet, 0)
 		if status == lua.OK && L.GetTop() > 0 {
 			// Init returned a table - merge into component state
-			if L.Type(-1) == lua.TypeTable {
-				initState := tableToMap(L, -1)
+			if initState, ok := L.ToMap(-1); ok {
 				for k, v := range initState {
 					comp.State[k] = v
 				}
@@ -272,7 +270,9 @@ func renderComponent(L *lua.State) int {
 	// Get optional props override
 	var props map[string]any
 	if L.GetTop() >= 2 && !L.IsNoneOrNil(2) {
-		props = tableToMap(L, 2)
+		if m, ok := L.ToMap(2); ok {
+			props = m
+		}
 	}
 
 	// Get component from userdata (if instance has one)
@@ -302,22 +302,12 @@ func renderComponent(L *lua.State) int {
 			// Call init function to populate initial state
 			if comp.PushInitFn(L) {
 				// Push props table
-				if len(props) > 0 {
-					L.NewTable()
-					for k, v := range props {
-						L.PushString(k)
-						pushLuaValue(L, v)
-						L.SetTable(-3)
-					}
-				} else {
-					L.NewTable()
-				}
+				L.PushAny(props)
 				// Call init(props) -> instanceState
 				SetCurrentComponent(comp)
 				status := L.PCall(1, lua.MultiRet, 0)
 				if status == lua.OK && L.GetTop() > 0 {
-					if L.Type(-1) == lua.TypeTable {
-						initState := tableToMap(L, -1)
+					if initState, ok := L.ToMap(-1); ok {
 						for k, v := range initState {
 							comp.State[k] = v
 						}
@@ -352,22 +342,13 @@ func renderComponent(L *lua.State) int {
 	L.PushString(comp.ID)
 	L.SetTable(-3)
 	L.PushString("_props")
-	if len(props) > 0 {
-		L.NewTable()
-		for k, v := range props {
-			L.PushString(k)
-			pushLuaValue(L, v)
-			L.SetTable(-3)
-		}
-	} else {
-		L.NewTable()
-	}
+	L.PushAny(props)
 	L.SetTable(-3)
 
 	// Copy component state into instance table so Lua render can access it
 	for k, v := range comp.State {
 		L.PushString(k)
-		pushLuaValue(L, v)
+		L.PushAny(v)
 		L.SetTable(-3)
 	}
 
@@ -431,6 +412,22 @@ func Open(L *lua.State) {
 	L.PushFunction(luaLoader)
 	L.SetField(-2, ModuleName)
 	L.Pop(2)
+}
+
+func init() {
+	// RegisterGlobal allows require("lumina") to work from any new State
+	// without needing Open(L) called first. The opener pushes the module
+	// table onto the stack (what require() expects).
+	lua.RegisterGlobal(ModuleName, func(L *lua.State) {
+		if GetOutputAdapter() == nil {
+			SetOutputAdapter(NewANSIAdapter(os.Stdout))
+		}
+		luaLoader(L)
+		// luaLoader pushes the module table — leave it on stack for require()
+		// Also set as global for convenience
+		L.PushValue(-1) // dup
+		L.SetGlobal(ModuleName)
+	})
 }
 
 // IsComponent checks if the value at idx is a Lumina component.

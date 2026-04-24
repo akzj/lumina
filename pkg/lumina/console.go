@@ -113,7 +113,7 @@ func consoleLog(L *lua.State) int {
 
 	var data any
 	if L.GetTop() >= 3 {
-		data = popLuaValue(L, 3)
+		data = L.ToAny(3)
 	}
 
 	globalConsole.Log(level, message, data)
