@@ -489,6 +489,45 @@ func VNodeToFrameWithFocus(vnode *VNode, width, height int, focusedID string) *F
 	return frame
 }
 
+// VNodeToFrameWithOverlays renders the base VNode tree, then renders overlay layers on top.
+func VNodeToFrameWithOverlays(vnode *VNode, width, height int, overlays []*Overlay) *Frame {
+	// 1. Render base layer
+	frame := VNodeToFrame(vnode, width, height)
+
+	if len(overlays) == 0 {
+		return frame
+	}
+
+	// 2. Render each overlay on top (overlays should already be sorted by ZIndex)
+	for _, ov := range overlays {
+		if !ov.Visible {
+			continue
+		}
+
+		// If modal, render semi-transparent backdrop first
+		if ov.Modal {
+			renderBackdrop(frame)
+		}
+
+		// Layout the overlay VNode at its absolute position
+		if ov.VNode != nil {
+			computeFlexLayout(ov.VNode, ov.X, ov.Y, ov.W, ov.H)
+			renderVNode(frame, ov.VNode)
+		}
+	}
+
+	return frame
+}
+
+// renderBackdrop dims the entire screen for a modal overlay.
+func renderBackdrop(frame *Frame) {
+	for y := 0; y < frame.Height; y++ {
+		for x := 0; x < frame.Width; x++ {
+			frame.Cells[y][x].Dim = true
+		}
+	}
+}
+
 // markFocusedVNode recursively marks the VNode that matches the focusedID.
 func markFocusedVNode(vnode *VNode, focusedID string) {
 	if vnode == nil {
