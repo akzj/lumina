@@ -203,7 +203,16 @@ func (app *App) eventLoop() error {
 	for app.running {
 		select {
 		case <-ticker.C:
-			app.sched.Tick()    // process async coroutines
+			app.sched.Tick() // process async coroutines
+			// Tick animations — mark owning components dirty
+			dirtyComps := globalAnimationManager.Tick(time.Now().UnixMilli())
+			for _, compID := range dirtyComps {
+				globalRegistry.mu.RLock()
+				if c, ok := globalRegistry.components[compID]; ok {
+					c.Dirty.Store(true)
+				}
+				globalRegistry.mu.RUnlock()
+			}
 			app.renderAllDirty()
 
 		case event := <-app.events:
