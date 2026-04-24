@@ -243,26 +243,13 @@ func TestComponentMetatable(t *testing.T) {
 	// __index points to itself (method delegation pattern)
 	L.PushValue(-1) // copy metatable
 	L.SetField(-2, "__index")
-	// Add a "render" method on the metatable
+	// Add a "render" method
 	L.PushFunction(func(L *lua.State) int {
 		// self is at index 1 (the userdata)
 		L.PushString("rendered content")
 		return 1
 	})
 	L.SetField(-2, "render")
-	// Add a "getName" method on the metatable
-	L.PushFunction(func(L *lua.State) int {
-		val := L.UserdataValue(1)
-		if m, ok := val.(map[string]any); ok {
-			if name, ok := m["name"].(string); ok {
-				L.PushString(name)
-				return 1
-			}
-		}
-		L.PushString("")
-		return 1
-	})
-	L.SetField(-2, "getName")
 	L.Pop(1) // pop the metatable
 
 	// Create a component userdata with initial state
@@ -287,7 +274,22 @@ func TestComponentMetatable(t *testing.T) {
 		t.Fatalf("comp:render() failed: %v", err)
 	}
 
-	
+	// Test 2: Access properties via Go callback
+	L.GetGlobal("comp")
+	L.PushString("name")
+	L.PushFunction(func(L *lua.State) int {
+		val := L.UserdataValue(1)
+		if m, ok := val.(map[string]any); ok {
+			if name, ok := m["name"].(string); ok {
+				L.PushString(name)
+				return 1
+			}
+		}
+		L.PushString("")
+		return 1
+	})
+	L.SetField(-2, "getName")
+	L.Pop(1)
 
 	err = L.DoString(`
 		local name = comp:getName()
