@@ -1,6 +1,7 @@
 package lumina
 
 import (
+	"os"
 	"sync"
 	"time"
 )
@@ -14,9 +15,10 @@ type HotReloadConfig struct {
 
 // StateSnapshot captures component state for reload.
 type StateSnapshot struct {
-	ComponentID string
-	State       map[string]any
-	Timestamp   int64
+	ComponentID   string
+	ComponentType string // component Type/Name for restore-by-name matching
+	State         map[string]any
+	Timestamp     int64
 }
 
 // HotReloader manages component hot reloading.
@@ -54,9 +56,10 @@ func (hr *HotReloader) SnapshotState(comp *Component) {
 	defer hr.mu.Unlock()
 
 	hr.snapshots[comp.ID] = &StateSnapshot{
-		ComponentID: comp.ID,
-		State:       copyMap(comp.State),
-		Timestamp:   time.Now().UnixMilli(),
+		ComponentID:   comp.ID,
+		ComponentType: comp.Type,
+		State:         copyMap(comp.State),
+		Timestamp:     time.Now().UnixMilli(),
 	}
 }
 
@@ -123,8 +126,149 @@ func (hr *HotReloader) ClearSnapshots() {
 }
 
 // SnapshotAllComponents snapshots all registered components.
-// Note: This requires a component registry with instance tracking.
 func (hr *HotReloader) SnapshotAllComponents() {
-	// Component instance tracking would be added here
-	// For now, this is a placeholder for future implementation
+	globalRegistry.mu.RLock()
+	defer globalRegistry.mu.RUnlock()
+	for _, comp := range globalRegistry.components {
+		hr.SnapshotState(comp)
+	}
+}
+
+// RestoreByType restores state to a component by matching ComponentType.
+// Returns true if a matching snapshot was found and restored.
+func (hr *HotReloader) RestoreByType(comp *Component) bool {
+	hr.mu.RLock()
+	defer hr.mu.RUnlock()
+
+	for _, snap := range hr.snapshots {
+		if snap.ComponentType == comp.Type {
+			comp.mu.Lock()
+			comp.State = copyMap(snap.State)
+			comp.Dirty.Store(true)
+			comp.mu.Unlock()
+			return true
+		}
+	}
+	return false
+}
+
+// RestoreAllByType restores state to all registered components by type matching.
+func (hr *HotReloader) RestoreAllByType() {
+	globalRegistry.mu.RLock()
+	defer globalRegistry.mu.RUnlock()
+	for _, comp := range globalRegistry.components {
+		hr.RestoreByType(comp)
+	}
+}
+
+// GetSnapshotByType returns a snapshot matching the given component type.
+func (hr *HotReloader) GetSnapshotByType(compType string) *StateSnapshot {
+	hr.mu.RLock()
+	defer hr.mu.RUnlock()
+	for _, snap := range hr.snapshots {
+		if snap.ComponentType == compType {
+			return snap
+		}
+	}
+	return nil
+}
+
+// -----------------------------------------------------------------------
+// FileWatcher — poll-based file change detection
+// -----------------------------------------------------------------------
+
+// FileWatcher polls files for modification time changes.
+type FileWatcher struct {
+	paths    []string
+	modTimes map[string]time.Time
+	interval time.Duration
+	onChange func(path string)
+	stopCh   chan struct{}
+	running  bool
+	mu       sync.Mutex
+}
+
+// NewFileWatcher creates a new poll-based file watcher.
+func NewFileWatcher(paths []string, interval time.Duration) *FileWatcher {
+	if interval <= 0 {
+		interval = 500 * time.Millisecond
+	}
+	return &FileWatcher{
+		paths:    paths,
+		modTimes: make(map[string]time.Time),
+		interval: interval,
+		stopCh:   make(chan struct{}),
+	}
+}
+
+// Start begins polling for file changes in a background goroutine.
+func (fw *FileWatcher) Start() {
+	fw.mu.Lock()
+	if fw.running {
+		fw.mu.Unlock()
+		return
+	}
+	fw.running = true
+	fw.mu.Unlock()
+
+	// Initialize mod times
+	for _, path := range fw.paths {
+		if info, err := os.Stat(path); err == nil {
+			fw.modTimes[path] = info.ModTime()
+		}
+	}
+
+	go func() {
+		ticker := time.NewTicker(fw.interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				fw.poll()
+			case <-fw.stopCh:
+				return
+			}
+		}
+	}()
+}
+
+// poll checks all watched paths for changes.
+func (fw *FileWatcher) poll() {
+	for _, path := range fw.paths {
+		info, err := os.Stat(path)
+		if err != nil {
+			continue
+		}
+		prev, ok := fw.modTimes[path]
+		if ok && info.ModTime().After(prev) {
+			fw.modTimes[path] = info.ModTime()
+			if fw.onChange != nil {
+				fw.onChange(path)
+			}
+		} else if !ok {
+			fw.modTimes[path] = info.ModTime()
+		}
+	}
+}
+
+// Stop stops the file watcher.
+func (fw *FileWatcher) Stop() {
+	fw.mu.Lock()
+	defer fw.mu.Unlock()
+	if fw.running {
+		close(fw.stopCh)
+		fw.running = false
+	}
+}
+
+// IsRunning returns whether the watcher is active.
+func (fw *FileWatcher) IsRunning() bool {
+	fw.mu.Lock()
+	defer fw.mu.Unlock()
+	return fw.running
+}
+
+// SetOnChange sets the callback for file changes.
+func (fw *FileWatcher) SetOnChange(fn func(path string)) {
+	fw.onChange = fn
 }
