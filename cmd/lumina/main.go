@@ -9,18 +9,16 @@ import (
 )
 
 func main() {
-	// Create interactive app
+	if len(os.Args) < 2 {
+		fmt.Println("Lumina — Terminal React for AI Agents")
+		fmt.Println("Usage: lumina <script.lua>")
+		os.Exit(1)
+	}
+
 	app := lumina.NewApp()
 	defer app.Close()
 
-	// Get script path from args
-	scriptPath := ""
-	if len(os.Args) >= 2 {
-		scriptPath = os.Args[1]
-	}
-
-	// Run the app
-	if err := app.Run(scriptPath); err != nil {
+	if err := app.RunInteractive(os.Args[1]); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
