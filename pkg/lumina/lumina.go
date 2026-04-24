@@ -210,6 +210,10 @@ func luaLoader(L *lua.State) int {
 		// Drag & Drop
 		"useDrag":                luaUseDrag,
 		"useDrop":                luaUseDrop,
+		// Plugin system
+		"registerPlugin":         luaRegisterPlugin,
+		"usePlugin":              luaUsePlugin,
+		"getPlugins":             luaGetPlugins,
 	}, 0)
 
 	// Register lumina.animation sub-table with preset factories
