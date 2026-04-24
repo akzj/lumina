@@ -351,6 +351,59 @@ func (eb *EventBus) GetFocused() string {
 	return eb.focusedID
 }
 
+// -----------------------------------------------------------------------
+// Focus Scope — trap focus within a subset of focusable IDs
+// -----------------------------------------------------------------------
+
+// FocusScope restricts focus cycling to a subset of focusable IDs.
+// When active, Tab/Shift+Tab cycle only within this scope.
+type FocusScope struct {
+	ID           string
+	FocusableIDs []string // ordered list of IDs within this scope
+}
+
+// focusScopeStack is a stack of active focus scopes.
+// The top scope (last element) is the active one.
+var focusScopeStack []*FocusScope
+var focusScopeMu sync.Mutex
+
+// PushFocusScope pushes a new focus scope onto the stack.
+// Focus will be trapped within this scope until PopFocusScope is called.
+func PushFocusScope(scope *FocusScope) {
+	focusScopeMu.Lock()
+	defer focusScopeMu.Unlock()
+	focusScopeStack = append(focusScopeStack, scope)
+}
+
+// PopFocusScope removes the top focus scope from the stack.
+func PopFocusScope() *FocusScope {
+	focusScopeMu.Lock()
+	defer focusScopeMu.Unlock()
+	if len(focusScopeStack) == 0 {
+		return nil
+	}
+	top := focusScopeStack[len(focusScopeStack)-1]
+	focusScopeStack = focusScopeStack[:len(focusScopeStack)-1]
+	return top
+}
+
+// GetActiveFocusScope returns the top focus scope, or nil if none active.
+func GetActiveFocusScope() *FocusScope {
+	focusScopeMu.Lock()
+	defer focusScopeMu.Unlock()
+	if len(focusScopeStack) > 0 {
+		return focusScopeStack[len(focusScopeStack)-1]
+	}
+	return nil
+}
+
+// ClearFocusScopes removes all focus scopes.
+func ClearFocusScopes() {
+	focusScopeMu.Lock()
+	defer focusScopeMu.Unlock()
+	focusScopeStack = nil
+}
+
 // RegisterFocusable adds a component ID to the focusable list.
 func (eb *EventBus) RegisterFocusable(compID string) {
 	eb.mu.Lock()
@@ -389,13 +442,19 @@ func (eb *EventBus) FocusNext() {
 	eb.mu.Lock()
 	defer eb.mu.Unlock()
 
-	if len(eb.focusableIDs) == 0 {
+	// Determine which IDs to cycle through
+	ids := eb.focusableIDs
+	if scope := GetActiveFocusScope(); scope != nil && len(scope.FocusableIDs) > 0 {
+		ids = scope.FocusableIDs
+	}
+
+	if len(ids) == 0 {
 		return
 	}
 
 	// Find current index
 	currentIdx := -1
-	for i, id := range eb.focusableIDs {
+	for i, id := range ids {
 		if id == eb.focusedID {
 			currentIdx = i
 			break
@@ -407,11 +466,11 @@ func (eb *EventBus) FocusNext() {
 		eb.EmitUnsafe(&Event{Type: "blur", Target: eb.focusedID})
 	}
 
-	// Move to next
-	if currentIdx == -1 || currentIdx >= len(eb.focusableIDs)-1 {
-		eb.focusedID = eb.focusableIDs[0]
+	// Move to next (wrap around)
+	if currentIdx == -1 || currentIdx >= len(ids)-1 {
+		eb.focusedID = ids[0]
 	} else {
-		eb.focusedID = eb.focusableIDs[currentIdx+1]
+		eb.focusedID = ids[currentIdx+1]
 	}
 
 	// Focus new
@@ -423,13 +482,19 @@ func (eb *EventBus) FocusPrev() {
 	eb.mu.Lock()
 	defer eb.mu.Unlock()
 
-	if len(eb.focusableIDs) == 0 {
+	// Determine which IDs to cycle through
+	ids := eb.focusableIDs
+	if scope := GetActiveFocusScope(); scope != nil && len(scope.FocusableIDs) > 0 {
+		ids = scope.FocusableIDs
+	}
+
+	if len(ids) == 0 {
 		return
 	}
 
 	// Find current index
 	currentIdx := -1
-	for i, id := range eb.focusableIDs {
+	for i, id := range ids {
 		if id == eb.focusedID {
 			currentIdx = i
 			break
@@ -441,11 +506,11 @@ func (eb *EventBus) FocusPrev() {
 		eb.EmitUnsafe(&Event{Type: "blur", Target: eb.focusedID})
 	}
 
-	// Move to previous
+	// Move to previous (wrap around)
 	if currentIdx <= 0 {
-		eb.focusedID = eb.focusableIDs[len(eb.focusableIDs)-1]
+		eb.focusedID = ids[len(ids)-1]
 	} else {
-		eb.focusedID = eb.focusableIDs[currentIdx-1]
+		eb.focusedID = ids[currentIdx-1]
 	}
 
 	// Focus new
