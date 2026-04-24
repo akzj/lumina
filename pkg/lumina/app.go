@@ -145,6 +145,11 @@ func (app *App) RunInteractive(scriptPath string) error {
 	// Initial render
 	app.renderAllDirty()
 
+	// Watch for terminal resize (SIGWINCH).
+	term.WatchResize(func(w, h int) {
+		app.PostEvent(AppEvent{Type: "resize", Payload: [2]int{w, h}})
+	})
+
 	// Start input reader (runs in goroutine, sends to app.events)
 	input := NewInputReader(term, app.events)
 	input.Start()
@@ -193,6 +198,11 @@ func (app *App) handleEvent(event AppEvent) {
 	switch event.Type {
 	case "quit":
 		app.running = false
+
+	case "resize":
+		if dims, ok := event.Payload.([2]int); ok {
+			app.handleResize(dims[0], dims[1])
+		}
 
 	case "input_event":
 		e, ok := event.Payload.(*Event)
@@ -474,6 +484,20 @@ func (app *App) InitialRender() {
 		adapter.Write(frame)
 	}
 	SetCurrentComponent(nil)
+}
+
+// handleResize updates the app dimensions and triggers a full re-render.
+// Called from the SIGWINCH handler goroutine via PostEvent.
+func (app *App) handleResize(width, height int) {
+	app.width = width
+	app.height = height
+	// Mark all components dirty so they re-render at the new size.
+	globalRegistry.mu.RLock()
+	for _, comp := range globalRegistry.components {
+		comp.Dirty.Store(true)
+	}
+	globalRegistry.mu.RUnlock()
+	app.renderAllDirty()
 }
 
 // Stop stops the application by posting a quit event.
