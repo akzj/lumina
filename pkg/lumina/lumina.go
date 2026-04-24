@@ -193,6 +193,12 @@ func luaLoader(L *lua.State) int {
 		"serveBackground":        luaServeBackground,
 		// i18n
 		"useTranslation":         luaUseTranslation,
+		// Data fetching
+		"fetch":                  luaFetch,
+		"useFetch":               luaUseFetch,
+		"useQuery":               luaUseQuery,
+		"invalidateQuery":        luaInvalidateQuery,
+		"invalidateAllQueries":   luaInvalidateAllQueries,
 	}, 0)
 
 	// Register lumina.animation sub-table with preset factories
