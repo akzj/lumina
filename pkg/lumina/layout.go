@@ -257,19 +257,38 @@ func computeFlexLayout(vnode *VNode, x, y, w, h int) {
 		contentH = 0
 	}
 
+	// If overflow=scroll, reserve 1 column for scrollbar
+	scrollable := style.Overflow == "scroll"
+	layoutW := contentW
+	if scrollable && contentW > 1 {
+		layoutW = contentW - 1 // reserve rightmost column for scrollbar
+	}
+
 	switch vnode.Type {
 	case "text":
-		layoutText(vnode, contentW)
+		layoutText(vnode, layoutW)
 
 	case "vbox":
-		layoutVBox(vnode, contentX, contentY, contentW, contentH, style)
+		if scrollable {
+			layoutScrollableVBox(vnode, contentX, contentY, layoutW, contentH, style)
+		} else {
+			layoutVBox(vnode, contentX, contentY, layoutW, contentH, style)
+		}
 
 	case "hbox":
-		layoutHBox(vnode, contentX, contentY, contentW, contentH, style)
+		if scrollable {
+			layoutScrollableHBox(vnode, contentX, contentY, layoutW, contentH, style)
+		} else {
+			layoutHBox(vnode, contentX, contentY, layoutW, contentH, style)
+		}
 
 	default:
 		// Generic container (box, etc.) — stack children vertically like vbox
-		layoutVBox(vnode, contentX, contentY, contentW, contentH, style)
+		if scrollable {
+			layoutScrollableVBox(vnode, contentX, contentY, layoutW, contentH, style)
+		} else {
+			layoutVBox(vnode, contentX, contentY, layoutW, contentH, style)
+		}
 	}
 }
 
@@ -590,6 +609,151 @@ func layoutHBox(vnode *VNode, contentX, contentY, contentW, contentH int, style 
 		curX += childW
 		if i < len(vnode.Children)-1 {
 			curX += gapSize
+		}
+	}
+}
+
+// layoutScrollableVBox lays out children in a vertical stack without clamping
+// to the container height. Children get their natural size, and a Viewport
+// is created/updated to track the scroll state.
+func layoutScrollableVBox(vnode *VNode, contentX, contentY, contentW, contentH int, style Style) {
+	if len(vnode.Children) == 0 {
+		return
+	}
+
+	// Get VNode ID for viewport registry
+	nodeID, _ := vnode.Props["id"].(string)
+
+	// Calculate total natural height of all children
+	type childInfo struct {
+		style  Style
+		height int // natural height
+	}
+	children := make([]childInfo, len(vnode.Children))
+
+	totalGaps := style.Gap * (len(vnode.Children) - 1)
+	totalH := totalGaps
+
+	for i, child := range vnode.Children {
+		cs := parseStyle(child.Props)
+		children[i].style = cs
+
+		marginV := cs.MarginTop + cs.MarginBottom
+		var h int
+		if cs.Height > 0 {
+			h = clamp(cs.Height, cs.MinHeight, cs.MaxHeight) + marginV
+		} else if cs.MinHeight > 0 {
+			h = cs.MinHeight + marginV
+		} else {
+			// Default: 1 row for text, or estimate for containers
+			h = 1 + marginV
+			if child.Type != "text" && len(child.Children) > 0 {
+				// Estimate based on number of children
+				h = len(child.Children) + marginV
+			}
+		}
+		children[i].height = h
+		totalH += h
+	}
+
+	// Get or create viewport
+	vp := &Viewport{
+		ContentH: totalH,
+		ContentW: contentW,
+		ViewW:    contentW,
+		ViewH:    contentH,
+	}
+
+	if nodeID != "" {
+		existing := GetViewport(nodeID)
+		// Preserve scroll position, update dimensions
+		vp.ScrollX = existing.ScrollX
+		vp.ScrollY = existing.ScrollY
+		vp.ContentH = totalH
+		vp.ContentW = contentW
+		vp.ViewW = contentW
+		vp.ViewH = contentH
+		vp.clampScroll()
+		SetViewport(nodeID, vp)
+	}
+
+	// Position children at their natural positions (virtual coordinates)
+	// The renderer will apply scroll offset and clipping
+	curY := contentY - vp.ScrollY
+	for i, child := range vnode.Children {
+		childH := children[i].height
+		computeFlexLayout(child, contentX, curY, contentW, childH)
+		curY += childH
+		if i < len(vnode.Children)-1 {
+			curY += style.Gap
+		}
+	}
+}
+
+// layoutScrollableHBox lays out children horizontally without clamping
+// to the container width. Similar to layoutScrollableVBox but on the X axis.
+func layoutScrollableHBox(vnode *VNode, contentX, contentY, contentW, contentH int, style Style) {
+	if len(vnode.Children) == 0 {
+		return
+	}
+
+	nodeID, _ := vnode.Props["id"].(string)
+
+	type childInfo struct {
+		style Style
+		width int
+	}
+	children := make([]childInfo, len(vnode.Children))
+
+	totalGaps := style.Gap * (len(vnode.Children) - 1)
+	totalW := totalGaps
+
+	for i, child := range vnode.Children {
+		cs := parseStyle(child.Props)
+		children[i].style = cs
+
+		marginH := cs.MarginLeft + cs.MarginRight
+		var w int
+		if cs.Width > 0 {
+			w = clamp(cs.Width, cs.MinWidth, cs.MaxWidth) + marginH
+		} else if cs.MinWidth > 0 {
+			w = cs.MinWidth + marginH
+		} else {
+			w = 1 + marginH
+			if child.Type == "text" {
+				w = len(child.Content) + marginH
+			}
+		}
+		children[i].width = w
+		totalW += w
+	}
+
+	vp := &Viewport{
+		ContentW: totalW,
+		ContentH: contentH,
+		ViewW:    contentW,
+		ViewH:    contentH,
+	}
+
+	if nodeID != "" {
+		existing := GetViewport(nodeID)
+		vp.ScrollX = existing.ScrollX
+		vp.ScrollY = existing.ScrollY
+		vp.ContentW = totalW
+		vp.ContentH = contentH
+		vp.ViewW = contentW
+		vp.ViewH = contentH
+		vp.clampScroll()
+		SetViewport(nodeID, vp)
+	}
+
+	curX := contentX - vp.ScrollX
+	for i, child := range vnode.Children {
+		childW := children[i].width
+		computeFlexLayout(child, curX, contentY, childW, contentH)
+		curX += childW
+		if i < len(vnode.Children)-1 {
+			curX += style.Gap
 		}
 	}
 }
