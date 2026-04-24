@@ -184,6 +184,10 @@ func luaLoader(L *lua.State) int {
 		// State management
 		"createStore":            luaCreateStore,
 		"useStore":               luaUseStore,
+		// Theme system (extends existing setTheme/defineTheme in style_api.go)
+		"useTheme":               luaUseTheme,
+		"defineStyles":           luaDefineStyles,
+		"getThemeColor":          luaGetThemeColor,
 		// Web runtime
 		"serve":                  luaServe,
 		"serveBackground":        luaServeBackground,
