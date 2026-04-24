@@ -40,6 +40,14 @@ type Style struct {
 
 	// Overflow
 	Overflow string // "hidden" (default), "scroll" (future)
+
+	// Positioning
+	Position string // "" or "relative" (default), "absolute", "fixed"
+	Top      int    // offset from parent top (absolute) or screen top (fixed)
+	Left     int    // offset from parent left (absolute) or screen left (fixed)
+	Right    int    // offset from right edge (-1 = unset)
+	Bottom   int    // offset from bottom edge (-1 = unset)
+	ZIndex   int    // layer order (higher = on top)
 }
 
 // getInt extracts an int from a map value, handling int64 (from go-lua ToAny)
@@ -49,6 +57,20 @@ func getInt(m map[string]any, key string) int {
 	if !ok {
 		return 0
 	}
+	switch n := v.(type) {
+	case int64:
+		return int(n)
+	case int:
+		return n
+	case float64:
+		return int(n)
+	default:
+		return 0
+	}
+}
+
+// toInt converts a value to int (like getInt but for a direct value, not a map lookup).
+func toInt(v any) int {
 	switch n := v.(type) {
 	case int64:
 		return int(n)
@@ -89,7 +111,7 @@ func getBool(m map[string]any, key string) bool {
 // It checks the "style" sub-table first, then falls back to top-level props
 // for backward compatibility.
 func parseStyle(props map[string]any) Style {
-	s := Style{Justify: "start", Align: "stretch"}
+	s := Style{Justify: "start", Align: "stretch", Right: -1, Bottom: -1}
 
 	// First, check for "style" sub-table
 	if styleMap, ok := props["style"].(map[string]any); ok {
@@ -123,6 +145,18 @@ func parseStyle(props map[string]any) Style {
 		s.Dim = getBool(styleMap, "dim")
 		s.Underline = getBool(styleMap, "underline")
 		s.Overflow = getString(styleMap, "overflow", "hidden")
+
+		// Positioning
+		s.Position = getString(styleMap, "position", "")
+		s.Top = getInt(styleMap, "top")
+		s.Left = getInt(styleMap, "left")
+		if v, ok := styleMap["right"]; ok {
+			s.Right = toInt(v)
+		}
+		if v, ok := styleMap["bottom"]; ok {
+			s.Bottom = toInt(v)
+		}
+		s.ZIndex = getInt(styleMap, "zIndex")
 	}
 
 	// Backward compat: check top-level props (lower priority — don't override style sub-table)
@@ -297,6 +331,59 @@ func computeFlexLayout(vnode *VNode, x, y, w, h int) {
 			layoutVBox(vnode, contentX, contentY, layoutW, contentH, style)
 		}
 	}
+
+	// After normal layout, handle absolute/fixed positioned children.
+	// These are excluded from flex flow and positioned independently.
+	for _, child := range vnode.Children {
+		cs := parseStyle(child.Props)
+		switch cs.Position {
+		case "absolute":
+			// Position relative to this parent's content area
+			cx := contentX + cs.Left
+			cy := contentY + cs.Top
+			cw := child.W
+			ch := child.H
+			if cs.Width > 0 {
+				cw = cs.Width
+			}
+			if cs.Height > 0 {
+				ch = cs.Height
+			}
+			// Handle right/bottom anchoring
+			if cs.Right >= 0 && cs.Left == 0 {
+				cx = contentX + contentW - cw - cs.Right
+			}
+			if cs.Bottom >= 0 && cs.Top == 0 {
+				cy = contentY + contentH - ch - cs.Bottom
+			}
+			child.X = cx
+			child.Y = cy
+			child.W = cw
+			child.H = ch
+			child.Style = cs
+			// Recursively layout absolute child's content
+			computeFlexLayout(child, cx, cy, cw, ch)
+
+		case "fixed":
+			// Position relative to screen (0,0)
+			cx := cs.Left
+			cy := cs.Top
+			cw := child.W
+			ch := child.H
+			if cs.Width > 0 {
+				cw = cs.Width
+			}
+			if cs.Height > 0 {
+				ch = cs.Height
+			}
+			child.X = cx
+			child.Y = cy
+			child.W = cw
+			child.H = ch
+			child.Style = cs
+			computeFlexLayout(child, cx, cy, cw, ch)
+		}
+	}
 }
 
 // layoutText measures a text node. It wraps text if it exceeds the available width.
@@ -324,6 +411,11 @@ func layoutText(vnode *VNode, availW int) {
 	vnode.H = lines
 }
 
+// isPositioned returns true if the style has absolute or fixed positioning.
+func isPositioned(s Style) bool {
+	return s.Position == "absolute" || s.Position == "fixed"
+}
+
 // layoutVBox lays out children in a vertical stack with flex distribution.
 func layoutVBox(vnode *VNode, contentX, contentY, contentW, contentH int, style Style) {
 	if len(vnode.Children) == 0 {
@@ -332,14 +424,29 @@ func layoutVBox(vnode *VNode, contentX, contentY, contentW, contentH int, style 
 
 	// Parse child styles
 	type childInfo struct {
-		style    Style
-		fixedH   int  // resolved fixed height (0 = flex)
-		flexGrow int  // flex factor
-		finalH   int  // computed height after distribution
+		style      Style
+		fixedH     int  // resolved fixed height (0 = flex)
+		flexGrow   int  // flex factor
+		finalH     int  // computed height after distribution
+		positioned bool // true if absolute/fixed (excluded from flow)
 	}
 	children := make([]childInfo, len(vnode.Children))
 
-	totalGaps := style.Gap * (len(vnode.Children) - 1)
+	// Count flow children (not absolute/fixed)
+	flowCount := 0
+	for i, child := range vnode.Children {
+		cs := parseStyle(child.Props)
+		children[i].style = cs
+		children[i].positioned = isPositioned(cs)
+		if !children[i].positioned {
+			flowCount++
+		}
+	}
+
+	totalGaps := 0
+	if flowCount > 1 {
+		totalGaps = style.Gap * (flowCount - 1)
+	}
 	availH := contentH - totalGaps
 	if availH < 0 {
 		availH = 0
@@ -349,8 +456,13 @@ func layoutVBox(vnode *VNode, contentX, contentY, contentW, contentH int, style 
 	flexTotal := 0
 
 	for i, child := range vnode.Children {
-		cs := parseStyle(child.Props)
-		children[i].style = cs
+		cs := children[i].style
+		_ = child // already parsed above
+
+		// Skip absolute/fixed positioned children — they don't participate in flow
+		if children[i].positioned {
+			continue
+		}
 
 		marginV := cs.MarginTop + cs.MarginBottom
 
@@ -386,6 +498,9 @@ func layoutVBox(vnode *VNode, contentX, contentY, contentW, contentH int, style 
 	}
 
 	for i := range children {
+		if children[i].positioned {
+			continue
+		}
 		if children[i].flexGrow > 0 {
 			if flexTotal > 0 {
 				children[i].finalH = (remainH * children[i].flexGrow) / flexTotal
@@ -403,6 +518,9 @@ func layoutVBox(vnode *VNode, contentX, contentY, contentW, contentH int, style 
 	// Calculate total used height for justify alignment
 	totalUsed := 0
 	for i := range children {
+		if children[i].positioned {
+			continue
+		}
 		totalUsed += children[i].finalH
 	}
 	totalUsed += totalGaps
@@ -421,9 +539,9 @@ func layoutVBox(vnode *VNode, contentX, contentY, contentW, contentH int, style 
 	case "end":
 		curY += extraSpace
 	case "space-between":
-		if len(vnode.Children) > 1 {
-			gapSize = 0 // we'll distribute all extra space as gaps
-			totalBetween := len(vnode.Children) - 1
+		if flowCount > 1 {
+			gapSize = 0
+			totalBetween := flowCount - 1
 			usedNoGap := totalUsed - totalGaps
 			spaceBetween := contentH - usedNoGap
 			if spaceBetween > 0 && totalBetween > 0 {
@@ -431,10 +549,10 @@ func layoutVBox(vnode *VNode, contentX, contentY, contentW, contentH int, style 
 			}
 		}
 	case "space-around":
-		if len(vnode.Children) > 0 {
+		if flowCount > 0 {
 			gapSize = 0
 			usedNoGap := totalUsed - totalGaps
-			totalSlots := len(vnode.Children)*2
+			totalSlots := flowCount * 2
 			spaceAround := contentH - usedNoGap
 			if spaceAround > 0 && totalSlots > 0 {
 				halfGap := spaceAround / totalSlots
@@ -444,8 +562,13 @@ func layoutVBox(vnode *VNode, contentX, contentY, contentW, contentH int, style 
 		}
 	}
 
-	// Position each child
+	// Position each child (skip absolute/fixed)
+	flowIdx := 0
 	for i, child := range vnode.Children {
+		if children[i].positioned {
+			continue
+		}
+
 		childH := children[i].finalH
 		childW := contentW
 
@@ -453,7 +576,6 @@ func layoutVBox(vnode *VNode, contentX, contentY, contentW, contentH int, style 
 		childX := contentX
 		switch style.Align {
 		case "center":
-			// Center child in cross axis — but we need child's preferred width
 			cs := children[i].style
 			if cs.Width > 0 {
 				cw := clamp(cs.Width, cs.MinWidth, cs.MaxWidth)
@@ -478,7 +600,8 @@ func layoutVBox(vnode *VNode, contentX, contentY, contentW, contentH int, style 
 
 		computeFlexLayout(child, childX, curY, childW, childH)
 		curY += childH
-		if i < len(vnode.Children)-1 {
+		flowIdx++
+		if flowIdx < flowCount {
 			curY += gapSize
 		}
 	}
@@ -491,14 +614,29 @@ func layoutHBox(vnode *VNode, contentX, contentY, contentW, contentH int, style 
 	}
 
 	type childInfo struct {
-		style    Style
-		fixedW   int
-		flexGrow int
-		finalW   int
+		style      Style
+		fixedW     int
+		flexGrow   int
+		finalW     int
+		positioned bool
 	}
 	children := make([]childInfo, len(vnode.Children))
 
-	totalGaps := style.Gap * (len(vnode.Children) - 1)
+	flowCount := 0
+	for i, child := range vnode.Children {
+		cs := parseStyle(child.Props)
+		children[i].style = cs
+		children[i].positioned = isPositioned(cs)
+		if !children[i].positioned {
+			flowCount++
+		}
+		_ = child
+	}
+
+	totalGaps := 0
+	if flowCount > 1 {
+		totalGaps = style.Gap * (flowCount - 1)
+	}
 	availW := contentW - totalGaps
 	if availW < 0 {
 		availW = 0
@@ -508,8 +646,11 @@ func layoutHBox(vnode *VNode, contentX, contentY, contentW, contentH int, style 
 	flexTotal := 0
 
 	for i, child := range vnode.Children {
-		cs := parseStyle(child.Props)
-		children[i].style = cs
+		if children[i].positioned {
+			continue
+		}
+		cs := children[i].style
+		_ = child
 
 		marginH := cs.MarginLeft + cs.MarginRight
 		if cs.Width > 0 {
@@ -523,7 +664,6 @@ func layoutHBox(vnode *VNode, contentX, contentY, contentW, contentH int, style 
 			children[i].flexGrow = cs.Flex
 			flexTotal += cs.Flex
 		} else {
-			// No flex, no fixed width — give minimum 1 col
 			children[i].fixedW = 1 + marginH
 			fixedTotal += children[i].fixedW
 		}
@@ -535,6 +675,9 @@ func layoutHBox(vnode *VNode, contentX, contentY, contentW, contentH int, style 
 	}
 
 	for i := range children {
+		if children[i].positioned {
+			continue
+		}
 		if children[i].flexGrow > 0 {
 			if flexTotal > 0 {
 				children[i].finalW = (remainW * children[i].flexGrow) / flexTotal
@@ -548,9 +691,11 @@ func layoutHBox(vnode *VNode, contentX, contentY, contentW, contentH int, style 
 		}
 	}
 
-	// Calculate total used width for justify alignment
 	totalUsed := 0
 	for i := range children {
+		if children[i].positioned {
+			continue
+		}
 		totalUsed += children[i].finalW
 	}
 	totalUsed += totalGaps
@@ -568,9 +713,9 @@ func layoutHBox(vnode *VNode, contentX, contentY, contentW, contentH int, style 
 	case "end":
 		curX += extraSpace
 	case "space-between":
-		if len(vnode.Children) > 1 {
+		if flowCount > 1 {
 			gapSize = 0
-			totalBetween := len(vnode.Children) - 1
+			totalBetween := flowCount - 1
 			usedNoGap := totalUsed - totalGaps
 			spaceBetween := contentW - usedNoGap
 			if spaceBetween > 0 && totalBetween > 0 {
@@ -578,10 +723,10 @@ func layoutHBox(vnode *VNode, contentX, contentY, contentW, contentH int, style 
 			}
 		}
 	case "space-around":
-		if len(vnode.Children) > 0 {
+		if flowCount > 0 {
 			gapSize = 0
 			usedNoGap := totalUsed - totalGaps
-			totalSlots := len(vnode.Children) * 2
+			totalSlots := flowCount * 2
 			spaceAround := contentW - usedNoGap
 			if spaceAround > 0 && totalSlots > 0 {
 				halfGap := spaceAround / totalSlots
@@ -591,11 +736,15 @@ func layoutHBox(vnode *VNode, contentX, contentY, contentW, contentH int, style 
 		}
 	}
 
+	flowIdx := 0
 	for i, child := range vnode.Children {
+		if children[i].positioned {
+			continue
+		}
+
 		childW := children[i].finalW
 		childH := contentH
 
-		// Cross-axis alignment (align) — vertical for hbox
 		childY := contentY
 		switch style.Align {
 		case "center":
@@ -623,7 +772,8 @@ func layoutHBox(vnode *VNode, contentX, contentY, contentW, contentH int, style 
 
 		computeFlexLayout(child, curX, childY, childW, childH)
 		curX += childW
-		if i < len(vnode.Children)-1 {
+		flowIdx++
+		if flowIdx < flowCount {
 			curX += gapSize
 		}
 	}
