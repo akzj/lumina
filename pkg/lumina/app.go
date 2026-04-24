@@ -405,6 +405,7 @@ func (app *App) renderAllDirty() {
 // renderComponent re-renders a single component on the main thread.
 func (app *App) renderComponent(comp *Component, adapter OutputAdapter) {
 	SetCurrentComponent(comp)
+	comp.ResetHookIndex()
 	defer SetCurrentComponent(nil)
 
 	if !comp.PushRenderFn(app.L) {
@@ -417,8 +418,23 @@ func (app *App) renderComponent(comp *Component, adapter OutputAdapter) {
 		return
 	}
 
-	frame := RenderLuaVNode(app.L, -1, app.width, app.height)
+	newVNode := LuaVNodeToVNode(app.L, -1)
 	app.L.Pop(1)
+
+	// Diff against previous render.
+	var frame *Frame
+	if comp.LastVNode != nil {
+		patches := DiffVNode(comp.LastVNode, newVNode)
+		if len(patches) == 0 {
+			// Nothing changed — skip rendering.
+			comp.MarkClean()
+			return
+		}
+		frame = VNodeToFrame(newVNode, app.width, app.height)
+	} else {
+		frame = VNodeToFrame(newVNode, app.width, app.height)
+	}
+	comp.LastVNode = newVNode
 
 	frame.FocusedID = globalEventBus.GetFocused()
 	adapter.Write(frame)
