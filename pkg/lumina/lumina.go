@@ -115,6 +115,11 @@ func luaLoader(L *lua.State) int {
 		"scrollToTop":    luaScrollToTop,
 		"scrollBy":       luaScrollBy,
 		"getScrollInfo":  luaGetScrollInfo,
+		// Text Input API
+		"setInputValue":    luaSetInputValue,
+		"getInputValue":    luaGetInputValue,
+		"registerInput":    luaRegisterInput,
+		"focusInput":       luaFocusInput,
 	}, 0)
 
 	// Register hooks as sub-table

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/akzj/go-lua/pkg/lua"
@@ -208,8 +209,15 @@ func (app *App) handleEvent(event AppEvent) {
 		// Dispatch to EventBus (handles focus, shortcuts, registered handlers)
 		globalEventBus.Emit(e)
 
-		// Handle keyboard navigation (Tab, Enter, Escape, etc.)
+		// Handle text input events first (if focused element is input/textarea)
+		textHandled := false
 		if e.Type == "keydown" {
+			textHandled = app.handleTextInputEvent(e)
+		}
+
+		// Handle keyboard navigation (Tab, Enter, Escape, etc.)
+		// Skip if text input consumed the event (except Tab which is not consumed)
+		if e.Type == "keydown" && !textHandled {
 			globalEventBus.HandleKeyEvent(e.Key, e.Modifiers)
 		}
 
@@ -240,6 +248,89 @@ func (app *App) handleEvent(event AppEvent) {
 }
 
 // handleScrollEvent handles scroll-related events (mouse wheel, PageUp/PageDown).
+// handleTextInputEvent routes key events to the focused text input/textarea.
+// Returns true if the event was consumed by a text input.
+func (app *App) handleTextInputEvent(e *Event) bool {
+	if e.Type != "keydown" {
+		return false
+	}
+
+	focusedID := globalEventBus.GetFocused()
+	if focusedID == "" {
+		return false
+	}
+
+	// Check if the focused element has a text input state
+	textInputMu.RLock()
+	state, ok := textInputRegistry[focusedID]
+	textInputMu.RUnlock()
+	if !ok {
+		return false
+	}
+
+	// Handle Enter for single-line input (triggers onSubmit, not consumed as text)
+	if !state.MultiLine && (e.Key == "Enter" || e.Key == "\n") {
+		// Trigger onSubmit callback if registered
+		// The callback is stored as a Lua registry ref in the component
+		app.triggerTextInputCallback(focusedID, "onSubmit", state.Text)
+		return true
+	}
+
+	consumed, changed := HandleTextInputKey(state, e.Key, e.Modifiers)
+	if !consumed {
+		return false
+	}
+
+	if changed {
+		// Trigger onChange callback
+		app.triggerTextInputCallback(focusedID, "onChange", state.Text)
+	}
+
+	return consumed
+}
+
+// triggerTextInputCallback calls a Lua callback (onChange/onSubmit) for a text input.
+func (app *App) triggerTextInputCallback(id, callbackName, value string) {
+	// The callback refs are stored in the text input callback registry
+	textCallbackMu.RLock()
+	refID, ok := textCallbacks[id+":"+callbackName]
+	textCallbackMu.RUnlock()
+	if !ok || refID == 0 {
+		return
+	}
+
+	app.L.RawGetI(lua.RegistryIndex, int64(refID))
+	if app.L.Type(-1) == lua.TypeFunction {
+		app.L.PushString(value)
+		status := app.L.PCall(1, 0, 0)
+		if status != lua.OK {
+			app.L.Pop(1) // pop error
+		}
+	} else {
+		app.L.Pop(1) // pop non-function
+	}
+}
+
+// Text input callback registry — stores Lua function refs for onChange/onSubmit.
+var (
+	textCallbacks  = make(map[string]int) // "id:onChange" -> Lua registry ref
+	textCallbackMu sync.RWMutex
+)
+
+// RegisterTextCallback registers a Lua callback for a text input event.
+func RegisterTextCallback(id, callbackName string, refID int) {
+	textCallbackMu.Lock()
+	defer textCallbackMu.Unlock()
+	textCallbacks[id+":"+callbackName] = refID
+}
+
+// ClearTextCallbacks removes all text input callbacks (for testing).
+func ClearTextCallbacks() {
+	textCallbackMu.Lock()
+	defer textCallbackMu.Unlock()
+	textCallbacks = make(map[string]int)
+}
+
 func (app *App) handleScrollEvent(e *Event) {
 	switch e.Type {
 	case "scroll":

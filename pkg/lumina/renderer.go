@@ -172,6 +172,12 @@ func renderVNode(frame *Frame, vnode *VNode) {
 		// Render text content with wrapping support
 		renderText(frame, vnode, cell)
 
+	case "input":
+		renderInput(frame, vnode, style)
+
+	case "textarea":
+		renderTextArea(frame, vnode, style)
+
 	default:
 		// Container types: box, vbox, hbox, container, etc.
 
@@ -611,4 +617,325 @@ func renderScrollbar(frame *Frame, x, y, trackH int, vp *Viewport) {
 			Foreground: "#666666", // dim gray for scrollbar
 		}
 	}
+}
+
+// renderInput renders a single-line text input VNode.
+func renderInput(frame *Frame, vnode *VNode, style Style) {
+	x, y := vnode.X, vnode.Y
+	w, h := vnode.W, vnode.H
+	if w <= 0 || h <= 0 || y >= frame.Height || x >= frame.Width {
+		return
+	}
+
+	// Get or create text input state
+	nodeID, _ := vnode.Props["id"].(string)
+	var state *TextInputState
+	if nodeID != "" {
+		state = GetTextInput(nodeID)
+		state.Width = w
+		state.Height = 1
+		state.MultiLine = false
+		state.Focused = vnode.Focused
+		// Sync value from Lua props if provided
+		if val, ok := vnode.Props["value"].(string); ok {
+			if val != state.Text {
+				state.Text = val
+				state.EnsureCursorVisible()
+			}
+		}
+		if ph, ok := vnode.Props["placeholder"].(string); ok {
+			state.Placeholder = ph
+		}
+		if ml, ok := vnode.Props["maxLength"]; ok {
+			state.MaxLength = getInt(vnode.Props, "maxLength")
+			_ = ml
+		}
+		if ro := getBool(vnode.Props, "readOnly"); ro {
+			state.ReadOnly = true
+		}
+	}
+
+	// Determine what to render
+	text := ""
+	isPlaceholder := false
+	scrollX := 0
+
+	if state != nil {
+		if state.Text == "" && state.Placeholder != "" {
+			text = state.Placeholder
+			isPlaceholder = true
+		} else {
+			text = state.Text
+			scrollX = state.ScrollX
+		}
+	} else if val, ok := vnode.Props["value"].(string); ok {
+		text = val
+	}
+
+	// Render background
+	bg := style.Background
+	if bg == "" {
+		bg = "#1a1a2e" // default input background (dark)
+	}
+	for cx := x; cx < x+w && cx < frame.Width; cx++ {
+		if y < frame.Height {
+			frame.Cells[y][cx] = Cell{Char: ' ', Background: bg}
+		}
+	}
+
+	// Render text (with horizontal scroll)
+	runes := []rune(text)
+	fg := style.Foreground
+	if isPlaceholder {
+		fg = "#666666" // dim placeholder
+	}
+
+	for col := 0; col < w; col++ {
+		runeIdx := col + scrollX
+		if runeIdx >= len(runes) {
+			break
+		}
+		px := x + col
+		if px >= frame.Width {
+			break
+		}
+
+		cellFg := fg
+		cellBg := bg
+		reverse := false
+
+		// Check if this position is in the selection
+		if state != nil && state.HasSelection() {
+			lo := state.selMin()
+			hi := state.selMax()
+			if runeIdx >= lo && runeIdx < hi {
+				reverse = true
+			}
+		}
+
+		frame.Cells[y][px] = Cell{
+			Char:       runes[runeIdx],
+			Foreground: cellFg,
+			Background: cellBg,
+			Bold:       style.Bold,
+			Reverse:    reverse,
+		}
+	}
+
+	// Render cursor (reverse video at cursor position)
+	if state != nil && state.Focused {
+		cursorCol := state.CursorPos - scrollX
+		if cursorCol >= 0 && cursorCol < w {
+			px := x + cursorCol
+			if px < frame.Width && y < frame.Height {
+				ch := ' '
+				if state.CursorPos < len(runes) {
+					ch = runes[state.CursorPos]
+				}
+				frame.Cells[y][px] = Cell{
+					Char:       ch,
+					Foreground: bg,  // swap fg/bg for cursor
+					Background: fg,
+					Reverse:    true,
+				}
+			}
+		}
+	}
+
+	// Render border if specified
+	if style.Border != "" {
+		renderBorder(frame, vnode, style.Border)
+	}
+}
+
+// renderTextArea renders a multi-line text area VNode.
+func renderTextArea(frame *Frame, vnode *VNode, style Style) {
+	x, y := vnode.X, vnode.Y
+	w, h := vnode.W, vnode.H
+	if w <= 0 || h <= 0 || y >= frame.Height || x >= frame.Width {
+		return
+	}
+
+	// Account for border
+	borderW := 0
+	if style.Border == "single" || style.Border == "double" || style.Border == "rounded" {
+		borderW = 1
+	}
+
+	contentX := x + borderW + style.PaddingLeft
+	contentY := y + borderW + style.PaddingTop
+	contentW := w - 2*borderW - style.PaddingLeft - style.PaddingRight
+	contentH := h - 2*borderW - style.PaddingTop - style.PaddingBottom
+	if contentW <= 0 || contentH <= 0 {
+		return
+	}
+
+	// Get or create text input state
+	nodeID, _ := vnode.Props["id"].(string)
+	var state *TextInputState
+	if nodeID != "" {
+		state = GetTextInput(nodeID)
+		state.Width = contentW
+		state.Height = contentH
+		state.MultiLine = true
+		state.Focused = vnode.Focused
+		if val, ok := vnode.Props["value"].(string); ok {
+			if val != state.Text {
+				state.Text = val
+				state.EnsureCursorVisible()
+			}
+		}
+		if ph, ok := vnode.Props["placeholder"].(string); ok {
+			state.Placeholder = ph
+		}
+		if ml, ok := vnode.Props["maxLength"]; ok {
+			state.MaxLength = getInt(vnode.Props, "maxLength")
+			_ = ml
+		}
+		if ro := getBool(vnode.Props, "readOnly"); ro {
+			state.ReadOnly = true
+		}
+	}
+
+	// Render background
+	bg := style.Background
+	if bg == "" {
+		bg = "#1a1a2e"
+	}
+	for ry := y; ry < y+h && ry < frame.Height; ry++ {
+		for cx := x; cx < x+w && cx < frame.Width; cx++ {
+			frame.Cells[ry][cx] = Cell{Char: ' ', Background: bg}
+		}
+	}
+
+	// Render border
+	if style.Border != "" {
+		renderBorder(frame, vnode, style.Border)
+	}
+
+	// Determine text and scroll
+	text := ""
+	isPlaceholder := false
+	scrollX := 0
+	scrollY := 0
+
+	if state != nil {
+		if state.Text == "" && state.Placeholder != "" {
+			text = state.Placeholder
+			isPlaceholder = true
+		} else {
+			text = state.Text
+			scrollX = state.ScrollX
+			scrollY = state.ScrollY
+		}
+	} else if val, ok := vnode.Props["value"].(string); ok {
+		text = val
+	}
+
+	// Split into lines
+	lines := splitLines(text)
+
+	fg := style.Foreground
+	if isPlaceholder {
+		fg = "#666666"
+	}
+
+	// Render visible lines
+	for row := 0; row < contentH; row++ {
+		lineIdx := row + scrollY
+		if lineIdx >= len(lines) {
+			break
+		}
+		line := []rune(lines[lineIdx])
+
+		py := contentY + row
+		if py >= frame.Height {
+			break
+		}
+
+		for col := 0; col < contentW; col++ {
+			runeIdx := col + scrollX
+			if runeIdx >= len(line) {
+				break
+			}
+			px := contentX + col
+			if px >= frame.Width {
+				break
+			}
+
+			cellFg := fg
+			reverse := false
+
+			// Check selection
+			if state != nil && state.HasSelection() && !isPlaceholder {
+				// Convert line/col to absolute rune position
+				absPos := lineColToPos(lines, lineIdx, runeIdx)
+				lo := state.selMin()
+				hi := state.selMax()
+				if absPos >= lo && absPos < hi {
+					reverse = true
+				}
+			}
+
+			frame.Cells[py][px] = Cell{
+				Char:       line[runeIdx],
+				Foreground: cellFg,
+				Background: bg,
+				Bold:       style.Bold,
+				Reverse:    reverse,
+			}
+		}
+	}
+
+	// Render cursor
+	if state != nil && state.Focused && !isPlaceholder {
+		runes := []rune(state.Text)
+		curLine, curCol := state.lineCol(runes)
+		screenRow := curLine - scrollY
+		screenCol := curCol - scrollX
+
+		if screenRow >= 0 && screenRow < contentH && screenCol >= 0 && screenCol < contentW {
+			px := contentX + screenCol
+			py := contentY + screenRow
+			if px < frame.Width && py < frame.Height {
+				ch := ' '
+				if state.CursorPos < len(runes) {
+					ch = runes[state.CursorPos]
+				}
+				frame.Cells[py][px] = Cell{
+					Char:       ch,
+					Foreground: bg,
+					Background: fg,
+					Reverse:    true,
+				}
+			}
+		}
+	}
+}
+
+// splitLines splits text into lines (preserving empty lines).
+func splitLines(text string) []string {
+	if text == "" {
+		return []string{""}
+	}
+	lines := make([]string, 0)
+	start := 0
+	for i, ch := range text {
+		if ch == '\n' {
+			lines = append(lines, text[start:i])
+			start = i + 1
+		}
+	}
+	lines = append(lines, text[start:])
+	return lines
+}
+
+// lineColToPos converts a (line, col) position to an absolute rune position.
+func lineColToPos(lines []string, line, col int) int {
+	pos := 0
+	for i := 0; i < line && i < len(lines); i++ {
+		pos += len([]rune(lines[i])) + 1 // +1 for newline
+	}
+	pos += col
+	return pos
 }
