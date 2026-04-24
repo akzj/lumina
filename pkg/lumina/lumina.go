@@ -108,6 +108,9 @@ func luaLoader(L *lua.State) int {
 		"profile":      profile,
 		"profileReset": profileReset,
 		"profileSize":  profileSize,
+		// Async API
+		"useAsync": useAsync,
+		"delay":    luminaDelay,
 	}, 0)
 
 	// Register hooks as sub-table

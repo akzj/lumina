@@ -26,6 +26,7 @@ type LuaCallbackEvent struct {
 // All Lua State operations happen on the goroutine that calls Run().
 type App struct {
 	L       *lua.State
+	sched   *lua.Scheduler // async coroutine scheduler
 	events  chan AppEvent
 	width   int
 	height  int
@@ -38,6 +39,7 @@ func NewApp() *App {
 
 	app := &App{
 		L:      L,
+		sched:  lua.NewScheduler(L),
 		events: make(chan AppEvent, 256),
 		width:  80,
 		height: 24,
@@ -58,6 +60,7 @@ func NewAppWithSize(width, height int) *App {
 
 	app := &App{
 		L:      L,
+		sched:  lua.NewScheduler(L),
 		events: make(chan AppEvent, 256),
 		width:  width,
 		height: height,
@@ -129,6 +132,7 @@ func (app *App) eventLoop() error {
 	for app.running {
 		select {
 		case <-ticker.C:
+			app.sched.Tick()    // process async coroutines
 			app.renderAllDirty()
 
 		case event := <-app.events:
@@ -255,7 +259,14 @@ func (app *App) Close() {
 	}
 }
 
+// Scheduler returns the App's async coroutine scheduler.
+func (app *App) Scheduler() *lua.Scheduler {
+	return app.sched
+}
+
 // GetApp retrieves the App from a Lua State's user values.
+// Works correctly even from Go functions called by the Lua VM because
+// UserValue is stored on the internal api.State (survives wrapFunction).
 func GetApp(L *lua.State) *App {
 	if v := L.UserValue("lumina_app"); v != nil {
 		if app, ok := v.(*App); ok {
