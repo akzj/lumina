@@ -154,6 +154,12 @@ func luaLoader(L *lua.State) int {
 		"size":  consoleSize,
 	}, 0)
 	L.SetField(-3, "console")
+
+	// Register debug as sub-table: lumina.debug.*
+	L.NewTable()
+	RegisterDebugAPI(L)
+	L.SetField(-3, "debug")
+
 	L.Pop(1)
 
 	return 1
