@@ -17,6 +17,10 @@ type VNode struct {
 	Content string
 	// Focused indicates if this component is currently focused
 	Focused bool
+	// ComponentRef holds the Component instance that produced this VNode (if any).
+	ComponentRef *Component
+	// ComponentKey is a stable identity for reconciliation of component children.
+	ComponentKey string
 }
 
 // NewVNode creates a new VNode.
