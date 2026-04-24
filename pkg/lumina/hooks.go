@@ -1176,3 +1176,27 @@ func useAnimation(L *lua.State) int {
 var timeNowMs = func() int64 {
 	return time.Now().UnixMilli()
 }
+
+// useRoute returns the current route path and parameters.
+// Usage: local route = lumina.useRoute()
+// Returns: { path = "/users/123", params = { id = "123" } }
+func useRoute(L *lua.State) int {
+	router := globalRouter
+
+	L.NewTable()
+
+	// path
+	L.PushString(router.GetCurrentPath())
+	L.SetField(-2, "path")
+
+	// params as a table
+	params := router.GetParams()
+	L.NewTable()
+	for k, v := range params {
+		L.PushString(v)
+		L.SetField(-2, k)
+	}
+	L.SetField(-2, "params")
+
+	return 1
+}
