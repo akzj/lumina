@@ -288,6 +288,9 @@ func (ir *InputReader) parseSGRMouse(data []byte) {
 		Ctrl:  button&16 != 0,
 	}
 
+	// Check motion bit (bit 5 = 32)
+	isMotion := button&32 != 0
+
 	// Scroll events (button bit 6 set)
 	if button&64 != 0 {
 		direction := "up"
@@ -308,7 +311,7 @@ func (ir *InputReader) parseSGRMouse(data []byte) {
 		return
 	}
 
-	// Button name
+	// Button name (mask out motion + modifier bits)
 	buttonName := "left"
 	switch button & 0x03 {
 	case 1:
@@ -317,8 +320,13 @@ func (ir *InputReader) parseSGRMouse(data []byte) {
 		buttonName = "right"
 	}
 
-	eventType := "mousedown"
-	if !press {
+	// Determine event type
+	var eventType string
+	if isMotion {
+		eventType = "mousemove"
+	} else if press {
+		eventType = "mousedown"
+	} else {
 		eventType = "mouseup"
 	}
 
