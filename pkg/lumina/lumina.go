@@ -199,6 +199,10 @@ func luaLoader(L *lua.State) int {
 		"useQuery":               luaUseQuery,
 		"invalidateQuery":        luaInvalidateQuery,
 		"invalidateAllQueries":   luaInvalidateAllQueries,
+		// Accessibility
+		"announce":               luaAnnounce,
+		// Testing utilities
+		"createTestRenderer":     luaCreateTestRenderer,
 	}, 0)
 
 	// Register lumina.animation sub-table with preset factories
