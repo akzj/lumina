@@ -275,9 +275,15 @@ func isInteger(L *lua.State, idx int) bool {
 }
 
 // useTheme returns the current theme values.
-// Works both inside components (for reactivity) and outside (for one-time reads).
 func useTheme(L *lua.State) int {
-	// Get current theme from app context (theme is global, not per-component)
+	comp := GetCurrentComponent()
+	if comp == nil {
+		L.PushString("useTheme: no current component")
+		L.Error()
+		return 0
+	}
+
+	// Get current theme from app context
 	theme := GetCurrentTheme()
 	if theme == nil {
 		theme = DefaultTheme()

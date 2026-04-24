@@ -274,56 +274,6 @@ func isInteger(L *lua.State, idx int) bool {
 	return ok
 }
 
-// useTheme returns the current theme values.
-// Works both inside components (for reactivity) and outside (for one-time reads).
-func useTheme(L *lua.State) int {
-	// Get current theme from app context (theme is global, not per-component)
-	theme := GetCurrentTheme()
-	if theme == nil {
-		theme = DefaultTheme()
-	}
-
-	// Push theme as a Lua table
-	L.NewTable()
-
-	// Colors sub-table
-	L.PushString("colors")
-	L.NewTable()
-	for k, v := range theme.Colors {
-		L.PushString(k)
-		L.PushString(v)
-		L.SetTable(-3)
-	}
-	L.SetTable(-3)
-
-	// Spacing sub-table
-	L.PushString("spacing")
-	L.NewTable()
-	for k, v := range theme.Spacing {
-		L.PushString(k)
-		L.PushInteger(int64(v))
-		L.SetTable(-3)
-	}
-	L.SetTable(-3)
-
-	// Borders sub-table
-	L.PushString("borders")
-	L.NewTable()
-	for k, v := range theme.Borders {
-		L.PushString(k)
-		L.PushString(v)
-		L.SetTable(-3)
-	}
-	L.SetTable(-3)
-
-	// Theme name
-	L.PushString("name")
-	L.PushString(theme.Name)
-	L.SetTable(-3)
-
-	return 1
-}
-
 // RegisterHooks registers all hook functions in the lumina module.
 func RegisterHooks(L *lua.State) {
 	L.SetFuncs(map[string]lua.Function{
@@ -332,6 +282,5 @@ func RegisterHooks(L *lua.State) {
 		"useMemo":     useMemo,
 		"useCallback": useCallback,
 		"useRef":      useRef,
-		"useTheme":    useTheme,
 	}, 0)
 }

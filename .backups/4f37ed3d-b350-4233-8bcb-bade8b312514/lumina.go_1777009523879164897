@@ -43,16 +43,10 @@ func luaLoader(L *lua.State) int {
 			L.SetField(-2, "year")
 			return 1
 		},
-"defineComponent":    defineComponent,
-		"createComponent":  createComponent,
-		"render":           renderComponent,
-		"createState":      createState,
-		// Style & Theme API
-		"defineStyle":        defineStyle,
-		"defineGlobalStyles": defineGlobalStyles,
-		"getStyle":           getStyle,
-		"defineTheme":        defineTheme,
-		"setTheme":           setTheme,
+		"defineComponent": defineComponent,
+		"createComponent": createComponent,
+		"render":          renderComponent,
+		"createState":     createState,
 	}, 0)
 
 	// Register hooks as sub-table
