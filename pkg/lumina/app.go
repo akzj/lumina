@@ -228,10 +228,24 @@ func (app *App) handleEvent(event AppEvent) {
 			return
 		}
 
-		// Handle Ctrl+C / Ctrl+Q to quit
+		// Handle Ctrl+C / Ctrl+Q to quit (always works, even with modal)
 		if e.Type == "keydown" && e.Modifiers.Ctrl && (e.Key == "c" || e.Key == "q") {
 			app.running = false
 			return
+		}
+
+		// Modal overlay input routing: when a modal overlay is active,
+		// Escape closes it and other events are captured by the modal.
+		if topModal := globalOverlayManager.GetTopModal(); topModal != nil {
+			if e.Type == "keydown" && e.Key == KeyEscape {
+				globalOverlayManager.Hide(topModal.ID)
+				return
+			}
+			// Route event to modal's VNode tree if it has one
+			// (target events to the modal overlay, not the base layer)
+			if topModal.VNode != nil {
+				e.Target = topModal.ID
+			}
 		}
 
 		// Dispatch to EventBus (handles focus, shortcuts, registered handlers)
@@ -461,6 +475,20 @@ func (app *App) renderComponent(comp *Component, adapter OutputAdapter) {
 		frame = VNodeToFrame(newVNode, app.width, app.height)
 	}
 	comp.LastVNode = newVNode
+
+	// Render overlays on top of the base frame
+	overlays := globalOverlayManager.GetVisible()
+	if len(overlays) > 0 {
+		for _, ov := range overlays {
+			if ov.Modal {
+				renderBackdrop(frame)
+			}
+			if ov.VNode != nil {
+				computeFlexLayout(ov.VNode, ov.X, ov.Y, ov.W, ov.H)
+				renderVNode(frame, ov.VNode)
+			}
+		}
+	}
 
 	frame.FocusedID = globalEventBus.GetFocused()
 	adapter.Write(frame)
