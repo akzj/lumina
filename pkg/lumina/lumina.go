@@ -181,6 +181,9 @@ func luaLoader(L *lua.State) int {
 		"useAnimation":           useAnimation,
 		"startAnimation":         luaStartAnimation,
 		"stopAnimation":          luaStopAnimation,
+		// State management
+		"createStore":            luaCreateStore,
+		"useStore":               luaUseStore,
 	}, 0)
 
 	// Register lumina.animation sub-table with preset factories
