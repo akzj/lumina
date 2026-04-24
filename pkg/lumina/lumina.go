@@ -203,6 +203,8 @@ func luaLoader(L *lua.State) int {
 		"announce":               luaAnnounce,
 		// Testing utilities
 		"createTestRenderer":     luaCreateTestRenderer,
+		// Grid + Virtual scrolling
+		"createVirtualList":      luaCreateVirtualList,
 	}, 0)
 
 	// Register lumina.animation sub-table with preset factories
