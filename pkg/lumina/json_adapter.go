@@ -155,12 +155,12 @@ func (a *JSONAdapter) SetVerbose(v bool) {
 
 // JSONFrame represents a frame in JSON format.
 type JSONFrame struct {
-	Type      string                `json:"type"`
-	Timestamp int64                 `json:"timestamp"`
-	Patches   []map[string]any      `json:"patches,omitempty"`
-	Cells     [][]map[string]any    `json:"cells,omitempty"`
-	Width     int                   `json:"width,omitempty"`
-	Height    int                   `json:"height,omitempty"`
+	Type      string             `json:"type"`
+	Timestamp int64              `json:"timestamp"`
+	Patches   []map[string]any   `json:"patches,omitempty"`
+	Cells     [][]map[string]any `json:"cells,omitempty"`
+	Width     int                `json:"width,omitempty"`
+	Height    int                `json:"height,omitempty"`
 }
 
 // ToJSON converts a Frame to JSON bytes.

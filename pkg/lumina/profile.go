@@ -10,12 +10,12 @@ import (
 
 // ProfileResult holds profiling data.
 type ProfileResult struct {
-	TotalFrames  int           `json:"total_frames"`
-	AvgFrameTime float64       `json:"avg_frame_time_ms"`
-	MinFrameTime float64       `json:"min_frame_time_ms"`
-	MaxFrameTime float64       `json:"max_frame_time_ms"`
-	SlowFrames   int           `json:"slow_frames_>16ms"`
-	FrameTimes   []float64     `json:"frame_times_ms,omitempty"`
+	TotalFrames  int       `json:"total_frames"`
+	AvgFrameTime float64   `json:"avg_frame_time_ms"`
+	MinFrameTime float64   `json:"min_frame_time_ms"`
+	MaxFrameTime float64   `json:"max_frame_time_ms"`
+	SlowFrames   int       `json:"slow_frames_>16ms"`
+	FrameTimes   []float64 `json:"frame_times_ms,omitempty"`
 }
 
 // FrameTiming tracks timing for a single frame.

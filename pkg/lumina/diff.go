@@ -8,10 +8,10 @@ import (
 
 // DiffResult holds the diff between two frames.
 type DiffResult struct {
-	Before *Frame   `json:"before,omitempty"`
-	After  *Frame   `json:"after,omitempty"`
+	Before  *Frame      `json:"before,omitempty"`
+	After   *Frame      `json:"after,omitempty"`
 	Patches []DiffPatch `json:"patches"`
-	Stats  DiffStats    `json:"stats"`
+	Stats   DiffStats   `json:"stats"`
 }
 
 // DiffPatch represents a single cell change.
@@ -25,9 +25,9 @@ type DiffPatch struct {
 
 // DiffStats holds diff statistics.
 type DiffStats struct {
-	Added   int `json:"added"`
-	Removed int `json:"removed"`
-	Changed int `json:"changed"`
+	Added     int `json:"added"`
+	Removed   int `json:"removed"`
+	Changed   int `json:"changed"`
 	Unchanged int `json:"unchanged"`
 }
 

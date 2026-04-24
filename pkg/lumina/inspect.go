@@ -24,7 +24,7 @@ type ComponentSnapshot struct {
 // ComputedStyles holds the final calculated styles.
 type ComputedStyles struct {
 	ComponentID string         `json:"component_id"`
-	Layout      map[string]any `json:"layout"`  // x, y, w, h, flex
+	Layout      map[string]any `json:"layout"` // x, y, w, h, flex
 	Visual      map[string]any `json:"visual"` // color, bg, border, padding
 	Raw         map[string]any `json:"raw"`    // original props
 }

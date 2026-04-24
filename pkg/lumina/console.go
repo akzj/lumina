@@ -10,11 +10,11 @@ import (
 
 // ConsoleEntry represents a log entry.
 type ConsoleEntry struct {
-	Level   string         `json:"level"`   // "log" | "warn" | "error" | "debug"
-	Message string         `json:"message"`
-	Data    any            `json:"data,omitempty"`
-	Time    int64          `json:"time"`
-	Stack   string         `json:"stack,omitempty"`
+	Level   string `json:"level"` // "log" | "warn" | "error" | "debug"
+	Message string `json:"message"`
+	Data    any    `json:"data,omitempty"`
+	Time    int64  `json:"time"`
+	Stack   string `json:"stack,omitempty"`
 }
 
 // Console holds log entries for AI inspection.
@@ -99,8 +99,8 @@ func (c *Console) Size() int {
 }
 
 // Global console functions
-func log(msg string, data ...any)    { globalConsole.Log("log", msg, data) }
-func logWarn(msg string, data ...any) { globalConsole.Log("warn", msg, data) }
+func log(msg string, data ...any)      { globalConsole.Log("log", msg, data) }
+func logWarn(msg string, data ...any)  { globalConsole.Log("warn", msg, data) }
 func logError(msg string, data ...any) { globalConsole.Log("error", msg, data) }
 func logDebug(msg string, data ...any) { globalConsole.Log("debug", msg, data) }
 
