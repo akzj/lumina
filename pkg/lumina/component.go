@@ -25,10 +25,12 @@ type Component struct {
 	renderFn     *luaFunctionRef
 	cleanupFn    *luaFunctionRef
 	// Hooks state
-	effectHooks       []*EffectHook       // useEffect hooks in call order
-	layoutEffectHooks []*LayoutEffectHook // useLayoutEffect hooks in call order
-	memoHooks         []*MemoHook         // useMemo hooks in call order
-	hookIndex         int                 // current hook index during render
+	effectHooks        []*EffectHook        // useEffect hooks in call order
+	layoutEffectHooks  []*LayoutEffectHook  // useLayoutEffect hooks in call order
+	memoHooks          []*MemoHook          // useMemo hooks in call order
+	externalStoreHooks []*ExternalStoreHook // useSyncExternalStore hooks
+	hookIndex          int                  // current hook index during render
+	debugValues        []string             // useDebugValue labels (reset each render)
 	// Component tree
 	Parent       *Component     // Parent component (nil for root)
 	ChildComps   []*Component   // Child component instances
@@ -248,6 +250,7 @@ func UserdataToComponent(L *lua.State, idx int) *Component {
 // ResetHookIndex resets the hook call counter for a new render pass.
 func (c *Component) ResetHookIndex() {
 	c.hookIndex = 0
+	c.debugValues = c.debugValues[:0] // reset debug values each render
 }
 
 // UpdateProps updates the component's props and marks it dirty if they changed.

@@ -65,6 +65,7 @@ func luaLoader(L *lua.State) int {
 		"setTheme":           setTheme,
 		// Event API
 		"on":                  registerEvent,
+		"onCapture":           registerCaptureEvent,
 		"off":                 unregisterEvent,
 		"emit":                emitEvent,
 		"registerShortcut":    registerShortcut,
@@ -146,15 +147,23 @@ func luaLoader(L *lua.State) int {
 		"useReducer":           useReducer,
 		"useId":                useId,
 		"useImperativeHandle":  useImperativeHandle,
-		"useTransition":        useTransition,
-		"useDeferredValue":     useDeferredValue,
-		"createContext":        createContext,
-		"useContext":           useContext,
-		"setContextValue":      setContextValueLua,
+		"useTransition":          useTransition,
+		"useDeferredValue":       useDeferredValue,
+		"useSyncExternalStore":   useSyncExternalStore,
+		"useDebugValue":          useDebugValue,
+		"createContext":          createContext,
+		"useContext":             useContext,
+		"setContextValue":        setContextValueLua,
 	}, 0)
 
 	// Register lumina.Suspense as a component factory table (not a function)
 	registerSuspenseFactory(L)
+
+	// Register lumina.Profiler as a component factory
+	registerProfilerFactory(L)
+
+	// Register lumina.StrictMode as a component factory
+	registerStrictModeFactory(L)
 
 	// Register console as sub-table
 	L.PushString("console")
@@ -904,4 +913,78 @@ func luaLazy(L *lua.State) int {
 	L.SetField(-2, "render")
 
 	return 1
+}
+
+// -----------------------------------------------------------------------
+// Profiler factory
+// -----------------------------------------------------------------------
+
+// registerProfilerFactory creates the Profiler component factory table
+// and sets it as lumina.Profiler on the module table at stack top.
+func registerProfilerFactory(L *lua.State) {
+	L.NewTable()
+	L.PushString("Profiler")
+	L.SetField(-2, "name")
+	L.PushBoolean(true)
+	L.SetField(-2, "isComponent")
+	L.PushBoolean(true)
+	L.SetField(-2, "_isProfiler")
+
+	// render function: returns a profiler VNode
+	L.PushFunction(func(L *lua.State) int {
+		// self is arg 1 — has .id, .onRender, .children
+		L.NewTable()
+		L.PushString("profiler")
+		L.SetField(-2, "type")
+
+		// Copy id
+		L.GetField(1, "id")
+		L.SetField(-2, "id")
+
+		// Copy onRender callback
+		L.GetField(1, "onRender")
+		L.SetField(-2, "onRender")
+
+		// Copy children
+		L.GetField(1, "children")
+		L.SetField(-2, "children")
+
+		return 1
+	})
+	L.SetField(-2, "render")
+
+	L.SetField(-2, "Profiler")
+}
+
+// -----------------------------------------------------------------------
+// StrictMode factory
+// -----------------------------------------------------------------------
+
+// registerStrictModeFactory creates the StrictMode component factory table
+// and sets it as lumina.StrictMode on the module table at stack top.
+func registerStrictModeFactory(L *lua.State) {
+	L.NewTable()
+	L.PushString("StrictMode")
+	L.SetField(-2, "name")
+	L.PushBoolean(true)
+	L.SetField(-2, "isComponent")
+	L.PushBoolean(true)
+	L.SetField(-2, "_isStrictMode")
+
+	// render function: returns a strictmode VNode
+	L.PushFunction(func(L *lua.State) int {
+		// self is arg 1 — has .children
+		L.NewTable()
+		L.PushString("strictmode")
+		L.SetField(-2, "type")
+
+		// Copy children
+		L.GetField(1, "children")
+		L.SetField(-2, "children")
+
+		return 1
+	})
+	L.SetField(-2, "render")
+
+	L.SetField(-2, "StrictMode")
 }

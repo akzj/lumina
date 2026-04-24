@@ -3,6 +3,7 @@ package lumina
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/akzj/go-lua/pkg/lua"
 )
@@ -74,6 +75,16 @@ func LuaVNodeToVNode(L *lua.State, idx int) *VNode {
 	// Handle portal type: store content and target for later rendering
 	if vnode.Type == "portal" {
 		return luaPortalToVNode(L, tableIdx)
+	}
+
+	// Handle profiler type: time children rendering, call onRender callback
+	if vnode.Type == "profiler" {
+		return luaProfilerToVNode(L, tableIdx)
+	}
+
+	// Handle strictmode type: double-render children to detect side effects
+	if vnode.Type == "strictmode" {
+		return luaStrictModeToVNode(L, tableIdx)
 	}
 
 	// Get content field (text nodes)
@@ -1293,4 +1304,110 @@ func lineColToPos(lines []string, line, col int) int {
 	}
 	pos += col
 	return pos
+}
+
+// luaProfilerToVNode handles a VNode table with type="profiler".
+// It wraps child rendering with timing and calls the onRender callback.
+func luaProfilerToVNode(L *lua.State, idx int) *VNode {
+	vnode := NewVNode("fragment") // profiler is transparent like fragment
+
+	// Get profiler ID
+	L.GetField(idx, "id")
+	profilerID := "unknown"
+	if s, ok := L.ToString(-1); ok && s != "" {
+		profilerID = s
+	}
+	L.Pop(1)
+
+	// Get onRender callback reference
+	L.GetField(idx, "onRender")
+	hasCallback := L.IsFunction(-1)
+	var callbackIdx int
+	if hasCallback {
+		callbackIdx = L.AbsIndex(-1)
+	}
+
+	// Time the children rendering
+	startTime := float64(time.Now().UnixMilli())
+
+	// Render children
+	L.GetField(idx, "children")
+	if L.Type(-1) == lua.TypeTable {
+		childrenIdx := L.AbsIndex(-1)
+		n := int(L.RawLen(childrenIdx))
+		for i := 1; i <= n; i++ {
+			L.RawGetI(childrenIdx, int64(i))
+			if L.Type(-1) == lua.TypeTable {
+				child := LuaVNodeToVNode(L, -1)
+				vnode.AddChild(child)
+			}
+			L.Pop(1)
+		}
+	}
+	L.Pop(1) // pop children
+
+	commitTime := float64(time.Now().UnixMilli())
+	actualDuration := commitTime - startTime
+
+	// Call onRender(id, phase, actualDuration, baseDuration, startTime, commitTime)
+	if hasCallback {
+		L.PushValue(callbackIdx)
+		L.PushString(profilerID)
+		L.PushString("mount") // phase: "mount" for first render, "update" for re-render
+		L.PushNumber(actualDuration)
+		L.PushNumber(actualDuration) // baseDuration ≈ actualDuration for now
+		L.PushNumber(startTime)
+		L.PushNumber(commitTime)
+		_ = L.PCall(6, 0, 0)
+	}
+
+	L.Pop(1) // pop onRender
+
+	vnode.Props["profiler_id"] = profilerID
+	return vnode
+}
+
+// luaStrictModeToVNode handles a VNode table with type="strictmode".
+// It double-renders children to detect side effects.
+func luaStrictModeToVNode(L *lua.State, idx int) *VNode {
+	vnode := NewVNode("fragment") // strictmode is transparent like fragment
+
+	// Enable strict mode
+	prevStrict := IsStrictMode()
+	SetStrictMode(true)
+	defer SetStrictMode(prevStrict)
+
+	// First render of children
+	L.GetField(idx, "children")
+	if L.Type(-1) == lua.TypeTable {
+		childrenIdx := L.AbsIndex(-1)
+		n := int(L.RawLen(childrenIdx))
+		for i := 1; i <= n; i++ {
+			L.RawGetI(childrenIdx, int64(i))
+			if L.Type(-1) == lua.TypeTable {
+				child := LuaVNodeToVNode(L, -1)
+				vnode.AddChild(child)
+			}
+			L.Pop(1)
+		}
+	}
+	L.Pop(1) // pop children
+
+	// Second render (strict mode double-render) — results are discarded
+	// This helps detect side effects in render functions
+	L.GetField(idx, "children")
+	if L.Type(-1) == lua.TypeTable {
+		childrenIdx := L.AbsIndex(-1)
+		n := int(L.RawLen(childrenIdx))
+		for i := 1; i <= n; i++ {
+			L.RawGetI(childrenIdx, int64(i))
+			if L.Type(-1) == lua.TypeTable {
+				_ = LuaVNodeToVNode(L, -1) // discard second render result
+			}
+			L.Pop(1)
+		}
+	}
+	L.Pop(1)
+
+	return vnode
 }

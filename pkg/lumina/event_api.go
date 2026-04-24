@@ -232,3 +232,37 @@ func emitKeyEvent(L *lua.State) int {
 	globalEventBus.Emit(e)
 	return 0
 }
+
+// registerCaptureEvent registers an event handler for the capture phase.
+// lumina.onCapture(eventType, componentID, handler)
+func registerCaptureEvent(L *lua.State) int {
+	eventType := L.CheckString(1)
+	compID := ""
+	if L.GetTop() >= 2 && !L.IsNoneOrNil(2) {
+		if s, _ := L.ToString(2); s != "" {
+			compID = s
+		}
+	}
+	if L.Type(3) != lua.TypeFunction {
+		L.PushString("registerCaptureEvent: third argument must be handler function")
+		L.Error()
+		return 0
+	}
+
+	refID := L.Ref(lua.RegistryIndex)
+	app := GetApp(L)
+
+	globalEventBus.OnCapture(eventType, compID, func(e *Event) {
+		if app != nil {
+			app.PostEvent(AppEvent{
+				Type:    "lua_callback",
+				Payload: LuaCallbackEvent{RefID: refID, Event: e},
+			})
+		} else {
+			pushEventToLua(L, e)
+			_ = L.CallRef(refID, 1, 0)
+		}
+	})
+
+	return 0
+}
