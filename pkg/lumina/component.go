@@ -13,16 +13,16 @@ import (
 // Component represents a Lumina UI component instance.
 // It wraps the component definition with runtime state.
 type Component struct {
-	ID       string // Unique identifier
-	Type     string // Component type name (e.g., "Counter")
-	Name     string // Component name
-	Props    map[string]any
-	State    map[string]any
-	Dirty    atomic.Bool // True if state changed and needs re-render
-	initFn   *luaFunctionRef
-	renderFn *luaFunctionRef
+	ID        string // Unique identifier
+	Type      string // Component type name (e.g., "Counter")
+	Name      string // Component name
+	Props     map[string]any
+	State     map[string]any
+	Dirty     atomic.Bool // True if state changed and needs re-render
+	initFn    *luaFunctionRef
+	renderFn  *luaFunctionRef
 	cleanupFn *luaFunctionRef
-	mu       sync.RWMutex
+	mu        sync.RWMutex
 }
 
 // luaFunctionRef holds a reference to a Lua function on the stack.
@@ -38,7 +38,7 @@ type ComponentRegistry struct {
 }
 
 var (
-	globalRegistry      = &ComponentRegistry{
+	globalRegistry = &ComponentRegistry{
 		components: make(map[string]*Component),
 	}
 	currentComponentID int64

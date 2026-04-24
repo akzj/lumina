@@ -15,7 +15,7 @@ const ModuleName = "lumina"
 // ComponentRegistry stores registered component factories.
 var (
 	componentRegistry = make(map[string]*lua.State) // name -> state (for future use)
-	registryMu        sync.RWMutex
+	registryMu         sync.RWMutex
 )
 
 // luaLoader is the module loader function that creates the lumina module table.
@@ -46,7 +46,7 @@ func luaLoader(L *lua.State) int {
 		"defineComponent": defineComponent,
 		"createComponent": createComponent,
 		"render":          renderComponent,
-		"createState":     createState,
+		"createState":      createState,
 	}, 0)
 
 	// Register hooks as sub-table
@@ -310,7 +310,7 @@ func renderComponent(L *lua.State) int {
 	// vdom is now on stack at -1
 	// Convert to Frame and write to terminal
 	frame := RenderLuaVNode(L, -1, 80, 24)
-
+	
 	// Write to terminal
 	adapter := GetOutputAdapter()
 	if adapter == nil {
@@ -343,11 +343,9 @@ func createState(L *lua.State) int {
 
 // Open registers the lumina module into the global namespace AND into package.preload.
 func Open(L *lua.State) {
-	// Only set default output adapter if none is configured
-	if GetOutputAdapter() == nil {
-		SetOutputAdapter(NewANSIAdapter(os.Stdout))
-	}
-
+	// Set up default output adapter (ANSI to stdout)
+	SetOutputAdapter(NewANSIAdapter(os.Stdout))
+	
 	luaLoader(L)
 	L.SetGlobal(ModuleName)
 

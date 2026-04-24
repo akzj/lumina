@@ -20,7 +20,7 @@ func NewANSIAdapter(w io.Writer) *ANSIAdapter {
 	return &ANSIAdapter{
 		writer: w,
 		buf:    bytes.Buffer{},
-		width:  80,  // default terminal width
+		width:  80, // default terminal width
 		height: 24, // default terminal height
 	}
 }
@@ -45,19 +45,19 @@ func (a *ANSIAdapter) Write(frame *Frame) error {
 		for y := rect.Y; y < rect.Y+rect.H && y < frame.Height; y++ {
 			// Move to start of line
 			a.buf.WriteString(fmt.Sprintf("\x1b[%d;%dH", y+1, rect.X+1))
-			
+
 			// Output cells in this row
 			var lastStyle string
 			for x := rect.X; x < rect.X+rect.W && x < frame.Width; x++ {
 				cell := frame.Cells[y][x]
 				style := a.styleCodes(&cell)
-				
+
 				// Only emit style change if different from last
 				if style != lastStyle {
 					a.buf.WriteString(style)
 					lastStyle = style
 				}
-				
+
 				// Handle special characters
 				switch cell.Char {
 				case '\\':
@@ -72,7 +72,7 @@ func (a *ANSIAdapter) Write(frame *Frame) error {
 					a.buf.WriteRune(cell.Char)
 				}
 			}
-			
+
 			// Clear to end of line and reset style
 			a.buf.WriteString("\x1b[0m")
 		}
@@ -80,7 +80,7 @@ func (a *ANSIAdapter) Write(frame *Frame) error {
 
 	// Move cursor to bottom-left (standard terminal position)
 	a.buf.WriteString("\x1b[999;1H")
-	
+
 	// Flush to writer
 	_, err := a.writer.Write(a.buf.Bytes())
 	return err

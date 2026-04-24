@@ -100,16 +100,16 @@ func LuaVNodeToVNode(L *lua.State, idx int) *VNode {
 // VNodeToFrame converts a VNode tree to a Frame with layout.
 func VNodeToFrame(vnode *VNode, width, height int) *Frame {
 	frame := NewFrame(width, height)
-	
+
 	// Compute layout
 	computeLayout(vnode, 0, 0, width, height)
-	
+
 	// Render VNode to frame
 	renderVNode(frame, vnode)
-	
+
 	// Mark entire frame dirty
 	frame.MarkDirty()
-	
+
 	return frame
 }
 
@@ -146,7 +146,7 @@ func computeLayout(vnode *VNode, x, y, w, h int) {
 		if flexTotal == 0 {
 			flexTotal = len(vnode.Children)
 		}
-		
+
 		availHeight := h
 		fixedHeight := 0
 		flexChildren := 0
@@ -159,7 +159,7 @@ func computeLayout(vnode *VNode, x, y, w, h int) {
 				flexChildren++
 			}
 		}
-		
+
 		childY := y
 		flexUnit := 0
 		if flexChildren > 0 {
@@ -168,7 +168,7 @@ func computeLayout(vnode *VNode, x, y, w, h int) {
 				flexUnit = 1
 			}
 		}
-		
+
 		for _, child := range vnode.Children {
 			childH := 1
 			if minH, ok := child.Props["minHeight"].(int); ok {
@@ -196,12 +196,12 @@ func computeLayout(vnode *VNode, x, y, w, h int) {
 		if flexTotal == 0 {
 			flexTotal = len(vnode.Children)
 		}
-		
+
 		flexUnit := w / flexTotal
 		if flexUnit < 1 {
 			flexUnit = 1
 		}
-		
+
 		childX := x
 		for _, child := range vnode.Children {
 			childW := flexUnit
@@ -219,7 +219,7 @@ func computeLayout(vnode *VNode, x, y, w, h int) {
 		childX, childY := x, y
 		childW := w
 		childH := h
-		
+
 		childIdx := 0
 		for _, child := range vnode.Children {
 			computeLayout(child, childX, childY, childW, childH)
@@ -234,7 +234,7 @@ func computeLayout(vnode *VNode, x, y, w, h int) {
 func renderVNode(frame *Frame, vnode *VNode) {
 	// Apply style from props
 	cell := Cell{Char: ' '}
-	
+
 	if fg, ok := vnode.Props["foreground"].(string); ok {
 		cell.Foreground = fg
 	}
@@ -247,7 +247,7 @@ func renderVNode(frame *Frame, vnode *VNode) {
 	if dim, ok := vnode.Props["dim"].(bool); ok {
 		cell.Dim = dim
 	}
-	
+
 	switch vnode.Type {
 	case "text":
 		// Render text content
@@ -256,7 +256,7 @@ func renderVNode(frame *Frame, vnode *VNode) {
 				frame.Cells[vnode.Y][vnode.X+i] = Cell{Char: ch, Foreground: cell.Foreground, Background: cell.Background}
 			}
 		}
-		
+
 	case "box", "vbox", "hbox", "container":
 		// Render background if specified
 		if vnode.Props["background"] != nil {
@@ -266,12 +266,12 @@ func renderVNode(frame *Frame, vnode *VNode) {
 				}
 			}
 		}
-		
+
 		// Render border if specified
 		if border, ok := vnode.Props["border"].(string); ok {
 			renderBorder(frame, vnode, border)
 		}
-		
+
 		// Render children
 		for _, child := range vnode.Children {
 			renderVNode(frame, child)
@@ -283,11 +283,11 @@ func renderVNode(frame *Frame, vnode *VNode) {
 func renderBorder(frame *Frame, vnode *VNode, borderType string) {
 	x, y := vnode.X, vnode.Y
 	w, h := vnode.W, vnode.H
-	
+
 	if w < 2 || h < 2 {
 		return
 	}
-	
+
 	// Box drawing characters
 	var tl, tr, bl, br, hLine, vLine rune
 	switch borderType {
@@ -300,7 +300,7 @@ func renderBorder(frame *Frame, vnode *VNode, borderType string) {
 	default:
 		return
 	}
-	
+
 	// Top border
 	if y < frame.Height && x < frame.Width {
 		frame.Cells[y][x] = Cell{Char: tl}
@@ -311,7 +311,7 @@ func renderBorder(frame *Frame, vnode *VNode, borderType string) {
 	if y < frame.Height && x+w-1 < frame.Width {
 		frame.Cells[y][x+w-1] = Cell{Char: tr}
 	}
-	
+
 	// Bottom border
 	if y+h-1 < frame.Height && x < frame.Width {
 		frame.Cells[y+h-1][x] = Cell{Char: bl}
@@ -324,7 +324,7 @@ func renderBorder(frame *Frame, vnode *VNode, borderType string) {
 	if y+h-1 < frame.Height && x+w-1 < frame.Width {
 		frame.Cells[y+h-1][x+w-1] = Cell{Char: br}
 	}
-	
+
 	// Vertical borders
 	for i := 1; i < h-1 && y+i < frame.Height; i++ {
 		if x < frame.Width {
@@ -345,12 +345,12 @@ func RenderLuaVNode(L *lua.State, vnodeIdx int, width, height int) *Frame {
 // RenderToTerminal renders a VDOM to the terminal using the global adapter.
 func RenderToTerminal(L *lua.State, vnodeIdx int) error {
 	frame := RenderLuaVNode(L, vnodeIdx, 80, 24)
-	
+
 	adapter := GetOutputAdapter()
 	if adapter == nil {
 		adapter = NewANSIAdapter(new(noopWriter))
 	}
-	
+
 	return adapter.Write(frame)
 }
 
