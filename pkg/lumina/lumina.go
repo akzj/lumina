@@ -184,6 +184,9 @@ func luaLoader(L *lua.State) int {
 		// State management
 		"createStore":            luaCreateStore,
 		"useStore":               luaUseStore,
+		// Web runtime
+		"serve":                  luaServe,
+		"serveBackground":        luaServeBackground,
 	}, 0)
 
 	// Register lumina.animation sub-table with preset factories
