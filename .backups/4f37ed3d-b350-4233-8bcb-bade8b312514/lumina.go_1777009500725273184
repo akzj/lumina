@@ -26,7 +26,7 @@ func luaLoader(L *lua.State) int {
 	// Register module functions using SetFuncs
 	L.SetFuncs(map[string]lua.Function{
 		"version": func(L *lua.State) int {
-			L.PushString("0.2.0")
+			L.PushString("0.1.0")
 			return 1
 		},
 		"echo": func(L *lua.State) int {
@@ -35,7 +35,7 @@ func luaLoader(L *lua.State) int {
 		},
 		"info": func(L *lua.State) int {
 			L.NewTable()
-			L.PushString("0.2.0")
+			L.PushString("0.1.0")
 			L.SetField(-2, "version")
 			L.PushString("Lumina Terminal UI Framework")
 			L.SetField(-2, "description")
@@ -43,16 +43,10 @@ func luaLoader(L *lua.State) int {
 			L.SetField(-2, "year")
 			return 1
 		},
-"defineComponent":    defineComponent,
-		"createComponent":  createComponent,
-		"render":           renderComponent,
-		"createState":      createState,
-		// Style & Theme API
-		"defineStyle":        defineStyle,
-		"defineGlobalStyles": defineGlobalStyles,
-		"getStyle":           getStyle,
-		"defineTheme":        defineTheme,
-		"setTheme":           setTheme,
+		"defineComponent": defineComponent,
+		"createComponent": createComponent,
+		"render":          renderComponent,
+		"createState":     createState,
 	}, 0)
 
 	// Register hooks as sub-table

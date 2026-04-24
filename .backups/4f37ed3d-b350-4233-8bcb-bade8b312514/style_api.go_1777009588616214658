@@ -1,0 +1,152 @@
+package lumina
+
+import (
+	"github.com/akzj/go-lua/pkg/lua"
+)
+
+// Global style registry
+var globalStyles = make(map[string]map[string]any)
+
+// defineStyle(name, styleTable or styleFn) — define a named style
+func defineStyle(L *lua.State) int {
+	name := L.CheckString(1)
+	// Style can be a table or a function (theme-aware)
+	if L.Type(2) == lua.TypeFunction {
+		// Store as function reference
+		refID := L.Ref(lua.RegistryIndex)
+		globalStyles[name] = map[string]any{"_fn": refID, "_isFn": true}
+	} else if L.Type(2) == lua.TypeTable {
+		globalStyles[name] = tableToMap(L, 2)
+	} else {
+		L.PushString("defineStyle: expected table or function")
+		L.Error()
+	}
+	return 0
+}
+
+// defineGlobalStyles(stylesTable) — define multiple styles at once
+func defineGlobalStyles(L *lua.State) int {
+	styles := tableToMap(L, 1)
+	for k, v := range styles {
+		if m, ok := v.(map[string]any); ok {
+			globalStyles[k] = m
+		}
+	}
+	return 0
+}
+
+// getStyle(name) → styleTable — get a named style
+func getStyle(L *lua.State) int {
+	name := L.CheckString(1)
+	if style, ok := globalStyles[name]; ok {
+		// Convert back to Lua table
+		L.NewTable()
+		for k, v := range style {
+			L.PushString(k)
+			pushLuaValue(L, v)
+			L.SetTable(-3)
+		}
+	} else {
+		L.PushNil()
+	}
+	return 1
+}
+
+// defineTheme(name, themeTable) → theme
+func defineTheme(L *lua.State) int {
+	name := L.CheckString(1)
+	if L.Type(2) != lua.TypeTable {
+		L.PushString("defineTheme: expected table")
+		L.Error()
+	}
+
+	theme := &Theme{Name: name}
+	theme.Colors = make(map[string]string)
+	theme.Spacing = make(map[string]int)
+	theme.Borders = make(map[string]string)
+
+	// Extract colors
+	L.GetField(2, "colors")
+	if L.Type(-1) == lua.TypeTable {
+		L.PushNil()
+		for L.Next(-2) {
+			if k, _ := L.ToString(-2); k != "" {
+				if v, _ := L.ToString(-1); v != "" {
+					theme.Colors[k] = v
+				}
+			}
+			L.Pop(1)
+		}
+	}
+	L.Pop(1)
+
+	// Extract spacing
+	L.GetField(2, "spacing")
+	if L.Type(-1) == lua.TypeTable {
+		L.PushNil()
+		for L.Next(-2) {
+			if k, _ := L.ToString(-2); k != "" {
+				if v, ok := L.ToInteger(-1); ok {
+					theme.Spacing[k] = v
+				}
+			}
+			L.Pop(1)
+		}
+	}
+	L.Pop(1)
+
+	// Extract borders
+	L.GetField(2, "borders")
+	if L.Type(-1) == lua.TypeTable {
+		L.PushNil()
+		for L.Next(-2) {
+			if k, _ := L.ToString(-2); k != "" {
+				if v, _ := L.ToString(-1); v != "" {
+					theme.Borders[k] = v
+				}
+			}
+			L.Pop(1)
+		}
+	}
+	L.Pop(1)
+
+	// Register as named theme
+	RegisterTheme(name, theme)
+
+	// Push theme object as Lua table
+	L.NewTable()
+	L.PushString("name")
+	L.PushString(name)
+	L.SetTable(-3)
+	L.PushString("colors")
+	L.NewTable()
+	for k, v := range theme.Colors {
+		L.PushString(k)
+		L.PushString(v)
+		L.SetTable(-3)
+	}
+	L.SetTable(-3)
+
+	return 1
+}
+
+// setTheme(name or themeTable) — set current theme
+func setTheme(L *lua.State) int {
+	if L.Type(1) == lua.TypeString {
+		name := L.CheckString(1)
+		t := GetThemeByName(name)
+		if t == nil {
+			L.PushString("setTheme: unknown theme '" + name + "'")
+			L.Error()
+			return 0
+		}
+		SetTheme(t)
+	} else if L.Type(1) == lua.TypeTable {
+		// Create theme from table (inline theme)
+		L.PushValue(1)
+		// Use default theme for now if table is complex
+		SetTheme(DefaultTheme())
+		L.Pop(1)
+	}
+	return 0
+}

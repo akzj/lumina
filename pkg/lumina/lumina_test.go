@@ -37,8 +37,8 @@ func TestVersion(t *testing.T) {
 	err := L.DoString(`
 		local lumina = require("lumina")
 		local v = lumina.version()
-		if v ~= "0.1.0" then
-			error("expected version 0.1.0, got: " .. tostring(v))
+		if v ~= "0.2.0" then
+			error("expected version 0.2.0, got: " .. tostring(v))
 		end
 		print("version: " .. v)
 	`)
@@ -79,8 +79,8 @@ func TestInfo(t *testing.T) {
 		if type(info) ~= "table" then
 			error("info should return a table")
 		end
-		if info.version ~= "0.1.0" then
-			error("info.version should be 0.1.0")
+		if info.version ~= "0.2.0" then
+			error("info.version should be 0.2.0")
 		end
 		if info.year ~= 2024 then
 			error("info.year should be 2024")
@@ -102,7 +102,7 @@ func TestGlobalAccess(t *testing.T) {
 	err := L.DoString(`
 		-- lumina should be set as global from Open()
 		local v = lumina.version()
-		if v ~= "0.1.0" then
+		if v ~= "0.2.0" then
 			error("global lumina.version() failed: " .. tostring(v))
 		end
 	`)
@@ -133,7 +133,7 @@ func TestModuleIsolation(t *testing.T) {
 
 	err = L2.DoString(`
 		local lumina = require("lumina")
-		if lumina.version() ~= "0.1.0" then
+		if lumina.version() ~= "0.2.0" then
 			error("L2 version corrupted")
 		end
 	`)
