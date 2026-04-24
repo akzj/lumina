@@ -511,3 +511,265 @@ func TestComposition_MultipleComponentChildren(t *testing.T) {
 		}
 	}
 }
+
+// ---------- Props Reactivity ----------
+
+func TestPropsReactivity_UpdatedPropsReflected(t *testing.T) {
+	L := compTestState(t)
+	defer L.Close()
+
+	// Define a component that reads a prop
+	err := L.DoString(`
+		local Greeting = lumina.defineComponent({
+			name = "Greeting",
+			render = function(self)
+				return { type = "text", content = "Hello, " .. (self.name or "World") }
+			end
+		})
+		_Greeting = Greeting
+	`)
+	if err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+
+	// First render with name = "Alice"
+	err = L.DoString(`
+		_tree1 = {
+			type = "box",
+			children = {
+				lumina.createElement(_Greeting, { name = "Alice" }),
+			}
+		}
+	`)
+	if err != nil {
+		t.Fatalf("tree1: %v", err)
+	}
+
+	L.GetGlobal("_tree1")
+	vnode1 := LuaVNodeToVNode(L, -1)
+	L.Pop(1)
+
+	if len(vnode1.Children) != 1 {
+		t.Fatalf("expected 1 child, got %d", len(vnode1.Children))
+	}
+	if vnode1.Children[0].Content != "Hello, Alice" {
+		t.Fatalf("first render: expected 'Hello, Alice', got %q", vnode1.Children[0].Content)
+	}
+
+	// Second render with name = "Bob" — same component should get updated props
+	err = L.DoString(`
+		_tree2 = {
+			type = "box",
+			children = {
+				lumina.createElement(_Greeting, { name = "Bob" }),
+			}
+		}
+	`)
+	if err != nil {
+		t.Fatalf("tree2: %v", err)
+	}
+
+	L.GetGlobal("_tree2")
+	vnode2 := LuaVNodeToVNode(L, -1)
+	L.Pop(1)
+
+	if len(vnode2.Children) != 1 {
+		t.Fatalf("expected 1 child, got %d", len(vnode2.Children))
+	}
+	if vnode2.Children[0].Content != "Hello, Bob" {
+		t.Fatalf("second render: expected 'Hello, Bob', got %q", vnode2.Children[0].Content)
+	}
+}
+
+func TestPropsReactivity_ChildrenProp(t *testing.T) {
+	L := compTestState(t)
+	defer L.Close()
+
+	err := L.DoString(`
+		local Layout = lumina.defineComponent({
+			name = "Layout",
+			render = function(self)
+				local kids = self.children or {}
+				return {
+					type = "vbox",
+					children = {
+						{ type = "text", content = "=== Header ===" },
+						unpack(kids)
+					}
+				}
+			end
+		})
+
+		_tree = {
+			type = "box",
+			children = {
+				lumina.createElement(Layout, {
+					children = {
+						{ type = "text", content = "Child A" },
+						{ type = "text", content = "Child B" },
+					}
+				}),
+			}
+		}
+	`)
+	if err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+
+	L.GetGlobal("_tree")
+	vnode := LuaVNodeToVNode(L, -1)
+	L.Pop(1)
+
+	if len(vnode.Children) != 1 {
+		t.Fatalf("expected 1 child (Layout), got %d", len(vnode.Children))
+	}
+
+	layout := vnode.Children[0]
+	if layout.Type != "vbox" {
+		t.Fatalf("expected Layout to render vbox, got %q", layout.Type)
+	}
+
+	// Layout should have: Header + Child A + Child B = 3 children
+	if len(layout.Children) < 2 {
+		t.Fatalf("expected at least 2 children in Layout, got %d", len(layout.Children))
+	}
+	if layout.Children[0].Content != "=== Header ===" {
+		t.Fatalf("expected header, got %q", layout.Children[0].Content)
+	}
+}
+
+func TestPropsReactivity_SamePropsNoRerender(t *testing.T) {
+	// Verify that UpdateProps returns false for identical props
+	comp := &Component{
+		ID:    "test",
+		Type:  "Test",
+		Name:  "Test",
+		Props: map[string]any{"x": int64(1), "y": "hello"},
+		State: make(map[string]any),
+	}
+
+	// Same props → no change
+	changed := comp.UpdateProps(map[string]any{"x": int64(1), "y": "hello"})
+	if changed {
+		t.Fatal("expected no change for identical props")
+	}
+	if comp.Dirty.Load() {
+		t.Fatal("should not be dirty for identical props")
+	}
+
+	// Different props → change
+	changed = comp.UpdateProps(map[string]any{"x": int64(2), "y": "hello"})
+	if !changed {
+		t.Fatal("expected change for different props")
+	}
+	if !comp.Dirty.Load() {
+		t.Fatal("should be dirty after props change")
+	}
+}
+
+func TestPropsReactivity_ComponentWithState(t *testing.T) {
+	L := compTestState(t)
+	defer L.Close()
+
+	// Component that uses both state and props
+	err := L.DoString(`
+		local Display = lumina.defineComponent({
+			name = "Display",
+			init = function(props)
+				return { prefix = props.prefix or ">" }
+			end,
+			render = function(self)
+				return { type = "text", content = self.prefix .. " " .. (self.label or "?") }
+			end
+		})
+
+		_tree = {
+			type = "box",
+			children = {
+				lumina.createElement(Display, { prefix = ">>", label = "Hello" }),
+			}
+		}
+	`)
+	if err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+
+	L.GetGlobal("_tree")
+	vnode := LuaVNodeToVNode(L, -1)
+	L.Pop(1)
+
+	if len(vnode.Children) != 1 {
+		t.Fatalf("expected 1 child, got %d", len(vnode.Children))
+	}
+	child := vnode.Children[0]
+	if child.Content != ">> Hello" {
+		t.Fatalf("expected '>> Hello', got %q", child.Content)
+	}
+}
+
+// ---------- Component tree structure ----------
+
+func TestComponentTree_ParentChildReferences(t *testing.T) {
+	L := compTestState(t)
+	defer L.Close()
+
+	// Set up a parent component context
+	parent := &Component{
+		ID:    "parent_comp",
+		Type:  "Parent",
+		Name:  "Parent",
+		Props: make(map[string]any),
+		State: make(map[string]any),
+	}
+	globalRegistry.mu.Lock()
+	globalRegistry.components[parent.ID] = parent
+	globalRegistry.mu.Unlock()
+	SetCurrentComponent(parent)
+	defer func() {
+		SetCurrentComponent(nil)
+		globalRegistry.mu.Lock()
+		delete(globalRegistry.components, parent.ID)
+		globalRegistry.mu.Unlock()
+	}()
+
+	err := L.DoString(`
+		local Child = lumina.defineComponent({
+			name = "Child",
+			render = function(self)
+				return { type = "text", content = "child" }
+			end
+		})
+
+		_tree = {
+			type = "box",
+			children = {
+				lumina.createElement(Child, {}),
+			}
+		}
+	`)
+	if err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+
+	L.GetGlobal("_tree")
+	vnode := LuaVNodeToVNode(L, -1)
+	L.Pop(1)
+
+	// Verify parent-child relationship
+	children := parent.GetChildren()
+	if len(children) != 1 {
+		t.Fatalf("expected parent to have 1 child component, got %d", len(children))
+	}
+	childComp := children[0]
+	if childComp.Type != "Child" {
+		t.Fatalf("expected child type='Child', got %q", childComp.Type)
+	}
+	if childComp.Parent != parent {
+		t.Fatal("child.Parent should point to parent")
+	}
+
+	// Verify VNode has the component reference
+	if vnode.Children[0].ComponentRef != childComp {
+		t.Fatal("VNode.ComponentRef should point to the child component")
+	}
+}
