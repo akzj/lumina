@@ -3,6 +3,8 @@ package lumina
 
 import (
 	"fmt"
+	"os"
+	"sync"
 )
 
 // OutputMode represents the output format mode.
@@ -165,17 +167,22 @@ func (c *Cell) SetUnderline(underline bool) *Cell {
 	return c
 }
 
-// DefaultOutputAdapter is the global output adapter.
-var DefaultOutputAdapter OutputAdapter = nil
-
 // SetOutputAdapter sets the global output adapter.
 func SetOutputAdapter(adapter OutputAdapter) {
-	DefaultOutputAdapter = adapter
+	outputMu.Lock()
+	defer outputMu.Unlock()
+	outputAdapter = adapter
 }
 
 // GetOutputAdapter returns the global output adapter.
 func GetOutputAdapter() OutputAdapter {
-	return DefaultOutputAdapter
+	outputMu.Lock()
+	defer outputMu.Unlock()
+	if outputAdapter == nil {
+		// Lazy initialization with ANSI adapter
+		outputAdapter = NewANSIAdapter(os.Stdout)
+	}
+	return outputAdapter
 }
 
 // NopAdapter is an OutputAdapter that discards all output.
@@ -202,11 +209,29 @@ func (a *NopAdapter) Mode() OutputMode {
 }
 
 // Output mode management
-var currentOutputMode OutputMode = ModeANSI
+var (
+	currentOutputMode OutputMode = ModeANSI
+	outputAdapter     OutputAdapter
+	outputMu          sync.Mutex // protects outputAdapter
+)
 
-// SetOutputMode sets the global output mode.
+// SetOutputMode sets the global output mode and configures the adapter.
 func SetOutputMode(mode OutputMode) {
+	outputMu.Lock()
+	defer outputMu.Unlock()
+
 	currentOutputMode = mode
+
+	switch mode {
+	case ModeJSON:
+		if outputAdapter == nil || outputAdapter.Mode() != ModeJSON {
+			outputAdapter = NewJSONAdapter(os.Stdout)
+		}
+	case ModeANSI:
+		if outputAdapter == nil || outputAdapter.Mode() != ModeANSI {
+			outputAdapter = NewANSIAdapter(os.Stdout)
+		}
+	}
 }
 
 // GetOutputMode returns the current output mode.

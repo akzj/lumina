@@ -26,7 +26,7 @@ func luaLoader(L *lua.State) int {
 	// Register module functions using SetFuncs
 	L.SetFuncs(map[string]lua.Function{
 		"version": func(L *lua.State) int {
-			L.PushString("0.2.0")
+			L.PushString("0.3.0")
 			return 1
 		},
 		"echo": func(L *lua.State) int {
@@ -35,7 +35,7 @@ func luaLoader(L *lua.State) int {
 		},
 		"info": func(L *lua.State) int {
 			L.NewTable()
-			L.PushString("0.2.0")
+			L.PushString("0.3.0")
 			L.SetField(-2, "version")
 			L.PushString("Lumina Terminal UI Framework")
 			L.SetField(-2, "description")
@@ -48,11 +48,11 @@ func luaLoader(L *lua.State) int {
 		"render":          renderComponent,
 		"createState":     createState,
 		// Style & Theme API
-		"defineStyle":        defineStyle,
-		"defineGlobalStyles": defineGlobalStyles,
-		"getStyle":           getStyle,
-		"defineTheme":        defineTheme,
-		"setTheme":           setTheme,
+		"defineStyle":         defineStyle,
+		"defineGlobalStyles":  defineGlobalStyles,
+		"getStyle":            getStyle,
+		"defineTheme":         defineTheme,
+		"setTheme":            setTheme,
 		// Event API
 		"on":               registerEvent,
 		"off":              unregisterEvent,
@@ -67,6 +67,28 @@ func luaLoader(L *lua.State) int {
 		"getMCPFrame":             getMCPFrame,
 		"createComponentRequest":  createComponentRequest,
 		"createEventNotification": createEventNotification,
+		// MCP DevTools - Inspect
+		"inspect":          inspectDispatch,
+		"inspectTree":      inspectTree,
+		"inspectComponent": inspectComponent,
+		"inspectStyles":    inspectStyles,
+		"inspectFrames":    inspectFrames,
+		"getState":         getState,
+		"getAllComponents": getAllComponents,
+		// MCP DevTools - Simulate
+		"simulate":     simulate,
+		"simulateClick": simulateClick,
+		"simulateKey":  simulateKey,
+		"simulateChange": simulateChange,
+		// MCP DevTools - Console
+		"consoleLog":   consoleLog,
+		"consoleGet":   consoleGet,
+		"consoleGetErrors": consoleGetErrors,
+		"consoleClear": consoleClear,
+		"consoleSize":  consoleSize,
+		// MCP DevTools - Diff
+		"diff":       diff,
+		"diffFrames": diffFrames,
 	}, 0)
 
 	// Register hooks as sub-table
@@ -74,6 +96,20 @@ func luaLoader(L *lua.State) int {
 	L.NewTable()
 	RegisterHooks(L)
 	L.SetField(-3, "hooks")
+	L.Pop(1)
+
+	// Register console as sub-table
+	L.PushString("console")
+	L.NewTable()
+	L.SetFuncs(map[string]lua.Function{
+		"log":   func(L *lua.State) int { L.PushString("log"); return consoleLog(L) },
+		"warn":  func(L *lua.State) int { L.PushString("warn"); return consoleLog(L) },
+		"error": func(L *lua.State) int { L.PushString("error"); return consoleLog(L) },
+		"get":   consoleGet,
+		"clear": consoleClear,
+		"size":  consoleSize,
+	}, 0)
+	L.SetField(-3, "console")
 	L.Pop(1)
 
 	return 1
