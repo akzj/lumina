@@ -265,6 +265,13 @@ func computeFlexLayout(vnode *VNode, x, y, w, h int) {
 	}
 
 	switch vnode.Type {
+	case "fragment":
+		// Fragment: transparent container — no border/padding/margin.
+		// Layout each child using computeFlexLayout directly.
+		// The parent's layout function handles positioning.
+		layoutVBox(vnode, x, y, w, h, style)
+		return // skip the rest of computeFlexLayout
+
 	case "text":
 		layoutText(vnode, layoutW)
 
@@ -346,7 +353,16 @@ func layoutVBox(vnode *VNode, contentX, contentY, contentW, contentH int, style 
 		children[i].style = cs
 
 		marginV := cs.MarginTop + cs.MarginBottom
-		if cs.Height > 0 {
+
+		// Fragment: natural height = number of children (each at least 1 row)
+		if child.Type == "fragment" {
+			fragH := len(child.Children)
+			if fragH < 1 {
+				fragH = 1
+			}
+			children[i].fixedH = fragH
+			fixedTotal += children[i].fixedH
+		} else if cs.Height > 0 {
 			h := clamp(cs.Height, cs.MinHeight, cs.MaxHeight)
 			children[i].fixedH = h + marginV
 			fixedTotal += children[i].fixedH
