@@ -542,3 +542,348 @@ func RunEffectCleanups(L *lua.State, comp *Component) {
 		}
 	}
 }
+
+// -----------------------------------------------------------------------
+// useLayoutEffect — synchronous effect that runs after render, before paint
+// -----------------------------------------------------------------------
+
+// LayoutEffectHook tracks a single useLayoutEffect call across renders.
+type LayoutEffectHook struct {
+	Deps        []any // dependency values from last run
+	CleanupRef  int   // Lua registry ref for cleanup function (0 = none)
+	CallbackRef int   // Lua registry ref for the effect callback
+	Ran         bool  // whether the effect has ever been run
+}
+
+// useLayoutEffect registers a layout effect (runs synchronously after render).
+// useLayoutEffect(callback, deps?)
+func useLayoutEffect(L *lua.State) int {
+	comp := GetCurrentComponent()
+	if comp == nil {
+		L.PushString("useLayoutEffect: no current component")
+		L.Error()
+		return 0
+	}
+	L.CheckAny(1)
+	if L.Type(1) != lua.TypeFunction {
+		L.PushString("useLayoutEffect: first argument must be a function")
+		L.Error()
+		return 0
+	}
+
+	var newDeps []any
+	hasDeps := false
+	if L.GetTop() >= 2 && !L.IsNoneOrNil(2) {
+		L.CheckType(2, lua.TypeTable)
+		hasDeps = true
+		newDeps = luaTableToSlice(L, 2)
+	}
+
+	comp.mu.Lock()
+	hook := comp.nextLayoutEffectHookLocked()
+	comp.mu.Unlock()
+
+	shouldRun := false
+	if !hook.Ran {
+		shouldRun = true
+	} else if !hasDeps {
+		shouldRun = true
+	} else {
+		shouldRun = !depsEqual(hook.Deps, newDeps)
+	}
+
+	if shouldRun {
+		// Run cleanup from previous invocation
+		if hook.CleanupRef != 0 {
+			L.RawGetI(lua.RegistryIndex, int64(hook.CleanupRef))
+			if L.Type(-1) == lua.TypeFunction {
+				status := L.PCall(0, 0, 0)
+				if status != lua.OK {
+					L.Pop(1)
+				}
+			} else {
+				L.Pop(1)
+			}
+			L.Unref(lua.RegistryIndex, hook.CleanupRef)
+			hook.CleanupRef = 0
+		}
+
+		// Run the effect callback
+		L.PushValue(1)
+		status := L.PCall(0, 1, 0)
+		if status != lua.OK {
+			msg, _ := L.ToString(-1)
+			L.Pop(1)
+			L.PushString("useLayoutEffect error: " + msg)
+			L.Error()
+			return 0
+		}
+
+		// Store cleanup function if returned
+		if L.Type(-1) == lua.TypeFunction {
+			hook.CleanupRef = L.Ref(lua.RegistryIndex)
+		} else {
+			L.Pop(1)
+		}
+
+		hook.Deps = newDeps
+		hook.Ran = true
+	}
+	return 0
+}
+
+func (c *Component) nextLayoutEffectHookLocked() *LayoutEffectHook {
+	idx := c.hookIndex
+	c.hookIndex++
+	if idx < len(c.layoutEffectHooks) {
+		return c.layoutEffectHooks[idx]
+	}
+	hook := &LayoutEffectHook{}
+	c.layoutEffectHooks = append(c.layoutEffectHooks, hook)
+	return hook
+}
+
+// RunLayoutEffectCleanups runs all layout effect cleanups for a component.
+func RunLayoutEffectCleanups(L *lua.State, comp *Component) {
+	comp.mu.Lock()
+	hooks := comp.layoutEffectHooks
+	comp.mu.Unlock()
+	for _, hook := range hooks {
+		if hook.CleanupRef != 0 {
+			L.RawGetI(lua.RegistryIndex, int64(hook.CleanupRef))
+			if L.Type(-1) == lua.TypeFunction {
+				status := L.PCall(0, 0, 0)
+				if status != lua.OK {
+					L.Pop(1)
+				}
+			} else {
+				L.Pop(1)
+			}
+			L.Unref(lua.RegistryIndex, hook.CleanupRef)
+			hook.CleanupRef = 0
+		}
+	}
+}
+
+// -----------------------------------------------------------------------
+// useId — generates a unique, stable ID per component + hook position
+// -----------------------------------------------------------------------
+
+func useId(L *lua.State) int {
+	comp := GetCurrentComponent()
+	if comp == nil {
+		L.PushString("")
+		return 1
+	}
+
+	comp.mu.Lock()
+	idx := comp.hookIndex
+	comp.hookIndex++
+	comp.mu.Unlock()
+
+	// Generate stable ID based on component ID + hook index
+	id := fmt.Sprintf(":r%s:%d:", comp.ID, idx)
+	L.PushString(id)
+	return 1
+}
+
+// -----------------------------------------------------------------------
+// useImperativeHandle — customizes the instance value exposed via ref
+// -----------------------------------------------------------------------
+
+// useImperativeHandle(ref, createHandle, deps?)
+// Sets ref.current to the result of createHandle() when deps change.
+func useImperativeHandle(L *lua.State) int {
+	comp := GetCurrentComponent()
+	if comp == nil {
+		L.PushString("useImperativeHandle: no current component")
+		L.Error()
+		return 0
+	}
+
+	// arg1: ref (table with .current field)
+	// arg2: createHandle (function)
+	// arg3: deps (optional array)
+	if L.Type(1) != lua.TypeTable {
+		L.PushString("useImperativeHandle: first argument must be a ref table")
+		L.Error()
+		return 0
+	}
+	if L.Type(2) != lua.TypeFunction {
+		L.PushString("useImperativeHandle: second argument must be a function")
+		L.Error()
+		return 0
+	}
+
+	var newDeps []any
+	hasDeps := false
+	if L.GetTop() >= 3 && !L.IsNoneOrNil(3) {
+		L.CheckType(3, lua.TypeTable)
+		hasDeps = true
+		newDeps = luaTableToSlice(L, 3)
+	}
+
+	comp.mu.Lock()
+	hook := comp.nextMemoHookLocked() // Reuse MemoHook for deps tracking
+	comp.mu.Unlock()
+
+	shouldRun := false
+	if !hook.HasValue {
+		shouldRun = true
+	} else if !hasDeps {
+		shouldRun = true
+	} else {
+		shouldRun = !depsEqual(hook.Deps, newDeps)
+	}
+
+	if shouldRun {
+		// Call createHandle()
+		L.PushValue(2) // push createHandle function
+		status := L.PCall(0, 1, 0)
+		if status != lua.OK {
+			msg, _ := L.ToString(-1)
+			L.Pop(1)
+			L.PushString("useImperativeHandle error: " + msg)
+			L.Error()
+			return 0
+		}
+
+		// Set ref.current = result
+		L.SetField(1, "current") // ref.current = handle
+
+		hook.Deps = newDeps
+		hook.HasValue = true
+	}
+
+	return 0
+}
+
+// -----------------------------------------------------------------------
+// useTransition — marks state updates as non-urgent
+// -----------------------------------------------------------------------
+
+// useTransition() → isPending, startTransition
+// startTransition(fn) runs fn immediately but marks the component as "transitioning".
+// isPending is true while the transition callback is pending.
+func useTransition(L *lua.State) int {
+	comp := GetCurrentComponent()
+	if comp == nil {
+		L.PushBoolean(false) // isPending
+		L.PushFunction(func(L *lua.State) int { return 0 })
+		return 2
+	}
+
+	comp.mu.Lock()
+	idx := comp.hookIndex
+	comp.hookIndex++
+
+	// Use a MemoHook to store isPending state
+	var hook *MemoHook
+	if idx < len(comp.memoHooks) {
+		hook = comp.memoHooks[idx]
+	} else {
+		hook = &MemoHook{}
+		comp.memoHooks = append(comp.memoHooks, hook)
+	}
+	comp.mu.Unlock()
+
+	// isPending
+	isPending := false
+	if v, ok := hook.Value.(bool); ok {
+		isPending = v
+	}
+	L.PushBoolean(isPending)
+
+	// startTransition(fn)
+	L.PushFunction(func(L *lua.State) int {
+		if L.Type(1) != lua.TypeFunction {
+			return 0
+		}
+
+		// Mark as pending
+		comp.mu.Lock()
+		hook.Value = true
+		hook.HasValue = true
+		comp.mu.Unlock()
+
+		// Run the callback immediately (synchronous for simplicity)
+		L.PushValue(1)
+		status := L.PCall(0, 0, 0)
+		if status != lua.OK {
+			L.Pop(1) // pop error
+		}
+
+		// Mark as no longer pending
+		comp.mu.Lock()
+		hook.Value = false
+		comp.mu.Unlock()
+
+		return 0
+	})
+
+	return 2
+}
+
+// -----------------------------------------------------------------------
+// useDeferredValue — returns a deferred version of a value
+// -----------------------------------------------------------------------
+
+// useDeferredValue(value) → deferredValue
+// On first render, returns the value immediately.
+// On subsequent renders, returns the previous value (lags by one render).
+// The deferred value catches up on the next render cycle.
+func useDeferredValue(L *lua.State) int {
+	comp := GetCurrentComponent()
+	if comp == nil {
+		L.PushValue(1) // return value as-is
+		return 1
+	}
+
+	comp.mu.Lock()
+	idx := comp.hookIndex
+	comp.hookIndex++
+
+	var hook *MemoHook
+	if idx < len(comp.memoHooks) {
+		hook = comp.memoHooks[idx]
+	} else {
+		hook = &MemoHook{}
+		comp.memoHooks = append(comp.memoHooks, hook)
+	}
+	comp.mu.Unlock()
+
+	// Get current value from Lua
+	var currentValue any
+	switch L.Type(1) {
+	case lua.TypeString:
+		currentValue, _ = L.ToString(1)
+	case lua.TypeNumber:
+		if v, ok := L.ToInteger(1); ok {
+			currentValue = v
+		} else if v, ok := L.ToNumber(1); ok {
+			currentValue = v
+		}
+	case lua.TypeBoolean:
+		currentValue = L.ToBoolean(1)
+	default:
+		// For non-primitive types, just pass through
+		L.PushValue(1)
+		return 1
+	}
+
+	if !hook.HasValue {
+		// First render — return current value, store it
+		hook.Value = currentValue
+		hook.HasValue = true
+		L.PushValue(1)
+		return 1
+	}
+
+	// Subsequent renders — return previous value, then update stored value
+	previousValue := hook.Value
+	hook.Value = currentValue
+
+	// Push the previous (deferred) value
+	L.PushAny(previousValue)
+	return 1
+}
