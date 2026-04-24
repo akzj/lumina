@@ -1,0 +1,362 @@
+package lumina
+
+import (
+	"sync"
+
+	"github.com/akzj/go-lua/pkg/lua"
+)
+
+// Viewport tracks scroll state for a scrollable container.
+type Viewport struct {
+	ScrollX  int // horizontal scroll offset (pixels/cells from left)
+	ScrollY  int // vertical scroll offset (rows from top)
+	ContentW int // total content width
+	ContentH int // total content height (sum of children + gaps)
+	ViewW    int // visible width (container content area width)
+	ViewH    int // visible height (container content area height)
+}
+
+// ScrollDown scrolls down by n rows, clamped to valid range.
+func (v *Viewport) ScrollDown(n int) {
+	v.ScrollY += n
+	v.clampScroll()
+}
+
+// ScrollUp scrolls up by n rows, clamped to valid range.
+func (v *Viewport) ScrollUp(n int) {
+	v.ScrollY -= n
+	v.clampScroll()
+}
+
+// ScrollLeft scrolls left by n columns.
+func (v *Viewport) ScrollLeft(n int) {
+	v.ScrollX -= n
+	v.clampScroll()
+}
+
+// ScrollRight scrolls right by n columns.
+func (v *Viewport) ScrollRight(n int) {
+	v.ScrollX += n
+	v.clampScroll()
+}
+
+// ScrollTo sets the vertical scroll offset to y, clamped to valid range.
+func (v *Viewport) ScrollTo(y int) {
+	v.ScrollY = y
+	v.clampScroll()
+}
+
+// ScrollToBottom scrolls to the very bottom of the content.
+func (v *Viewport) ScrollToBottom() {
+	v.ScrollY = v.maxScrollY()
+}
+
+// ScrollToTop scrolls to the very top.
+func (v *Viewport) ScrollToTop() {
+	v.ScrollY = 0
+	v.ScrollX = 0
+}
+
+// EnsureVisible scrolls the minimum amount needed to make the region
+// [y, y+h) fully visible within the viewport.
+func (v *Viewport) EnsureVisible(y, h int) {
+	if y < v.ScrollY {
+		// Region starts above viewport — scroll up
+		v.ScrollY = y
+	} else if y+h > v.ScrollY+v.ViewH {
+		// Region ends below viewport — scroll down
+		v.ScrollY = y + h - v.ViewH
+	}
+	v.clampScroll()
+}
+
+// AtTop returns true if scrolled to the very top.
+func (v *Viewport) AtTop() bool {
+	return v.ScrollY <= 0
+}
+
+// AtBottom returns true if scrolled to the very bottom.
+func (v *Viewport) AtBottom() bool {
+	return v.ScrollY >= v.maxScrollY()
+}
+
+// ScrollPercent returns the scroll position as a fraction [0.0, 1.0].
+// Returns 0 if content fits in the viewport (no scrolling needed).
+func (v *Viewport) ScrollPercent() float64 {
+	maxY := v.maxScrollY()
+	if maxY <= 0 {
+		return 0
+	}
+	return float64(v.ScrollY) / float64(maxY)
+}
+
+// NeedsScroll returns true if the content exceeds the viewport.
+func (v *Viewport) NeedsScroll() bool {
+	return v.ContentH > v.ViewH
+}
+
+// NeedsHScroll returns true if the content exceeds the viewport horizontally.
+func (v *Viewport) NeedsHScroll() bool {
+	return v.ContentW > v.ViewW
+}
+
+// VisibleRange returns the range of content rows visible in the viewport.
+// Returns (startRow, endRow) where endRow is exclusive.
+func (v *Viewport) VisibleRange() (int, int) {
+	start := v.ScrollY
+	end := v.ScrollY + v.ViewH
+	if end > v.ContentH {
+		end = v.ContentH
+	}
+	return start, end
+}
+
+// maxScrollY returns the maximum valid ScrollY value.
+func (v *Viewport) maxScrollY() int {
+	max := v.ContentH - v.ViewH
+	if max < 0 {
+		return 0
+	}
+	return max
+}
+
+// maxScrollX returns the maximum valid ScrollX value.
+func (v *Viewport) maxScrollX() int {
+	max := v.ContentW - v.ViewW
+	if max < 0 {
+		return 0
+	}
+	return max
+}
+
+// clampScroll ensures scroll offsets are within valid bounds.
+func (v *Viewport) clampScroll() {
+	if v.ScrollY < 0 {
+		v.ScrollY = 0
+	}
+	if maxY := v.maxScrollY(); v.ScrollY > maxY {
+		v.ScrollY = maxY
+	}
+	if v.ScrollX < 0 {
+		v.ScrollX = 0
+	}
+	if maxX := v.maxScrollX(); v.ScrollX > maxX {
+		v.ScrollX = maxX
+	}
+}
+
+// ScrollbarThumb calculates the scrollbar thumb position and size
+// for a track of the given height. Returns (thumbStart, thumbSize).
+// thumbSize is at least 1 if scrolling is needed.
+func (v *Viewport) ScrollbarThumb(trackH int) (int, int) {
+	if !v.NeedsScroll() || trackH <= 0 {
+		return 0, 0
+	}
+
+	// Thumb size is proportional to viewport/content ratio
+	thumbSize := (v.ViewH * trackH) / v.ContentH
+	if thumbSize < 1 {
+		thumbSize = 1
+	}
+	if thumbSize > trackH {
+		thumbSize = trackH
+	}
+
+	// Thumb position is proportional to scroll position
+	maxThumbStart := trackH - thumbSize
+	thumbStart := 0
+	if maxY := v.maxScrollY(); maxY > 0 {
+		thumbStart = (v.ScrollY * maxThumbStart) / maxY
+	}
+	if thumbStart < 0 {
+		thumbStart = 0
+	}
+	if thumbStart > maxThumbStart {
+		thumbStart = maxThumbStart
+	}
+
+	return thumbStart, thumbSize
+}
+
+// --- Viewport Registry ---
+// Viewports persist across re-renders so scroll position is maintained.
+
+var (
+	viewportRegistry = make(map[string]*Viewport)
+	viewportMu       sync.RWMutex
+)
+
+// GetViewport returns the viewport for the given VNode ID, creating one if needed.
+func GetViewport(id string) *Viewport {
+	viewportMu.RLock()
+	vp, ok := viewportRegistry[id]
+	viewportMu.RUnlock()
+	if ok {
+		return vp
+	}
+
+	// Create new viewport
+	viewportMu.Lock()
+	defer viewportMu.Unlock()
+	// Double-check after acquiring write lock
+	if vp, ok := viewportRegistry[id]; ok {
+		return vp
+	}
+	vp = &Viewport{}
+	viewportRegistry[id] = vp
+	return vp
+}
+
+// SetViewport stores a viewport for the given VNode ID.
+func SetViewport(id string, vp *Viewport) {
+	viewportMu.Lock()
+	defer viewportMu.Unlock()
+	viewportRegistry[id] = vp
+}
+
+// RemoveViewport removes a viewport from the registry.
+func RemoveViewport(id string) {
+	viewportMu.Lock()
+	defer viewportMu.Unlock()
+	delete(viewportRegistry, id)
+}
+
+// ClearViewports removes all viewports (useful for testing).
+func ClearViewports() {
+	viewportMu.Lock()
+	defer viewportMu.Unlock()
+	viewportRegistry = make(map[string]*Viewport)
+}
+
+// ScrollViewport scrolls the viewport for the given ID by dy rows.
+// Positive dy = scroll down, negative dy = scroll up.
+// Returns false if no viewport exists for the ID.
+func ScrollViewport(id string, dy int) bool {
+	viewportMu.RLock()
+	vp, ok := viewportRegistry[id]
+	viewportMu.RUnlock()
+	if !ok {
+		return false
+	}
+	if dy > 0 {
+		vp.ScrollDown(dy)
+	} else if dy < 0 {
+		vp.ScrollUp(-dy)
+	}
+	return true
+}
+
+// findScrollableAncestor walks up the VNode tree to find the nearest
+// scrollable container that contains the given (x, y) point.
+// Returns the VNode ID and viewport, or ("", nil) if none found.
+func findScrollableVNode(root *VNode, x, y int) (string, *Viewport) {
+	if root == nil {
+		return "", nil
+	}
+
+	// Check if this node contains the point
+	if x < root.X || x >= root.X+root.W || y < root.Y || y >= root.Y+root.H {
+		return "", nil
+	}
+
+	// Check children first (deepest match wins)
+	for _, child := range root.Children {
+		if id, vp := findScrollableVNode(child, x, y); id != "" {
+			return id, vp
+		}
+	}
+
+	// Check if this node is scrollable
+	if root.Style.Overflow == "scroll" {
+		if id, ok := root.Props["id"].(string); ok && id != "" {
+			vp := GetViewport(id)
+			return id, vp
+		}
+	}
+
+	return "", nil
+}
+
+// --- Lua API ---
+
+// luaScrollTo implements lumina.scrollTo(id, y)
+// Scrolls the viewport for the given container ID to the specified row.
+func luaScrollTo(L *lua.State) int {
+	id := L.CheckString(1)
+	y, ok := L.ToInteger(2)
+	if !ok {
+		L.PushString("scrollTo: expected integer for y position")
+		L.Error()
+		return 0
+	}
+
+	vp := GetViewport(id)
+	vp.ScrollTo(int(y))
+	return 0
+}
+
+// luaScrollToBottom implements lumina.scrollToBottom(id)
+// Scrolls the viewport for the given container ID to the bottom.
+func luaScrollToBottom(L *lua.State) int {
+	id := L.CheckString(1)
+	vp := GetViewport(id)
+	vp.ScrollToBottom()
+	return 0
+}
+
+// luaScrollToTop implements lumina.scrollToTop(id)
+// Scrolls the viewport for the given container ID to the top.
+func luaScrollToTop(L *lua.State) int {
+	id := L.CheckString(1)
+	vp := GetViewport(id)
+	vp.ScrollToTop()
+	return 0
+}
+
+// luaScrollBy implements lumina.scrollBy(id, dy)
+// Scrolls the viewport by dy rows (positive = down, negative = up).
+func luaScrollBy(L *lua.State) int {
+	id := L.CheckString(1)
+	dy, ok := L.ToInteger(2)
+	if !ok {
+		L.PushString("scrollBy: expected integer for dy")
+		L.Error()
+		return 0
+	}
+
+	vp := GetViewport(id)
+	if dy > 0 {
+		vp.ScrollDown(int(dy))
+	} else if dy < 0 {
+		vp.ScrollUp(int(-dy))
+	}
+	return 0
+}
+
+// luaGetScrollInfo implements lumina.getScrollInfo(id) -> table
+// Returns scroll state for the given container.
+func luaGetScrollInfo(L *lua.State) int {
+	id := L.CheckString(1)
+
+	viewportMu.RLock()
+	vp, ok := viewportRegistry[id]
+	viewportMu.RUnlock()
+
+	if !ok {
+		L.PushNil()
+		return 1
+	}
+
+	L.NewTableFrom(map[string]any{
+		"scrollX":    int64(vp.ScrollX),
+		"scrollY":    int64(vp.ScrollY),
+		"contentW":   int64(vp.ContentW),
+		"contentH":   int64(vp.ContentH),
+		"viewW":      int64(vp.ViewW),
+		"viewH":      int64(vp.ViewH),
+		"atTop":      vp.AtTop(),
+		"atBottom":   vp.AtBottom(),
+		"needsScroll": vp.NeedsScroll(),
+	})
+	return 1
+}
