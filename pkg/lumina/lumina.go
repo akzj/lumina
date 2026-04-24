@@ -52,6 +52,10 @@ func luaLoader(L *lua.State) int {
 		"forwardRef":          luaForwardRef,
 		"lazy":                luaLazy,
 		"render":          renderComponent,
+		"mount":           luaMount,
+		"run":             luaRun,
+		"quit":            luaQuit,
+		"onKey":           luaOnKey,
 		"createState":     createState,
 		// Style & Theme API
 		"defineStyle":        defineStyle,
@@ -793,6 +797,123 @@ func luaForwardRef(L *lua.State) int {
 	L.SetField(-2, "render")
 
 	return 1
+}
+
+// -----------------------------------------------------------------------
+// Mount / Run Lua API
+// -----------------------------------------------------------------------
+
+// mountedFactory stores the factory table ref for lumina.mount().
+// lumina.run() renders it and enters the event loop.
+var mountedFactoryRef int
+
+// luaMount registers a component factory as the root component.
+// lumina.mount(Factory) — stores the factory for lumina.run() to render.
+// In headless/test mode, it also renders immediately.
+func luaMount(L *lua.State) int {
+	if L.Type(1) != lua.TypeTable {
+		L.PushString("mount: expected component factory table")
+		L.Error()
+		return 0
+	}
+
+	// Store factory ref in Lua registry
+	L.PushValue(1)
+	mountedFactoryRef = L.Ref(lua.RegistryIndex)
+
+	// Render immediately (same as lumina.render(Factory, {}))
+	L.PushValue(1)
+	L.NewTable() // empty props
+	renderComponent(L)
+
+	return 0
+}
+
+// luaRun starts the event loop. In headless/test mode (no App attached),
+// it's a no-op — the script has already rendered via mount().
+func luaRun(L *lua.State) int {
+	// Check if there's an App attached to this State
+	app := GetApp(L)
+	if app == nil {
+		// No app — headless/test mode. Just return.
+		return 0
+	}
+
+	// If we have an app, mark it as running.
+	// The actual event loop is managed by App.Run/RunInteractive/RunWithTermIO,
+	// not by the Lua-side lumina.run() call.
+	app.running = true
+	return 0
+}
+
+// luaQuit stops the application.
+// lumina.quit()
+func luaQuit(L *lua.State) int {
+	app := GetApp(L)
+	if app != nil {
+		app.Stop()
+	}
+	return 0
+}
+
+// keyBindings stores key → Lua function ref mappings for lumina.onKey().
+var (
+	keyBindings   = make(map[string]int) // key → Lua registry ref
+	keyBindingsMu sync.Mutex
+)
+
+// luaOnKey registers a key binding: lumina.onKey("q", function() ... end)
+func luaOnKey(L *lua.State) int {
+	key := L.CheckString(1)
+	if L.Type(2) != lua.TypeFunction {
+		L.PushString("onKey: second argument must be a function")
+		L.Error()
+		return 0
+	}
+
+	// Store the callback in the Lua registry
+	L.PushValue(2)
+	ref := L.Ref(lua.RegistryIndex)
+
+	keyBindingsMu.Lock()
+	keyBindings[key] = ref
+	keyBindingsMu.Unlock()
+
+	// Register as a keyboard shortcut in the event bus
+	normKey := normalizeShortcutKey(key)
+	app := GetApp(L)
+
+	globalEventBus.mu.Lock()
+	globalEventBus.shortcuts[normKey] = eventHandler{
+		componentID: "global",
+		handler: func(e *Event) {
+			if app != nil {
+				app.PostEvent(AppEvent{
+					Type:    "lua_callback",
+					Payload: LuaCallbackEvent{RefID: ref, Event: e},
+				})
+			} else {
+				L.RawGetI(lua.RegistryIndex, int64(ref))
+				if L.Type(-1) == lua.TypeFunction {
+					pushEventToLua(L, e)
+					status := L.PCall(1, 0, 0)
+					if status != lua.OK {
+						L.Pop(1)
+					}
+				}
+			}
+		},
+	}
+	globalEventBus.mu.Unlock()
+
+	return 0
+}
+
+// ClearKeyBindings removes all key bindings (for testing).
+func ClearKeyBindings() {
+	keyBindingsMu.Lock()
+	defer keyBindingsMu.Unlock()
+	keyBindings = make(map[string]int)
 }
 
 // -----------------------------------------------------------------------
