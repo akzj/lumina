@@ -887,3 +887,190 @@ func useDeferredValue(L *lua.State) int {
 	L.PushAny(previousValue)
 	return 1
 }
+
+// -----------------------------------------------------------------------
+// useSyncExternalStore — subscribe to external stores
+// -----------------------------------------------------------------------
+
+// ExternalStoreHook stores subscription state for useSyncExternalStore.
+type ExternalStoreHook struct {
+	LastSnapshot any // last snapshot value returned to the component
+	Subscribed   bool
+}
+
+// useSyncExternalStore subscribes to an external store.
+// Args: subscribe(callback) → unsubscribe, getSnapshot() → value
+func useSyncExternalStore(L *lua.State) int {
+	comp := GetCurrentComponent()
+	if comp == nil {
+		L.PushString("useSyncExternalStore: no current component")
+		L.Error()
+		return 0
+	}
+
+	comp.mu.Lock()
+	idx := comp.hookIndex
+	comp.hookIndex++
+
+	// Grow externalStoreHooks if needed
+	for idx >= len(comp.externalStoreHooks) {
+		comp.externalStoreHooks = append(comp.externalStoreHooks, &ExternalStoreHook{})
+	}
+	hook := comp.externalStoreHooks[idx]
+	comp.mu.Unlock()
+
+	// arg1 = subscribe function (not called here — subscription is app-level)
+	// arg2 = getSnapshot function
+
+	// Call getSnapshot() to get current value
+	L.PushValue(2) // getSnapshot
+	if status := L.PCall(0, 1, 0); status != 0 {
+		msg, _ := L.ToString(-1)
+		L.Pop(1)
+		L.PushString(fmt.Sprintf("useSyncExternalStore: getSnapshot error: %s", msg))
+		L.Error()
+		return 0
+	}
+
+	// Get the snapshot value
+	snapshot := luaToAny(L, -1)
+	L.Pop(1)
+
+	// On first render, call subscribe with a no-op callback
+	// (real subscription management would be done at the app level)
+	if !hook.Subscribed {
+		hook.Subscribed = true
+		hook.LastSnapshot = snapshot
+
+		// Call subscribe(callback) — callback is a no-op for now
+		// In a real app, the callback would mark the component dirty
+		L.PushValue(1) // subscribe function
+		L.PushFunction(func(L *lua.State) int {
+			// Notification callback — mark component dirty
+			comp.Dirty.Store(true)
+			return 0
+		})
+		if status := L.PCall(1, 1, 0); status != 0 {
+			// subscribe may fail — that's OK, just ignore
+			L.Pop(1)
+		} else {
+			// subscribe returns an unsubscribe function — store as cleanup ref
+			// For now, just pop it (cleanup would be handled on unmount)
+			L.Pop(1)
+		}
+	} else {
+		hook.LastSnapshot = snapshot
+	}
+
+	// Return the current snapshot
+	L.PushAny(snapshot)
+	return 1
+}
+
+// luaToAny converts a Lua value at the given stack index to a Go value.
+func luaToAny(L *lua.State, idx int) any {
+	switch L.Type(idx) {
+	case lua.TypeNil:
+		return nil
+	case lua.TypeBoolean:
+		return L.ToBoolean(idx)
+	case lua.TypeNumber:
+		if n, ok := L.ToInteger(idx); ok {
+			return n
+		}
+		n, _ := L.ToNumber(idx)
+		return n
+	case lua.TypeString:
+		s, _ := L.ToString(idx)
+		return s
+	case lua.TypeTable:
+		// Convert table to map
+		result := make(map[string]any)
+		L.PushNil()
+		for L.Next(idx - 1) {
+			key, ok := L.ToString(-2)
+			if ok {
+				result[key] = luaToAny(L, -1)
+			}
+			L.Pop(1) // pop value, keep key
+		}
+		return result
+	default:
+		return nil
+	}
+}
+
+// -----------------------------------------------------------------------
+// useDebugValue — debug labels for hooks
+// -----------------------------------------------------------------------
+
+// useDebugValue stores a debug label on the current component for inspection.
+// Args: value (any), optional formatFn
+func useDebugValue(L *lua.State) int {
+	comp := GetCurrentComponent()
+	if comp == nil {
+		// Silent no-op if no component (like React)
+		return 0
+	}
+
+	comp.mu.Lock()
+	defer comp.mu.Unlock()
+
+	var label string
+	if L.GetTop() >= 2 && L.IsFunction(2) {
+		// formatFn provided: call formatFn(value) → formatted string
+		L.PushValue(2) // formatFn
+		L.PushValue(1) // value
+		if status := L.PCall(1, 1, 0); status == 0 {
+			label, _ = L.ToString(-1)
+			L.Pop(1)
+		} else {
+			L.Pop(1) // pop error message
+		}
+	} else {
+		label, _ = L.ToString(1)
+	}
+
+	comp.debugValues = append(comp.debugValues, label)
+	return 0
+}
+
+// GetDebugValues returns the debug values for a component.
+func (c *Component) GetDebugValues() []string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	result := make([]string, len(c.debugValues))
+	copy(result, c.debugValues)
+	return result
+}
+
+// -----------------------------------------------------------------------
+// Profiler — render performance measurement
+// -----------------------------------------------------------------------
+
+// ProfilerData holds timing data for a Profiler boundary.
+type ProfilerData struct {
+	ID             string
+	Phase          string  // "mount" or "update"
+	ActualDuration float64 // milliseconds
+	BaseDuration   float64 // milliseconds (estimated without memoization)
+	StartTime      float64 // milliseconds since epoch
+	CommitTime     float64 // milliseconds since epoch
+}
+
+// -----------------------------------------------------------------------
+// StrictMode — double-render detection
+// -----------------------------------------------------------------------
+
+// strictModeEnabled is a per-render flag that enables double-rendering.
+var strictModeEnabled bool
+
+// IsStrictMode returns whether strict mode is currently active.
+func IsStrictMode() bool {
+	return strictModeEnabled
+}
+
+// SetStrictMode enables or disables strict mode.
+func SetStrictMode(enabled bool) {
+	strictModeEnabled = enabled
+}
