@@ -193,6 +193,12 @@ func luaLoader(L *lua.State) int {
 		"serveBackground":        luaServeBackground,
 		// i18n
 		"useTranslation":         luaUseTranslation,
+		// Data fetching
+		"fetch":                  luaFetch,
+		"useFetch":               luaUseFetch,
+		"useQuery":               luaUseQuery,
+		"invalidateQuery":        luaInvalidateQuery,
+		"invalidateAllQueries":   luaInvalidateAllQueries,
 	}, 0)
 
 	// Register lumina.animation sub-table with preset factories
@@ -200,6 +206,9 @@ func luaLoader(L *lua.State) int {
 
 	// Register lumina.i18n sub-table
 	registerI18nModule(L)
+
+	// Register lumina.devtools sub-table
+	registerDevToolsModule(L)
 
 	// Register lumina.Suspense as a component factory table (not a function)
 	registerSuspenseFactory(L)
