@@ -108,7 +108,7 @@ func (t *Terminal) EnableRawMode() error {
 	t.rawMode = true
 
 	// Enable mouse reporting (SGR extended mode)
-	os.Stdout.WriteString("\x1b[?1000h") // basic mouse tracking
+	os.Stdout.WriteString("\x1b[?1003h") // ANY_EVENT mouse tracking (motion + click)
 	os.Stdout.WriteString("\x1b[?1006h") // SGR extended mouse format
 
 	return nil
@@ -119,7 +119,7 @@ func (t *Terminal) RestoreMode() {
 	if t.rawMode {
 		// Disable mouse reporting
 		os.Stdout.WriteString("\x1b[?1006l")
-		os.Stdout.WriteString("\x1b[?1000l")
+		os.Stdout.WriteString("\x1b[?1003l")
 
 		tcsetattr(t.fd, &t.origTerm)
 		t.rawMode = false

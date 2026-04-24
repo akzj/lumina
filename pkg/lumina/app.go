@@ -183,6 +183,8 @@ func (app *App) RunInteractive(scriptPath string) error {
 		select {
 		case <-ticker.C:
 			app.sched.Tick()
+			// Tick smooth scrolling
+			TickAllViewports()
 			app.renderAllDirty()
 
 		case event := <-app.events:
@@ -213,6 +215,8 @@ func (app *App) eventLoop() error {
 				}
 				globalRegistry.mu.RUnlock()
 			}
+			// Tick smooth scrolling
+			TickAllViewports()
 			app.renderAllDirty()
 
 		case event := <-app.events:
