@@ -44,7 +44,11 @@ func luaLoader(L *lua.State) int {
 		
 		"defineComponent": defineComponent,
 		"createComponent": createComponent,
-		"createElement":   createElement,
+		"createElement":        createElement,
+		"createErrorBoundary": createErrorBoundary,
+		"memo":                luaMemo,
+		"createPortal":        luaCreatePortal,
+		"forwardRef":          luaForwardRef,
 		"render":          renderComponent,
 		"createState":     createState,
 		// Style & Theme API
@@ -507,6 +511,196 @@ func createElement(L *lua.State) int {
 		L.NewTable()
 	}
 	L.SetField(-2, "_props")
+
+	return 1
+}
+
+// createErrorBoundary creates an error boundary component factory.
+// createErrorBoundary({ fallback = function(err) ... end }) → factory table
+func createErrorBoundary(L *lua.State) int {
+	if L.Type(1) != lua.TypeTable {
+		L.PushString("createErrorBoundary: expected config table")
+		L.Error()
+		return 0
+	}
+
+	// Create a component factory table
+	L.NewTable()
+
+	// name = "ErrorBoundary"
+	L.PushString("ErrorBoundary")
+	L.SetField(-2, "name")
+
+	// isComponent = true
+	L.PushBoolean(true)
+	L.SetField(-2, "isComponent")
+
+	// _isErrorBoundary = true
+	L.PushBoolean(true)
+	L.SetField(-2, "_isErrorBoundary")
+
+	// render = passthrough (renders children)
+	L.PushFunction(func(L *lua.State) int {
+		// self is arg 1
+		L.GetField(1, "children")
+		if L.Type(-1) != lua.TypeTable {
+			// No children — return empty box
+			L.Pop(1)
+			L.NewTableFrom(map[string]any{"type": "box"})
+			return 1
+		}
+		// Wrap children in a box
+		L.NewTable()
+		L.PushString("box")
+		L.SetField(-2, "type")
+		L.PushValue(-2) // push children
+		L.SetField(-2, "children")
+		L.Remove(-2) // remove original children
+		return 1
+	})
+	L.SetField(-2, "render")
+
+	// Copy fallback function from config
+	L.GetField(1, "fallback")
+	if L.Type(-1) == lua.TypeFunction {
+		L.SetField(-2, "_fallback")
+	} else {
+		L.Pop(1)
+	}
+
+	return 1
+}
+
+// luaMemo wraps a component factory with memoization.
+// memo(factory) → memoized factory table
+func luaMemo(L *lua.State) int {
+	if L.Type(1) != lua.TypeTable {
+		L.PushString("memo: expected component factory table")
+		L.Error()
+		return 0
+	}
+
+	// Create a new factory table that wraps the original
+	L.NewTable()
+
+	// Copy name from original
+	L.GetField(1, "name")
+	if name, ok := L.ToString(-1); ok {
+		L.Pop(1)
+		L.PushString(name)
+	}
+	L.SetField(-2, "name")
+
+	// isComponent = true
+	L.PushBoolean(true)
+	L.SetField(-2, "isComponent")
+
+	// _memoized = true
+	L.PushBoolean(true)
+	L.SetField(-2, "_memoized")
+
+	// Copy render from original
+	L.GetField(1, "render")
+	L.SetField(-2, "render")
+
+	// Copy init from original (if exists)
+	L.GetField(1, "init")
+	if L.Type(-1) == lua.TypeFunction {
+		L.SetField(-2, "init")
+	} else {
+		L.Pop(1)
+	}
+
+	// Copy cleanup from original (if exists)
+	L.GetField(1, "cleanup")
+	if L.Type(-1) == lua.TypeFunction {
+		L.SetField(-2, "cleanup")
+	} else {
+		L.Pop(1)
+	}
+
+	return 1
+}
+
+// luaCreatePortal creates a portal VNode that renders at a target container.
+// createPortal(vnodeTable, targetID) → portal VNode table
+func luaCreatePortal(L *lua.State) int {
+	if L.Type(1) != lua.TypeTable {
+		L.PushString("createPortal: first argument must be a VNode table")
+		L.Error()
+		return 0
+	}
+	targetID := ""
+	if L.GetTop() >= 2 {
+		targetID = L.CheckString(2)
+	}
+
+	L.NewTable()
+	L.PushString("portal")
+	L.SetField(-2, "type")
+
+	L.PushValue(1) // content VNode
+	L.SetField(-2, "_content")
+
+	L.PushString(targetID)
+	L.SetField(-2, "_target")
+
+	return 1
+}
+
+// luaForwardRef wraps a render function to receive a ref.
+// forwardRef(function(props, ref) ... end) → factory table
+func luaForwardRef(L *lua.State) int {
+	if L.Type(1) != lua.TypeFunction {
+		L.PushString("forwardRef: expected render function")
+		L.Error()
+		return 0
+	}
+
+	// Store the render function ref
+	L.PushValue(1)
+	renderRef := L.Ref(lua.RegistryIndex)
+
+	L.NewTable()
+	L.PushString("ForwardRef")
+	L.SetField(-2, "name")
+	L.PushBoolean(true)
+	L.SetField(-2, "isComponent")
+	L.PushBoolean(true)
+	L.SetField(-2, "_forwardRef")
+
+	// render function: calls the stored function with (props, ref)
+	L.PushFunction(func(L *lua.State) int {
+		// self is arg 1
+		L.RawGetI(lua.RegistryIndex, int64(renderRef))
+		if L.Type(-1) != lua.TypeFunction {
+			L.Pop(1)
+			L.NewTableFrom(map[string]any{"type": "box"})
+			return 1
+		}
+
+		// Push props (self minus internal fields)
+		L.PushValue(1) // push self as props
+
+		// Get ref from self.ref or generate one
+		L.GetField(1, "ref")
+		if L.IsNoneOrNil(-1) {
+			L.Pop(1)
+			L.PushString("") // empty ref
+		}
+
+		// Call render(props, ref)
+		status := L.PCall(2, 1, 0)
+		if status != lua.OK {
+			msg, _ := L.ToString(-1)
+			L.Pop(1)
+			L.PushString("forwardRef render error: " + msg)
+			L.Error()
+			return 0
+		}
+		return 1
+	})
+	L.SetField(-2, "render")
 
 	return 1
 }

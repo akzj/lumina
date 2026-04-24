@@ -421,12 +421,40 @@ func useContext(L *lua.State) int {
 		L.Error()
 		return 0
 	}
+
+	// Walk up the component tree to find a provider
+	comp := GetCurrentComponent()
+	if comp != nil {
+		if v, found := resolveContextFromTree(comp, ctx.ID); found {
+			L.PushAny(v)
+			return 1
+		}
+	}
+
+	// Fall back to global context value
 	value := GetContextValue(ctx)
 	L.PushAny(value)
 	return 1
 }
 
+// resolveContextFromTree walks up the component tree to find a context value.
+func resolveContextFromTree(comp *Component, contextID int64) (any, bool) {
+	for c := comp; c != nil; c = c.Parent {
+		c.mu.RLock()
+		if c.ContextValues != nil {
+			if val, ok := c.ContextValues[contextID]; ok {
+				c.mu.RUnlock()
+				return val, true
+			}
+		}
+		c.mu.RUnlock()
+	}
+	return nil, false
+}
+
 // setContextValueLua sets a context's current value.
+// If called within a component render, sets on the current component (tree-scoped).
+// Otherwise sets globally.
 func setContextValueLua(L *lua.State) int {
 	val := L.UserdataValue(1)
 	ctx, ok := val.(*Context)
@@ -439,6 +467,19 @@ func setContextValueLua(L *lua.State) int {
 	if L.GetTop() >= 2 && !L.IsNoneOrNil(2) {
 		value = L.ToAny(2)
 	}
+
+	// If we're inside a component render, set on the component (tree-scoped)
+	comp := GetCurrentComponent()
+	if comp != nil {
+		comp.mu.Lock()
+		if comp.ContextValues == nil {
+			comp.ContextValues = make(map[int64]any)
+		}
+		comp.ContextValues[ctx.ID] = value
+		comp.mu.Unlock()
+	}
+
+	// Also set globally for backward compatibility
 	SetContextValue(ctx, value)
 	return 0
 }
