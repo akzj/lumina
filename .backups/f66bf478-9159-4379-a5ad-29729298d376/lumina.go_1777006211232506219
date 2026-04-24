@@ -70,64 +70,45 @@ func luaLoader(L *lua.State) int {
 				return 0
 			}
 
-			// Swap: move config to upvalue slot, new table to -1
-			// Stack: [config] -> after NewTable -> [config, componentTable]
-			// We need: [componentTable, config] so we can read from config
-			L.PushValue(-1) // duplicate config -> [config, componentTable, config]
-			L.Insert(-3)    // move config to bottom -> [config, componentTable, ...wait]
-
-			// Actually simpler: push config ref to registry, work with new table
-			// Create new component table first
-			L.NewTable() // stack: [config, componentTable]
-
-			// Get component name from config (now at -2)
-			L.PushValue(-2) // copy config -> [config, componentTable, config]
+			// Get component name
 			L.GetField(-1, "name")
 			name, _ := L.ToString(-1)
-			L.Remove(-2) // remove the config copy we just used
-			// stack: [config, componentTable], name on stack
+			L.Pop(1)
 
 			if name == "" {
-				L.Pop(3) // pop config, componentTable, name
 				L.PushString("defineComponent: 'name' is required")
 				L.Error()
 				return 0
 			}
 
-			L.PushString(name)
-			L.SetField(-3, "name") // set on componentTable (now at -3)
-			L.Pop(1) // pop name
-
 			// Verify render function exists
-			L.PushValue(-2) // copy config again
 			L.GetField(-1, "render")
-			L.Remove(-2) // remove config copy
 			if L.Type(-1) != lua.TypeFunction {
-				L.Pop(3) // pop config, componentTable, non-function
+				L.Pop(1)
 				L.PushString("defineComponent: 'render' function is required")
 				L.Error()
 				return 0
 			}
-			// stack: [config, componentTable, renderFn]
-			// Set render on component table
-			L.SetField(-3, "render")
 			L.Pop(1) // pop render function reference
 
-			// Set other fields on componentTable (at -2)
+			// Create component factory table
+			L.NewTable()
+			L.PushString(name)
+			L.SetField(-2, "name")
 			L.PushString("component:" + name)
 			L.SetField(-2, "id")
 			L.PushBoolean(true)
 			L.SetField(-2, "isComponent")
 
-			// Pop config from stack, leaving componentTable as return value
-			L.Remove(-2) // remove config
-
+			// Store render function reference for later use
+			L.GetField(-1, "render")
 			// Component registry (in Go side for tracking)
 			registryMu.Lock()
-			componentRegistry[name] = L
+			// Store component name in registry for verification
+			componentRegistry[name] = L // L is just used as a placeholder
 			registryMu.Unlock()
 
-			return 1 // return componentTable
+			return 1 // return component factory
 		},
 		"createState": func(L *lua.State) int {
 			// createState(initial) -> state
