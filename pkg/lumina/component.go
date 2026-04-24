@@ -20,9 +20,14 @@ type Component struct {
 	State        map[string]any
 	Dirty        atomic.Bool   // True if state changed and needs re-render
 	RenderNotify chan struct{} // Notify render loop when state changes
+	LastVNode    *VNode        // Previous render result for VDom diffing
 	initFn       *luaFunctionRef
 	renderFn     *luaFunctionRef
 	cleanupFn    *luaFunctionRef
+	// Hooks state
+	effectHooks  []*EffectHook  // useEffect hooks in call order
+	memoHooks    []*MemoHook    // useMemo hooks in call order
+	hookIndex    int            // current hook index during render
 	mu           sync.RWMutex
 }
 
@@ -216,6 +221,11 @@ func UserdataToComponent(L *lua.State, idx int) *Component {
 		return comp
 	}
 	return nil
+}
+
+// ResetHookIndex resets the hook call counter for a new render pass.
+func (c *Component) ResetHookIndex() {
+	c.hookIndex = 0
 }
 
 // Error variables for component creation
