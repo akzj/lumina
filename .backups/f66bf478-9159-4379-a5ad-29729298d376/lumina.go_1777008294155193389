@@ -3,7 +3,6 @@ package lumina
 
 import (
 	"fmt"
-	"os"
 	"sync"
 
 	"github.com/akzj/go-lua/pkg/lua"
@@ -307,21 +306,6 @@ func renderComponent(L *lua.State) int {
 		return 0
 	}
 
-	// vdom is now on stack at -1
-	// Convert to Frame and write to terminal
-	frame := RenderLuaVNode(L, -1, 80, 24)
-	
-	// Write to terminal
-	adapter := GetOutputAdapter()
-	if adapter == nil {
-		// Use noop adapter if not set, to avoid nil panic
-		adapter = &NopAdapter{}
-	}
-	if err := adapter.Write(frame); err != nil {
-		// Error writing, but we still return the vdom
-		// Could log or handle differently
-	}
-
 	return 1
 }
 
@@ -343,9 +327,6 @@ func createState(L *lua.State) int {
 
 // Open registers the lumina module into the global namespace AND into package.preload.
 func Open(L *lua.State) {
-	// Set up default output adapter (ANSI to stdout)
-	SetOutputAdapter(NewANSIAdapter(os.Stdout))
-	
 	luaLoader(L)
 	L.SetGlobal(ModuleName)
 

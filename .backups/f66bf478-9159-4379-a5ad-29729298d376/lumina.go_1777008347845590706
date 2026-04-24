@@ -3,7 +3,6 @@ package lumina
 
 import (
 	"fmt"
-	"os"
 	"sync"
 
 	"github.com/akzj/go-lua/pkg/lua"

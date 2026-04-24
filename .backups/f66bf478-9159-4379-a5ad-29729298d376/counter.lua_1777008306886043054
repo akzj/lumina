@@ -6,7 +6,7 @@ local lumina = require("lumina")
 print("Lumina version: " .. lumina.version())
 print()
 
--- Define a counter component with proper VDOM
+-- Define a simple counter component
 local Counter = lumina.defineComponent({
     name = "Counter",
     
@@ -17,19 +17,10 @@ local Counter = lumina.defineComponent({
     end,
     
     render = function(instance)
-        -- Return a proper VDOM structure with vbox and text
+        print("  Count: " .. tostring(instance.count))
         return {
-            type = "vbox",
-            children = {
-                {
-                    type = "text",
-                    content = "Count: " .. tostring(instance.count)
-                },
-                {
-                    type = "text",
-                    content = "Click button to increment"
-                }
-            }
+            type = "nil",
+            children = {}
         }
     end
 })
@@ -38,12 +29,12 @@ print("Component defined: " .. Counter.name)
 print("Component ID: " .. Counter.id)
 print()
 
--- Render the component (now outputs to terminal via ANSIAdapter)
+-- Render the component
 print("Rendering Counter...")
 local vdom = lumina.render(Counter, { initial = 42 })
 
 print()
-print("Render complete.")
+print("Render complete. VDOM type: " .. (vdom.type or "nil"))
 print()
 
 -- Create a state
