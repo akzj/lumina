@@ -6,12 +6,9 @@ import (
 
 func TestAppEvalServerSim(t *testing.T) {
     app := NewApp()
+    defer app.Close()
     
-    // Simulate what server does - start render loop
-    app.RenderLoop.Start()
-    defer app.RenderLoop.Stop()
-    
-    // Now test eval
+    // Now test eval — all Lua operations happen on this goroutine (safe)
     if err := app.L.DoString("return lumina.Checkbox ~= nil"); err != nil {
         t.Fatalf("DoString failed: %v", err)
     }
@@ -21,6 +18,4 @@ func TestAppEvalServerSim(t *testing.T) {
     if n > 0 {
         t.Logf("Result: %v", app.L.ToBoolean(1))
     }
-    
-    app.Close()
 }

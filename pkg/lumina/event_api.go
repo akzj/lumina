@@ -54,6 +54,10 @@ func pushEventToLua(L *lua.State, e *Event) {
 }
 
 // registerEvent(eventType, componentID?, handler) — register event handler
+//
+// In the new architecture, event handlers do NOT call L.PCall directly.
+// Instead they post a LuaCallbackEvent to the App's event channel,
+// which is dispatched on the main thread.
 func registerEvent(L *lua.State) int {
 	eventType := L.CheckString(1)
 	compID := ""
@@ -71,14 +75,25 @@ func registerEvent(L *lua.State) int {
 	// Store handler reference in registry
 	refID := L.Ref(lua.RegistryIndex)
 
+	// Get the App from UserValue for safe event posting
+	app := GetApp(L)
+
 	globalEventBus.On(eventType, compID, func(e *Event) {
-		L.RawGetI(lua.RegistryIndex, int64(refID))
-		if L.Type(-1) == lua.TypeFunction {
-			pushEventToLua(L, e)
-			status := L.PCall(1, 0, 0)
-			if status != lua.OK {
-				// Error in handler, just log and continue
-				L.Pop(1)
+		if app != nil {
+			// Post to main thread — safe
+			app.PostEvent(AppEvent{
+				Type: "lua_callback",
+				Payload: LuaCallbackEvent{RefID: refID, Event: e},
+			})
+		} else {
+			// Fallback: direct call (for tests without App)
+			L.RawGetI(lua.RegistryIndex, int64(refID))
+			if L.Type(-1) == lua.TypeFunction {
+				pushEventToLua(L, e)
+				status := L.PCall(1, 0, 0)
+				if status != lua.OK {
+					L.Pop(1)
+				}
 			}
 		}
 	})
@@ -164,15 +179,25 @@ func registerShortcut(L *lua.State) int {
 	// Normalize key (lowercase, remove spaces)
 	normKey := normalizeShortcutKey(key)
 
+	// Get the App for safe event posting
+	app := GetApp(L)
+
 	globalEventBus.shortcuts[normKey] = eventHandler{
 		componentID: "global",
 		handler: func(e *Event) {
-			L.RawGetI(lua.RegistryIndex, int64(refID))
-			if L.Type(-1) == lua.TypeFunction {
-				pushEventToLua(L, e)
-				status := L.PCall(1, 0, 0)
-				if status != lua.OK {
-					L.Pop(1)
+			if app != nil {
+				app.PostEvent(AppEvent{
+					Type:    "lua_callback",
+					Payload: LuaCallbackEvent{RefID: refID, Event: e},
+				})
+			} else {
+				L.RawGetI(lua.RegistryIndex, int64(refID))
+				if L.Type(-1) == lua.TypeFunction {
+					pushEventToLua(L, e)
+					status := L.PCall(1, 0, 0)
+					if status != lua.OK {
+						L.Pop(1)
+					}
 				}
 			}
 		},

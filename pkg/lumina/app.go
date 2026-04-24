@@ -5,29 +5,49 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/akzj/go-lua/pkg/lua"
 )
 
+// AppEvent represents an event posted to the main event loop.
+type AppEvent struct {
+	Type    string
+	Payload any
+}
+
+// LuaCallbackEvent carries a Lua registry reference + event data.
+type LuaCallbackEvent struct {
+	RefID int
+	Event *Event
+}
+
 // App represents an interactive Lumina application.
+// All Lua State operations happen on the goroutine that calls Run().
 type App struct {
-	L          *lua.State
-	RenderLoop *RenderLoop
+	L       *lua.State
+	events  chan AppEvent
+	width   int
+	height  int
+	running bool
 }
 
 // NewApp creates a new interactive Lumina application.
 func NewApp() *App {
-	// Create Lua state with standard libraries
 	L := lua.NewState()
+
+	app := &App{
+		L:      L,
+		events: make(chan AppEvent, 256),
+		width:  80,
+		height: 24,
+	}
+
+	// Store app reference on the Lua state for event handlers
+	L.SetUserValue("lumina_app", app)
 
 	// Open Lumina module
 	Open(L)
-
-	// Create render loop with default terminal size
-	app := &App{
-		L:          L,
-		RenderLoop: NewRenderLoop(L, 80, 24),
-	}
 
 	return app
 }
@@ -35,47 +55,57 @@ func NewApp() *App {
 // NewAppWithSize creates a new app with custom terminal size.
 func NewAppWithSize(width, height int) *App {
 	L := lua.NewState()
+
+	app := &App{
+		L:      L,
+		events: make(chan AppEvent, 256),
+		width:  width,
+		height: height,
+	}
+
+	L.SetUserValue("lumina_app", app)
 	Open(L)
 
-	return &App{
-		L:          L,
-		RenderLoop: NewRenderLoop(L, width, height),
+	return app
+}
+
+// PostEvent sends an event to the main event loop (goroutine-safe).
+func (app *App) PostEvent(event AppEvent) {
+	select {
+	case app.events <- event:
+	default:
+		// Drop if channel full (non-blocking)
 	}
 }
 
-// Run executes a Lua script and starts the render loop.
+// Run executes a Lua script and starts the single-threaded event loop.
 // This blocks until Stop() is called or an error occurs.
+// ALL Lua State operations happen on this goroutine.
 func (app *App) Run(scriptPath string) error {
-	// Check for script argument
 	if scriptPath == "" {
 		fmt.Println("Lumina v" + ModuleName + " - Terminal React for AI Agents")
 		fmt.Println("Usage: lumina <script.lua>")
 		os.Exit(0)
 	}
 
-	// Verify the file exists
 	if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
 		return fmt.Errorf("file not found: %s", scriptPath)
 	}
 
-	// Execute the user script
+	// Execute the user script (on main thread — safe)
 	if err := app.L.DoFile(scriptPath); err != nil {
 		return fmt.Errorf("script error: %w", err)
 	}
 
 	// Initial render of all components
-	app.RenderLoop.InitialRender()
+	app.renderAllDirty()
 
-	// Start the render loop (this blocks)
-	app.RenderLoop.Start()
-
-	return nil
+	// Start the single-threaded event loop
+	return app.eventLoop()
 }
 
 // RunInteractive runs the app with stdin event handling.
-// This is the main entry point for interactive apps.
 func (app *App) RunInteractive(scriptPath string) error {
-	// Load script
 	if scriptPath != "" {
 		if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
 			return fmt.Errorf("file not found: %s", scriptPath)
@@ -85,37 +115,161 @@ func (app *App) RunInteractive(scriptPath string) error {
 		}
 	}
 
-	// Initial render
-	app.RenderLoop.InitialRender()
-
-	// Start render loop
-	app.RenderLoop.Start()
-
-	// TODO: Start event handling loop for keyboard/mouse
-	// For now, just keep the render loop running
-	select {}
+	app.renderAllDirty()
+	return app.eventLoop()
 }
 
-// Stop stops the application.
-func (app *App) Stop() {
-	if app.RenderLoop != nil {
-		app.RenderLoop.Stop()
+// eventLoop is the single-threaded event loop.
+// All Lua operations happen here on the calling goroutine.
+func (app *App) eventLoop() error {
+	ticker := time.NewTicker(16 * time.Millisecond) // ~60fps
+	defer ticker.Stop()
+
+	app.running = true
+	for app.running {
+		select {
+		case <-ticker.C:
+			app.renderAllDirty()
+
+		case event := <-app.events:
+			app.handleEvent(event)
+		}
 	}
+	return nil
+}
+
+// handleEvent dispatches an event on the main thread.
+func (app *App) handleEvent(event AppEvent) {
+	switch event.Type {
+	case "quit":
+		app.running = false
+
+	case "lua_callback":
+		cb, ok := event.Payload.(LuaCallbackEvent)
+		if !ok {
+			return
+		}
+		app.L.RawGetI(lua.RegistryIndex, int64(cb.RefID))
+		if app.L.Type(-1) == lua.TypeFunction {
+			pushEventToLua(app.L, cb.Event)
+			status := app.L.PCall(1, 0, 0)
+			if status != lua.OK {
+				app.L.Pop(1) // pop error
+			}
+		} else {
+			app.L.Pop(1) // pop non-function
+		}
+		// Re-render after event handling (state may have changed)
+		app.renderAllDirty()
+	}
+}
+
+// renderAllDirty checks all components for dirty state and re-renders.
+func (app *App) renderAllDirty() {
+	globalRegistry.mu.RLock()
+	components := make([]*Component, 0, len(globalRegistry.components))
+	for _, comp := range globalRegistry.components {
+		components = append(components, comp)
+	}
+	globalRegistry.mu.RUnlock()
+
+	adapter := GetOutputAdapter()
+	if adapter == nil {
+		return
+	}
+
+	for _, comp := range components {
+		if comp.Dirty.Load() {
+			app.renderComponent(comp, adapter)
+		}
+	}
+}
+
+// renderComponent re-renders a single component on the main thread.
+func (app *App) renderComponent(comp *Component, adapter OutputAdapter) {
+	SetCurrentComponent(comp)
+	defer SetCurrentComponent(nil)
+
+	if !comp.PushRenderFn(app.L) {
+		return
+	}
+
+	status := app.L.PCall(0, 1, 0)
+	if status != lua.OK {
+		app.L.Pop(1)
+		return
+	}
+
+	frame := RenderLuaVNode(app.L, -1, app.width, app.height)
+	app.L.Pop(1)
+
+	frame.FocusedID = globalEventBus.GetFocused()
+	adapter.Write(frame)
+	comp.MarkClean()
+}
+
+// InitialRender renders all components once (for testing/compatibility).
+func (app *App) InitialRender() {
+	globalRegistry.mu.RLock()
+	components := make([]*Component, 0, len(globalRegistry.components))
+	for _, comp := range globalRegistry.components {
+		components = append(components, comp)
+	}
+	globalRegistry.mu.RUnlock()
+
+	adapter := GetOutputAdapter()
+	if adapter == nil {
+		return
+	}
+
+	for _, comp := range components {
+		SetCurrentComponent(comp)
+
+		if !comp.PushRenderFn(app.L) {
+			continue
+		}
+
+		status := app.L.PCall(0, 1, 0)
+		if status != lua.OK {
+			app.L.Pop(1)
+			continue
+		}
+
+		frame := RenderLuaVNode(app.L, -1, app.width, app.height)
+		app.L.Pop(1)
+		frame.FocusedID = globalEventBus.GetFocused()
+		adapter.Write(frame)
+	}
+	SetCurrentComponent(nil)
+}
+
+// Stop stops the application by posting a quit event.
+func (app *App) Stop() {
+	app.PostEvent(AppEvent{Type: "quit"})
 }
 
 // Close closes the application and cleans up resources.
 func (app *App) Close() {
-	app.Stop()
 	if app.L != nil {
 		app.L.Close()
 	}
+}
+
+// GetApp retrieves the App from a Lua State's user values.
+func GetApp(L *lua.State) *App {
+	if v := L.UserValue("lumina_app"); v != nil {
+		if app, ok := v.(*App); ok {
+			return app
+		}
+	}
+	return nil
 }
 
 // MCPRequest represents a JSON-RPC style request from an AI agent.
 type MCPRequest struct {
 	Method string          `json:"method"`
 	Params json.RawMessage `json:"params,omitempty"`
-	ID     interface{}      `json:"id,omitempty"`
+	ID     interface{}     `json:"id,omitempty"`
 }
 
 // MCPResponse represents a JSON-RPC style response.
@@ -275,7 +429,6 @@ func (app *App) mcpInspectStyles(id string) map[string]interface{} {
 		return map[string]interface{}{"error": "component not found"}
 	}
 
-	// Return component props as styles (simplified)
 	return map[string]interface{}{
 		"id":     id,
 		"styles": comp.Props,
@@ -293,17 +446,13 @@ func (app *App) mcpSimulateClick(id string) map[string]interface{} {
 
 // mcpEval evaluates Lua code.
 func (app *App) mcpEval(code string) map[string]interface{} {
-	// Push lumina onto the stack and ensure it's in globals
 	app.L.GetGlobal("lumina")
-	// Re-register it as global (ensures it's accessible in new chunks)
 	app.L.SetGlobal("lumina")
 
-	// Execute the code
 	if err := app.L.DoString(code); err != nil {
 		return map[string]interface{}{"error": err.Error()}
 	}
 
-	// Capture return values from stack
 	n := app.L.GetTop()
 	if n == 0 {
 		return map[string]interface{}{"ok": true}
@@ -385,7 +534,7 @@ func (app *App) mcpFocusPrev() {
 // mcpGetFrame returns the current frame.
 func (app *App) mcpGetFrame() map[string]interface{} {
 	return map[string]interface{}{
-		"focusedID":  globalEventBus.GetFocused(),
+		"focusedID":      globalEventBus.GetFocused(),
 		"componentCount": len(globalRegistry.components),
 	}
 }
