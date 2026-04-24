@@ -12,13 +12,13 @@ type Event struct {
 	Target    string // component ID
 
 	// Keyboard
-	Key      string // "Enter", "Escape", "a", etc.
-	Code     string // physical key code
+	Key       string // "Enter", "Escape", "a", etc.
+	Code      string // physical key code
 	Modifiers EventModifiers
 
 	// Mouse
-	X, Y    int    // terminal coordinates
-	Button  string // "left" | "middle" | "right"
+	X, Y   int    // terminal coordinates
+	Button string // "left" | "middle" | "right"
 
 	// Error for propagation
 	stopped bool
@@ -55,11 +55,11 @@ type eventHandler struct {
 
 // EventBus handles event dispatching.
 type EventBus struct {
-	handlers    map[string][]eventHandler
-	shortcuts   map[string]eventHandler // "ctrl+c" → handler
-	focusStack  []string               // component ID stack for focus management
-	focusedID   string
-	mu          sync.RWMutex
+	handlers   map[string][]eventHandler
+	shortcuts  map[string]eventHandler // "ctrl+c" → handler
+	focusStack []string                // component ID stack for focus management
+	focusedID  string
+	mu         sync.RWMutex
 }
 
 // Global event bus
@@ -119,11 +119,21 @@ func (eb *EventBus) Emit(event *Event) {
 
 func buildShortcutKey(e *Event) string {
 	var key string
-	if e.Modifiers.Ctrl  { key += "ctrl" }
-	if e.Modifiers.Shift { key += "shift" }
-	if e.Modifiers.Alt   { key += "alt" }
-	if e.Modifiers.Meta  { key += "meta" }
-	if len(key) > 0 { key += "+" }
+	if e.Modifiers.Ctrl {
+		key += "ctrl"
+	}
+	if e.Modifiers.Shift {
+		key += "shift"
+	}
+	if e.Modifiers.Alt {
+		key += "alt"
+	}
+	if e.Modifiers.Meta {
+		key += "meta"
+	}
+	if len(key) > 0 {
+		key += "+"
+	}
 	key += e.Key
 	return key
 }
