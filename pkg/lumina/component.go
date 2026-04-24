@@ -25,9 +25,10 @@ type Component struct {
 	renderFn     *luaFunctionRef
 	cleanupFn    *luaFunctionRef
 	// Hooks state
-	effectHooks  []*EffectHook  // useEffect hooks in call order
-	memoHooks    []*MemoHook    // useMemo hooks in call order
-	hookIndex    int            // current hook index during render
+	effectHooks       []*EffectHook       // useEffect hooks in call order
+	layoutEffectHooks []*LayoutEffectHook // useLayoutEffect hooks in call order
+	memoHooks         []*MemoHook         // useMemo hooks in call order
+	hookIndex         int                 // current hook index during render
 	// Component tree
 	Parent       *Component     // Parent component (nil for root)
 	ChildComps   []*Component   // Child component instances

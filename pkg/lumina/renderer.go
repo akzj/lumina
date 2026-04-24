@@ -509,6 +509,13 @@ func renderVNode(frame *Frame, vnode *VNode) {
 	cell.Underline = style.Underline
 
 	switch vnode.Type {
+	case "fragment":
+		// Fragment: render children directly, no background/border/styling
+		for _, child := range vnode.Children {
+			renderVNode(frame, child)
+		}
+		return
+
 	case "text":
 		// Render text content with wrapping support
 		renderText(frame, vnode, cell)
@@ -797,6 +804,13 @@ func renderVNodeClipped(frame *Frame, vnode *VNode, clipX, clipY, clipW, clipH i
 	style := vnode.Style
 
 	switch vnode.Type {
+	case "fragment":
+		// Fragment: render children directly, no background/border
+		for _, child := range vnode.Children {
+			renderVNodeClipped(frame, child, clipX, clipY, clipW, clipH)
+		}
+		return
+
 	case "text":
 		// Render text with clipping
 		renderTextClipped(frame, vnode, style, clipX, clipY, clipW, clipH)
