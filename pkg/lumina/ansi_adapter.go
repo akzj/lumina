@@ -9,20 +9,44 @@ import (
 
 // ANSIAdapter implements OutputAdapter for ANSI terminal output.
 type ANSIAdapter struct {
-	writer io.Writer
-	buf    bytes.Buffer
-	width  int
-	height int
+	writer    io.Writer
+	buf       bytes.Buffer
+	width     int
+	height    int
+	colorMode ColorMode // detected or configured color capability
 }
 
 // NewANSIAdapter creates a new ANSIAdapter writing to the given writer.
+// It auto-detects the terminal's color capability.
 func NewANSIAdapter(w io.Writer) *ANSIAdapter {
 	return &ANSIAdapter{
-		writer: w,
-		buf:    bytes.Buffer{},
-		width:  80, // default terminal width
-		height: 24, // default terminal height
+		writer:    w,
+		buf:       bytes.Buffer{},
+		width:     80,
+		height:    24,
+		colorMode: DetectColorMode(),
 	}
+}
+
+// NewANSIAdapterWithColorMode creates an ANSIAdapter with a specific color mode.
+func NewANSIAdapterWithColorMode(w io.Writer, mode ColorMode) *ANSIAdapter {
+	return &ANSIAdapter{
+		writer:    w,
+		buf:       bytes.Buffer{},
+		width:     80,
+		height:    24,
+		colorMode: mode,
+	}
+}
+
+// ColorMode returns the adapter's current color mode.
+func (a *ANSIAdapter) ColorMode() ColorMode {
+	return a.colorMode
+}
+
+// SetColorMode sets the adapter's color mode.
+func (a *ANSIAdapter) SetColorMode(mode ColorMode) {
+	a.colorMode = mode
 }
 
 // SetSize sets the terminal dimensions.
@@ -109,56 +133,144 @@ func (a *ANSIAdapter) Mode() OutputMode {
 }
 
 // styleCodes generates the ANSI escape codes for a cell's style.
+// It respects the adapter's color mode, downgrading colors as needed.
 func (a *ANSIAdapter) styleCodes(cell *Cell) string {
-	codes := ""
-
-	// Reset
-	codes += "\x1b[0m"
+	codes := "\x1b[0m" // reset
 
 	// Foreground color
-	if cell.Foreground != "" {
-		if len(cell.Foreground) == 7 && cell.Foreground[0] == '#' {
-			// Parse hex color
-			r := cell.Foreground[1:3]
-			g := cell.Foreground[3:5]
-			b := cell.Foreground[5:7]
-			codes += fmt.Sprintf("\x1b[38;2;%s;%s;%sm", hexToDec(r), hexToDec(g), hexToDec(b))
-		} else {
-			// Named color
-			codes += a.namedColor("fg", cell.Foreground)
-		}
+	if cell.Foreground != "" && a.colorMode != ColorNone {
+		codes += a.colorCode("fg", cell.Foreground)
 	}
 
 	// Background color
-	if cell.Background != "" {
-		if len(cell.Background) == 7 && cell.Background[0] == '#' {
-			r := cell.Background[1:3]
-			g := cell.Background[3:5]
-			b := cell.Background[5:7]
-			codes += fmt.Sprintf("\x1b[48;2;%s;%s;%sm", hexToDec(r), hexToDec(g), hexToDec(b))
-		} else {
-			codes += a.namedColor("bg", cell.Background)
+	if cell.Background != "" && a.colorMode != ColorNone {
+		codes += a.colorCode("bg", cell.Background)
+	}
+
+	// Text attributes (work in all modes except ColorNone)
+	if a.colorMode != ColorNone {
+		if cell.Bold {
+			codes += "\x1b[1m"
+		}
+		if cell.Dim {
+			codes += "\x1b[2m"
+		}
+		if cell.Underline {
+			codes += "\x1b[4m"
+		}
+		if cell.Reverse {
+			codes += "\x1b[7m"
+		}
+		if cell.Blink {
+			codes += "\x1b[5m"
 		}
 	}
 
-	// Text attributes
-	if cell.Bold {
-		codes += "\x1b[1m"
-	}
-	if cell.Dim {
-		codes += "\x1b[2m"
-	}
-	if cell.Underline {
-		codes += "\x1b[4m"
-	}
-	if cell.Reverse {
-		codes += "\x1b[7m"
-	}
-	if cell.Blink {
-		codes += "\x1b[5m"
+	return codes
+}
+
+// colorCode generates a foreground or background color escape code,
+// respecting the adapter's color mode.
+func (a *ANSIAdapter) colorCode(fgOrBg, color string) string {
+	isHex := len(color) == 7 && color[0] == '#'
+
+	if isHex {
+		r, g, b := hexToRGB(color)
+		switch a.colorMode {
+		case ColorTrue:
+			if fgOrBg == "fg" {
+				return fmt.Sprintf("\x1b[38;2;%d;%d;%dm", r, g, b)
+			}
+			return fmt.Sprintf("\x1b[48;2;%d;%d;%dm", r, g, b)
+		case Color256:
+			idx := rgbTo256(r, g, b)
+			if fgOrBg == "fg" {
+				return fmt.Sprintf("\x1b[38;5;%dm", idx)
+			}
+			return fmt.Sprintf("\x1b[48;5;%dm", idx)
+		case Color16:
+			code := rgbTo16(r, g, b)
+			if fgOrBg == "bg" {
+				code += 10 // 30→40, 90→100
+			}
+			return fmt.Sprintf("\x1b[%dm", code)
+		default:
+			return ""
+		}
 	}
 
-	return codes
+	// Named color — works in all color modes.
+	return a.namedColor(fgOrBg, color)
+}
+
+// hexToRGB parses a "#RRGGBB" string to r, g, b components.
+func hexToRGB(hex string) (r, g, b int) {
+	r = hexByteToInt(hex[1:3])
+	g = hexByteToInt(hex[3:5])
+	b = hexByteToInt(hex[5:7])
+	return
+}
+
+// hexByteToInt converts a 2-char hex string to an int.
+func hexByteToInt(s string) int {
+	var n int
+	for _, c := range s {
+		n *= 16
+		if c >= '0' && c <= '9' {
+			n += int(c - '0')
+		} else if c >= 'a' && c <= 'f' {
+			n += int(c-'a') + 10
+		} else if c >= 'A' && c <= 'F' {
+			n += int(c-'A') + 10
+		}
+	}
+	return n
+}
+
+// rgbTo256 converts RGB to the nearest xterm-256 color index.
+func rgbTo256(r, g, b int) int {
+	// Check grayscale ramp first (indices 232-255).
+	if r == g && g == b {
+		if r < 8 {
+			return 16 // black
+		}
+		if r > 248 {
+			return 231 // white
+		}
+		return 232 + (r-8)*24/247
+	}
+	// Map to the 6×6×6 color cube (indices 16-231).
+	ri := (r * 5 + 127) / 255
+	gi := (g * 5 + 127) / 255
+	bi := (b * 5 + 127) / 255
+	return 16 + 36*ri + 6*gi + bi
+}
+
+// rgbTo16 converts RGB to the nearest ANSI 16-color foreground code (30-37, 90-97).
+func rgbTo16(r, g, b int) int {
+	// Simple luminance-based mapping.
+	brightness := (r*299 + g*587 + b*114) / 1000
+	bright := brightness > 128
+
+	rBit := 0
+	if r > 128 {
+		rBit = 1
+	}
+	gBit := 0
+	if g > 128 {
+		gBit = 1
+	}
+	bBit := 0
+	if b > 128 {
+		bBit = 1
+	}
+
+	// ANSI color index: 0=black, 1=red, 2=green, 3=yellow, 4=blue, 5=magenta, 6=cyan, 7=white
+	idx := bBit<<2 | gBit<<1 | rBit
+	if bright {
+		return 90 + idx // bright variant
+	}
+	return 30 + idx
 }
 
 // namedColor converts a named color to ANSI code.
