@@ -293,10 +293,54 @@ func (app *App) mcpSimulateClick(id string) map[string]interface{} {
 
 // mcpEval evaluates Lua code.
 func (app *App) mcpEval(code string) map[string]interface{} {
+	// Push lumina onto the stack and ensure it's in globals
+	app.L.GetGlobal("lumina")
+	// Re-register it as global (ensures it's accessible in new chunks)
+	app.L.SetGlobal("lumina")
+
+	// Execute the code
 	if err := app.L.DoString(code); err != nil {
 		return map[string]interface{}{"error": err.Error()}
 	}
-	return map[string]interface{}{"ok": true}
+
+	// Capture return values from stack
+	n := app.L.GetTop()
+	if n == 0 {
+		return map[string]interface{}{"ok": true}
+	}
+
+	results := make([]interface{}, n)
+	for i := 1; i <= n; i++ {
+		results[i-1] = luaValueToInterface(app.L, i)
+	}
+	app.L.Pop(n)
+
+	return map[string]interface{}{"results": results}
+}
+
+func luaValueToInterface(L *lua.State, index int) interface{} {
+	switch L.Type(index) {
+	case lua.TypeString:
+		if v, ok := L.ToString(index); ok {
+			return v
+		}
+		return nil
+	case lua.TypeNumber:
+		if L.IsInteger(index) {
+			v, _ := L.ToInteger(index)
+			return v
+		}
+		v, _ := L.ToNumber(index)
+		return v
+	case lua.TypeBoolean:
+		return L.ToBoolean(index)
+	case lua.TypeTable:
+		return "table"
+	case lua.TypeNil:
+		return nil
+	default:
+		return fmt.Sprintf("unknown(%s)", L.TypeName(L.Type(index)))
+	}
 }
 
 // mcpGetState returns component state.

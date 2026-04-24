@@ -16,7 +16,9 @@ func defineStyle(L *lua.State) int {
 		refID := L.Ref(lua.RegistryIndex)
 		globalStyles[name] = map[string]any{"_fn": refID, "_isFn": true}
 	} else if L.Type(2) == lua.TypeTable {
-		globalStyles[name] = tableToMap(L, 2)
+		if m, ok := L.ToMap(2); ok {
+			globalStyles[name] = m
+		}
 	} else {
 		L.PushString("defineStyle: expected table or function")
 		L.Error()
@@ -26,10 +28,11 @@ func defineStyle(L *lua.State) int {
 
 // defineGlobalStyles(stylesTable) — define multiple styles at once
 func defineGlobalStyles(L *lua.State) int {
-	styles := tableToMap(L, 1)
-	for k, v := range styles {
-		if m, ok := v.(map[string]any); ok {
-			globalStyles[k] = m
+	if styles, ok := L.ToMap(1); ok {
+		for k, v := range styles {
+			if m, ok := v.(map[string]any); ok {
+				globalStyles[k] = m
+			}
 		}
 	}
 	return 0
@@ -39,13 +42,8 @@ func defineGlobalStyles(L *lua.State) int {
 func getStyle(L *lua.State) int {
 	name := L.CheckString(1)
 	if style, ok := globalStyles[name]; ok {
-		// Convert back to Lua table
-		L.NewTable()
-		for k, v := range style {
-			L.PushString(k)
-			pushLuaValue(L, v)
-			L.SetTable(-3)
-		}
+		// Convert back to Lua table using PushAny
+		L.PushAny(style)
 	} else {
 		L.PushNil()
 	}

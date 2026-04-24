@@ -25,7 +25,7 @@ func useState(L *lua.State) int {
 	// Get initial value (optional second argument)
 	var initial any
 	if L.GetTop() >= 2 && !L.IsNoneOrNil(2) {
-		initial = popLuaValue(L, 2)
+		initial = L.ToAny(2)
 	}
 
 	// Initialize state if not exists
@@ -37,13 +37,13 @@ func useState(L *lua.State) int {
 	comp.mu.Unlock()
 
 	// Push current value onto stack (return value 1)
-	pushLuaValue(L, value)
+	L.PushAny(value)
 
 	// Create setter closure (return value 2)
 	// The setter captures 'comp' and 'key' via closure
 	L.PushFunction(func(L *lua.State) int {
 		// Get new value
-		newValue := popLuaValue(L, 1)
+		newValue := L.ToAny(1)
 
 		// Update component state
 		comp.SetState(key, newValue)
@@ -167,111 +167,15 @@ func useRef(L *lua.State) int {
 	// Get initial value
 	var initial any
 	if L.GetTop() >= 1 && !L.IsNoneOrNil(1) {
-		initial = popLuaValue(L, 1)
+		initial = L.ToAny(1)
 	}
 
 	// Set current to initial
 	L.PushString("current")
-	pushLuaValue(L, initial)
+	L.PushAny(initial)
 	L.SetTable(-3)
 
 	return 1
-}
-
-// popLuaValue pops a value from the stack and converts it to a Go value.
-func popLuaValue(L *lua.State, idx int) any {
-	L.PushValue(idx)
-	defer L.Pop(1)
-
-	switch L.Type(-1) {
-	case lua.TypeNil:
-		return nil
-	case lua.TypeBoolean:
-		return L.ToBoolean(-1)
-	case lua.TypeNumber:
-		if isInteger(L, -1) {
-			v, _ := L.ToInteger(-1)
-			return v
-		}
-		v, _ := L.ToNumber(-1)
-		return v
-	case lua.TypeString:
-		v, _ := L.ToString(-1)
-		return v
-	case lua.TypeTable:
-		return tableToMap(L, -1)
-	case lua.TypeFunction:
-		return true
-	default:
-		return nil
-	}
-}
-
-// pushLuaValue pushes a Go value onto the stack.
-func pushLuaValue(L *lua.State, value any) {
-	if value == nil {
-		L.PushNil()
-		return
-	}
-
-	switch v := value.(type) {
-	case bool:
-		L.PushBoolean(v)
-	case int:
-		L.PushInteger(int64(v))
-	case int64:
-		L.PushInteger(v)
-	case float64:
-		L.PushNumber(v)
-	case string:
-		L.PushString(v)
-	case []any:
-		L.NewTable()
-		for i, item := range v {
-			L.PushInteger(int64(i + 1))
-			pushLuaValue(L, item)
-			L.SetTable(-3)
-		}
-	case map[string]any:
-		L.NewTable()
-		for k, val := range v {
-			L.PushString(k)
-			pushLuaValue(L, val)
-			L.SetTable(-3)
-		}
-	default:
-		L.PushNil()
-	}
-}
-
-// tableToMap converts a Lua table to a Go map.
-func tableToMap(L *lua.State, idx int) map[string]any {
-	result := make(map[string]any)
-
-	L.PushValue(idx)
-	defer L.Pop(1)
-
-	L.PushNil()
-	for L.Next(-2) {
-		// stack: [..., table, key, value]
-		k := ""
-		if L.Type(-2) == lua.TypeString {
-			k, _ = L.ToString(-2)
-		} else {
-			idx, _ := L.ToInteger(-2)
-			k = string(rune('0' + idx%10))
-		}
-		result[k] = popLuaValue(L, -1)
-		L.Pop(1) // pop value, keep key for iteration
-	}
-
-	return result
-}
-
-// isInteger checks if the value at idx is an integer (not a float).
-func isInteger(L *lua.State, idx int) bool {
-	_, ok := L.ToInteger(idx)
-	return ok
 }
 
 // useTheme returns the current theme values.
@@ -283,40 +187,21 @@ func useTheme(L *lua.State) int {
 		theme = DefaultTheme()
 	}
 
-	// Push theme as a Lua table
+	// Push theme as a Lua table using PushAny for sub-tables
 	L.NewTable()
 
-	// Colors sub-table
 	L.PushString("colors")
-	L.NewTable()
-	for k, v := range theme.Colors {
-		L.PushString(k)
-		L.PushString(v)
-		L.SetTable(-3)
-	}
+	L.PushAny(theme.Colors)
 	L.SetTable(-3)
 
-	// Spacing sub-table
 	L.PushString("spacing")
-	L.NewTable()
-	for k, v := range theme.Spacing {
-		L.PushString(k)
-		L.PushInteger(int64(v))
-		L.SetTable(-3)
-	}
+	L.PushAny(theme.Spacing)
 	L.SetTable(-3)
 
-	// Borders sub-table
 	L.PushString("borders")
-	L.NewTable()
-	for k, v := range theme.Borders {
-		L.PushString(k)
-		L.PushString(v)
-		L.SetTable(-3)
-	}
+	L.PushAny(theme.Borders)
 	L.SetTable(-3)
 
-	// Theme name
 	L.PushString("name")
 	L.PushString(theme.Name)
 	L.SetTable(-3)
