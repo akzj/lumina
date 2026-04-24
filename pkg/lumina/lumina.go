@@ -414,6 +414,22 @@ func Open(L *lua.State) {
 	L.Pop(2)
 }
 
+func init() {
+	// RegisterGlobal allows require("lumina") to work from any new State
+	// without needing Open(L) called first. The opener pushes the module
+	// table onto the stack (what require() expects).
+	lua.RegisterGlobal(ModuleName, func(L *lua.State) {
+		if GetOutputAdapter() == nil {
+			SetOutputAdapter(NewANSIAdapter(os.Stdout))
+		}
+		luaLoader(L)
+		// luaLoader pushes the module table — leave it on stack for require()
+		// Also set as global for convenience
+		L.PushValue(-1) // dup
+		L.SetGlobal(ModuleName)
+	})
+}
+
 // IsComponent checks if the value at idx is a Lumina component.
 func IsComponent(L *lua.State, idx int) bool {
 	L.GetField(idx, "isComponent")
