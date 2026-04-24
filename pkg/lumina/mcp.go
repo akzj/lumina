@@ -55,15 +55,14 @@ func createComponentRequest(L *lua.State) int {
 	props := make(map[string]string)
 
 	if L.GetTop() >= 2 && L.Type(2) == lua.TypeTable {
-		L.PushNil()
-		for L.Next(2) {
+		L.ForEach(2, func(L *lua.State) bool {
 			if k, _ := L.ToString(-2); k != "" {
 				if v, _ := L.ToString(-1); v != "" {
 					props[k] = v
 				}
 			}
-			L.Pop(1)
-		}
+			return true
+		})
 	}
 
 	req := &proto.ComponentRequest{
@@ -88,15 +87,14 @@ func createEventNotification(L *lua.State) int {
 
 	eventData := make(map[string]string)
 	if L.GetTop() >= 3 && L.Type(3) == lua.TypeTable {
-		L.PushNil()
-		for L.Next(3) {
+		L.ForEach(3, func(L *lua.State) bool {
 			if k, _ := L.ToString(-2); k != "" {
 				if v, _ := L.ToString(-1); v != "" {
 					eventData[k] = v
 				}
 			}
-			L.Pop(1)
-		}
+			return true
+		})
 	}
 
 	notif := proto.NewEventNotification(compID, eventType, eventData)
