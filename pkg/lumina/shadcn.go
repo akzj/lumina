@@ -46,6 +46,16 @@ var shadcnComponents = map[string]string{
 	"shadcn.combobox":      "components/shadcn/combobox.lua",
 	"shadcn.native_select": "components/shadcn/native_select.lua",
 	"shadcn.form":          "components/shadcn/form.lua",
+	// Phase 23: Overlay components
+	"shadcn.dialog":         "components/shadcn/dialog.lua",
+	"shadcn.alert_dialog":   "components/shadcn/alert_dialog.lua",
+	"shadcn.sheet":          "components/shadcn/sheet.lua",
+	"shadcn.drawer":         "components/shadcn/drawer.lua",
+	"shadcn.dropdown_menu":  "components/shadcn/dropdown_menu.lua",
+	"shadcn.context_menu":   "components/shadcn/context_menu.lua",
+	"shadcn.popover":        "components/shadcn/popover.lua",
+	"shadcn.tooltip":        "components/shadcn/tooltip.lua",
+	"shadcn.hover_card":     "components/shadcn/hover_card.lua",
 	"shadcn":              "components/shadcn/init.lua",
 }
 
