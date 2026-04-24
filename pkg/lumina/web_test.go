@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"testing"
 	"time"
+
+	"github.com/akzj/go-lua/pkg/lua"
 )
 
 func TestWebServer_Start(t *testing.T) {
@@ -308,4 +310,51 @@ func TestWSConn_WriteLargeFrame(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("timeout")
 	}
+}
+
+// Phase 24 Commit 3: Lua API tests
+
+func TestLuaServe_Exists(t *testing.T) {
+	ClearComponents()
+	ClearContextValues()
+	L := lua.NewState()
+	Open(L)
+	defer L.Close()
+
+	err := L.DoString(`
+		assert(type(lumina.serve) == "function", "lumina.serve should be a function")
+		assert(type(lumina.serveBackground) == "function", "lumina.serveBackground should be a function")
+	`)
+	if err != nil {
+		t.Fatalf("Lua serve API: %v", err)
+	}
+}
+
+func TestLuaServeBackground(t *testing.T) {
+	ClearComponents()
+	ClearContextValues()
+	L := lua.NewState()
+	Open(L)
+	defer L.Close()
+
+	err := L.DoString(`
+		local addr = lumina.serveBackground(0)
+		assert(type(addr) == "string", "expected address string, got " .. type(addr))
+		assert(#addr > 0, "expected non-empty address")
+	`)
+	if err != nil {
+		t.Fatalf("serveBackground: %v", err)
+	}
+
+	// Clean up: stop the server
+	if v := L.UserValue("lumina_web_server"); v != nil {
+		if ws, ok := v.(*WebServer); ok {
+			ws.Stop()
+		}
+	}
+}
+
+func TestWebTerminal_Interface(t *testing.T) {
+	// Verify WebTerminal implements TermIO
+	var _ TermIO = (*WebTerminal)(nil)
 }
