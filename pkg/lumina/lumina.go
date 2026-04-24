@@ -89,6 +89,13 @@ func luaLoader(L *lua.State) int {
 		// MCP DevTools - Diff
 		"diff":       diff,
 		"diffFrames": diffFrames,
+		// MCP DevTools - Patch & Eval
+		"patch": patchComponent,
+		"eval":  eval,
+		// MCP DevTools - Profile
+		"profile":      profile,
+		"profileReset": profileReset,
+		"profileSize":  profileSize,
 	}, 0)
 
 	// Register hooks as sub-table
