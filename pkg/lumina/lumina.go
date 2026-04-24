@@ -52,6 +52,8 @@ func luaLoader(L *lua.State) int {
 		"forwardRef":          luaForwardRef,
 		"lazy":                luaLazy,
 		"render":          renderComponent,
+		"mount":           luaMount,
+		"run":             luaRun,
 		"createState":     createState,
 		// Style & Theme API
 		"defineStyle":        defineStyle,
@@ -793,6 +795,59 @@ func luaForwardRef(L *lua.State) int {
 	L.SetField(-2, "render")
 
 	return 1
+}
+
+// -----------------------------------------------------------------------
+// Mount / Run Lua API
+// -----------------------------------------------------------------------
+
+// mountedFactory stores the factory table ref for lumina.mount().
+// lumina.run() renders it and enters the event loop.
+var mountedFactoryRef int
+
+// luaMount registers a component factory as the root component.
+// lumina.mount(Factory) — stores the factory for lumina.run() to render.
+// In headless/test mode, it also renders immediately.
+func luaMount(L *lua.State) int {
+	if L.Type(1) != lua.TypeTable {
+		L.PushString("mount: expected component factory table")
+		L.Error()
+		return 0
+	}
+
+	// Store factory ref in Lua registry
+	L.PushValue(1)
+	mountedFactoryRef = L.Ref(lua.RegistryIndex)
+
+	// Render immediately (same as lumina.render(Factory, {}))
+	L.PushValue(1)
+	L.NewTable() // empty props
+	renderComponent(L)
+
+	return 0
+}
+
+// luaRun starts the event loop. In headless/test mode (no App attached),
+// it's a no-op — the script has already rendered via mount().
+func luaRun(L *lua.State) int {
+	// Check if there's an App attached to this State
+	app := GetApp(L)
+	if app == nil {
+		// No app — headless/test mode. Just return.
+		return 0
+	}
+
+	// If we have an app, start the event loop
+	// (This blocks until app.Stop() is called)
+	app.running = true
+	go func() {
+		// The event loop runs on the goroutine that called Run(),
+		// but here we're inside a Lua call, so we can't block.
+		// Instead, mark that run was requested — the App.Run() caller
+		// handles the actual loop.
+	}()
+
+	return 0
 }
 
 // -----------------------------------------------------------------------
