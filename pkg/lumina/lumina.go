@@ -98,12 +98,18 @@ func luaLoader(L *lua.State) int {
 		"profileSize":  profileSize,
 	}, 0)
 
-	// Register hooks as sub-table
+		// Register hooks as sub-table
 	L.PushString("hooks")
 	L.NewTable()
 	RegisterHooks(L)
 	L.SetField(-3, "hooks")
 	L.Pop(1)
+
+	// Also register common hooks directly on lumina for convenience
+	L.SetFuncs(map[string]lua.Function{
+		"useState":  useState,
+		"useEffect": useEffect,
+	}, 0)
 
 	// Register console as sub-table
 	L.PushString("console")
