@@ -201,6 +201,9 @@ func luaLoader(L *lua.State) int {
 	// Register lumina.i18n sub-table
 	registerI18nModule(L)
 
+	// Register lumina.devtools sub-table
+	registerDevToolsModule(L)
+
 	// Register lumina.Suspense as a component factory table (not a function)
 	registerSuspenseFactory(L)
 
