@@ -115,6 +115,9 @@ func (rl *RenderLoop) renderComponent(comp *Component) {
 	frame := RenderLuaVNode(rl.L, -1, rl.frameWidth, rl.frameHeight)
 	rl.L.Pop(1)
 
+	// Set focused component ID from event bus
+	frame.FocusedID = globalEventBus.GetFocused()
+
 	// Write to terminal
 	adapter.Write(frame)
 
@@ -151,6 +154,9 @@ func (rl *RenderLoop) InitialRender() {
 
 		frame := RenderLuaVNode(rl.L, -1, rl.frameWidth, rl.frameHeight)
 		rl.L.Pop(1)
+
+		// Set focused component ID from event bus
+		frame.FocusedID = globalEventBus.GetFocused()
 
 		adapter.Write(frame)
 	}

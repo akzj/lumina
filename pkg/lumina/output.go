@@ -51,6 +51,8 @@ type Frame struct {
 	Width int
 	// Height is the terminal height in cells.
 	Height int
+	// FocusedID is the ID of the currently focused component.
+	FocusedID string
 }
 
 // Cell represents a single character cell in the terminal.

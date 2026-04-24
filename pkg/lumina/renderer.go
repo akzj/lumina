@@ -14,6 +14,8 @@ type VNode struct {
 	X, Y, W, H int
 	// Content for text nodes
 	Content string
+	// Focused indicates if this component is currently focused
+	Focused bool
 }
 
 // NewVNode creates a new VNode.
@@ -84,8 +86,14 @@ func LuaVNodeToVNode(L *lua.State, idx int) *VNode {
 		if L.Type(-2) == lua.TypeString {
 			key, _ := L.ToString(-2)
 			// Skip known fields
-			if key != "type" && key != "content" && key != "children" {
+			if key != "type" && key != "content" && key != "children" && key != "_focused" {
 				vnode.Props[key] = popLuaValue(L, -1)
+			} else if key == "_focused" {
+				// Mark this VNode as focused if _focused is true
+				if L.ToBoolean(-1) {
+					vnode.Focused = true
+				}
+				L.Pop(1)
 			} else {
 				L.Pop(1)
 			}
@@ -111,6 +119,43 @@ func VNodeToFrame(vnode *VNode, width, height int) *Frame {
 	frame.MarkDirty()
 
 	return frame
+}
+
+// VNodeToFrameWithFocus converts a VNode tree to a Frame with focus indication.
+func VNodeToFrameWithFocus(vnode *VNode, width, height int, focusedID string) *Frame {
+	frame := NewFrame(width, height)
+	frame.FocusedID = focusedID
+
+	// Compute layout
+	computeLayout(vnode, 0, 0, width, height)
+
+	// Mark focused VNode
+	markFocusedVNode(vnode, focusedID)
+
+	// Render VNode to frame
+	renderVNode(frame, vnode)
+
+	// Mark entire frame dirty
+	frame.MarkDirty()
+
+	return frame
+}
+
+// markFocusedVNode recursively marks the VNode that matches the focusedID.
+func markFocusedVNode(vnode *VNode, focusedID string) {
+	if vnode == nil {
+		return
+	}
+
+	// Check if this node is focused (by ID in props)
+	if id, ok := vnode.Props["id"].(string); ok && id == focusedID {
+		vnode.Focused = true
+	}
+
+	// Recurse into children
+	for _, child := range vnode.Children {
+		markFocusedVNode(child, focusedID)
+	}
 }
 
 // computeLayout computes the layout for a VNode tree.
@@ -272,10 +317,74 @@ func renderVNode(frame *Frame, vnode *VNode) {
 			renderBorder(frame, vnode, border)
 		}
 
+		// Render focus indicator if focused
+		if vnode.Focused {
+			renderFocusIndicator(frame, vnode)
+		}
+
 		// Render children
 		for _, child := range vnode.Children {
 			renderVNode(frame, child)
 		}
+	}
+}
+
+// renderFocusIndicator draws a focus indicator around a VNode.
+// Uses reverse video (swap foreground/background) for the border.
+func renderFocusIndicator(frame *Frame, vnode *VNode) {
+	x, y := vnode.X, vnode.Y
+	w, h := vnode.W, vnode.H
+
+	if w < 2 || h < 2 {
+		return
+	}
+
+	// Focus border characters (using bracket style for clarity)
+	focusTl := '['
+	focusTr := ']'
+	focusBl := '['
+	focusBr := ']'
+	focusH := '-'
+	focusV := '|'
+
+	// Top-left corner
+	if y < frame.Height && x < frame.Width {
+		frame.Cells[y][x] = Cell{Char: focusTl, Foreground: "#FFFF00"} // Yellow
+	}
+	// Top border
+	for i := 1; i < w-1 && x+i < frame.Width; i++ {
+		if y < frame.Height {
+			frame.Cells[y][x+i] = Cell{Char: focusH, Foreground: "#FFFF00"}
+		}
+	}
+	// Top-right corner
+	if y < frame.Height && x+w-1 < frame.Width {
+		frame.Cells[y][x+w-1] = Cell{Char: focusTr, Foreground: "#FFFF00"}
+	}
+
+	// Side borders
+	for i := 1; i < h-1 && y+i < frame.Height; i++ {
+		if x < frame.Width {
+			frame.Cells[y+i][x] = Cell{Char: focusV, Foreground: "#FFFF00"}
+		}
+		if x+w-1 < frame.Width {
+			frame.Cells[y+i][x+w-1] = Cell{Char: focusV, Foreground: "#FFFF00"}
+		}
+	}
+
+	// Bottom-left corner
+	if y+h-1 < frame.Height && x < frame.Width {
+		frame.Cells[y+h-1][x] = Cell{Char: focusBl, Foreground: "#FFFF00"}
+	}
+	// Bottom border
+	for i := 1; i < w-1 && x+i < frame.Width; i++ {
+		if y+h-1 < frame.Height {
+			frame.Cells[y+h-1][x+i] = Cell{Char: focusH, Foreground: "#FFFF00"}
+		}
+	}
+	// Bottom-right corner
+	if y+h-1 < frame.Height && x+w-1 < frame.Width {
+		frame.Cells[y+h-1][x+w-1] = Cell{Char: focusBr, Foreground: "#FFFF00"}
 	}
 }
 
