@@ -111,10 +111,10 @@ func inspectFrames(L *lua.State) int {
 
 	// Convert frames to serializable format
 	type SerialFrame struct {
-		Timestamp int64           `json:"timestamp"`
-		Width     int              `json:"width"`
-		Height    int              `json:"height"`
-		Dirty     int              `json:"dirty_rects"`
+		Timestamp int64 `json:"timestamp"`
+		Width     int   `json:"width"`
+		Height    int   `json:"height"`
+		Dirty     int   `json:"dirty_rects"`
 	}
 
 	serialFrames := make([]SerialFrame, len(frames))

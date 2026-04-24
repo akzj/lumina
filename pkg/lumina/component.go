@@ -13,16 +13,17 @@ import (
 // Component represents a Lumina UI component instance.
 // It wraps the component definition with runtime state.
 type Component struct {
-	ID        string // Unique identifier
-	Type      string // Component type name (e.g., "Counter")
-	Name      string // Component name
-	Props     map[string]any
-	State     map[string]any
-	Dirty     atomic.Bool // True if state changed and needs re-render
-	initFn    *luaFunctionRef
-	renderFn  *luaFunctionRef
-	cleanupFn *luaFunctionRef
-	mu        sync.RWMutex
+	ID           string // Unique identifier
+	Type         string // Component type name (e.g., "Counter")
+	Name         string // Component name
+	Props        map[string]any
+	State        map[string]any
+	Dirty        atomic.Bool   // True if state changed and needs re-render
+	RenderNotify chan struct{} // Notify render loop when state changes
+	initFn       *luaFunctionRef
+	renderFn     *luaFunctionRef
+	cleanupFn    *luaFunctionRef
+	mu           sync.RWMutex
 }
 
 // luaFunctionRef holds a reference to a Lua function on the stack.
@@ -62,11 +63,12 @@ func NewComponent(L *lua.State, factoryIdx int, props map[string]any) (*Componen
 	}
 
 	comp := &Component{
-		ID:    getNextComponentID(),
-		Type:  name,
-		Name:  name,
-		Props: props,
-		State: make(map[string]any),
+		ID:           getNextComponentID(),
+		Type:         name,
+		Name:         name,
+		Props:        props,
+		State:        make(map[string]any),
+		RenderNotify: make(chan struct{}, 1),
 	}
 
 	// Extract init function reference
@@ -111,6 +113,14 @@ func (c *Component) SetState(key string, value any) {
 	c.State[key] = value
 	c.Dirty.Store(true)
 	c.mu.Unlock()
+
+	// Notify render loop that this component needs re-render
+	if c.RenderNotify != nil {
+		select {
+		case c.RenderNotify <- struct{}{}:
+		default:
+		}
+	}
 }
 
 // GetState returns a state value.
