@@ -56,6 +56,13 @@ var shadcnComponents = map[string]string{
 	"shadcn.popover":        "components/shadcn/popover.lua",
 	"shadcn.tooltip":        "components/shadcn/tooltip.lua",
 	"shadcn.hover_card":     "components/shadcn/hover_card.lua",
+	// Phase 23: Complex components
+	"shadcn.command":        "components/shadcn/command.lua",
+	"shadcn.menubar":        "components/shadcn/menubar.lua",
+	"shadcn.scroll_area":    "components/shadcn/scroll_area.lua",
+	"shadcn.collapsible":    "components/shadcn/collapsible.lua",
+	"shadcn.carousel":       "components/shadcn/carousel.lua",
+	"shadcn.sonner":         "components/shadcn/sonner.lua",
 	"shadcn":              "components/shadcn/init.lua",
 }
 
