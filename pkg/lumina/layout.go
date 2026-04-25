@@ -412,6 +412,24 @@ func isPositioned(s Style) bool {
 	return s.Position == "absolute" || s.Position == "fixed"
 }
 
+// applyRelativeOffset offsets a VNode from its normal flow position
+// when position="relative". Top/Left move the element down/right;
+// Right/Bottom are treated as negative Left/Top when Left/Top are zero.
+func applyRelativeOffset(child *VNode, cs Style) {
+	if cs.Position != "relative" {
+		return
+	}
+	child.X += cs.Left
+	child.Y += cs.Top
+	if cs.Right > 0 && cs.Left == 0 {
+		child.X -= cs.Right
+	}
+	if cs.Bottom > 0 && cs.Top == 0 {
+		child.Y -= cs.Bottom
+	}
+}
+
+
 // layoutVBox lays out children in a vertical stack with flex distribution.
 func layoutVBox(vnode *VNode, contentX, contentY, contentW, contentH int, style Style) {
 	if len(vnode.Children) == 0 {
@@ -605,6 +623,8 @@ func layoutVBox(vnode *VNode, contentX, contentY, contentW, contentH int, style 
 		}
 
 		computeFlexLayout(child, childX, curY, childW, childH)
+		// Relative positioning: offset from normal flow position
+		applyRelativeOffset(child, children[i].style)
 		curY += childH
 		flowIdx++
 		if flowIdx < flowCount {
@@ -808,6 +828,8 @@ func layoutHBox(vnode *VNode, contentX, contentY, contentW, contentH int, style 
 		}
 
 		computeFlexLayout(child, curX, childY, childW, childH)
+		// Relative positioning: offset from normal flow position
+		applyRelativeOffset(child, children[i].style)
 		curX += childW
 		flowIdx++
 		if flowIdx < flowCount {
@@ -886,6 +908,7 @@ func layoutScrollableVBox(vnode *VNode, contentX, contentY, contentW, contentH i
 	for i, child := range vnode.Children {
 		childH := children[i].height
 		computeFlexLayout(child, contentX, curY, contentW, childH)
+		applyRelativeOffset(child, parseStyle(child.Props))
 		curY += childH
 		if i < len(vnode.Children)-1 {
 			curY += style.Gap
@@ -954,6 +977,7 @@ func layoutScrollableHBox(vnode *VNode, contentX, contentY, contentW, contentH i
 	for i, child := range vnode.Children {
 		childW := children[i].width
 		computeFlexLayout(child, curX, contentY, childW, contentH)
+		applyRelativeOffset(child, parseStyle(child.Props))
 		curX += childW
 		if i < len(vnode.Children)-1 {
 			curX += style.Gap
