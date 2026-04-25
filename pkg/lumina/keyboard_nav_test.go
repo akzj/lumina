@@ -163,7 +163,7 @@ func TestFocusIndicatorRendering(t *testing.T) {
 	}
 
 	// Should not panic
-	renderFocusIndicator(frame, vnode)
+	renderFocusIndicator(frame, vnode, Rect{X: 0, Y: 0, W: 20, H: 10})
 
 	// Verify border cells were set (corners should have focus chars)
 	if frame.Cells[2][2].Char != '[' {

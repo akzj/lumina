@@ -275,20 +275,22 @@ func ApplyPatches(frame *Frame, root *VNode, patches []Patch, width, height int)
 				clearRegion(frame, p.OldNode)
 			}
 			if p.NewNode != nil {
-				// NewNode already has layout from the full tree relayout.
-				renderVNode(frame, p.NewNode)
+				fullClip := Rect{X: 0, Y: 0, W: frame.Width, H: frame.Height}
+				renderVNode(frame, p.NewNode, fullClip)
 			}
 
 		case PatchUpdate, PatchText:
 			// Re-render in place — the new node already has correct layout.
 			if p.NewNode != nil {
-				renderVNode(frame, p.NewNode)
+				fullClip := Rect{X: 0, Y: 0, W: frame.Width, H: frame.Height}
+				renderVNode(frame, p.NewNode, fullClip)
 			}
 
 		case PatchInsert:
 			// Render the new child — it already has layout from the full tree relayout.
 			if p.NewNode != nil {
-				renderVNode(frame, p.NewNode)
+				fullClip := Rect{X: 0, Y: 0, W: frame.Width, H: frame.Height}
+				renderVNode(frame, p.NewNode, fullClip)
 			}
 
 		case PatchReorder:

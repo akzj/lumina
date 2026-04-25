@@ -23,9 +23,9 @@ local Button = lumina.defineComponent({
         local s = styles[self.variant] or styles.default
 
         local sizeMap = {
-            default = { padding = 1, height = 3 },
+            default = { paddingLeft = 1, paddingRight = 1, height = 3 },
             sm      = { padding = 0, height = 1 },
-            lg      = { padding = 2, height = 5 },
+            lg      = { padding = 2, height = 7 },
             icon    = { padding = 0, width = 3, height = 3 },
             xs      = { padding = 0, height = 1 },
         }
@@ -38,6 +38,8 @@ local Button = lumina.defineComponent({
                 foreground = self.disabled and "#666666" or s.fg,
                 border = "rounded",
                 padding = sz.padding,
+                paddingLeft = sz.paddingLeft,
+                paddingRight = sz.paddingRight,
                 height = sz.height,
                 width = sz.width,
                 justify = "center",

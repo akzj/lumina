@@ -73,6 +73,13 @@ type Cell struct {
 	Reverse bool
 	// Blink indicates blinking text.
 	Blink bool
+	// OwnerID is the VNode id (from props["id"]) that produced this cell.
+	OwnerID string
+	// OwnerNode is a direct reference to the source VNode.
+	OwnerNode *VNode
+	// CellRole describes what part of the VNode this cell represents:
+	// "content", "border", "padding", "background"
+	CellRole string
 }
 
 // Rect represents a rectangular region in the terminal.
@@ -117,6 +124,51 @@ func (f *Frame) MarkDirty() {
 func (f *Frame) AddDirtyRect(x, y, w, h int) {
 	f.DirtyRects = append(f.DirtyRects, Rect{X: x, Y: y, W: w, H: h})
 }
+
+// SetCellClipped writes a cell only if (x,y) is within the clip rect AND frame bounds.
+func (f *Frame) SetCellClipped(x, y int, cell Cell, clip Rect) {
+	if x < clip.X || x >= clip.X+clip.W || y < clip.Y || y >= clip.Y+clip.H {
+		return // clipped
+	}
+	if x < 0 || x >= f.Width || y < 0 || y >= f.Height {
+		return // out of frame bounds
+	}
+	f.Cells[y][x] = cell
+}
+
+// FillClipped fills a rectangular area with a cell, clipped to clip rect.
+func (f *Frame) FillClipped(x, y, w, h int, cell Cell, clip Rect) {
+	for cy := y; cy < y+h; cy++ {
+		for cx := x; cx < x+w; cx++ {
+			f.SetCellClipped(cx, cy, cell, clip)
+		}
+	}
+}
+
+// IntersectRect returns the intersection of two Rects (for nested clipping).
+func IntersectRect(a, b Rect) Rect {
+	x1 := a.X
+	if b.X > x1 {
+		x1 = b.X
+	}
+	y1 := a.Y
+	if b.Y > y1 {
+		y1 = b.Y
+	}
+	x2 := a.X + a.W
+	if b.X+b.W < x2 {
+		x2 = b.X + b.W
+	}
+	y2 := a.Y + a.H
+	if b.Y+b.H < y2 {
+		y2 = b.Y + b.H
+	}
+	if x2 <= x1 || y2 <= y1 {
+		return Rect{} // empty intersection
+	}
+	return Rect{X: x1, Y: y1, W: x2 - x1, H: y2 - y1}
+}
+
 
 // GetCell returns the cell at the given coordinates.
 func (f *Frame) GetCell(x, y int) Cell {
