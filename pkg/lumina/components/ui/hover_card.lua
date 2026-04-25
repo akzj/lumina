@@ -1,48 +1,66 @@
--- shadcn/hover_card — Rich hover card (larger tooltip)
+-- shadcn/hover_card — Card that appears on hover
 local lumina = require("lumina")
+
+local c = {
+    fg = "#CDD6F4",
+    muted = "#6C7086",
+    primary = "#89B4FA",
+    border = "#45475A",
+    bg = "#181825",
+}
 
 local HoverCard = lumina.defineComponent({
     name = "ShadcnHoverCard",
+
     init = function(props)
         return {
             open = props.open or false,
-            trigger = props.trigger or "",
-            width = props.width or 40,
+            id = props.id,
+            className = props.className,
+            style = props.style,
+            children = props.content or props.children or {},
         }
     end,
+
     render = function(self)
-        local children = {}
-        -- Trigger
-        children[#children + 1] = {
-            type = "text",
-            content = self.trigger,
-            style = { foreground = "#3B82F6", underline = true },
+        if not self.open then
+            return { type = "empty" }
+        end
+
+        local style = {
+            border = "rounded",
+            borderColor = c.border,
+            background = c.bg,
+            foreground = c.fg,
+            padding = 1,
         }
-        -- Card content
-        if self.open then
-            local cardChildren = {}
-            if self.props and self.props.children then
-                for _, child in ipairs(self.props.children) do
-                    cardChildren[#cardChildren + 1] = child
+
+        if self.className and type(self.className) == "table" then
+            for k, v in pairs(self.className) do style[k] = v end
+        end
+        if self.style and type(self.style) == "table" then
+            for k, v in pairs(self.style) do style[k] = v end
+        end
+
+        local contentChildren = self.children
+        local children = {}
+        if type(contentChildren) == "table" then
+            if contentChildren.type then
+                children[1] = contentChildren
+            else
+                for i, child in ipairs(contentChildren) do
+                    children[i] = child
                 end
             end
-            children[#children + 1] = {
-                type = "vbox",
-                style = {
-                    border = "rounded",
-                    background = "#0F172A",
-                    foreground = "#E2E8F0",
-                    padding = 1,
-                    width = self.width,
-                },
-                children = cardChildren,
-            }
         end
+
         return {
             type = "vbox",
+            id = self.id,
+            style = style,
             children = children,
         }
-    end
+    end,
 })
 
 return HoverCard

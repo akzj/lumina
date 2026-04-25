@@ -1,37 +1,52 @@
--- shadcn/collapsible — Simple collapsible section
+-- shadcn/collapsible — Collapsible content section
 local lumina = require("lumina")
+
+local c = {
+    fg = "#CDD6F4",
+    muted = "#6C7086",
+    primary = "#89B4FA",
+    surface = "#313244",
+}
 
 local Collapsible = lumina.defineComponent({
     name = "ShadcnCollapsible",
+
     init = function(props)
         return {
             open = props.open or false,
-            title = props.title or "",
+            disabled = props.disabled or false,
+            id = props.id,
+            className = props.className,
+            style = props.style,
         }
     end,
+
     render = function(self)
         local chevron = self.open and "▼" or "▶"
-        local children = {
-            {
-                type = "hbox",
-                children = {
-                    { type = "text", content = chevron .. " ", style = { foreground = "#64748B" } },
-                    { type = "text", content = self.title, style = { foreground = "#E2E8F0", bold = true } },
-                },
+
+        local header = {
+            type = "hbox",
+            id = self.id and (self.id .. "-trigger") or nil,
+            style = { padding = 0 },
+            children = {
+                { type = "text", content = " " .. chevron .. " ", style = { foreground = c.muted } },
             },
         }
-        if self.open and self.props and self.props.children then
-            children[#children + 1] = {
-                type = "vbox",
-                style = { padding = 1 },
-                children = self.props.children,
-            }
+
+        local content = {}
+        if self.open then
+            -- Content children would be passed via slot/children
         end
+
         return {
             type = "vbox",
-            children = children,
+            id = self.id,
+            style = self.style or {},
+            children = {
+                header,
+            },
         }
-    end
+    end,
 })
 
 return Collapsible

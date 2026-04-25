@@ -1,61 +1,116 @@
--- shadcn/dialog — Modal dialog with overlay backdrop
+-- shadcn/dialog — Modal dialog with overlay
+-- Note: Requires overlay manager. For terminal, use with sheet component instead.
 local lumina = require("lumina")
+
+local c = {
+    fg = "#CDD6F4",
+    muted = "#6C7086",
+    primary = "#89B4FA",
+    border = "#45475A",
+    bg = "#181825",
+    destructive = "#F38BA8",
+}
 
 local Dialog = lumina.defineComponent({
     name = "ShadcnDialog",
+
     init = function(props)
         return {
             open = props.open or false,
-            title = props.title or "",
-            description = props.description or "",
-            width = props.width or 50,
-            height = props.height or 20,
+            title = props.title or "Dialog",
+            description = props.description,
+            content = props.content or {},
+            onOpenChange = props.onOpenChange,
+            id = props.id,
+            className = props.className,
+            style = props.style,
         }
     end,
+
     render = function(self)
         if not self.open then
-            return { type = "fragment", children = {} }
+            return { type = "empty" }
         end
-        local children = {}
-        -- Title
-        if self.title ~= "" then
+
+        local style = {
+            background = c.bg,
+            border = "rounded",
+            borderColor = c.border,
+            paddingLeft = 1,
+            paddingRight = 1,
+            paddingTop = 0,
+            paddingBottom = 0,
+            justify = "center",
+            align = "center",
+        }
+
+        if self.className and type(self.className) == "table" then
+            for k, v in pairs(self.className) do style[k] = v end
+        end
+        if self.style and type(self.style) == "table" then
+            for k, v in pairs(self.style) do style[k] = v end
+        end
+
+        -- Dialog content
+        local children = {
+            -- Header
+            {
+                type = "hbox",
+                style = { paddingTop = 1 },
+                children = {
+                    { type = "text", content = self.title, style = { foreground = c.fg, bold = true } },
+                    { type = "spacer" },
+                },
+            },
+        }
+
+        if self.description then
             children[#children + 1] = {
-                type = "text", content = self.title,
-                style = { bold = true, foreground = "#F8FAFC" },
+                type = "text",
+                content = self.description,
+                style = { foreground = c.muted, paddingTop = 1 },
             }
         end
-        -- Description
-        if self.description ~= "" then
-            children[#children + 1] = {
-                type = "text", content = self.description,
-                style = { foreground = "#94A3B8" },
-            }
-        end
-        -- Separator
+
         children[#children + 1] = {
             type = "text",
-            content = string.rep("─", self.width - 4),
-            style = { foreground = "#334155" },
+            content = "────────────────────────────────",
+            style = { foreground = c.border, paddingTop = 1 },
         }
-        -- Slot for content
-        if self.props and self.props.children then
-            for _, child in ipairs(self.props.children) do
-                children[#children + 1] = child
+
+        -- Content
+        if self.content then
+            if type(self.content) == "table" and self.content.type then
+                children[#children + 1] = self.content
+            else
+                children[#children + 1] = {
+                    type = "text",
+                    content = tostring(self.content),
+                    style = { foreground = c.fg },
+                }
             end
         end
+
+        children[#children + 1] = {
+            type = "text",
+            content = "────────────────────────────────",
+            style = { foreground = c.border, paddingTop = 1 },
+        }
+
+        -- Footer hint
+        children[#children + 1] = {
+            type = "text",
+            content = "[Esc] to close",
+            style = { foreground = c.muted, dim = true },
+        }
+
         return {
             type = "vbox",
-            style = {
-                border = "rounded",
-                background = "#1E1E2E",
-                foreground = "#CDD6F4",
-                padding = 1,
-                width = self.width,
-                height = self.height,
-            },
+            id = self.id,
+            style = style,
             children = children,
         }
-    end
+    end,
 })
 
 return Dialog
