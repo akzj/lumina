@@ -1,56 +1,63 @@
--- shadcn/input_group — Input with prefix/suffix addons
+-- shadcn/input_group — Input with label and helper text
 local lumina = require("lumina")
+
+local c = {
+    fg = "#CDD6F4",
+    muted = "#6C7086",
+    border = "#45475A",
+}
 
 local InputGroup = lumina.defineComponent({
     name = "ShadcnInputGroup",
+
     init = function(props)
         return {
-            prefix = props.prefix or "",
-            suffix = props.suffix or "",
-            value = props.value or "",
-            placeholder = props.placeholder or "",
-            disabled = props.disabled or false,
+            label = props.label or "",
+            helper = props.helper or "",
+            children = props.children or {},
+            id = props.id,
+            className = props.className,
+            style = props.style,
         }
     end,
+
     render = function(self)
         local children = {}
-        local fg = self.disabled and "#475569" or "#E2E8F0"
 
-        if self.prefix ~= "" then
+        if self.label ~= "" then
             children[#children + 1] = {
                 type = "text",
-                content = self.prefix .. " │ ",
-                style = { foreground = "#64748B" },
+                content = self.label,
+                style = { foreground = c.fg },
             }
         end
 
-        local display = self.value ~= "" and self.value or self.placeholder
-        local inputFg = self.value == "" and "#64748B" or fg
-        children[#children + 1] = {
-            type = "text",
-            content = display,
-            style = { foreground = inputFg },
-        }
+        local contentChildren = self.children
+        if type(contentChildren) == "table" then
+            if contentChildren.type then
+                children[#children + 1] = contentChildren
+            else
+                for _, child in ipairs(contentChildren) do
+                    children[#children + 1] = child
+                end
+            end
+        end
 
-        if self.suffix ~= "" then
+        if self.helper ~= "" then
             children[#children + 1] = {
                 type = "text",
-                content = " │ " .. self.suffix,
-                style = { foreground = "#64748B" },
+                content = self.helper,
+                style = { foreground = c.muted },
             }
         end
 
         return {
-            type = "hbox",
-            style = {
-                border = "rounded",
-                foreground = fg,
-                padding = 1,
-                height = 3,
-            },
+            type = "vbox",
+            id = self.id,
+            style = self.style or {},
             children = children,
         }
-    end
+    end,
 })
 
 return InputGroup

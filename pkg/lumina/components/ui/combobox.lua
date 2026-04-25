@@ -1,39 +1,63 @@
 -- shadcn/combobox — Searchable select (input + dropdown)
 local lumina = require("lumina")
 
+local c = {
+    fg = "#CDD6F4",
+    muted = "#6C7086",
+    primary = "#89B4FA",
+    border = "#45475A",
+    bg = "#181825",
+}
+
 local Combobox = lumina.defineComponent({
     name = "ShadcnCombobox",
+
     init = function(props)
         return {
             options = props.options or {},
             value = props.value or "",
-            search = props.search or "",
             placeholder = props.placeholder or "Search...",
-            disabled = props.disabled or false,
-            open = false,
+            open = props.open or false,
+            id = props.id,
+            className = props.className,
+            style = props.style,
         }
     end,
-    render = function(self)
-        -- Display: selected value or search text
-        local display = self.value ~= "" and self.value or self.search
-        if display == "" then display = self.placeholder end
-        local fg = (self.value == "" and self.search == "") and "#64748B" or "#E2E8F0"
-        if self.disabled then fg = "#475569" end
 
-        return {
-            type = "hbox",
-            style = {
-                border = "rounded",
-                foreground = fg,
-                padding = 1,
-                height = 3,
-            },
-            children = {
-                { type = "text", content = "🔍 " .. display },
-                { type = "text", content = " ▾", style = { foreground = "#64748B" } },
+    render = function(self)
+        -- Input display
+        local display = self.value ~= "" and self.value or self.placeholder
+        local fg = self.value == "" and c.muted or c.fg
+
+        local children = {
+            {
+                type = "text",
+                content = display,
+                style = { foreground = fg },
             },
         }
-    end
+
+        -- Dropdown when open
+        if self.open then
+            for i, opt in ipairs(self.options) do
+                local label = type(opt) == "table" and (opt.label or opt) or opt
+                local val = type(opt) == "table" and opt.value or opt
+                local selected = val == self.value
+                children[#children + 1] = {
+                    type = "text",
+                    content = (selected and "● " or "  ") .. tostring(label),
+                    style = { foreground = selected and c.primary or c.muted },
+                }
+            end
+        end
+
+        return {
+            type = "vbox",
+            id = self.id,
+            style = self.style or {},
+            children = children,
+        }
+    end,
 })
 
 return Combobox
