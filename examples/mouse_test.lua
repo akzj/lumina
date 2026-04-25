@@ -1,171 +1,104 @@
--- Lumina Mouse Test: Full-screen character canvas for mouse debugging
--- Hover: cell under cursor turns green █
--- Click: cell turns red █ (persists)
--- Shows coordinates at top
+-- Lumina Mouse Grid Test: per-component grid with independent hover/click
+-- Each cell is a box with unique ID, uses lumina.isHovered() and e.target
+-- Hover: green [O], Click: red [X], Both: yellow [*]
 local lumina = require("lumina")
 
-local theme = {
-    bg = "#1E1E2E",
-    dot = "#585B70",
-    hover = "#A6E3A1",
-    click = "#F38BA8",
-    both = "#F9E2AF",
-    accent = "#89B4FA",
-    muted = "#6C7086",
-    text = "#CDD6F4",
-    bar = "#181825",
-}
-
--- Global state via store
 local store = lumina.createStore({
     state = {
-        hoverX = -1,
-        hoverY = -1,
-        clickX = -1,
-        clickY = -1,
-        totalClicks = 0,
+        clicked = {},    -- id -> true
+        lastClick = "",
+        hoverTarget = "",
     }
 })
 
--- Clicked cells: "x,y" -> true
-local clickedCells = {}
-
--- Register global mouse events (empty componentID = wildcard, matches all)
+-- Global mousemove handler — track hover target
 lumina.on("mousemove", "", function(e)
-    store.dispatch("setState", { hoverX = e.x, hoverY = e.y })
+    store.dispatch("setState", { hoverTarget = e.target or "" })
 end)
 
+-- Global click handler — reads e.target to know which cell
 lumina.on("mousedown", "", function(e)
-    local key = e.x .. "," .. e.y
-    clickedCells[key] = true
-    local st = store.getState()
-    store.dispatch("setState", {
-        clickX = e.x,
-        clickY = e.y,
-        totalClicks = (st.totalClicks or 0) + 1,
-    })
+    if e.target and e.target ~= "" then
+        local st = store.getState()
+        local clicked = st.clicked or {}
+        clicked[e.target] = true
+        store.dispatch("setState", {
+            clicked = clicked,
+            lastClick = e.target,
+        })
+    end
 end)
 
 lumina.onKey("c", function()
-    clickedCells = {}
-    store.dispatch("setState", { totalClicks = 0, clickX = -1, clickY = -1 })
+    store.dispatch("setState", { clicked = {}, lastClick = "" })
 end)
-
 lumina.onKey("q", function() lumina.quit() end)
 
--- Build a single row as text segments (optimized: accumulate same-style chars)
-local function buildRow(y, width, hoverX, hoverY)
-    -- Check if this row has any special cells
-    local isHoverRow = (y == hoverY)
-    local hasClicks = false
-    if not isHoverRow then
-        for x = 0, width - 1 do
-            if clickedCells[x .. "," .. y] then
-                hasClicks = true
-                break
-            end
-        end
-    end
-
-    -- Fast path: uniform row (most rows)
-    if not isHoverRow and not hasClicks then
-        return {
-            type = "text",
-            content = string.rep(".", width),
-            style = { foreground = theme.dot, background = theme.bg },
-        }
-    end
-
-    -- Slow path: build segments for rows with special cells
-    local segments = {}
-    local curChars = {}
-    local curFg = theme.dot
-    local curBg = theme.bg
-
-    local function flush()
-        if #curChars > 0 then
-            segments[#segments + 1] = {
-                type = "text",
-                content = table.concat(curChars),
-                style = { foreground = curFg, background = curBg },
-            }
-            curChars = {}
-        end
-    end
-
-    for x = 0, width - 1 do
-        local key = x .. "," .. y
-        local isHover = (x == hoverX and y == hoverY)
-        local isClick = clickedCells[key]
-
-        local char = "."
-        local fg = theme.dot
-        local bg = theme.bg
-
-        if isHover and isClick then
-            char = "#"
-            fg = theme.both
-            bg = "#45475A"
-        elseif isHover then
-            char = "@"
-            fg = theme.hover
-            bg = "#313244"
-        elseif isClick then
-            char = "*"
-            fg = theme.click
-            bg = "#313244"
-        end
-
-        -- If style changed, flush current segment
-        if fg ~= curFg or bg ~= curBg then
-            flush()
-            curFg = fg
-            curBg = bg
-        end
-        curChars[#curChars + 1] = char
-    end
-    flush()
-
-    if #segments == 1 then
-        return segments[1]
-    end
-    return { type = "hbox", children = segments }
-end
-
 local App = lumina.defineComponent({
-    name = "MouseTest",
+    name = "MouseGrid",
     render = function()
         local state = lumina.useStore(store)
-        local hx = state.hoverX or -1
-        local hy = state.hoverY or -1
-        local cx = state.clickX or -1
-        local cy = state.clickY or -1
-        local total = state.totalClicks or 0
-
-        -- Get actual terminal size
         local width, height = lumina.getSize()
 
-        -- Status bar (row 0)
-        local status = string.format(
-            " Mouse: (%d, %d) | Clicked: (%d, %d) | Total: %d | [c] Clear  [q] Quit",
-            hx, hy, cx, cy, total
-        )
+        -- Each cell is 3 chars wide
+        local cols = math.floor(width / 3)
+        local rows = height - 1  -- reserve 1 row for status
 
-        local children = {
-            {
-                type = "text",
-                content = status,
-                style = { foreground = theme.accent, background = theme.bar, bold = true },
-            },
+        local children = {}
+
+        -- Status bar
+        children[1] = {
+            type = "text",
+            content = string.format(" Hover: %s | Click: %s | [c] Clear [q] Quit",
+                state.hoverTarget or "none", state.lastClick or "none"),
+            style = { foreground = "#89B4FA", background = "#181825", bold = true },
         }
 
-        for y = 1, height - 1 do
-            children[#children + 1] = buildRow(y, width, hx, hy)
+        -- Grid rows
+        for y = 0, rows - 1 do
+            local rowChildren = {}
+            for x = 0, cols - 1 do
+                local id = "c-" .. x .. "-" .. y
+                local isHover = lumina.isHovered(id)
+                local isClick = (state.clicked or {})[id]
+
+                local char = " . "
+                local fg = "#585B70"
+                local bg = "#1E1E2E"
+
+                if isHover and isClick then
+                    char = "[*]"
+                    fg = "#F9E2AF"
+                    bg = "#45475A"
+                elseif isHover then
+                    char = "[O]"
+                    fg = "#A6E3A1"
+                    bg = "#313244"
+                elseif isClick then
+                    char = "[X]"
+                    fg = "#F38BA8"
+                    bg = "#313244"
+                end
+
+                rowChildren[#rowChildren + 1] = {
+                    type = "box",
+                    props = { id = id },
+                    style = { width = 3, height = 1, background = bg },
+                    children = {
+                        { type = "text", content = char, style = { foreground = fg } }
+                    }
+                }
+            end
+
+            children[#children + 1] = {
+                type = "hbox",
+                children = rowChildren,
+            }
         end
 
         return {
             type = "vbox",
-            style = { background = theme.bg },
+            style = { background = "#1E1E2E" },
             children = children,
         }
     end,
