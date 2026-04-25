@@ -312,6 +312,7 @@ func (ir *InputReader) parseSGRMouse(data []byte) {
 			Type: "input_event",
 			Payload: &Event{
 				Type:      "scroll",
+				Bubbles:   true,
 				X:         x,
 				Y:         y,
 				Button:    direction,

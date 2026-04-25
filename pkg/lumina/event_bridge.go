@@ -222,7 +222,28 @@ type LuaFuncRef struct {
 func storeLuaFuncRef(L *lua.State, idx int) LuaFuncRef {
 	L.PushValue(idx)
 	ref := L.Ref(lua.RegistryIndex)
+	trackRenderRef(ref)
 	return LuaFuncRef{Ref: ref}
+}
+
+// Render ref tracking — release Lua registry refs from the previous render cycle.
+var (
+	previousRenderRefs []int
+	currentRenderRefs  []int
+)
+
+func trackRenderRef(ref int) {
+	currentRenderRefs = append(currentRenderRefs, ref)
+}
+
+// SwapRenderRefs releases all Lua registry refs from the previous render cycle
+// and promotes the current cycle's refs to "previous". Call at the start of each render.
+func SwapRenderRefs(L *lua.State) {
+	for _, ref := range previousRenderRefs {
+		L.Unref(lua.RegistryIndex, ref)
+	}
+	previousRenderRefs = currentRenderRefs
+	currentRenderRefs = nil
 }
 
 // ClearBridgedHandlers removes all handlers registered by the VNode→EventBus bridge.
