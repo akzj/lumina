@@ -1,108 +1,119 @@
--- Lumina Mouse Grid Test: per-component grid with independent hover/click
--- Each cell is a box with unique ID, uses lumina.isHovered() and e.target
--- Hover: green [O], Click: red [X], Both: yellow [*]
+-- Lumina Mouse Grid Test: React declarative style
+-- Each cell is an independent component with its own useState for hover/click.
+-- Uses createElement + defineComponent + onMouseEnter/onMouseLeave/onClick props.
+-- No global store, no lumina.on(), no lumina.isHovered() — pure React pattern.
 local lumina = require("lumina")
 
-local store = lumina.createStore({
-    state = {
-        clicked = {},    -- id -> true
-        lastClick = "",
-        hoverTarget = "",
-    }
+local theme = {
+    bg = "#1E1E2E", dot = "#585B70", hover = "#A6E3A1",
+    click = "#F38BA8", both = "#F9E2AF", bar = "#181825",
+    accent = "#89B4FA",
+}
+
+-- ============================================================
+-- Cell: independent component with own hover/click state
+-- ============================================================
+local Cell = lumina.defineComponent({
+    name = "Cell",
+    render = function(props)
+        local hovered, setHovered = lumina.useState("hovered", false)
+        local clicked, setClicked = lumina.useState("clicked", false)
+
+        local label = " . "
+        local fg = theme.dot
+        local bg = theme.bg
+
+        if hovered and clicked then
+            label = "[*]"
+            fg = theme.both
+            bg = "#45475A"
+        elseif hovered then
+            label = "[O]"
+            fg = theme.hover
+            bg = "#313244"
+        elseif clicked then
+            label = "[X]"
+            fg = theme.click
+            bg = "#313244"
+        end
+
+        return {
+            type = "box",
+            id = props.id,
+            style = { width = 3, height = 1, background = bg },
+            -- Declarative event props — React style
+            onClick = function()
+                setClicked(not clicked)
+                if props.onCellClick then
+                    props.onCellClick(props.id, not clicked)
+                end
+            end,
+            onMouseEnter = function()
+                setHovered(true)
+                if props.onCellHover then
+                    props.onCellHover(props.id)
+                end
+            end,
+            onMouseLeave = function()
+                setHovered(false)
+            end,
+            children = {
+                { type = "text", content = label, style = { foreground = fg } }
+            }
+        }
+    end
 })
 
--- Global mousemove handler — track hover target
-lumina.on("mousemove", "", function(e)
-    store.dispatch("setState", { hoverTarget = e.target or "" })
-end)
-
--- Global click handler — reads e.target to know which cell
-lumina.on("mousedown", "", function(e)
-    if e.target and e.target ~= "" then
-        local st = store.getState()
-        local clicked = st.clicked or {}
-        clicked[e.target] = true
-        store.dispatch("setState", {
-            clicked = clicked,
-            lastClick = e.target,
-        })
-    end
-end)
-
-lumina.onKey("c", function()
-    store.dispatch("setState", { clicked = {}, lastClick = "" })
-end)
-lumina.onKey("q", function() lumina.quit() end)
-
+-- ============================================================
+-- App: composes Cell components in a grid
+-- ============================================================
 local App = lumina.defineComponent({
     name = "MouseGrid",
     render = function()
-        local state = lumina.useStore(store)
-        local width, height = lumina.getSize()
+        local lastHover, setLastHover = lumina.useState("lastHover", "")
+        local lastClick, setLastClick = lumina.useState("lastClick", "")
 
-        -- Each cell is 3 chars wide
-        local cols = math.floor(width / 3)
-        local rows = height - 1  -- reserve 1 row for status
+        local width, height = lumina.getSize()
+        -- Reduce grid for performance (each cell is an independent component)
+        local cols = math.min(math.floor(width / 3), 30)
+        local rows = math.min(height - 1, 15)
 
         local children = {}
 
         -- Status bar
         children[1] = {
             type = "text",
-            content = string.format(" Hover: %s | Click: %s | [c] Clear [q] Quit",
-                state.hoverTarget or "none", state.lastClick or "none"),
-            style = { foreground = "#89B4FA", background = "#181825", bold = true },
+            content = string.format(
+                " Hover: %s | Click: %s | [q] Quit",
+                lastHover, lastClick),
+            style = { foreground = theme.accent, background = theme.bar, bold = true },
         }
 
-        -- Grid rows
+        -- Grid of Cell components via createElement
         for y = 0, rows - 1 do
             local rowChildren = {}
             for x = 0, cols - 1 do
-                local id = "c-" .. x .. "-" .. y
-                local isHover = lumina.isHovered(id)
-                local isClick = (state.clicked or {})[id]
-
-                local char = " . "
-                local fg = "#585B70"
-                local bg = "#1E1E2E"
-
-                if isHover and isClick then
-                    char = "[*]"
-                    fg = "#F9E2AF"
-                    bg = "#45475A"
-                elseif isHover then
-                    char = "[O]"
-                    fg = "#A6E3A1"
-                    bg = "#313244"
-                elseif isClick then
-                    char = "[X]"
-                    fg = "#F38BA8"
-                    bg = "#313244"
-                end
-
-                rowChildren[#rowChildren + 1] = {
-                    type = "box",
-                    props = { id = id },
-                    style = { width = 3, height = 1, background = bg },
-                    children = {
-                        { type = "text", content = char, style = { foreground = fg } }
-                    }
-                }
+                local cellId = "c-" .. x .. "-" .. y
+                rowChildren[#rowChildren + 1] = lumina.createElement(Cell, {
+                    id = cellId,
+                    key = cellId,
+                    onCellHover = function(id) setLastHover(id) end,
+                    onCellClick = function(id, isClicked)
+                        if isClicked then setLastClick(id) end
+                    end,
+                })
             end
-
-            children[#children + 1] = {
-                type = "hbox",
-                children = rowChildren,
-            }
+            children[#children + 1] = { type = "hbox", children = rowChildren }
         end
 
         return {
             type = "vbox",
-            style = { background = "#1E1E2E" },
+            style = { background = theme.bg },
             children = children,
         }
-    end,
+    end
 })
 
+lumina.onKey("q", function() lumina.quit() end)
 lumina.mount(App)
 lumina.run()
