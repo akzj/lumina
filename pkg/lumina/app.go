@@ -164,8 +164,8 @@ func (app *App) RunInteractive(scriptPath string) error {
 	// Set output adapter to write through TermIO
 	SetOutputAdapter(NewANSIAdapter(localIO))
 
-	// Clear screen
-	localIO.Write([]byte("\x1b[2J\x1b[H"))
+	// Clear screen with theme background color (not terminal default)
+	localIO.Write([]byte(clearScreenWithBg()))
 
 	// Load script
 	if scriptPath != "" {
@@ -256,8 +256,8 @@ func (app *App) RunWithTermIO(tio TermIO, scriptPath string) error {
 		}
 	}
 
-	// Clear screen via TermIO
-	tio.Write([]byte("\x1b[2J\x1b[H"))
+	// Clear screen with theme background color (not terminal default)
+	tio.Write([]byte(clearScreenWithBg()))
 
 	// Initial render
 	app.renderAllDirty()
@@ -1285,4 +1285,18 @@ func (app *App) mcpGetFrame() map[string]interface{} {
 		"focusedID":      globalEventBus.GetFocused(),
 		"componentCount": len(globalRegistry.components),
 	}
+}
+
+// clearScreenWithBg returns an ANSI escape sequence that sets the theme
+// background color before clearing the screen. This ensures the cleared
+// area uses our theme color instead of the terminal's default background.
+func clearScreenWithBg() string {
+	bg := "#1E1E2E" // Catppuccin Mocha base (fallback)
+	if theme := GetCurrentTheme(); theme != nil {
+		if tbg, ok := theme.Colors["background"]; ok && tbg != "" {
+			bg = tbg
+		}
+	}
+	r, g, b := hexToRGB(bg)
+	return fmt.Sprintf("\x1b[48;2;%d;%d;%dm\x1b[2J\x1b[H", r, g, b)
 }
