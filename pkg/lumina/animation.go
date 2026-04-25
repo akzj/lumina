@@ -121,6 +121,18 @@ func (am *AnimationManager) Get(id string) *AnimationState {
 	return am.animations[id]
 }
 
+// GetState returns a snapshot of an animation's current value and done status.
+// Returns (current, done, found). Safe for concurrent use — values are copied under lock.
+func (am *AnimationManager) GetState(id string) (current float64, done bool, found bool) {
+	am.mu.RLock()
+	defer am.mu.RUnlock()
+	anim, ok := am.animations[id]
+	if !ok {
+		return 0, false, false
+	}
+	return anim.Current, anim.Done, true
+}
+
 // Tick updates all running animations based on the current time.
 // Returns the set of component IDs that need re-rendering.
 func (am *AnimationManager) Tick(nowMs int64) []string {

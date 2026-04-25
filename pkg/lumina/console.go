@@ -120,6 +120,20 @@ func consoleLog(L *lua.State) int {
 	return 0
 }
 
+// makeConsoleLog returns a Lua function that logs at the given level.
+// Usage: makeConsoleLog("warn") → func(message, data?)
+func makeConsoleLog(level string) lua.Function {
+	return func(L *lua.State) int {
+		message := L.CheckString(1)
+		var data any
+		if L.GetTop() >= 2 {
+			data = L.ToAny(2)
+		}
+		globalConsole.Log(level, message, data)
+		return 0
+	}
+}
+
 // consoleGet() → JSON string of log entries
 func consoleGet(L *lua.State) int {
 	entries := globalConsole.GetEntries()

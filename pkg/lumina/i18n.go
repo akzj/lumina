@@ -1,6 +1,7 @@
 package lumina
 
 import (
+	"fmt"
 	"strings"
 	"sync"
 )
@@ -114,7 +115,7 @@ func (i *I18n) Reset() {
 func interpolate(template string, args []string) string {
 	result := template
 	for idx, arg := range args {
-		placeholder := "{" + string(rune('1'+idx)) + "}"
+		placeholder := fmt.Sprintf("{%d}", idx+1)
 		result = strings.ReplaceAll(result, placeholder, arg)
 	}
 	return result
