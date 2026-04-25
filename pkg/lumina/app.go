@@ -183,6 +183,20 @@ func (app *App) RunInteractive(scriptPath string) error {
 	input := NewInputReader(term, app.events)
 	input.Start()
 
+	// Watch for terminal resize (SIGWINCH)
+	term.WatchResize(func(w, h int) {
+		app.width = w
+		app.height = h
+		localIO.SetSize(w, h)
+		// Mark all components dirty for re-render at new size
+		globalRegistry.mu.RLock()
+		for _, comp := range globalRegistry.components {
+			comp.Dirty.Store(true)
+		}
+		globalRegistry.mu.RUnlock()
+	})
+	defer term.StopResize()
+
 	// Event loop (same as eventLoop but inlined for clarity)
 	ticker := time.NewTicker(16 * time.Millisecond)
 	defer ticker.Stop()
@@ -577,6 +591,9 @@ func (app *App) renderComponent(comp *Component, adapter OutputAdapter) {
 	}
 	comp.LastVNode = newVNode
 
+	// Bridge VNode event handlers to EventBus
+	app.bridgeVNodeEvents(newVNode)
+
 	// Render overlays on top of the base frame
 	overlays := globalOverlayManager.GetVisible()
 	if len(overlays) > 0 {
@@ -680,6 +697,24 @@ func (app *App) Close() {
 // Scheduler returns the App's async coroutine scheduler.
 func (app *App) Scheduler() *lua.Scheduler {
 	return app.sched
+}
+
+// GetGlobalEventBus returns the global event bus (for testing).
+func GetGlobalEventBus() *EventBus {
+	return globalEventBus
+}
+
+// ProcessPendingEvents drains and processes all pending events in the channel.
+// Used in tests to process lua_callback events posted by event handlers.
+func (app *App) ProcessPendingEvents() {
+	for {
+		select {
+		case event := <-app.events:
+			app.handleEvent(event)
+		default:
+			return
+		}
+	}
 }
 
 // GetApp retrieves the App from a Lua State's user values.

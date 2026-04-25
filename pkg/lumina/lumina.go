@@ -493,6 +493,11 @@ func renderComponent(L *lua.State) int {
 		comp.LastVNode = newVNode
 	}
 
+	// Bridge VNode event handlers to EventBus
+	if app := GetApp(L); app != nil {
+		app.bridgeVNodeEvents(newVNode)
+	}
+
 	// Write to terminal
 	adapter := GetOutputAdapter()
 	if adapter == nil {

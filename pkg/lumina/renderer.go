@@ -121,7 +121,12 @@ func LuaVNodeToVNode(L *lua.State, idx int) *VNode {
 			key, _ := L.ToString(-2)
 			// Skip known fields
 			if key != "type" && key != "content" && key != "children" && key != "_focused" {
-				vnode.Props[key] = L.ToAny(-1)
+				// Store Lua functions as registry references so event handlers survive
+				if L.Type(-1) == lua.TypeFunction {
+					vnode.Props[key] = storeLuaFuncRef(L, -1)
+				} else {
+					vnode.Props[key] = L.ToAny(-1)
+				}
 			} else if key == "_focused" {
 				if L.ToBoolean(-1) {
 					vnode.Focused = true
