@@ -343,6 +343,44 @@ func (app *App) handleEvent(event AppEvent) {
 			return
 		}
 
+		// F12 toggles DevTools inspector
+		if e.Type == "keydown" && e.Key == "F12" {
+			ToggleInspector()
+			// Force re-render
+			globalRegistry.mu.RLock()
+			for _, comp := range globalRegistry.components {
+				comp.Dirty.Store(true)
+			}
+			globalRegistry.mu.RUnlock()
+		}
+
+		// DevTools inspector: update hover/selection on mouse events
+		if IsInspectorVisible() {
+			switch e.Type {
+			case "mousemove":
+				if app.lastFrame != nil && e.X >= 0 && e.Y >= 0 &&
+					e.X < app.lastFrame.Width && e.Y < app.lastFrame.Height {
+					node := app.lastFrame.Cells[e.Y][e.X].OwnerNode
+					if node != nil {
+						if id, ok := node.Props["id"].(string); ok && id != "" {
+							SetInspectorHighlight(id)
+						}
+					}
+				}
+			case "mousedown":
+				// Click selects element for inspection
+				if app.lastFrame != nil && e.X >= 0 && e.Y >= 0 &&
+					e.X < app.lastFrame.Width && e.Y < app.lastFrame.Height {
+					node := app.lastFrame.Cells[e.Y][e.X].OwnerNode
+					if node != nil {
+						if id, ok := node.Props["id"].(string); ok && id != "" {
+							SetInspectorSelected(id)
+						}
+					}
+				}
+			}
+		}
+
 		// Modal overlay input routing: when a modal overlay is active,
 		// Escape closes it and other events are captured by the modal.
 		if topModal := globalOverlayManager.GetTopModal(); topModal != nil {
@@ -783,6 +821,42 @@ compositeAndWrite:
 	}
 
 	frame.FocusedID = globalEventBus.GetFocused()
+
+	// DevTools inspector overlay
+	if IsInspectorVisible() && app.lastFrame != nil {
+		// Highlight the hovered/selected element
+		var highlightNode *VNode
+		if globalInspector.selectedID != "" {
+			highlightNode = findVNodeByID(newVNode, globalInspector.selectedID)
+		} else if globalInspector.highlightID != "" {
+			highlightNode = findVNodeByID(newVNode, globalInspector.highlightID)
+		}
+		if highlightNode != nil {
+			RenderHighlight(frame, highlightNode)
+		}
+
+		// Render inspector panel as overlay on right side
+		panelVNode := BuildInspectorVNode(newVNode, app.width, app.height)
+		if panelVNode != nil {
+			panelW := globalInspector.panelWidth
+			if panelW > app.width/2 {
+				panelW = app.width / 2
+			}
+			panelOverlay := &Overlay{
+				ID:      "devtools-panel",
+				VNode:   panelVNode,
+				X:       app.width - panelW,
+				Y:       0,
+				W:       panelW,
+				H:       app.height,
+				ZIndex:  9999,
+				Visible: true,
+			}
+			dtCompositor := NewCompositor(app.width, app.height)
+			frame = dtCompositor.Compose(frame, []*Overlay{panelOverlay})
+		}
+	}
+
 	adapter.Write(frame)
 	app.lastRenderTime = time.Now()
 	comp.MarkClean()

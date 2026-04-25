@@ -35,6 +35,16 @@ func registerDevToolsModule(L *lua.State) {
 	L.PushFunction(luaDevToolsSummary)
 	L.SetField(-2, "summary")
 
+	// Element Inspector API (uses globalInspector)
+	L.PushFunction(luaInspectorToggle)
+	L.SetField(-2, "toggleInspector")
+
+	L.PushFunction(luaInspectorIsEnabled)
+	L.SetField(-2, "isInspectorEnabled")
+
+	L.PushFunction(luaInspectorSelect)
+	L.SetField(-2, "selectElement")
+
 	L.SetField(-2, "devtools")
 }
 
@@ -85,4 +95,22 @@ func luaDevToolsSummary(L *lua.State) int {
 	summary := globalDevTools.Summary()
 	L.PushAny(summary)
 	return 1
+}
+
+// --- Element Inspector API ---
+
+func luaInspectorToggle(L *lua.State) int {
+	ToggleInspector()
+	return 0
+}
+
+func luaInspectorIsEnabled(L *lua.State) int {
+	L.PushBoolean(IsInspectorVisible())
+	return 1
+}
+
+func luaInspectorSelect(L *lua.State) int {
+	id := L.CheckString(1)
+	SetInspectorSelected(id)
+	return 0
 }
