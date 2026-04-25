@@ -1,24 +1,40 @@
 -- shadcn/dropdown_menu — Dropdown menu with items
 local lumina = require("lumina")
 
+local c = {
+    fg = "#CDD6F4",
+    muted = "#6C7086",
+    primary = "#89B4FA",
+    border = "#45475A",
+    bg = "#181825",
+    surface = "#313244",
+}
+
 local DropdownMenu = lumina.defineComponent({
     name = "ShadcnDropdownMenu",
+
     init = function(props)
         return {
             open = props.open or false,
             items = props.items or {},
             trigger = props.trigger or "Menu",
             selectedIndex = 0,
+            id = props.id,
+            className = props.className,
+            style = props.style,
         }
     end,
+
     render = function(self)
         local children = {}
+
         -- Trigger
         children[#children + 1] = {
             type = "text",
             content = self.trigger .. " ▾",
-            style = { foreground = "#E2E8F0", bold = true },
+            style = { foreground = c.fg, bold = true },
         }
+
         -- Menu items (when open)
         if self.open then
             local menuItems = {}
@@ -27,41 +43,50 @@ local DropdownMenu = lumina.defineComponent({
                     menuItems[#menuItems + 1] = {
                         type = "text",
                         content = "──────────────────",
-                        style = { foreground = "#334155" },
+                        style = { foreground = c.border },
                     }
                 else
                     local isSelected = (i == self.selectedIndex)
-                    local label = item.label or item
-                    local shortcut = item.shortcut or ""
+                    local label = type(item) == "table" and (item.label or tostring(item)) or tostring(item)
+                    local shortcut = type(item) == "table" and (item.shortcut or "") or ""
+                    local disabled = type(item) == "table" and (item.disabled or false) or false
+
                     local content = "  " .. label
                     if shortcut ~= "" then
-                        content = content .. string.rep(" ", 20 - #label) .. shortcut
+                        content = content .. string.rep(" ", math.max(0, 20 - #label)) .. shortcut
                     end
+
+                    local fg = disabled and c.muted or (isSelected and c.fg or c.muted)
+                    local bg = isSelected and c.surface or ""
+
                     menuItems[#menuItems + 1] = {
                         type = "text",
                         content = content,
-                        style = {
-                            foreground = item.disabled and "#475569" or (isSelected and "#E2E8F0" or "#94A3B8"),
-                            background = isSelected and "#334155" or "",
-                        },
+                        style = { foreground = fg, background = bg },
                     }
                 end
             end
+
             children[#children + 1] = {
                 type = "vbox",
                 style = {
                     border = "rounded",
-                    background = "#1E293B",
+                    borderColor = c.border,
+                    background = c.bg,
+                    foreground = c.fg,
                     padding = 1,
                 },
                 children = menuItems,
             }
         end
+
         return {
             type = "vbox",
+            id = self.id,
+            style = self.style or {},
             children = children,
         }
-    end
+    end,
 })
 
 return DropdownMenu

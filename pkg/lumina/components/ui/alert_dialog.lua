@@ -1,8 +1,18 @@
 -- shadcn/alert_dialog — Confirmation dialog with action/cancel
 local lumina = require("lumina")
 
+local c = {
+    fg = "#CDD6F4",
+    muted = "#6C7086",
+    primary = "#89B4FA",
+    destructive = "#F38BA8",
+    border = "#45475A",
+    bg = "#181825",
+}
+
 local AlertDialog = lumina.defineComponent({
     name = "ShadcnAlertDialog",
+
     init = function(props)
         return {
             open = props.open or false,
@@ -10,40 +20,68 @@ local AlertDialog = lumina.defineComponent({
             description = props.description or "",
             confirmLabel = props.confirmLabel or "Continue",
             cancelLabel = props.cancelLabel or "Cancel",
-            variant = props.variant or "default",
+            variant = props.variant or "default", -- default, destructive
+            id = props.id,
+            className = props.className,
+            style = props.style,
         }
     end,
+
     render = function(self)
         if not self.open then
-            return { type = "fragment", children = {} }
+            return { type = "empty" }
         end
-        local confirmFg = self.variant == "destructive" and "#DC2626" or "#3B82F6"
-        return {
-            type = "vbox",
-            style = {
-                border = "rounded",
-                background = "#1E1E2E",
-                foreground = "#CDD6F4",
-                padding = 1,
-                width = 50,
-                height = 12,
-            },
+
+        local confirmFg = (self.variant == "destructive") and c.destructive or c.primary
+        local w = 50
+
+        local style = {
+            border = "rounded",
+            borderColor = c.border,
+            background = c.bg,
+            foreground = c.fg,
+            padding = 1,
+            width = w,
+        }
+        if self.className and type(self.className) == "table" then
+            for k, v in pairs(self.className) do style[k] = v end
+        end
+        if self.style and type(self.style) == "table" then
+            for k, v in pairs(self.style) do style[k] = v end
+        end
+
+        local children = {
+            { type = "text", content = self.title, style = { bold = true, foreground = c.fg } },
+        }
+        if self.description ~= "" then
+            children[#children + 1] = {
+                type = "text",
+                content = self.description,
+                style = { foreground = c.muted },
+            }
+        end
+        children[#children + 1] = {
+            type = "text",
+            content = string.rep("─", w - 2),
+            style = { foreground = c.border },
+        }
+        children[#children + 1] = {
+            type = "hbox",
+            style = { justify = "end" },
             children = {
-                { type = "text", content = self.title, style = { bold = true, foreground = "#F8FAFC" } },
-                { type = "text", content = self.description, style = { foreground = "#94A3B8" } },
-                { type = "text", content = string.rep("─", 46), style = { foreground = "#334155" } },
-                {
-                    type = "hbox",
-                    style = { justify = "end" },
-                    children = {
-                        { type = "text", content = "[ " .. self.cancelLabel .. " ]", style = { foreground = "#94A3B8" } },
-                        { type = "text", content = "  " },
-                        { type = "text", content = "[ " .. self.confirmLabel .. " ]", style = { foreground = confirmFg, bold = true } },
-                    },
-                },
+                { type = "text", content = "[ " .. self.cancelLabel .. " ]", style = { foreground = c.muted } },
+                { type = "text", content = "  " },
+                { type = "text", content = "[ " .. self.confirmLabel .. " ]", style = { foreground = confirmFg, bold = true } },
             },
         }
-    end
+
+        return {
+            type = "vbox",
+            id = self.id,
+            style = style,
+            children = children,
+        }
+    end,
 })
 
 return AlertDialog
