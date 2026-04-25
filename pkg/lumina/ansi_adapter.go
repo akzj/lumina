@@ -376,21 +376,41 @@ func hexByteToInt(s string) int {
 
 // rgbTo256 converts RGB to the nearest xterm-256 color index.
 func rgbTo256(r, g, b int) int {
-	// Check grayscale ramp first (indices 232-255).
-	if r == g && g == b {
-		if r < 8 {
-			return 16 // black
-		}
-		if r > 248 {
-			return 231 // white
-		}
-		return 232 + (r-8)*24/247
-	}
 	// Map to the 6×6×6 color cube (indices 16-231).
+	cubeVals := [6]int{0, 0x5f, 0x87, 0xaf, 0xd7, 0xff}
 	ri := (r * 5 + 127) / 255
 	gi := (g * 5 + 127) / 255
 	bi := (b * 5 + 127) / 255
-	return 16 + 36*ri + 6*gi + bi
+	cubeIdx := 16 + 36*ri + 6*gi + bi
+	cr, cg, cb := cubeVals[ri], cubeVals[gi], cubeVals[bi]
+	cubeDist := colorDist(r, g, b, cr, cg, cb)
+
+	// Map to grayscale ramp (indices 232-255, values 8, 18, 28, ..., 238).
+	gray := (r + g + b) / 3
+	var grayIdx int
+	if gray < 4 {
+		grayIdx = 232
+	} else if gray > 243 {
+		grayIdx = 255
+	} else {
+		grayIdx = 232 + (gray-3)/10
+	}
+	grayVal := 8 + (grayIdx-232)*10
+	grayDist := colorDist(r, g, b, grayVal, grayVal, grayVal)
+
+	// Return whichever is closer.
+	if grayDist < cubeDist {
+		return grayIdx
+	}
+	return cubeIdx
+}
+
+// colorDist returns the squared Euclidean distance between two RGB colors.
+func colorDist(r1, g1, b1, r2, g2, b2 int) int {
+	dr := r1 - r2
+	dg := g1 - g2
+	db := b1 - b2
+	return dr*dr + dg*dg + db*db
 }
 
 // rgbTo16 converts RGB to the nearest ANSI 16-color foreground code (30-37, 90-97).
