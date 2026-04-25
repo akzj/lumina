@@ -97,6 +97,31 @@ func (app *App) walkVNodeForEvents(vnode *VNode) {
 			app.registerBridgedLuaHandler("scroll", id, ref)
 		}
 
+		// Register onMouseDown handler
+		if ref, ok := getLuaRef(vnode.Props["onMouseDown"]); ok {
+			app.registerBridgedLuaHandler("mousedown", id, ref)
+		}
+
+		// Register onMouseUp handler
+		if ref, ok := getLuaRef(vnode.Props["onMouseUp"]); ok {
+			app.registerBridgedLuaHandler("mouseup", id, ref)
+		}
+
+		// Register onMouseMove handler
+		if ref, ok := getLuaRef(vnode.Props["onMouseMove"]); ok {
+			app.registerBridgedLuaHandler("mousemove", id, ref)
+		}
+
+		// Register onDragOver handler
+		if ref, ok := getLuaRef(vnode.Props["onDragOver"]); ok {
+			app.registerBridgedLuaHandler("dragover", id, ref)
+		}
+
+		// Register onDrop handler
+		if ref, ok := getLuaRef(vnode.Props["onDrop"]); ok {
+			app.registerBridgedLuaHandler("drop", id, ref)
+		}
+
 		// If element type is inherently focusable, register it
 		if isFocusableType(vnode.Type) {
 			globalEventBus.RegisterFocusable(id)
@@ -143,7 +168,9 @@ func getLuaRef(val any) (int, bool) {
 func isEventProp(key string) bool {
 	return key == "onClick" || key == "onChange" || key == "onFocus" ||
 		key == "onBlur" || key == "onKeyDown" || key == "onKeyUp" ||
-		key == "onSubmit" || key == "onScroll"
+		key == "onSubmit" || key == "onScroll" ||
+		key == "onMouseDown" || key == "onMouseUp" || key == "onMouseMove" ||
+		key == "onDragOver" || key == "onDrop"
 }
 
 // isFocusableType returns true if the VNode type is inherently interactive/focusable.

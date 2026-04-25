@@ -341,15 +341,78 @@ func (app *App) handleEvent(event AppEvent) {
 			}
 		}
 
-		// Mouse click hit-testing: map (x,y) to target component
-		if e.Type == "mousedown" || e.Type == "mouseup" {
-			if root := app.findRootVNode(); root != nil {
-				targetID := HitTestVNode(root, e.X, e.Y)
-				if targetID != "" {
-					e.Target = targetID
-					if e.Type == "mousedown" {
-						globalEventBus.SetFocus(targetID)
+		// Mouse event hit-testing: map (x,y) to target component
+		if e.Type == "mousedown" || e.Type == "mouseup" || e.Type == "mousemove" {
+			// O(1) hit-test using Cell.OwnerNode from last rendered frame
+			var targetNode *VNode
+			if app.lastFrame != nil && e.X >= 0 && e.Y >= 0 &&
+				e.X < app.lastFrame.Width && e.Y < app.lastFrame.Height {
+				targetNode = app.lastFrame.Cells[e.Y][e.X].OwnerNode
+			}
+
+			if targetNode != nil {
+				if id, ok := targetNode.Props["id"].(string); ok && id != "" {
+					e.Target = id
+				}
+				e.TargetNode = targetNode
+				// Compute local coordinates (relative to target VNode top-left)
+				e.LocalX = e.X - targetNode.X
+				e.LocalY = e.Y - targetNode.Y
+			}
+
+			// Fall back to VNode tree walk if Cell has no owner
+			if e.Target == "" {
+				if root := app.findRootVNode(); root != nil {
+					targetID := HitTestVNode(root, e.X, e.Y)
+					if targetID != "" {
+						e.Target = targetID
 					}
+				}
+			}
+
+			// Focus on mousedown
+			if e.Type == "mousedown" && e.Target != "" {
+				globalEventBus.SetFocus(e.Target)
+			}
+
+			// Drag-and-drop handling
+			switch e.Type {
+			case "mousedown":
+				if e.TargetNode != nil {
+					if draggable, ok := e.TargetNode.Props["draggable"].(bool); ok && draggable {
+						dragType, _ := e.TargetNode.Props["dragType"].(string)
+						globalDragState.StartDrag(e.Target, dragType, e.TargetNode.Props["dragData"])
+						globalDragState.UpdatePosition(e.X, e.Y)
+					}
+				}
+
+			case "mousemove":
+				if globalDragState.Dragging() {
+					globalDragState.UpdatePosition(e.X, e.Y)
+					// Check if hovering over a drop target
+					if e.TargetNode != nil {
+						if _, hasOnDrop := e.TargetNode.Props["onDrop"]; hasOnDrop {
+							globalDragState.SetDropTarget(e.Target)
+							globalEventBus.Emit(&Event{
+								Type: "dragover", Target: e.Target,
+								X: e.X, Y: e.Y, LocalX: e.LocalX, LocalY: e.LocalY,
+								Timestamp: e.Timestamp,
+							})
+						}
+					}
+				}
+
+			case "mouseup":
+				if globalDragState.Dragging() {
+					sourceID, dropTargetID, _ := globalDragState.EndDrag()
+					if dropTargetID != "" {
+						globalEventBus.Emit(&Event{
+							Type: "drop", Target: dropTargetID,
+							X: e.X, Y: e.Y,
+							Timestamp: e.Timestamp,
+						})
+					}
+					_ = sourceID // available for future use
 				}
 			}
 		}
@@ -360,13 +423,16 @@ func (app *App) handleEvent(event AppEvent) {
 		// For mousedown with a target, also emit a "click" event
 		if e.Type == "mousedown" && e.Target != "" {
 			clickEvent := &Event{
-				Type:      "click",
-				Target:    e.Target,
-				X:         e.X,
-				Y:         e.Y,
-				Button:    e.Button,
-				Modifiers: e.Modifiers,
-				Timestamp: e.Timestamp,
+				Type:       "click",
+				Target:     e.Target,
+				X:          e.X,
+				Y:          e.Y,
+				LocalX:     e.LocalX,
+				LocalY:     e.LocalY,
+				Button:     e.Button,
+				Modifiers:  e.Modifiers,
+				Timestamp:  e.Timestamp,
+				TargetNode: e.TargetNode,
 			}
 			globalEventBus.Emit(clickEvent)
 		}

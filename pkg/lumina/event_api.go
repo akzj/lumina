@@ -12,6 +12,7 @@ func pushEventToLua(L *lua.State, e *Event) {
 	L.PushAny(map[string]any{
 		"type": e.Type, "key": e.Key, "code": e.Code,
 		"x": int64(e.X), "y": int64(e.Y), "button": e.Button,
+		"localX": int64(e.LocalX), "localY": int64(e.LocalY),
 		"target": e.Target, "timestamp": e.Timestamp,
 		"modifiers": map[string]any{
 			"ctrl": e.Modifiers.Ctrl, "shift": e.Modifiers.Shift,
