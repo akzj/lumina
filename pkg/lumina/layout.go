@@ -481,9 +481,19 @@ func layoutVBox(vnode *VNode, contentX, contentY, contentW, contentH int, style 
 			children[i].flexGrow = cs.Flex
 			flexTotal += cs.Flex
 		} else {
-			// No flex, no fixed height — give minimum 1 row
-			children[i].fixedH = 1 + marginV
-			fixedTotal += children[i].fixedH
+			// No flex, no fixed height.
+			// Container types (vbox, hbox, box) get implicit flex=1 so they
+			// stretch to fill available space (CSS block-level behavior).
+			// Leaf types (text, input, textarea) get minimum 1 row.
+			switch child.Type {
+			case "text", "input", "textarea":
+				children[i].fixedH = 1 + marginV
+				fixedTotal += children[i].fixedH
+			default:
+				// Container — treat as flex=1
+				children[i].flexGrow = 1
+				flexTotal += 1
+			}
 		}
 	}
 
@@ -660,16 +670,30 @@ func layoutHBox(vnode *VNode, contentX, contentY, contentW, contentH int, style 
 			children[i].flexGrow = cs.Flex
 			flexTotal += cs.Flex
 		} else {
-			// For text nodes, use natural content width instead of 1
-			naturalW := 1
-			if child.Type == "text" && child.Content != "" {
-				naturalW = StringWidth(child.Content)
-				if naturalW < 1 {
-					naturalW = 1
+			// No flex, no fixed width.
+			// Text nodes use natural content width.
+			// Other leaf types get minimum 1 column.
+			// Container types (vbox, hbox, box) get implicit flex=1 so they
+			// stretch to fill available space (CSS block-level behavior).
+			switch child.Type {
+			case "text":
+				naturalW := 1
+				if child.Content != "" {
+					naturalW = StringWidth(child.Content)
+					if naturalW < 1 {
+						naturalW = 1
+					}
 				}
+				children[i].fixedW = naturalW + marginH
+				fixedTotal += children[i].fixedW
+			case "input", "textarea":
+				children[i].fixedW = 1 + marginH
+				fixedTotal += children[i].fixedW
+			default:
+				// Container — treat as flex=1
+				children[i].flexGrow = 1
+				flexTotal += 1
 			}
-			children[i].fixedW = naturalW + marginH
-			fixedTotal += children[i].fixedW
 		}
 	}
 
