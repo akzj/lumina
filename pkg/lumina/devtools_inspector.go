@@ -222,9 +222,9 @@ func buildElementTree(vnode *VNode, depth int) []treeLine {
 		label += fmt.Sprintf(" (%d×%d)", vnode.W, vnode.H)
 	}
 
-	// Truncate to fit panel
+	// Truncate to fit panel (guard against zero/negative panelWidth)
 	maxLen := globalInspector.panelWidth - 4
-	if len(label) > maxLen {
+	if maxLen > 0 && len(label) > maxLen {
 		label = label[:maxLen-1] + "…"
 	}
 
@@ -326,11 +326,13 @@ func buildStyleInspector(rootVNode *VNode) []string {
 		lines = append(lines, fmt.Sprintf("  align: %s", s.Align))
 	}
 
-	// Truncate lines to fit panel
+	// Truncate lines to fit panel (guard against zero/negative panelWidth)
 	maxLen := globalInspector.panelWidth - 3
-	for i, line := range lines {
-		if len(line) > maxLen {
-			lines[i] = line[:maxLen-1] + "…"
+	if maxLen > 0 {
+		for i, line := range lines {
+			if len(line) > maxLen {
+				lines[i] = line[:maxLen-1] + "…"
+			}
 		}
 	}
 

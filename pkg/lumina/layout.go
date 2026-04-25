@@ -122,6 +122,17 @@ func getBool(m map[string]any, key string) bool {
 	return false
 }
 
+// getCachedStyle returns the parsed style for a VNode, caching the result
+// so it's only parsed once per layout pass.
+func getCachedStyle(vnode *VNode) Style {
+	if vnode.cachedStyle != nil {
+		return *vnode.cachedStyle
+	}
+	s := parseStyle(vnode.Props)
+	vnode.cachedStyle = &s
+	return s
+}
+
 // parseStyle extracts a Style from VNode.Props.
 // It checks the "style" sub-table first, then falls back to top-level props
 // for backward compatibility.
@@ -281,7 +292,7 @@ func maxInt(a, b int) int {
 // computeFlexLayout computes the layout for a VNode tree using flexbox semantics.
 // It replaces the old computeLayout function.
 func computeFlexLayout(vnode *VNode, x, y, w, h int) {
-	style := parseStyle(vnode.Props)
+	style := getCachedStyle(vnode)
 	vnode.Style = style
 
 	// Apply margin — shrinks the area this node occupies from the parent's perspective
@@ -374,7 +385,7 @@ func computeFlexLayout(vnode *VNode, x, y, w, h int) {
 	// After normal layout, handle absolute/fixed positioned children.
 	// These are excluded from flex flow and positioned independently.
 	for _, child := range vnode.Children {
-		cs := parseStyle(child.Props)
+		cs := getCachedStyle(child)
 		switch cs.Position {
 		case "absolute":
 			// Position relative to this parent's content area
@@ -488,7 +499,7 @@ func layoutVBox(vnode *VNode, contentX, contentY, contentW, contentH int, style 
 	// Count flow children (not absolute/fixed)
 	flowCount := 0
 	for i, child := range vnode.Children {
-		cs := parseStyle(child.Props)
+		cs := getCachedStyle(child)
 		children[i].style = cs
 		children[i].positioned = isPositioned(cs)
 		if !children[i].positioned {
@@ -689,7 +700,7 @@ func layoutHBox(vnode *VNode, contentX, contentY, contentW, contentH int, style 
 
 	flowCount := 0
 	for i, child := range vnode.Children {
-		cs := parseStyle(child.Props)
+		cs := getCachedStyle(child)
 		children[i].style = cs
 		children[i].positioned = isPositioned(cs)
 		if !children[i].positioned {
@@ -908,7 +919,7 @@ func estimateNaturalHeight(node *VNode, style Style) int {
 
 	childrenH := 0
 	for i, child := range node.Children {
-		cs := parseStyle(child.Props)
+		cs := getCachedStyle(child)
 		childrenH += estimateNaturalHeight(child, cs)
 		if i < len(node.Children)-1 {
 			childrenH += style.Gap
@@ -919,7 +930,7 @@ func estimateNaturalHeight(node *VNode, style Style) int {
 	if node.Type == "hbox" {
 		maxH := 0
 		for _, child := range node.Children {
-			cs := parseStyle(child.Props)
+			cs := getCachedStyle(child)
 			h := estimateNaturalHeight(child, cs)
 			if h > maxH {
 				maxH = h
@@ -953,7 +964,7 @@ func layoutScrollableVBox(vnode *VNode, contentX, contentY, contentW, contentH i
 	totalH := totalGaps
 
 	for i, child := range vnode.Children {
-		cs := parseStyle(child.Props)
+		cs := getCachedStyle(child)
 		children[i].style = cs
 
 		h := estimateNaturalHeight(child, cs)
@@ -988,7 +999,7 @@ func layoutScrollableVBox(vnode *VNode, contentX, contentY, contentW, contentH i
 	for i, child := range vnode.Children {
 		childH := children[i].height
 		computeFlexLayout(child, contentX, curY, contentW, childH)
-		applyRelativeOffset(child, parseStyle(child.Props))
+		applyRelativeOffset(child, getCachedStyle(child))
 		curY += childH
 		if i < len(vnode.Children)-1 {
 			curY += style.Gap
@@ -1015,7 +1026,7 @@ func layoutScrollableHBox(vnode *VNode, contentX, contentY, contentW, contentH i
 	totalW := totalGaps
 
 	for i, child := range vnode.Children {
-		cs := parseStyle(child.Props)
+		cs := getCachedStyle(child)
 		children[i].style = cs
 
 		marginH := cs.MarginLeft + cs.MarginRight
@@ -1057,7 +1068,7 @@ func layoutScrollableHBox(vnode *VNode, contentX, contentY, contentW, contentH i
 	for i, child := range vnode.Children {
 		childW := children[i].width
 		computeFlexLayout(child, curX, contentY, childW, contentH)
-		applyRelativeOffset(child, parseStyle(child.Props))
+		applyRelativeOffset(child, getCachedStyle(child))
 		curX += childW
 		if i < len(vnode.Children)-1 {
 			curX += style.Gap

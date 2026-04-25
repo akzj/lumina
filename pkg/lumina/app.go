@@ -57,30 +57,23 @@ func (app *App) setSize(w, h int) {
 
 // NewApp creates a new interactive Lumina application.
 func NewApp() *App {
-	L := lua.NewState()
-
-	app := &App{
-		L:      L,
-		sched:  lua.NewScheduler(L),
-		events: make(chan AppEvent, 256),
-	}
-	app.width.Store(80)
-	app.height.Store(24)
-
-	// Store app reference on the Lua state for event handlers
-	L.SetUserValue("lumina_app", app)
-
-	// Open Lumina module
-	Open(L)
-
-	return app
+	return NewAppWithSize(80, 24)
 }
 
 // NewAppWithSize creates a new app with custom terminal size.
+// Resets ALL global singletons for test isolation.
 func NewAppWithSize(width, height int) *App {
 	// Reset global state so tests don't leak between runs
 	ClearComponents()
-	globalEventBus.ClearBridgedHandlers()
+	globalEventBus = NewEventBus()
+	globalAnimationManager = NewAnimationManager()
+	globalOverlayManager = NewOverlayManager()
+	globalRouter = NewRouter()
+	globalDragState = &DragState{}
+	globalWindowManager = NewWindowManager(width, height)
+	globalStyles = make(map[string]map[string]any)
+	globalInspector = &DevToolsInspector{panelWidth: 40}
+	globalConsole = &Console{maxSize: 1000}
 
 	L := lua.NewState()
 

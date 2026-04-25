@@ -897,6 +897,7 @@ func useDeferredValue(L *lua.State) int {
 type ExternalStoreHook struct {
 	LastSnapshot any // last snapshot value returned to the component
 	Subscribed   bool
+	UnsubRef     int // Lua registry ref for unsubscribe function (0 = none)
 }
 
 // useSyncExternalStore subscribes to an external store.
@@ -955,9 +956,12 @@ func useSyncExternalStore(L *lua.State) int {
 			// subscribe may fail — that's OK, just ignore
 			L.Pop(1)
 		} else {
-			// subscribe returns an unsubscribe function — store as cleanup ref
-			// For now, just pop it (cleanup would be handled on unmount)
-			L.Pop(1)
+			// subscribe returns an unsubscribe function — store as registry ref for cleanup on unmount
+			if L.Type(-1) == lua.TypeFunction {
+				hook.UnsubRef = L.Ref(lua.RegistryIndex) // pops the value
+			} else {
+				L.Pop(1)
+			}
 		}
 	} else {
 		hook.LastSnapshot = snapshot

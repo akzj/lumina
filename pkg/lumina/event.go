@@ -1,6 +1,7 @@
 package lumina
 
 import (
+	"strings"
 	"sync"
 	"time"
 )
@@ -330,24 +331,23 @@ func (eb *EventBus) bubbleUp(event *Event) {
 }
 
 func buildShortcutKey(e *Event) string {
-	var key string
+	parts := make([]string, 0, 5)
 	if e.Modifiers.Ctrl {
-		key += "ctrl"
+		parts = append(parts, "ctrl")
 	}
 	if e.Modifiers.Shift {
-		key += "shift"
+		parts = append(parts, "shift")
 	}
 	if e.Modifiers.Alt {
-		key += "alt"
+		parts = append(parts, "alt")
 	}
 	if e.Modifiers.Meta {
-		key += "meta"
+		parts = append(parts, "meta")
 	}
-	if len(key) > 0 {
-		key += "+"
+	if len(parts) > 0 {
+		return strings.Join(parts, "+") + "+" + e.Key
 	}
-	key += e.Key
-	return key
+	return e.Key
 }
 
 // SetFocus sets focus to a component.
@@ -592,12 +592,18 @@ func (eb *EventBus) HandleKeyEvent(key string, modifiers EventModifiers) {
 
 // focusNextUnsafe moves to next focusable (caller must hold lock).
 func (eb *EventBus) focusNextUnsafe() {
-	if len(eb.focusableIDs) == 0 {
+	// Respect FocusScope if active
+	ids := eb.focusableIDs
+	if scope := GetActiveFocusScope(); scope != nil && len(scope.FocusableIDs) > 0 {
+		ids = scope.FocusableIDs
+	}
+
+	if len(ids) == 0 {
 		return
 	}
 
 	currentIdx := -1
-	for i, id := range eb.focusableIDs {
+	for i, id := range ids {
 		if id == eb.focusedID {
 			currentIdx = i
 			break
@@ -608,10 +614,10 @@ func (eb *EventBus) focusNextUnsafe() {
 		eb.EmitUnsafe(&Event{Type: "blur", Target: eb.focusedID, Bubbles: false})
 	}
 
-	if currentIdx == -1 || currentIdx >= len(eb.focusableIDs)-1 {
-		eb.focusedID = eb.focusableIDs[0]
+	if currentIdx == -1 || currentIdx >= len(ids)-1 {
+		eb.focusedID = ids[0]
 	} else {
-		eb.focusedID = eb.focusableIDs[currentIdx+1]
+		eb.focusedID = ids[currentIdx+1]
 	}
 
 	eb.EmitUnsafe(&Event{Type: "focus", Target: eb.focusedID, Bubbles: false})
@@ -619,12 +625,18 @@ func (eb *EventBus) focusNextUnsafe() {
 
 // focusPrevUnsafe moves to prev focusable (caller must hold lock).
 func (eb *EventBus) focusPrevUnsafe() {
-	if len(eb.focusableIDs) == 0 {
+	// Respect FocusScope if active
+	ids := eb.focusableIDs
+	if scope := GetActiveFocusScope(); scope != nil && len(scope.FocusableIDs) > 0 {
+		ids = scope.FocusableIDs
+	}
+
+	if len(ids) == 0 {
 		return
 	}
 
 	currentIdx := -1
-	for i, id := range eb.focusableIDs {
+	for i, id := range ids {
 		if id == eb.focusedID {
 			currentIdx = i
 			break
@@ -636,9 +648,9 @@ func (eb *EventBus) focusPrevUnsafe() {
 	}
 
 	if currentIdx <= 0 {
-		eb.focusedID = eb.focusableIDs[len(eb.focusableIDs)-1]
+		eb.focusedID = ids[len(ids)-1]
 	} else {
-		eb.focusedID = eb.focusableIDs[currentIdx-1]
+		eb.focusedID = ids[currentIdx-1]
 	}
 
 	eb.EmitUnsafe(&Event{Type: "focus", Target: eb.focusedID, Bubbles: false})
