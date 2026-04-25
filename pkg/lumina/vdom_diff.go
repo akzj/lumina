@@ -264,53 +264,70 @@ func ApplyPatches(frame *Frame, root *VNode, patches []Patch, width, height int)
 	// Clear the default full-frame dirty rect — we'll add precise ones
 	frame.DirtyRects = frame.DirtyRects[:0]
 
-	// For each patch, find the affected VNode and re-render its region.
+	// Approach A: when a child has a patch, re-render its parent container.
+	// This ensures sibling nodes whose positions shifted (due to content size
+	// changes in a sibling) are also re-rendered, even if they have no patch.
+	//
+	// We collect unique parent containers by their region key to avoid
+	// re-rendering the same container multiple times.
+	type parentRegion struct {
+		node *VNode
+		// Also track old nodes for clearing stale regions
+		oldNodes []*VNode
+	}
+	rerendered := make(map[*VNode]*parentRegion)
+
 	for _, p := range patches {
-		switch p.Type {
-		case PatchRemove:
-			// Clear the old node's region.
-			if p.OldNode != nil {
-				clearRegion(frame, p.OldNode)
-				frame.AddDirtyRect(p.OldNode.X, p.OldNode.Y, p.OldNode.W, p.OldNode.H)
-			}
+		// Find the parent container in the NEW tree via path
+		parent := findParentContainer(root, p.Path)
 
-		case PatchReplace:
-			// Clear old region first, then render new.
-			if p.OldNode != nil {
-				clearRegion(frame, p.OldNode)
-				frame.AddDirtyRect(p.OldNode.X, p.OldNode.Y, p.OldNode.W, p.OldNode.H)
-			}
-			if p.NewNode != nil {
-				clip := nodeClipRect(p.NewNode, frame)
-				renderVNode(frame, p.NewNode, clip)
-				frame.AddDirtyRect(p.NewNode.X, p.NewNode.Y, p.NewNode.W, p.NewNode.H)
-			}
-
-		case PatchUpdate, PatchText:
-			// Clear old area first (content may have shrunk), then re-render.
-			if p.OldNode != nil {
-				clearRegion(frame, p.OldNode)
-				frame.AddDirtyRect(p.OldNode.X, p.OldNode.Y, p.OldNode.W, p.OldNode.H)
-			}
-			if p.NewNode != nil {
-				clip := nodeClipRect(p.NewNode, frame)
-				renderVNode(frame, p.NewNode, clip)
-				frame.AddDirtyRect(p.NewNode.X, p.NewNode.Y, p.NewNode.W, p.NewNode.H)
-			}
-
-		case PatchInsert:
-			// Render the new child — it already has layout from the full tree relayout.
-			if p.NewNode != nil {
-				clip := nodeClipRect(p.NewNode, frame)
-				renderVNode(frame, p.NewNode, clip)
-				frame.AddDirtyRect(p.NewNode.X, p.NewNode.Y, p.NewNode.W, p.NewNode.H)
-			}
-
-		case PatchReorder:
-			// Reorder is handled by the full tree relayout; individual
-			// patches are already emitted for content changes.
+		pr, exists := rerendered[parent]
+		if !exists {
+			pr = &parentRegion{node: parent}
+			rerendered[parent] = pr
+		}
+		if p.OldNode != nil {
+			pr.oldNodes = append(pr.oldNodes, p.OldNode)
 		}
 	}
+
+	// Re-render each unique parent container
+	for _, pr := range rerendered {
+		parent := pr.node
+
+		// Clear old node regions that may not overlap with new layout
+		for _, old := range pr.oldNodes {
+			clearRegion(frame, old)
+			frame.AddDirtyRect(old.X, old.Y, old.W, old.H)
+		}
+
+		// Clear the parent's region
+		clearRect(frame, parent.X, parent.Y, parent.W, parent.H)
+
+		// Re-render the entire parent (including all children)
+		clip := nodeClipRect(parent, frame)
+		renderVNode(frame, parent, clip)
+		frame.AddDirtyRect(parent.X, parent.Y, parent.W, parent.H)
+	}
+}
+
+// findParentContainer walks the VNode tree via the patch path and returns
+// the parent container (one level up from the patched node). If the path
+// is empty or has only one element, returns root.
+func findParentContainer(root *VNode, path []int) *VNode {
+	if len(path) <= 1 {
+		return root
+	}
+	// Walk path up to second-to-last element to find the parent
+	node := root
+	for _, idx := range path[:len(path)-1] {
+		if idx < len(node.Children) {
+			node = node.Children[idx]
+		} else {
+			return root
+		}
+	}
+	return node
 }
 
 // nodeClipRect returns the clip rect for a VNode, bounded by the frame.

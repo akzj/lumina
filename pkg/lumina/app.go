@@ -829,18 +829,26 @@ func (app *App) renderComponent(comp *Component, adapter OutputAdapter) {
 			return
 		}
 
-		// NOTE: Incremental rendering via ApplyPatches was disabled because it causes
-		// rendering corruption when node types change (text↔hbox) during high-frequency
-		// updates like mouse movement. Full re-render of a 120x40 frame is <1ms,
-		// so the optimization is not worth the complexity.
-		//
-		// Original condition: len(patches) <= 10 && !ShouldFullRerender(patches, newVNode) && !scrollDirty
+		// Incremental rendering: if few patches and we have a previous frame,
+		// re-layout the new tree and apply only changed subtrees via parent
+		// container re-rendering (handles sibling position shifts correctly).
+		// Scroll-dirty forces full re-render since layout positions change.
+		if len(patches) <= 10 && app.lastFrame != nil && !ShouldFullRerender(patches, newVNode) && !scrollDirty {
+			frame = app.lastFrame
+			// Re-layout the entire new tree (cheap) so positions are correct
+			computeFlexLayout(newVNode, 0, 0, app.width, app.height)
+			ApplyPatches(frame, newVNode, patches, app.width, app.height)
+			comp.LastVNode = newVNode
+			app.lastFrame = frame
+			goto compositeAndWrite
+		}
 	}
 	// Full re-render (first render, large change, or no previous frame)
 	frame = VNodeToFrame(newVNode, app.width, app.height)
 	comp.LastVNode = newVNode
 	app.lastFrame = frame
 
+compositeAndWrite:
 	// Clear scroll dirty flags after re-render (layout applied new scroll positions)
 	ClearAllScrollDirty()
 	// Bridge VNode event handlers to EventBus
