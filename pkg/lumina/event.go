@@ -29,8 +29,15 @@ type Event struct {
 	Modifiers EventModifiers
 
 	// Mouse
-	X, Y   int    // terminal coordinates
+	X, Y   int    // global terminal coordinates
 	Button string // "left" | "middle" | "right"
+
+	// Local coordinates (relative to target element's top-left)
+	LocalX int
+	LocalY int
+
+	// Target VNode reference (set by cell-based hit testing)
+	TargetNode *VNode
 
 	// Error for propagation
 	stopped bool
