@@ -646,6 +646,14 @@ func ClearTextCallbacks() {
 }
 
 func (app *App) handleScrollEvent(e *Event) {
+	markAllDirty := func() {
+		globalRegistry.mu.RLock()
+		for _, comp := range globalRegistry.components {
+			comp.Dirty.Store(true)
+		}
+		globalRegistry.mu.RUnlock()
+	}
+
 	switch e.Type {
 	case "scroll":
 		// Mouse wheel scroll — find the scrollable container under the cursor
@@ -654,6 +662,7 @@ func (app *App) handleScrollEvent(e *Event) {
 		focusedID := globalEventBus.GetFocused()
 		if focusedID != "" {
 			ScrollViewport(focusedID, e.Y)
+			markAllDirty()
 		}
 
 	case "keydown":
@@ -662,6 +671,7 @@ func (app *App) handleScrollEvent(e *Event) {
 			return
 		}
 
+		scrolled := false
 		switch e.Key {
 		case "PageUp":
 			viewportMu.RLock()
@@ -669,6 +679,7 @@ func (app *App) handleScrollEvent(e *Event) {
 			viewportMu.RUnlock()
 			if ok {
 				vp.ScrollUp(vp.ViewH)
+				scrolled = true
 			}
 		case "PageDown":
 			viewportMu.RLock()
@@ -676,6 +687,7 @@ func (app *App) handleScrollEvent(e *Event) {
 			viewportMu.RUnlock()
 			if ok {
 				vp.ScrollDown(vp.ViewH)
+				scrolled = true
 			}
 		case "Home":
 			viewportMu.RLock()
@@ -683,6 +695,7 @@ func (app *App) handleScrollEvent(e *Event) {
 			viewportMu.RUnlock()
 			if ok {
 				vp.ScrollToTop()
+				scrolled = true
 			}
 		case "End":
 			viewportMu.RLock()
@@ -690,7 +703,11 @@ func (app *App) handleScrollEvent(e *Event) {
 			viewportMu.RUnlock()
 			if ok {
 				vp.ScrollToBottom()
+				scrolled = true
 			}
+		}
+		if scrolled {
+			markAllDirty()
 		}
 	}
 }
@@ -768,7 +785,8 @@ func (app *App) renderComponent(comp *Component, adapter OutputAdapter) {
 	var frame *Frame
 	if comp.LastVNode != nil {
 		patches := DiffVNode(comp.LastVNode, newVNode)
-		if len(patches) == 0 {
+		scrollDirty := AnyViewportScrollDirty()
+		if len(patches) == 0 && !scrollDirty {
 			// Nothing changed — skip rendering.
 			comp.MarkClean()
 			return
@@ -776,7 +794,8 @@ func (app *App) renderComponent(comp *Component, adapter OutputAdapter) {
 
 		// Incremental rendering: if few patches and we have a previous frame,
 		// re-layout the new tree and apply only the changed subtrees.
-		if len(patches) <= 10 && app.lastFrame != nil && !ShouldFullRerender(patches, newVNode) {
+		// Scroll-dirty forces full re-render since layout positions change.
+		if len(patches) <= 10 && app.lastFrame != nil && !ShouldFullRerender(patches, newVNode) && !scrollDirty {
 			frame = app.lastFrame
 			// Re-layout the entire new tree (cheap) so positions are correct
 			computeFlexLayout(newVNode, 0, 0, app.width, app.height)
@@ -792,6 +811,8 @@ func (app *App) renderComponent(comp *Component, adapter OutputAdapter) {
 	app.lastFrame = frame
 
 compositeAndWrite:
+	// Clear scroll dirty flags after re-render (layout applied new scroll positions)
+	ClearAllScrollDirty()
 	// Bridge VNode event handlers to EventBus
 	app.bridgeVNodeEvents(newVNode)
 

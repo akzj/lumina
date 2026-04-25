@@ -21,47 +21,78 @@ type Viewport struct {
 	VelocityY float64 // scroll velocity (rows/frame)
 	Damping   float64 // friction coefficient (0.92 = smooth deceleration)
 	Animating bool    // true while inertia is active
+
+	ScrollDirty bool // true when scroll position changed, cleared after re-layout
 }
 
 // ScrollDown scrolls down by n rows, clamped to valid range.
 func (v *Viewport) ScrollDown(n int) {
+	old := v.ScrollY
 	v.ScrollY += n
 	v.clampScroll()
+	if v.ScrollY != old {
+		v.ScrollDirty = true
+	}
 }
 
 // ScrollUp scrolls up by n rows, clamped to valid range.
 func (v *Viewport) ScrollUp(n int) {
+	old := v.ScrollY
 	v.ScrollY -= n
 	v.clampScroll()
+	if v.ScrollY != old {
+		v.ScrollDirty = true
+	}
 }
 
 // ScrollLeft scrolls left by n columns.
 func (v *Viewport) ScrollLeft(n int) {
+	old := v.ScrollX
 	v.ScrollX -= n
 	v.clampScroll()
+	if v.ScrollX != old {
+		v.ScrollDirty = true
+	}
 }
 
 // ScrollRight scrolls right by n columns.
 func (v *Viewport) ScrollRight(n int) {
+	old := v.ScrollX
 	v.ScrollX += n
 	v.clampScroll()
+	if v.ScrollX != old {
+		v.ScrollDirty = true
+	}
 }
 
 // ScrollTo sets the vertical scroll offset to y, clamped to valid range.
 func (v *Viewport) ScrollTo(y int) {
+	old := v.ScrollY
 	v.ScrollY = y
 	v.clampScroll()
+	if v.ScrollY != old {
+		v.ScrollDirty = true
+	}
 }
 
 // ScrollToBottom scrolls to the very bottom of the content.
 func (v *Viewport) ScrollToBottom() {
+	old := v.ScrollY
 	v.ScrollY = v.maxScrollY()
+	if v.ScrollY != old {
+		v.ScrollDirty = true
+	}
 }
 
 // ScrollToTop scrolls to the very top.
 func (v *Viewport) ScrollToTop() {
+	old := v.ScrollY
+	oldX := v.ScrollX
 	v.ScrollY = 0
 	v.ScrollX = 0
+	if v.ScrollY != old || v.ScrollX != oldX {
+		v.ScrollDirty = true
+	}
 }
 
 // EnsureVisible scrolls the minimum amount needed to make the region
@@ -295,6 +326,29 @@ func ClearViewports() {
 	viewportRegistry = make(map[string]*Viewport)
 }
 
+// AnyViewportScrollDirty returns true if any viewport has been scrolled
+// since the last render. Used to force re-render even when VNode diff is empty.
+func AnyViewportScrollDirty() bool {
+	viewportMu.RLock()
+	defer viewportMu.RUnlock()
+	for _, vp := range viewportRegistry {
+		if vp.ScrollDirty {
+			return true
+		}
+	}
+	return false
+}
+
+// ClearAllScrollDirty clears the ScrollDirty flag on all viewports.
+// Called after a successful re-render.
+func ClearAllScrollDirty() {
+	viewportMu.RLock()
+	defer viewportMu.RUnlock()
+	for _, vp := range viewportRegistry {
+		vp.ScrollDirty = false
+	}
+}
+
 // TickAllViewports ticks smooth scrolling for all viewports.
 // Returns true if any viewport was updated (needs re-render).
 func TickAllViewports() bool {
@@ -411,6 +465,14 @@ func luaScrollBy(L *lua.State) int {
 	} else if dy < 0 {
 		vp.ScrollUp(int(-dy))
 	}
+
+	// Mark all components dirty to trigger re-render with new scroll position
+	globalRegistry.mu.RLock()
+	for _, comp := range globalRegistry.components {
+		comp.Dirty.Store(true)
+	}
+	globalRegistry.mu.RUnlock()
+
 	return 0
 }
 

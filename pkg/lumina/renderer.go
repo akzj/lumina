@@ -144,6 +144,16 @@ func LuaVNodeToVNode(L *lua.State, idx int) *VNode {
 		L.Pop(1) // pop value, keep key for Next iteration
 	}
 
+	// Flatten props.id → Props["id"] for backward compatibility.
+	// Some Lua code uses { props = { id = "..." } } instead of { id = "..." }.
+	if _, hasID := vnode.Props["id"]; !hasID {
+		if propsMap, ok := vnode.Props["props"].(map[string]any); ok {
+			if id, ok := propsMap["id"].(string); ok && id != "" {
+				vnode.Props["id"] = id
+			}
+		}
+	}
+
 	return vnode
 }
 
