@@ -448,6 +448,12 @@ func (app *App) handleEvent(event AppEvent) {
 				newHoverID := e.Target
 				if newHoverID != app.hoveredID {
 					app.hoveredID = newHoverID
+					// Mark all components dirty to re-render with new hover state
+					globalRegistry.mu.RLock()
+					for _, comp := range globalRegistry.components {
+						comp.Dirty.Store(true)
+					}
+					globalRegistry.mu.RUnlock()
 				}
 
 				if globalDragState.Dragging() {
@@ -656,12 +662,43 @@ func (app *App) handleScrollEvent(e *Event) {
 
 	switch e.Type {
 	case "scroll":
-		// Mouse wheel scroll — find the scrollable container under the cursor
-		// e.Y contains the scroll direction: negative = up, positive = down
-		// For mouse scroll, we use the focused container or find by position
-		focusedID := globalEventBus.GetFocused()
-		if focusedID != "" {
-			ScrollViewport(focusedID, e.Y)
+		// Mouse wheel scroll — e.Button is "up" or "down", NOT e.Y (which is cursor position)
+		scrollAmount := 3 // lines per wheel tick
+		if e.Button == "up" {
+			scrollAmount = -3
+		}
+
+		// Find the scrollable container under the cursor using VNode tree walk
+		targetID := ""
+		if root := app.findRootVNode(); root != nil {
+			targetID, _ = findScrollableVNode(root, e.X, e.Y)
+		}
+
+		// Fallback: try focused element's viewport
+		if targetID == "" {
+			focusedID := globalEventBus.GetFocused()
+			viewportMu.RLock()
+			_, hasFocusedVP := viewportRegistry[focusedID]
+			viewportMu.RUnlock()
+			if hasFocusedVP {
+				targetID = focusedID
+			}
+		}
+
+		// Last resort: find any viewport that needs scroll
+		if targetID == "" {
+			viewportMu.RLock()
+			for id, vp := range viewportRegistry {
+				if vp.NeedsScroll() {
+					targetID = id
+					break
+				}
+			}
+			viewportMu.RUnlock()
+		}
+
+		if targetID != "" {
+			ScrollViewport(targetID, scrollAmount)
 			markAllDirty()
 		}
 
