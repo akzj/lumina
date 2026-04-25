@@ -115,6 +115,25 @@ func NewFrame(width, height int) *Frame {
 	}
 }
 
+// Clone creates a deep copy of the frame (cells only — OwnerNode pointers are nil'd
+// to avoid retaining old VNode trees in memory).
+func (f *Frame) Clone() *Frame {
+	clone := &Frame{
+		Width:  f.Width,
+		Height: f.Height,
+		Cells:  make([][]Cell, f.Height),
+	}
+	for y := 0; y < f.Height; y++ {
+		clone.Cells[y] = make([]Cell, f.Width)
+		copy(clone.Cells[y], f.Cells[y])
+		// Nil out OwnerNode pointers to avoid retaining old VNode trees.
+		for x := range clone.Cells[y] {
+			clone.Cells[y][x].OwnerNode = nil
+		}
+	}
+	return clone
+}
+
 // MarkDirty marks the entire frame as dirty.
 func (f *Frame) MarkDirty() {
 	f.DirtyRects = []Rect{{X: 0, Y: 0, W: f.Width, H: f.Height}}

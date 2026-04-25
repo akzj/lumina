@@ -119,6 +119,11 @@ func (t *Terminal) EnableRawMode() error {
 	}
 	t.rawMode = true
 
+	// Enter alternate screen buffer (preserves main screen on exit)
+	t.output.Write([]byte("\x1b[?1049h"))
+	// Hide cursor during rendering
+	t.output.Write([]byte("\x1b[?25l"))
+
 	// Enable mouse reporting (SGR extended mode)
 	t.output.Write([]byte("\x1b[?1003h")) // ANY_EVENT mouse tracking (motion + click)
 	t.output.Write([]byte("\x1b[?1006h")) // SGR extended mouse format
@@ -132,6 +137,11 @@ func (t *Terminal) RestoreMode() {
 		// Disable mouse reporting
 		t.output.Write([]byte("\x1b[?1006l"))
 		t.output.Write([]byte("\x1b[?1003l"))
+
+		// Show cursor
+		t.output.Write([]byte("\x1b[?25h"))
+		// Leave alternate screen buffer (restores main screen)
+		t.output.Write([]byte("\x1b[?1049l"))
 
 		tcsetattr(t.fd, &t.origTerm)
 		t.rawMode = false

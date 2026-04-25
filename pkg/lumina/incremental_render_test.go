@@ -9,18 +9,19 @@ import (
 )
 
 // newRenderTestApp creates a test app with buffered output and ANSI adapter.
-func newRenderTestApp(t *testing.T) (*lumina.App, *bytes.Buffer) {
+func newRenderTestApp(t *testing.T) (*lumina.App, *bytes.Buffer, *lumina.ANSIAdapter) {
 	t.Helper()
 	app := lumina.NewApp()
 	var buf bytes.Buffer
 	tio := lumina.NewBufferTermIO(80, 24, &buf)
-	lumina.SetOutputAdapter(lumina.NewANSIAdapter(tio))
+	adapter := lumina.NewANSIAdapter(tio)
+	lumina.SetOutputAdapter(adapter)
 	_ = tio
-	return app, &buf
+	return app, &buf, adapter
 }
 
 func TestIncrementalRender_NoChange(t *testing.T) {
-	app, buf := newRenderTestApp(t)
+	app, buf, adapter := newRenderTestApp(t)
 	defer app.Close()
 
 	err := app.L.DoString(`
@@ -50,6 +51,7 @@ func TestIncrementalRender_NoChange(t *testing.T) {
 
 	// Second render — same content, DiffVNode detects no patches → skip
 	buf.Reset()
+	adapter.Invalidate()
 	app.RenderOnce()
 
 	// No changes → component not dirty → RenderOnce should produce nothing
@@ -61,7 +63,7 @@ func TestIncrementalRender_NoChange(t *testing.T) {
 }
 
 func TestIncrementalRender_TextChange(t *testing.T) {
-	app, buf := newRenderTestApp(t)
+	app, buf, adapter := newRenderTestApp(t)
 	defer app.Close()
 
 	err := app.L.DoString(`
@@ -95,6 +97,7 @@ func TestIncrementalRender_TextChange(t *testing.T) {
 
 	// Change state via useState setter → marks component dirty
 	buf.Reset()
+	adapter.Invalidate()
 	err = app.L.DoString(`_G._setCount(1)`)
 	if err != nil {
 		t.Fatalf("setState failed: %v", err)
@@ -113,7 +116,7 @@ func TestIncrementalRender_TextChange(t *testing.T) {
 }
 
 func TestIncrementalRender_FullFallback(t *testing.T) {
-	app, buf := newRenderTestApp(t)
+	app, buf, adapter := newRenderTestApp(t)
 	defer app.Close()
 
 	err := app.L.DoString(`
@@ -160,6 +163,7 @@ func TestIncrementalRender_FullFallback(t *testing.T) {
 	// Dramatic change — type changes from hbox to vbox + many new children
 	// ShouldFullRerender should return true → full re-render
 	buf.Reset()
+	adapter.Invalidate()
 	err = app.L.DoString(`_G._setMode("complex")`)
 	if err != nil {
 		t.Fatalf("state change failed: %v", err)
@@ -177,7 +181,7 @@ func TestIncrementalRender_FullFallback(t *testing.T) {
 }
 
 func TestIncrementalRender_AddChild(t *testing.T) {
-	app, buf := newRenderTestApp(t)
+	app, buf, adapter := newRenderTestApp(t)
 	defer app.Close()
 
 	err := app.L.DoString(`
@@ -212,6 +216,7 @@ func TestIncrementalRender_AddChild(t *testing.T) {
 
 	// Add a child
 	buf.Reset()
+	adapter.Invalidate()
 	err = app.L.DoString(`_G._setN(2)`)
 	if err != nil {
 		t.Fatalf("add child failed: %v", err)
@@ -225,7 +230,7 @@ func TestIncrementalRender_AddChild(t *testing.T) {
 }
 
 func TestIncrementalRender_RemoveChild(t *testing.T) {
-	app, buf := newRenderTestApp(t)
+	app, buf, adapter := newRenderTestApp(t)
 	defer app.Close()
 
 	err := app.L.DoString(`
@@ -259,6 +264,7 @@ func TestIncrementalRender_RemoveChild(t *testing.T) {
 
 	// Remove a child (3 → 2)
 	buf.Reset()
+	adapter.Invalidate()
 	err = app.L.DoString(`_G._setN(2)`)
 	if err != nil {
 		t.Fatalf("remove child failed: %v", err)
