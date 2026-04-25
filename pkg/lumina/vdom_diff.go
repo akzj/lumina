@@ -255,10 +255,14 @@ func diffKeyedChildren(oldChildren, newChildren []*VNode, parentPath []int, patc
 // ApplyPatches applies a set of patches to a Frame via incremental re-render.
 // It re-renders only the affected subtrees by walking the patch paths.
 // The root VNode should already have layout computed before calling this.
+// Dirty rects are added to the frame for each affected region.
 func ApplyPatches(frame *Frame, root *VNode, patches []Patch, width, height int) {
 	if len(patches) == 0 {
 		return
 	}
+
+	// Clear the default full-frame dirty rect — we'll add precise ones
+	frame.DirtyRects = frame.DirtyRects[:0]
 
 	// For each patch, find the affected VNode and re-render its region.
 	for _, p := range patches {
@@ -267,30 +271,39 @@ func ApplyPatches(frame *Frame, root *VNode, patches []Patch, width, height int)
 			// Clear the old node's region.
 			if p.OldNode != nil {
 				clearRegion(frame, p.OldNode)
+				frame.AddDirtyRect(p.OldNode.X, p.OldNode.Y, p.OldNode.W, p.OldNode.H)
 			}
 
 		case PatchReplace:
 			// Clear old region first, then render new.
 			if p.OldNode != nil {
 				clearRegion(frame, p.OldNode)
+				frame.AddDirtyRect(p.OldNode.X, p.OldNode.Y, p.OldNode.W, p.OldNode.H)
 			}
 			if p.NewNode != nil {
-				fullClip := Rect{X: 0, Y: 0, W: frame.Width, H: frame.Height}
-				renderVNode(frame, p.NewNode, fullClip)
+				clip := nodeClipRect(p.NewNode, frame)
+				renderVNode(frame, p.NewNode, clip)
+				frame.AddDirtyRect(p.NewNode.X, p.NewNode.Y, p.NewNode.W, p.NewNode.H)
 			}
 
 		case PatchUpdate, PatchText:
-			// Re-render in place — the new node already has correct layout.
+			// Clear old area first (content may have shrunk), then re-render.
+			if p.OldNode != nil {
+				clearRegion(frame, p.OldNode)
+				frame.AddDirtyRect(p.OldNode.X, p.OldNode.Y, p.OldNode.W, p.OldNode.H)
+			}
 			if p.NewNode != nil {
-				fullClip := Rect{X: 0, Y: 0, W: frame.Width, H: frame.Height}
-				renderVNode(frame, p.NewNode, fullClip)
+				clip := nodeClipRect(p.NewNode, frame)
+				renderVNode(frame, p.NewNode, clip)
+				frame.AddDirtyRect(p.NewNode.X, p.NewNode.Y, p.NewNode.W, p.NewNode.H)
 			}
 
 		case PatchInsert:
 			// Render the new child — it already has layout from the full tree relayout.
 			if p.NewNode != nil {
-				fullClip := Rect{X: 0, Y: 0, W: frame.Width, H: frame.Height}
-				renderVNode(frame, p.NewNode, fullClip)
+				clip := nodeClipRect(p.NewNode, frame)
+				renderVNode(frame, p.NewNode, clip)
+				frame.AddDirtyRect(p.NewNode.X, p.NewNode.Y, p.NewNode.W, p.NewNode.H)
 			}
 
 		case PatchReorder:
@@ -298,6 +311,27 @@ func ApplyPatches(frame *Frame, root *VNode, patches []Patch, width, height int)
 			// patches are already emitted for content changes.
 		}
 	}
+}
+
+// nodeClipRect returns the clip rect for a VNode, bounded by the frame.
+func nodeClipRect(node *VNode, frame *Frame) Rect {
+	r := Rect{X: node.X, Y: node.Y, W: node.W, H: node.H}
+	// Clamp to frame bounds
+	if r.X < 0 {
+		r.W += r.X
+		r.X = 0
+	}
+	if r.Y < 0 {
+		r.H += r.Y
+		r.Y = 0
+	}
+	if r.X+r.W > frame.Width {
+		r.W = frame.Width - r.X
+	}
+	if r.Y+r.H > frame.Height {
+		r.H = frame.Height - r.Y
+	}
+	return r
 }
 
 // ShouldFullRerender returns true when the patch set is large enough that
@@ -434,20 +468,28 @@ func countNodes(v *VNode) int {
 	return n
 }
 
-// clearRegion fills the region occupied by a VNode with empty cells.
+// clearRegion fills the region occupied by a VNode with empty transparent cells.
 func clearRegion(frame *Frame, node *VNode) {
 	if node == nil || frame == nil {
 		return
 	}
-	for y := node.Y; y < node.Y+node.H && y < frame.Height; y++ {
-		if y < 0 {
+	clearRect(frame, node.X, node.Y, node.W, node.H)
+}
+
+// clearRect fills a rectangular region with empty transparent cells.
+func clearRect(frame *Frame, x, y, w, h int) {
+	if frame == nil {
+		return
+	}
+	for cy := y; cy < y+h && cy < frame.Height; cy++ {
+		if cy < 0 {
 			continue
 		}
-		for x := node.X; x < node.X+node.W && x < frame.Width; x++ {
-			if x < 0 {
+		for cx := x; cx < x+w && cx < frame.Width; cx++ {
+			if cx < 0 {
 				continue
 			}
-			frame.Cells[y][x] = Cell{Char: ' '}
+			frame.Cells[cy][cx] = Cell{Char: ' ', Transparent: true}
 		}
 	}
 }

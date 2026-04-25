@@ -118,12 +118,53 @@ func (a *ANSIAdapter) writeFullFrame(frame *Frame) {
 }
 
 // writeDiffFrame writes only cells that differ from the previous frame.
+// When dirty rects are available, only those regions are scanned.
 func (a *ANSIAdapter) writeDiffFrame(newFrame, oldFrame *Frame) {
+	if len(newFrame.DirtyRects) > 0 && !isFullFrameDirty(newFrame) {
+		// Scan only dirty regions
+		for _, rect := range newFrame.DirtyRects {
+			a.writeDiffRegion(newFrame, oldFrame, rect)
+		}
+		return
+	}
+	// Full scan fallback
+	a.writeDiffRegion(newFrame, oldFrame, Rect{X: 0, Y: 0, W: newFrame.Width, H: newFrame.Height})
+}
+
+// isFullFrameDirty returns true if the dirty rects cover the entire frame
+// (single rect at 0,0 with full width/height). In that case, full scan is simpler.
+func isFullFrameDirty(f *Frame) bool {
+	if len(f.DirtyRects) == 1 {
+		r := f.DirtyRects[0]
+		return r.X == 0 && r.Y == 0 && r.W == f.Width && r.H == f.Height
+	}
+	return false
+}
+
+// writeDiffRegion writes changed cells within a specific rectangular region.
+func (a *ANSIAdapter) writeDiffRegion(newFrame, oldFrame *Frame, rect Rect) {
 	lastX, lastY := -1, -1
 	var lastStyle string
 
-	for y := 0; y < newFrame.Height; y++ {
-		for x := 0; x < newFrame.Width; x++ {
+	endY := rect.Y + rect.H
+	if endY > newFrame.Height {
+		endY = newFrame.Height
+	}
+	endX := rect.X + rect.W
+	if endX > newFrame.Width {
+		endX = newFrame.Width
+	}
+	startY := rect.Y
+	if startY < 0 {
+		startY = 0
+	}
+	startX := rect.X
+	if startX < 0 {
+		startX = 0
+	}
+
+	for y := startY; y < endY; y++ {
+		for x := startX; x < endX; x++ {
 			newCell := newFrame.Cells[y][x]
 
 			// Skip padding cells after wide characters
