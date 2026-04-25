@@ -14,6 +14,7 @@ type ANSIAdapter struct {
 	width     int
 	height    int
 	colorMode ColorMode // detected or configured color capability
+	prevFrame *Frame    // previous frame for cell-level diff
 }
 
 // NewANSIAdapter creates a new ANSIAdapter writing to the given writer.
@@ -56,66 +57,142 @@ func (a *ANSIAdapter) SetSize(width, height int) {
 }
 
 // Write writes a frame to the terminal using ANSI escape codes.
+// Uses double buffering: compares against the previous frame and only writes
+// changed cells. All output is buffered and written in a single Write call
+// to eliminate tearing.
 func (a *ANSIAdapter) Write(frame *Frame) error {
 	a.buf.Reset()
 
+	// If no dirty regions, nothing to write
 	if len(frame.DirtyRects) == 0 {
-		// No dirty regions, nothing to write
 		return nil
 	}
 
-	// For each dirty rect, output the cells
-	for _, rect := range frame.DirtyRects {
-		for y := rect.Y; y < rect.Y+rect.H && y < frame.Height; y++ {
-			// Move to start of line
-			a.buf.WriteString(fmt.Sprintf("\x1b[%d;%dH", y+1, rect.X+1))
+	// Hide cursor during render to prevent flicker
+	a.buf.WriteString("\x1b[?25l")
 
-			// Output cells in this row
-			var lastStyle string
-			for x := rect.X; x < rect.X+rect.W && x < frame.Width; x++ {
-				cell := frame.Cells[y][x]
-
-				// Skip padding cells after wide characters.
-				// The terminal cursor already advances past them when the
-				// wide char is emitted.
-				if cell.Char == 0 {
-					continue
-				}
-
-				style := a.styleCodes(&cell)
-
-				// Only emit style change if different from last
-				if style != lastStyle {
-					a.buf.WriteString(style)
-					lastStyle = style
-				}
-
-				// Handle special characters
-				switch cell.Char {
-				case '\\':
-					a.buf.WriteString("\\\\")
-				case '\x1b':
-					a.buf.WriteString("\\e")
-				case '\r':
-					a.buf.WriteString("\\r")
-				case '\n':
-					a.buf.WriteString("\\n")
-				default:
-					a.buf.WriteRune(cell.Char)
-				}
-			}
-
-			// Clear to end of line and reset style
-			a.buf.WriteString("\x1b[0m")
-		}
+	if a.prevFrame == nil || a.prevFrame.Width != frame.Width || a.prevFrame.Height != frame.Height {
+		// First frame or size changed — full write
+		a.writeFullFrame(frame)
+	} else {
+		// Cell-level diff — only write changed cells
+		a.writeDiffFrame(frame, a.prevFrame)
 	}
 
-	// Move cursor to bottom-left (standard terminal position)
+	// Move cursor to safe position
 	a.buf.WriteString("\x1b[999;1H")
 
-	// Flush to writer
+	// Atomic write — single write call to terminal
 	_, err := a.writer.Write(a.buf.Bytes())
+
+	// Store current frame as previous for next diff
+	a.prevFrame = frame.Clone()
+
 	return err
+}
+
+// writeFullFrame writes every cell in the frame (used for first render or resize).
+func (a *ANSIAdapter) writeFullFrame(frame *Frame) {
+	for y := 0; y < frame.Height; y++ {
+		// Move to start of line
+		a.buf.WriteString(fmt.Sprintf("\x1b[%d;1H", y+1))
+		var lastStyle string
+		for x := 0; x < frame.Width; x++ {
+			cell := frame.Cells[y][x]
+
+			// Skip padding cells after wide characters
+			if cell.Char == 0 {
+				continue
+			}
+
+			style := a.styleCodes(&cell)
+			if style != lastStyle {
+				a.buf.WriteString(style)
+				lastStyle = style
+			}
+
+			a.writeChar(cell.Char)
+		}
+		a.buf.WriteString("\x1b[0m")
+	}
+}
+
+// writeDiffFrame writes only cells that differ from the previous frame.
+func (a *ANSIAdapter) writeDiffFrame(newFrame, oldFrame *Frame) {
+	lastX, lastY := -1, -1
+	var lastStyle string
+
+	for y := 0; y < newFrame.Height; y++ {
+		for x := 0; x < newFrame.Width; x++ {
+			newCell := newFrame.Cells[y][x]
+
+			// Skip padding cells after wide characters
+			if newCell.Char == 0 {
+				continue
+			}
+
+			oldCell := oldFrame.Cells[y][x]
+
+			// Skip unchanged cells
+			if cellEqual(newCell, oldCell) {
+				continue
+			}
+
+			// Move cursor if not sequential
+			if x != lastX+1 || y != lastY {
+				a.buf.WriteString(fmt.Sprintf("\x1b[%d;%dH", y+1, x+1))
+			}
+
+			// Write style + char
+			style := a.styleCodes(&newCell)
+			if style != lastStyle {
+				a.buf.WriteString(style)
+				lastStyle = style
+			}
+
+			a.writeChar(newCell.Char)
+
+			lastX = x
+			lastY = y
+		}
+	}
+	if lastStyle != "" {
+		a.buf.WriteString("\x1b[0m") // reset at end
+	}
+}
+
+// writeChar writes a single character, escaping special characters.
+func (a *ANSIAdapter) writeChar(ch rune) {
+	switch ch {
+	case '\\':
+		a.buf.WriteString("\\\\")
+	case '\x1b':
+		a.buf.WriteString("\\e")
+	case '\r':
+		a.buf.WriteString("\\r")
+	case '\n':
+		a.buf.WriteString("\\n")
+	default:
+		a.buf.WriteRune(ch)
+	}
+}
+
+// cellEqual returns true if two cells are visually identical.
+func cellEqual(a, b Cell) bool {
+	return a.Char == b.Char &&
+		a.Foreground == b.Foreground &&
+		a.Background == b.Background &&
+		a.Bold == b.Bold &&
+		a.Dim == b.Dim &&
+		a.Underline == b.Underline &&
+		a.Reverse == b.Reverse &&
+		a.Blink == b.Blink
+}
+
+// Invalidate clears the previous frame, forcing the next Write to do a full rewrite.
+// Useful for tests that reset the output buffer between renders.
+func (a *ANSIAdapter) Invalidate() {
+	a.prevFrame = nil
 }
 
 // Flush flushes the buffered output.

@@ -11,7 +11,7 @@ import (
 
 // stripANSICodes removes ANSI escape codes from output for content assertions.
 func stripANSICodes(s string) string {
-	re := regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
+	re := regexp.MustCompile(`\x1b\[[\x20-\x3f]*[a-zA-Z]`)
 	return re.ReplaceAllString(s, "")
 }
 
