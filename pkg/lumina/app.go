@@ -629,7 +629,7 @@ func (app *App) renderComponent(comp *Component, adapter OutputAdapter) {
 	newVNode := LuaVNodeToVNode(app.L, -1)
 	app.L.Pop(1)
 
-	// Diff against previous render.
+	// Diff against previous render to detect no-change case.
 	var frame *Frame
 	if comp.LastVNode != nil {
 		patches := DiffVNode(comp.LastVNode, newVNode)
@@ -638,36 +638,13 @@ func (app *App) renderComponent(comp *Component, adapter OutputAdapter) {
 			comp.MarkClean()
 			return
 		}
-
-		// Decide: incremental or full re-render
-		if !ShouldFullRerender(patches, newVNode) && app.lastFrame != nil {
-			// INCREMENTAL: re-layout the new VNode tree
-			computeFlexLayout(newVNode, 0, 0, app.width, app.height)
-
-			// Apply patches to existing frame
-			frame = app.lastFrame
-			frame.DirtyRects = nil // clear old dirty rects
-			ApplyPatches(frame, newVNode, patches, app.width, app.height)
-
-			// Mark dirty rects from patches
-			for _, p := range patches {
-				// Mark old region dirty (for clears/replacements)
-				if p.OldNode != nil && p.OldNode.W > 0 && p.OldNode.H > 0 {
-					frame.AddDirtyRect(p.OldNode.X, p.OldNode.Y, p.OldNode.W, p.OldNode.H)
-				}
-				// Mark new region dirty
-				if p.NewNode != nil && p.NewNode.W > 0 && p.NewNode.H > 0 {
-					frame.AddDirtyRect(p.NewNode.X, p.NewNode.Y, p.NewNode.W, p.NewNode.H)
-				}
-			}
-		} else {
-			// Full re-render (too many changes)
-			frame = VNodeToFrame(newVNode, app.width, app.height)
-		}
-	} else {
-		// First render — always full
-		frame = VNodeToFrame(newVNode, app.width, app.height)
+		// NOTE: Incremental rendering via ApplyPatches is disabled for now.
+		// It causes visual tearing when content changes dramatically (e.g.
+		// page switches) because dirty rect calculation doesn't fully cover
+		// the old content area. Always do full re-render for correctness.
+		// TODO: Re-enable incremental path after fixing dirty rect coverage.
 	}
+	frame = VNodeToFrame(newVNode, app.width, app.height)
 	comp.LastVNode = newVNode
 	app.lastFrame = frame
 
