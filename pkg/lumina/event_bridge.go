@@ -19,6 +19,11 @@ func (app *App) bridgeVNodeEvents(root *VNode) {
 	// Clear previous bridged handlers (stale from last render)
 	globalEventBus.ClearBridgedHandlers()
 
+	// Release Lua refs from previous render cycle NOW — after clearing old handlers
+	// but before registering new ones. This ensures refs are only freed when we're
+	// about to replace them with new refs from the current render's VNode tree.
+	SwapRenderRefs(app.L)
+
 	// Build VNode tree for event bubbling
 	tree := BuildVNodeTree(root)
 	globalEventBus.SetVNodeTree(tree)
@@ -233,6 +238,12 @@ var (
 
 func trackRenderRef(ref int) {
 	currentRenderRefs = append(currentRenderRefs, ref)
+}
+
+// ResetRenderRefs clears all tracked render refs (for test isolation).
+func ResetRenderRefs() {
+	previousRenderRefs = nil
+	currentRenderRefs = nil
 }
 
 // SwapRenderRefs releases all Lua registry refs from the previous render cycle
