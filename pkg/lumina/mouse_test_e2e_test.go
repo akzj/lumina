@@ -108,3 +108,109 @@ func TestMouseTest_HoverAndClick(t *testing.T) {
 		t.Log("Click indicator found in grid row")
 	}
 }
+
+// TestMouseEnterLeave verifies mouseenter/mouseleave are synthesized from mousemove
+func TestMouseEnterLeave(t *testing.T) {
+	app := NewAppWithSize(30, 10)
+	tio := NewMockTermIO(30, 10)
+	SetOutputAdapter(NewANSIAdapter(tio))
+
+	// Simple script with two boxes that track enter/leave via global handlers
+	script := `
+local lumina = require("lumina")
+
+local store = lumina.createStore({
+    state = {
+        entered = "",
+        left = "",
+    }
+})
+
+lumina.on("mouseenter", "", function(e)
+    store.dispatch("setState", { entered = e.target or "" })
+end)
+
+lumina.on("mouseleave", "", function(e)
+    store.dispatch("setState", { left = e.target or "" })
+end)
+
+local App = lumina.defineComponent({
+    name = "EnterLeaveTest",
+    render = function()
+        local state = lumina.useStore(store)
+        return {
+            type = "vbox",
+            children = {
+                {
+                    type = "text",
+                    content = "enter:" .. (state.entered or "") .. " leave:" .. (state.left or ""),
+                    style = { foreground = "#FFFFFF" },
+                },
+                {
+                    type = "hbox",
+                    children = {
+                        { type = "box", props = { id = "boxA" }, style = { width = 10, height = 3, background = "#FF0000" },
+                          children = { { type = "text", content = "A" } } },
+                        { type = "box", props = { id = "boxB" }, style = { width = 10, height = 3, background = "#00FF00" },
+                          children = { { type = "text", content = "B" } } },
+                    }
+                },
+            }
+        }
+    end,
+})
+
+lumina.mount(App)
+`
+
+	err := app.L.DoString(script)
+	if err != nil {
+		t.Fatalf("DoString: %v", err)
+	}
+
+	// Register component and render
+	app.lastRenderTime = time.Time{}
+	app.RenderOnce()
+
+	frame := app.lastFrame
+	if frame == nil {
+		t.Fatal("No frame rendered")
+	}
+
+	// Move mouse to boxA (x=5, y=2)
+	app.handleEvent(AppEvent{
+		Type:    "input_event",
+		Payload: &Event{Type: "mousemove", X: 5, Y: 2},
+	})
+	app.ProcessPendingEvents()
+	app.lastRenderTime = time.Time{}
+	app.RenderOnce()
+
+	frame = app.lastFrame
+	row0 := getFrameRow(frame, 0)
+	t.Logf("After hover boxA: %s", strings.TrimSpace(row0))
+
+	if !strings.Contains(row0, "enter:boxA") {
+		t.Errorf("Expected 'enter:boxA' in status, got: %q", row0)
+	}
+
+	// Move mouse to boxB (x=15, y=2)
+	app.handleEvent(AppEvent{
+		Type:    "input_event",
+		Payload: &Event{Type: "mousemove", X: 15, Y: 2},
+	})
+	app.ProcessPendingEvents()
+	app.lastRenderTime = time.Time{}
+	app.RenderOnce()
+
+	frame = app.lastFrame
+	row0 = getFrameRow(frame, 0)
+	t.Logf("After hover boxB: %s", strings.TrimSpace(row0))
+
+	if !strings.Contains(row0, "enter:boxB") {
+		t.Errorf("Expected 'enter:boxB' in status, got: %q", row0)
+	}
+	if !strings.Contains(row0, "leave:boxA") {
+		t.Errorf("Expected 'leave:boxA' in status, got: %q", row0)
+	}
+}

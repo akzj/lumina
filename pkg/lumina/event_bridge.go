@@ -112,6 +112,16 @@ func (app *App) walkVNodeForEvents(vnode *VNode) {
 			app.registerBridgedLuaHandler("mousemove", id, ref)
 		}
 
+		// Register onMouseEnter handler
+		if ref, ok := getLuaRef(vnode.Props["onMouseEnter"]); ok {
+			app.registerBridgedLuaHandler("mouseenter", id, ref)
+		}
+
+		// Register onMouseLeave handler
+		if ref, ok := getLuaRef(vnode.Props["onMouseLeave"]); ok {
+			app.registerBridgedLuaHandler("mouseleave", id, ref)
+		}
+
 		// Register onDragOver handler
 		if ref, ok := getLuaRef(vnode.Props["onDragOver"]); ok {
 			app.registerBridgedLuaHandler("dragover", id, ref)
@@ -170,6 +180,7 @@ func isEventProp(key string) bool {
 		key == "onBlur" || key == "onKeyDown" || key == "onKeyUp" ||
 		key == "onSubmit" || key == "onScroll" ||
 		key == "onMouseDown" || key == "onMouseUp" || key == "onMouseMove" ||
+		key == "onMouseEnter" || key == "onMouseLeave" ||
 		key == "onDragOver" || key == "onDrop"
 }
 

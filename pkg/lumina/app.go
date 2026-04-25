@@ -444,10 +444,34 @@ func (app *App) handleEvent(event AppEvent) {
 				}
 
 			case "mousemove":
-				// Update hover state
+				// Update hover state and synthesize mouseenter/mouseleave
 				newHoverID := e.Target
 				if newHoverID != app.hoveredID {
+					oldHoverID := app.hoveredID
 					app.hoveredID = newHoverID
+
+					// Synthesize mouseleave for old element
+					if oldHoverID != "" {
+						globalEventBus.Emit(&Event{
+							Type:      "mouseleave",
+							Target:    oldHoverID,
+							X:         e.X,
+							Y:         e.Y,
+							Timestamp: e.Timestamp,
+						})
+					}
+
+					// Synthesize mouseenter for new element
+					if newHoverID != "" {
+						globalEventBus.Emit(&Event{
+							Type:      "mouseenter",
+							Target:    newHoverID,
+							X:         e.X,
+							Y:         e.Y,
+							Timestamp: e.Timestamp,
+						})
+					}
+
 					// Mark all components dirty to re-render with new hover state
 					globalRegistry.mu.RLock()
 					for _, comp := range globalRegistry.components {
