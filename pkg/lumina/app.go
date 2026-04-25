@@ -393,7 +393,11 @@ func (app *App) dispatchKeyBinding(key string) {
 	if ok {
 		app.L.RawGetI(lua.RegistryIndex, int64(ref))
 		if app.L.IsFunction(-1) {
-			app.L.PCall(0, 0, 0)
+			if status := app.L.PCall(0, 0, 0); status != lua.OK {
+				msg, _ := app.L.ToString(-1)
+				app.L.Pop(1)
+				fmt.Fprintf(os.Stderr, "onKey(%q) error: %s\n", key, msg)
+			}
 		} else {
 			app.L.Pop(1)
 		}

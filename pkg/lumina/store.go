@@ -222,6 +222,30 @@ func storeDispatchFn(store *Store) lua.Function {
 			return 0
 		}
 
+		// Built-in "setState" action: merges payload into state directly
+		if actionName == "setState" {
+			if L.Type(2) == lua.TypeTable {
+				if payload, ok := L.ToMap(2); ok {
+					store.mu.Lock()
+					for k, v := range payload {
+						store.state[k] = v
+					}
+					store.mu.Unlock()
+				}
+			}
+			// Notify listeners
+			store.mu.RLock()
+			listeners := make([]func(), len(store.listeners))
+			copy(listeners, store.listeners)
+			store.mu.RUnlock()
+			for _, fn := range listeners {
+				if fn != nil {
+					fn()
+				}
+			}
+			return 0
+		}
+
 		store.mu.RLock()
 		ref, exists := store.actionRefs[actionName]
 		store.mu.RUnlock()
