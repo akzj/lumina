@@ -76,6 +76,8 @@ func luaLoader(L *lua.State) int {
 		"registerShortcut":    registerShortcut,
 		"setFocus":            setFocus,
 		"getFocused":          getFocused,
+		"isFocused":           luaIsFocused,
+		"isHovered":           luaIsHovered,
 		"focusNext":           focusNext,
 		"focusPrev":           focusPrev,
 		"registerFocusable":   registerFocusable,

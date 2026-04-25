@@ -36,6 +36,7 @@ type App struct {
 	termIO         TermIO    // terminal I/O abstraction (nil = default local)
 	lastFrame      *Frame    // previous render frame for incremental updates
 	lastRenderTime time.Time // frame rate limiting
+	hoveredID      string    // ID of element currently under mouse cursor
 }
 
 // NewApp creates a new interactive Lumina application.
@@ -402,6 +403,12 @@ func (app *App) handleEvent(event AppEvent) {
 				}
 
 			case "mousemove":
+				// Update hover state
+				newHoverID := e.Target
+				if newHoverID != app.hoveredID {
+					app.hoveredID = newHoverID
+				}
+
 				if globalDragState.Dragging() {
 					globalDragState.UpdatePosition(e.X, e.Y)
 					// Check if hovering over a drop target

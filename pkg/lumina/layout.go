@@ -48,6 +48,21 @@ type Style struct {
 	Right    int    // offset from right edge (-1 = unset)
 	Bottom   int    // offset from bottom edge (-1 = unset)
 	ZIndex   int    // layer order (higher = on top)
+
+	// Focus styling
+	FocusForeground string // border color when focused
+	FocusBorder     string // border style when focused (overrides Border)
+
+	// Placeholder styling
+	PlaceholderColor string // text color for placeholder text
+
+	// Scrollbar styling
+	ScrollbarForeground string // scrollbar color (track + thumb)
+	ScrollbarTrackChar  string // e.g. "│"
+	ScrollbarThumbChar  string // e.g. "█"
+
+	// Custom border characters
+	BorderChars map[string]string // tl, tr, bl, br, h, v
 }
 
 // getInt extracts an int from a map value, handling int64 (from go-lua ToAny)
@@ -157,6 +172,30 @@ func parseStyle(props map[string]any) Style {
 			s.Bottom = toInt(v)
 		}
 		s.ZIndex = getInt(styleMap, "zIndex")
+
+		// Focus styling
+		s.FocusForeground = getString(styleMap, "focusForeground", "")
+		s.FocusBorder = getString(styleMap, "focusBorder", "")
+
+		// Placeholder styling
+		s.PlaceholderColor = getString(styleMap, "placeholderColor", "")
+
+		// Scrollbar styling
+		s.ScrollbarForeground = getString(styleMap, "scrollbarForeground", "")
+		s.ScrollbarTrackChar = getString(styleMap, "scrollbarTrackChar", "")
+		s.ScrollbarThumbChar = getString(styleMap, "scrollbarThumbChar", "")
+
+		// Custom border characters
+		if bc, ok := styleMap["borderChars"]; ok {
+			if bcMap, ok := bc.(map[string]any); ok {
+				s.BorderChars = make(map[string]string)
+				for k, v := range bcMap {
+					if str, ok := v.(string); ok {
+						s.BorderChars[k] = str
+					}
+				}
+			}
+		}
 	}
 
 	// Backward compat: check top-level props (lower priority — don't override style sub-table)
