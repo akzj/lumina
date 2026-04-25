@@ -340,8 +340,35 @@ func (app *App) handleEvent(event AppEvent) {
 			}
 		}
 
+		// Mouse click hit-testing: map (x,y) to target component
+		if e.Type == "mousedown" || e.Type == "mouseup" {
+			if root := app.findRootVNode(); root != nil {
+				targetID := HitTestVNode(root, e.X, e.Y)
+				if targetID != "" {
+					e.Target = targetID
+					if e.Type == "mousedown" {
+						globalEventBus.SetFocus(targetID)
+					}
+				}
+			}
+		}
+
 		// Dispatch to EventBus (handles focus, shortcuts, registered handlers)
 		globalEventBus.Emit(e)
+
+		// For mousedown with a target, also emit a "click" event
+		if e.Type == "mousedown" && e.Target != "" {
+			clickEvent := &Event{
+				Type:      "click",
+				Target:    e.Target,
+				X:         e.X,
+				Y:         e.Y,
+				Button:    e.Button,
+				Modifiers: e.Modifiers,
+				Timestamp: e.Timestamp,
+			}
+			globalEventBus.Emit(clickEvent)
+		}
 
 		// Handle text input events first (if focused element is input/textarea)
 		textHandled := false
@@ -722,6 +749,41 @@ func (app *App) Close() {
 // Scheduler returns the App's async coroutine scheduler.
 func (app *App) Scheduler() *lua.Scheduler {
 	return app.sched
+}
+
+// HitTestVNode finds the deepest VNode containing point (px, py).
+// Returns the VNode's ID (from props["id"]) or "" if no match.
+func HitTestVNode(vnode *VNode, px, py int) string {
+	if vnode == nil {
+		return ""
+	}
+	// Check if point is within this node's bounds
+	if px < vnode.X || px >= vnode.X+vnode.W || py < vnode.Y || py >= vnode.Y+vnode.H {
+		return ""
+	}
+	// Check children (deepest match wins — reverse order for z-order)
+	for i := len(vnode.Children) - 1; i >= 0; i-- {
+		if id := HitTestVNode(vnode.Children[i], px, py); id != "" {
+			return id
+		}
+	}
+	// Return this node's ID if it has one
+	if id, ok := vnode.Props["id"].(string); ok && id != "" {
+		return id
+	}
+	return ""
+}
+
+// findRootVNode returns the last rendered VNode tree from the root component.
+func (app *App) findRootVNode() *VNode {
+	globalRegistry.mu.RLock()
+	defer globalRegistry.mu.RUnlock()
+	for _, comp := range globalRegistry.components {
+		if comp.LastVNode != nil {
+			return comp.LastVNode
+		}
+	}
+	return nil
 }
 
 // GetGlobalEventBus returns the global event bus (for testing).

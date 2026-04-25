@@ -199,12 +199,16 @@ local function Sidebar()
         local isActive = (page == item.key)
         children[#children + 1] = {
             type = "text",
+            id = "nav-" .. item.key,
             content = (isActive and " ▸ " or "   ") .. item.label,
             style = {
                 foreground = isActive and "#89B4FA" or "#A6ADC8",
                 bold = isActive,
                 background = isActive and "#313244" or nil,
             },
+            onClick = function()
+                store.dispatch("setState", { page = item.key })
+            end,
         }
     end
 
