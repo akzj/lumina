@@ -64,17 +64,19 @@ type eventHandler struct {
 	componentID string
 	handler     func(*Event)
 	capture     bool // true = capture phase (parent→child), false = bubble phase (child→parent)
+	bridged     bool // true = registered by VNode→EventBus bridge (cleared each render)
 }
 
 // EventBus handles event dispatching.
 type EventBus struct {
-	handlers     map[string][]eventHandler
-	shortcuts    map[string]eventHandler // "ctrl+c" → handler
-	focusStack   []string                // component ID stack for focus management
-	focusedID    string
-	focusableIDs []string // ordered list of focusable component IDs
-	vnodeTree    *VNodeTree // current VNode tree for event bubbling
-	mu           sync.RWMutex
+	handlers        map[string][]eventHandler
+	shortcuts       map[string]eventHandler // "ctrl+c" → handler
+	focusStack      []string                // component ID stack for focus management
+	focusedID       string
+	focusableIDs    []string          // ordered list of focusable component IDs
+	vnodeTree       *VNodeTree        // current VNode tree for event bubbling
+	bridgedHandlers []bridgedHandler  // handlers from VNode→EventBus bridge (cleared each render)
+	mu              sync.RWMutex
 }
 
 // VNodeTree tracks parent-child relationships in the VNode tree for event bubbling.
