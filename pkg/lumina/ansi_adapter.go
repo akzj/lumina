@@ -9,23 +9,32 @@ import (
 
 // ANSIAdapter implements OutputAdapter for ANSI terminal output.
 type ANSIAdapter struct {
-	writer    io.Writer
-	buf       bytes.Buffer
-	width     int
-	height    int
-	colorMode ColorMode // detected or configured color capability
-	prevFrame *Frame    // previous frame for cell-level diff
+	writer            io.Writer
+	buf               bytes.Buffer
+	width             int
+	height            int
+	colorMode         ColorMode // detected or configured color capability
+	prevFrame         *Frame    // previous frame for cell-level diff
+	DefaultBackground string    // fallback bg for cells with empty Background
 }
 
 // NewANSIAdapter creates a new ANSIAdapter writing to the given writer.
-// It auto-detects the terminal's color capability.
+// It auto-detects the terminal's color capability and reads the default
+// background from the current theme.
 func NewANSIAdapter(w io.Writer) *ANSIAdapter {
+	bg := "#1E1E2E" // Catppuccin Mocha base (fallback)
+	if theme := GetCurrentTheme(); theme != nil {
+		if tbg, ok := theme.Colors["background"]; ok && tbg != "" {
+			bg = tbg
+		}
+	}
 	return &ANSIAdapter{
-		writer:    w,
-		buf:       bytes.Buffer{},
-		width:     80,
-		height:    24,
-		colorMode: DetectColorMode(),
+		writer:            w,
+		buf:               bytes.Buffer{},
+		width:             80,
+		height:            24,
+		colorMode:         DetectColorMode(),
+		DefaultBackground: bg,
 	}
 }
 
@@ -269,9 +278,13 @@ func (a *ANSIAdapter) styleCodes(cell *Cell) string {
 		codes += a.colorCode("fg", cell.Foreground)
 	}
 
-	// Background color
-	if cell.Background != "" && a.colorMode != ColorNone {
-		codes += a.colorCode("bg", cell.Background)
+	// Background color — use default background when empty
+	bg := cell.Background
+	if bg == "" {
+		bg = a.DefaultBackground
+	}
+	if bg != "" && a.colorMode != ColorNone {
+		codes += a.colorCode("bg", bg)
 	}
 
 	// Text attributes (work in all modes except ColorNone)
