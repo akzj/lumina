@@ -169,13 +169,10 @@ func luaLoader(L *lua.State) int {
 		"tileWindows":      luaTileWindows,
 	}, 0)
 
-	// Register hooks as sub-table
-	L.PushString("hooks")
+	// Register hooks as sub-table on the lumina module
 	L.NewTable()
 	RegisterHooks(L)
-	L.SetField(-3, "hooks")
-
-	L.SetField(-2, "devtools")
+	L.SetField(-2, "hooks")
 
 	// Also register common hooks directly on lumina for convenience
 	L.SetFuncs(map[string]lua.Function{
@@ -253,24 +250,21 @@ func luaLoader(L *lua.State) int {
 	registerStrictModeFactory(L)
 
 	// Register console as sub-table
-	L.PushString("console")
 	L.NewTable()
 	L.SetFuncs(map[string]lua.Function{
-		"log":   func(L *lua.State) int { L.PushString("log"); return consoleLog(L) },
-		"warn":  func(L *lua.State) int { L.PushString("warn"); return consoleLog(L) },
-		"error": func(L *lua.State) int { L.PushString("error"); return consoleLog(L) },
+		"log":   makeConsoleLog("log"),
+		"warn":  makeConsoleLog("warn"),
+		"error": makeConsoleLog("error"),
 		"get":   consoleGet,
 		"clear": consoleClear,
 		"size":  consoleSize,
 	}, 0)
-	L.SetField(-3, "console")
+	L.SetField(-2, "console")
 
 	// Register debug as sub-table: lumina.debug.*
 	L.NewTable()
 	RegisterDebugAPI(L)
-	L.SetField(-3, "debug")
-
-	L.Pop(1)
+	L.SetField(-2, "debug")
 
 	return 1
 }
@@ -1512,18 +1506,20 @@ func luaEnableHotReload(L *lua.State) int {
 	globalHotReloader.Enable(true)
 
 	if L.Type(1) == lua.TypeTable {
+		var interval time.Duration
+		var paths []string
+
 		L.GetField(1, "interval")
 		if !L.IsNoneOrNil(-1) {
 			ms, _ := L.ToNumber(-1)
 			if ms > 0 {
-				globalHotReloader.config.Interval = time.Duration(ms) * time.Millisecond
+				interval = time.Duration(ms) * time.Millisecond
 			}
 		}
 		L.Pop(1)
 
 		L.GetField(1, "paths")
 		if L.Type(-1) == lua.TypeTable {
-			var paths []string
 			n := int(L.RawLen(-1))
 			for i := 1; i <= n; i++ {
 				L.RawGetI(-1, int64(i))
@@ -1532,9 +1528,11 @@ func luaEnableHotReload(L *lua.State) int {
 				}
 				L.Pop(1)
 			}
-			globalHotReloader.config.WatchPaths = paths
 		}
 		L.Pop(1)
+
+		// Apply config under lock
+		globalHotReloader.SetConfig(interval, paths)
 	}
 
 	return 0
@@ -1594,6 +1592,7 @@ func luaPopFocusScope(L *lua.State) int {
 
 // luaCreateRouter creates a router with route definitions.
 // lumina.createRouter({ routes = { {path="/"}, {path="/users/:id"} } })
+// NOTE: Only called from Lua main thread — globalRouter assignment is safe.
 func luaCreateRouter(L *lua.State) int {
 	// Reset global router
 	globalRouter = NewRouter()
@@ -1679,6 +1678,7 @@ func luaGetCurrentPath(L *lua.State) int {
 // -----------------------------------------------------------------------
 
 // scrollBehavior controls whether scrolling is "instant" or "smooth".
+// Only accessed from the Lua main thread (via luaSetScrollBehavior and GetScrollBehavior).
 var scrollBehavior = "instant" // default for backward compat
 
 // GetScrollBehavior returns the current scroll behavior.

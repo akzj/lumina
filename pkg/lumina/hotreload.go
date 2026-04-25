@@ -52,13 +52,20 @@ func NewHotReloader(config HotReloadConfig) *HotReloader {
 
 // SnapshotState saves the current state of a component.
 func (hr *HotReloader) SnapshotState(comp *Component) {
+	// Read component state under its lock first
+	comp.mu.RLock()
+	stateCopy := copyMap(comp.State)
+	compID := comp.ID
+	compType := comp.Type
+	comp.mu.RUnlock()
+
 	hr.mu.Lock()
 	defer hr.mu.Unlock()
 
-	hr.snapshots[comp.ID] = &StateSnapshot{
-		ComponentID:   comp.ID,
-		ComponentType: comp.Type,
-		State:         copyMap(comp.State),
+	hr.snapshots[compID] = &StateSnapshot{
+		ComponentID:   compID,
+		ComponentType: compType,
+		State:         stateCopy,
 		Timestamp:     time.Now().UnixMilli(),
 	}
 }
@@ -91,24 +98,46 @@ func copyMap(m map[string]any) map[string]any {
 
 // Watch registers a callback for file changes.
 func (hr *HotReloader) Watch(callback func(path string)) {
+	hr.mu.Lock()
+	defer hr.mu.Unlock()
 	hr.watchers = append(hr.watchers, callback)
 }
 
 // Notify notifies all watchers of a change.
 func (hr *HotReloader) Notify(path string) {
-	for _, w := range hr.watchers {
+	hr.mu.RLock()
+	watchers := make([]func(string), len(hr.watchers))
+	copy(watchers, hr.watchers)
+	hr.mu.RUnlock()
+	for _, w := range watchers {
 		w(path)
 	}
 }
 
 // EnableHotReload enables or disables hot reload.
 func (hr *HotReloader) Enable(enabled bool) {
+	hr.mu.Lock()
+	defer hr.mu.Unlock()
 	hr.config.Enabled = enabled
 }
 
 // IsEnabled returns whether hot reload is enabled.
 func (hr *HotReloader) IsEnabled() bool {
+	hr.mu.RLock()
+	defer hr.mu.RUnlock()
 	return hr.config.Enabled
+}
+
+// SetConfig updates the hot reloader configuration under lock.
+func (hr *HotReloader) SetConfig(interval time.Duration, paths []string) {
+	hr.mu.Lock()
+	defer hr.mu.Unlock()
+	if interval > 0 {
+		hr.config.Interval = interval
+	}
+	if paths != nil {
+		hr.config.WatchPaths = paths
+	}
 }
 
 // GetSnapshot returns a snapshot for a component.
@@ -209,14 +238,14 @@ func (fw *FileWatcher) Start() {
 		return
 	}
 	fw.running = true
-	fw.mu.Unlock()
 
-	// Initialize mod times
+	// Initialize mod times under lock
 	for _, path := range fw.paths {
 		if info, err := os.Stat(path); err == nil {
 			fw.modTimes[path] = info.ModTime()
 		}
 	}
+	fw.mu.Unlock()
 
 	go func() {
 		ticker := time.NewTicker(fw.interval)
@@ -234,19 +263,28 @@ func (fw *FileWatcher) Start() {
 
 // poll checks all watched paths for changes.
 func (fw *FileWatcher) poll() {
+	fw.mu.Lock()
+	onChange := fw.onChange
+	fw.mu.Unlock()
+
 	for _, path := range fw.paths {
 		info, err := os.Stat(path)
 		if err != nil {
 			continue
 		}
+		fw.mu.Lock()
 		prev, ok := fw.modTimes[path]
 		if ok && info.ModTime().After(prev) {
 			fw.modTimes[path] = info.ModTime()
-			if fw.onChange != nil {
-				fw.onChange(path)
+			fw.mu.Unlock()
+			if onChange != nil {
+				onChange(path)
 			}
-		} else if !ok {
-			fw.modTimes[path] = info.ModTime()
+		} else {
+			if !ok {
+				fw.modTimes[path] = info.ModTime()
+			}
+			fw.mu.Unlock()
 		}
 	}
 }

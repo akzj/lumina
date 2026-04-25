@@ -1146,13 +1146,12 @@ func useAnimation(L *lua.State) int {
 		globalAnimationManager.Start(anim)
 	}
 
-	// Get current animation state
-	anim := globalAnimationManager.Get(animID)
+	// Get current animation state (values copied under lock — safe for concurrent access)
 	currentVal := from
 	done := false
-	if anim != nil {
-		currentVal = anim.Current
-		done = anim.Done
+	if cur, d, found := globalAnimationManager.GetState(animID); found {
+		currentVal = cur
+		done = d
 	}
 
 	// Return { value = current, done = done }

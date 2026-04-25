@@ -74,7 +74,28 @@ func NewAppWithSize(width, height int) *App {
 	globalStyles = make(map[string]map[string]any)
 	globalInspector = &DevToolsInspector{panelWidth: 40}
 	globalConsole = &Console{maxSize: 1000}
+	globalDevTools = &DevTools{
+		renderCounts: make(map[string]int),
+		renderTimes:  make(map[string]time.Duration),
+	}
+	globalI18n = NewI18n("en")
+	globalAnnouncer = &Announcer{}
+	globalQueryCache = &QueryCache{entries: make(map[string]*QueryEntry)}
+	globalHotReloader = NewHotReloader(HotReloadConfig{
+		Enabled:  false,
+		Interval: 500 * time.Millisecond,
+	})
+	globalPluginRegistry = NewPluginRegistry()
+	globalProfile = &Profile{
+		timings: make([]FrameTiming, 0, 1000),
+		maxSize: 1000,
+	}
+	globalThemeManager = &ThemeManager{
+		current: CatppuccinMocha,
+		styles:  make(map[string]map[string]string),
+	}
 	ResetRenderRefs()
+	scrollBehavior = "instant"
 
 	L := lua.NewState()
 

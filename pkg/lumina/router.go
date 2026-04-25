@@ -49,7 +49,6 @@ func (r *Router) AddRoute(path string) {
 // Navigate changes the current path and triggers onChange callbacks.
 func (r *Router) Navigate(path string) {
 	r.mu.Lock()
-	defer r.mu.Unlock()
 
 	// Push current path to history before navigating
 	if r.currentPath != "" {
@@ -66,8 +65,12 @@ func (r *Router) Navigate(path string) {
 		}
 	}
 
-	// Notify listeners
-	for _, fn := range r.onChange {
+	// Copy callbacks, release lock, then notify (avoids deadlock if callback navigates)
+	callbacks := make([]func(string), len(r.onChange))
+	copy(callbacks, r.onChange)
+	r.mu.Unlock()
+
+	for _, fn := range callbacks {
 		fn(path)
 	}
 }
@@ -76,9 +79,9 @@ func (r *Router) Navigate(path string) {
 // Returns true if navigation occurred, false if history is empty.
 func (r *Router) Back() bool {
 	r.mu.Lock()
-	defer r.mu.Unlock()
 
 	if len(r.history) == 0 {
+		r.mu.Unlock()
 		return false
 	}
 
@@ -96,8 +99,12 @@ func (r *Router) Back() bool {
 		}
 	}
 
-	// Notify listeners
-	for _, fn := range r.onChange {
+	// Copy callbacks, release lock, then notify
+	callbacks := make([]func(string), len(r.onChange))
+	copy(callbacks, r.onChange)
+	r.mu.Unlock()
+
+	for _, fn := range callbacks {
 		fn(prev)
 	}
 	return true
