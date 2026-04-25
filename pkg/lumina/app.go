@@ -355,6 +355,11 @@ func (app *App) handleEvent(event AppEvent) {
 			globalEventBus.HandleKeyEvent(e.Key, e.Modifiers)
 		}
 
+		// Dispatch lumina.onKey() bindings
+		if e.Type == "keydown" {
+			app.dispatchKeyBinding(e.Key)
+		}
+
 		// Handle scroll events (mouse wheel and PageUp/PageDown)
 		app.handleScrollEvent(e)
 
@@ -376,6 +381,22 @@ func (app *App) handleEvent(event AppEvent) {
 			app.L.Pop(1) // pop non-function
 		}
 		// Re-render deferred to EndBatch()
+	}
+}
+
+// dispatchKeyBinding checks if a key has a lumina.onKey() binding and calls it directly.
+func (app *App) dispatchKeyBinding(key string) {
+	keyBindingsMu.Lock()
+	ref, ok := keyBindings[key]
+	keyBindingsMu.Unlock()
+
+	if ok {
+		app.L.RawGetI(lua.RegistryIndex, int64(ref))
+		if app.L.IsFunction(-1) {
+			app.L.PCall(0, 0, 0)
+		} else {
+			app.L.Pop(1)
+		}
 	}
 }
 
