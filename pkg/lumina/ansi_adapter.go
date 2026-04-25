@@ -40,12 +40,19 @@ func NewANSIAdapter(w io.Writer) *ANSIAdapter {
 
 // NewANSIAdapterWithColorMode creates an ANSIAdapter with a specific color mode.
 func NewANSIAdapterWithColorMode(w io.Writer, mode ColorMode) *ANSIAdapter {
+	bg := "#1E1E2E" // Catppuccin Mocha base (fallback)
+	if theme := GetCurrentTheme(); theme != nil {
+		if tbg, ok := theme.Colors["background"]; ok && tbg != "" {
+			bg = tbg
+		}
+	}
 	return &ANSIAdapter{
-		writer:    w,
-		buf:       bytes.Buffer{},
-		width:     80,
-		height:    24,
-		colorMode: mode,
+		writer:            w,
+		buf:               bytes.Buffer{},
+		width:             80,
+		height:            24,
+		colorMode:         mode,
+		DefaultBackground: bg,
 	}
 }
 
