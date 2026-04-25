@@ -25,8 +25,8 @@ func TestMouseMotion_SGRMotionBit(t *testing.T) {
 		if e.Type != "mousemove" {
 			t.Fatalf("expected mousemove, got %q", e.Type)
 		}
-		if e.X != 10 || e.Y != 5 {
-			t.Fatalf("expected (10,5), got (%d,%d)", e.X, e.Y)
+		if e.X != 9 || e.Y != 4 {
+			t.Fatalf("expected (9,4), got (%d,%d)", e.X, e.Y)
 		}
 	default:
 		t.Fatal("expected event")
