@@ -120,10 +120,11 @@ func NewComponent(L *lua.State, factoryIdx int, props map[string]any) (*Componen
 		L.Pop(1) // pop nil
 	}
 
-	// Register component
+	// Register component and mark dirty for initial render
 	globalRegistry.mu.Lock()
 	globalRegistry.components[comp.ID] = comp
 	globalRegistry.mu.Unlock()
+	comp.Dirty.Store(true)
 
 	return comp, nil
 }
