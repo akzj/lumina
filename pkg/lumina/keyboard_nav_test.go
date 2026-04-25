@@ -6,6 +6,7 @@ import (
 )
 
 func TestFocusNavigation(t *testing.T) {
+	globalEventBus = NewEventBus() // isolate from other tests
 	// Test FocusNext
 	globalEventBus.RegisterFocusable("comp_1")
 	globalEventBus.RegisterFocusable("comp_2")
@@ -55,6 +56,7 @@ func TestFocusNavigation(t *testing.T) {
 }
 
 func TestHandleKeyEventTab(t *testing.T) {
+	globalEventBus = NewEventBus() // isolate from other tests
 	// Register focusable components
 	globalEventBus.RegisterFocusable("btn_1")
 	globalEventBus.RegisterFocusable("btn_2")
@@ -80,6 +82,7 @@ func TestHandleKeyEventTab(t *testing.T) {
 }
 
 func TestHandleKeyEventShiftTab(t *testing.T) {
+	globalEventBus = NewEventBus() // isolate from other tests
 	globalEventBus.RegisterFocusable("btn_1")
 	globalEventBus.RegisterFocusable("btn_2")
 

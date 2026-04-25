@@ -323,62 +323,62 @@ func TestParseInput_CtrlShiftArrowDown(t *testing.T) {
 
 func TestParseInput_MousePress(t *testing.T) {
 	ir, ch := testInputReader()
-	// SGR mouse press: ESC[<0;10;20M (left button press at 10,20)
+	// SGR mouse press: ESC[<0;10;20M (left button press at SGR 10,20 → 0-based 9,19)
 	ir.parseInput([]byte{0x1b, '[', '<', '0', ';', '1', '0', ';', '2', '0', 'M'})
 
 	e := drainEvent(t, ch)
 	assert.Equal(t, "mousedown", e.Type)
 	assert.Equal(t, "left", e.Button)
-	assert.Equal(t, 10, e.X)
-	assert.Equal(t, 20, e.Y)
+	assert.Equal(t, 9, e.X)  // SGR is 1-based, internal is 0-based
+	assert.Equal(t, 19, e.Y) // SGR is 1-based, internal is 0-based
 }
 
 func TestParseInput_MouseRelease(t *testing.T) {
 	ir, ch := testInputReader()
-	// SGR mouse release: ESC[<0;10;20m (left button release at 10,20)
+	// SGR mouse release: ESC[<0;10;20m (left button release at SGR 10,20 → 0-based 9,19)
 	ir.parseInput([]byte{0x1b, '[', '<', '0', ';', '1', '0', ';', '2', '0', 'm'})
 
 	e := drainEvent(t, ch)
 	assert.Equal(t, "mouseup", e.Type)
 	assert.Equal(t, "left", e.Button)
-	assert.Equal(t, 10, e.X)
-	assert.Equal(t, 20, e.Y)
+	assert.Equal(t, 9, e.X)
+	assert.Equal(t, 19, e.Y)
 }
 
 func TestParseInput_MouseRightClick(t *testing.T) {
 	ir, ch := testInputReader()
-	// SGR right button press: ESC[<2;5;15M
+	// SGR right button press: ESC[<2;5;15M (SGR 5,15 → 0-based 4,14)
 	ir.parseInput([]byte{0x1b, '[', '<', '2', ';', '5', ';', '1', '5', 'M'})
 
 	e := drainEvent(t, ch)
 	assert.Equal(t, "mousedown", e.Type)
 	assert.Equal(t, "right", e.Button)
-	assert.Equal(t, 5, e.X)
-	assert.Equal(t, 15, e.Y)
+	assert.Equal(t, 4, e.X)
+	assert.Equal(t, 14, e.Y)
 }
 
 func TestParseInput_ScrollUp(t *testing.T) {
 	ir, ch := testInputReader()
-	// SGR scroll up: ESC[<64;10;20M (button 64 = scroll up)
+	// SGR scroll up: ESC[<64;10;20M (button 64 = scroll up, SGR 10,20 → 0-based 9,19)
 	ir.parseInput([]byte{0x1b, '[', '<', '6', '4', ';', '1', '0', ';', '2', '0', 'M'})
 
 	e := drainEvent(t, ch)
 	assert.Equal(t, "scroll", e.Type)
 	assert.Equal(t, "up", e.Button)
-	assert.Equal(t, 10, e.X)
-	assert.Equal(t, 20, e.Y)
+	assert.Equal(t, 9, e.X)
+	assert.Equal(t, 19, e.Y)
 }
 
 func TestParseInput_ScrollDown(t *testing.T) {
 	ir, ch := testInputReader()
-	// SGR scroll down: ESC[<65;10;20M (button 65 = scroll down)
+	// SGR scroll down: ESC[<65;10;20M (button 65 = scroll down, SGR 10,20 → 0-based 9,19)
 	ir.parseInput([]byte{0x1b, '[', '<', '6', '5', ';', '1', '0', ';', '2', '0', 'M'})
 
 	e := drainEvent(t, ch)
 	assert.Equal(t, "scroll", e.Type)
 	assert.Equal(t, "down", e.Button)
-	assert.Equal(t, 10, e.X)
-	assert.Equal(t, 20, e.Y)
+	assert.Equal(t, 9, e.X)
+	assert.Equal(t, 19, e.Y)
 }
 
 func TestParseInput_CtrlMousePress(t *testing.T) {
