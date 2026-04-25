@@ -49,6 +49,7 @@ func Simulate(event *SimulatedEvent) error {
 	e := &Event{
 		Type:      event.Type,
 		Target:    comp.ID,
+		Bubbles:   eventBubbles(event.Type),
 		X:         event.X,
 		Y:         event.Y,
 		Key:       event.Key,
