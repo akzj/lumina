@@ -290,8 +290,8 @@ func (ir *InputReader) parseSGRMouse(data []byte) {
 	}
 
 	button := nums[0]
-	x := nums[1]
-	y := nums[2]
+	x := nums[1] - 1 // SGR mouse coordinates are 1-based; convert to 0-based
+	y := nums[2] - 1
 
 	mods := EventModifiers{
 		Shift: button&4 != 0,
