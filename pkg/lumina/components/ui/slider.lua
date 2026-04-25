@@ -1,8 +1,15 @@
 -- shadcn/slider — Value slider with track and thumb
 local lumina = require("lumina")
 
+local c = {
+    muted = "#6C7086",
+    primary = "#89B4FA",
+    fg = "#CDD6F4",
+}
+
 local Slider = lumina.defineComponent({
     name = "ShadcnSlider",
+
     init = function(props)
         return {
             value = props.value or 50,
@@ -12,8 +19,12 @@ local Slider = lumina.defineComponent({
             width = props.width or 20,
             disabled = props.disabled or false,
             showValue = props.showValue or false,
+            id = props.id,
+            className = props.className,
+            style = props.style,
         }
     end,
+
     render = function(self)
         local range = self.max - self.min
         local pct = range > 0 and ((self.value - self.min) / range) or 0
@@ -31,22 +42,24 @@ local Slider = lumina.defineComponent({
             end
         end
 
-        local fg = self.disabled and "#475569" or "#3B82F6"
         local children = {
-            { type = "text", content = "[" .. track .. "]", style = { foreground = fg } },
+            { type = "text", content = "[" .. track .. "]", style = { foreground = self.disabled and c.muted or c.primary } },
         }
         if self.showValue then
             children[#children + 1] = {
                 type = "text",
                 content = " " .. tostring(self.value),
-                style = { foreground = "#94A3B8" },
+                style = { foreground = c.muted },
             }
         end
+
         return {
             type = "hbox",
+            id = self.id,
+            style = { align = "center" },
             children = children,
         }
-    end
+    end,
 })
 
 return Slider
