@@ -466,7 +466,8 @@ func VNodeToFrame(vnode *VNode, width, height int) *Frame {
 	computeFlexLayout(vnode, 0, 0, width, height)
 
 	// Render VNode to frame
-	renderVNode(frame, vnode)
+	fullClip := Rect{X: 0, Y: 0, W: width, H: height}
+	renderVNode(frame, vnode, fullClip)
 
 	// Mark entire frame dirty
 	frame.MarkDirty()
@@ -486,13 +487,15 @@ func VNodeToFrameWithFocus(vnode *VNode, width, height int, focusedID string) *F
 	markFocusedVNode(vnode, focusedID)
 
 	// Render VNode to frame
-	renderVNode(frame, vnode)
+	fullClip := Rect{X: 0, Y: 0, W: width, H: height}
+	renderVNode(frame, vnode, fullClip)
 
 	// Mark entire frame dirty
 	frame.MarkDirty()
 
 	return frame
 }
+
 
 // VNodeToFrameWithOverlays renders the base VNode tree, then renders overlay layers on top.
 func VNodeToFrameWithOverlays(vnode *VNode, width, height int, overlays []*Overlay) *Frame {
@@ -517,7 +520,8 @@ func VNodeToFrameWithOverlays(vnode *VNode, width, height int, overlays []*Overl
 		// Layout the overlay VNode at its absolute position
 		if ov.VNode != nil {
 			computeFlexLayout(ov.VNode, ov.X, ov.Y, ov.W, ov.H)
-			renderVNode(frame, ov.VNode)
+			ovClip := Rect{X: ov.X, Y: ov.Y, W: ov.W, H: ov.H}
+			renderVNode(frame, ov.VNode, ovClip)
 		}
 	}
 
@@ -551,9 +555,28 @@ func markFocusedVNode(vnode *VNode, focusedID string) {
 }
 
 
-// renderVNode renders a VNode into the frame.
-func renderVNode(frame *Frame, vnode *VNode) {
-	// Use parsed style (populated by computeFlexLayout)
+// getVNodeID returns the id prop of a VNode, or "" if not set.
+func getVNodeID(vnode *VNode) string {
+	if vnode == nil {
+		return ""
+	}
+	if id, ok := vnode.Props["id"].(string); ok {
+		return id
+	}
+	return ""
+}
+
+// renderVNode renders a VNode into the frame, clipped to the given rect.
+// All cell writes go through frame.SetCellClipped — content NEVER overflows.
+func renderVNode(frame *Frame, vnode *VNode, clip Rect) {
+	// Quick reject: if vnode is entirely outside clip
+	if vnode.W > 0 && vnode.H > 0 {
+		nodeRect := Rect{X: vnode.X, Y: vnode.Y, W: vnode.W, H: vnode.H}
+		if IntersectRect(nodeRect, clip).W == 0 || IntersectRect(nodeRect, clip).H == 0 {
+			return
+		}
+	}
+
 	style := vnode.Style
 
 	cell := Cell{Char: ' '}
@@ -565,77 +588,74 @@ func renderVNode(frame *Frame, vnode *VNode) {
 
 	switch vnode.Type {
 	case "fragment":
-		// Fragment: render children directly, no background/border/styling
 		for _, child := range vnode.Children {
-			renderVNode(frame, child)
+			renderVNode(frame, child, clip)
 		}
 		return
 
 	case "text":
-		// Render text content with wrapping support
-		renderText(frame, vnode, cell)
+		renderText(frame, vnode, cell, clip)
 
 	case "input":
-		renderInput(frame, vnode, style)
+		renderInput(frame, vnode, style, clip)
 
 	case "textarea":
-		renderTextArea(frame, vnode, style)
+		renderTextArea(frame, vnode, style, clip)
 
 	default:
-		// Container types: box, vbox, hbox, container, etc.
+		// Container types: box, vbox, hbox, etc.
 
-		// Render background if specified
+		// Render background (clipped to parent clip)
 		if style.Background != "" {
-			for y := vnode.Y; y < vnode.Y+vnode.H && y < frame.Height; y++ {
-				for x := vnode.X; x < vnode.X+vnode.W && x < frame.Width; x++ {
-					frame.Cells[y][x] = Cell{Char: ' ', Background: style.Background}
-				}
-			}
+			frame.FillClipped(vnode.X, vnode.Y, vnode.W, vnode.H,
+				Cell{Char: ' ', Background: style.Background,
+					OwnerNode: vnode, OwnerID: getVNodeID(vnode), CellRole: "background"}, clip)
 		}
 
-		// Render border if specified
+		// Render border (clipped to parent clip)
 		if style.Border != "" {
-			renderBorder(frame, vnode, style.Border)
+			renderBorder(frame, vnode, style.Border, clip)
 		}
 
-		// Render focus indicator if focused
+		// Render focus indicator (in border area, uses parent clip)
 		if vnode.Focused {
-			renderFocusIndicator(frame, vnode)
+			renderFocusIndicator(frame, vnode, clip)
 		}
 
-		// Determine content clipping area for scrollable containers
-		scrollable := style.Overflow == "scroll"
-		if scrollable {
-			renderScrollableChildren(frame, vnode, style)
-		} else if style.Border != "" && vnode.W > 2 && vnode.H > 2 {
-			// Bordered container: clip container-type children that overflow
-			// the content area to prevent them from rendering over the border.
-			// Text nodes are never clipped (they have unreliable W/H from layout).
-			clipX := vnode.X + 1
-			clipY := vnode.Y + 1
-			clipW := vnode.W - 2
-			clipH := vnode.H - 2
-			for _, child := range vnode.Children {
-				if child.Type != "text" && child.Type != "fragment" &&
-					child.W > 0 && child.H > 0 &&
-					(child.X+child.W > clipX+clipW || child.Y+child.H > clipY+clipH ||
-						child.X < clipX || child.Y < clipY) {
-					renderVNodeClipped(frame, child, clipX, clipY, clipW, clipH)
-				} else {
-					renderVNode(frame, child)
-				}
-			}
+		// Child clip = intersection of parent clip AND this node's inner area
+		// (inside border only — the layout engine already positions children
+		// with padding offsets, so we don't subtract padding from the clip).
+		borderW := 0
+		if style.Border != "" {
+			borderW = 1
+		}
+		innerRect := Rect{
+			X: vnode.X + borderW,
+			Y: vnode.Y + borderW,
+			W: vnode.W - 2*borderW,
+			H: vnode.H - 2*borderW,
+		}
+		if innerRect.W < 0 {
+			innerRect.W = 0
+		}
+		if innerRect.H < 0 {
+			innerRect.H = 0
+		}
+		childClip := IntersectRect(clip, innerRect)
+
+		// Render children with child clip
+		if style.Overflow == "scroll" {
+			renderScrollableChildren(frame, vnode, style, childClip)
 		} else {
-			// Render children normally
 			for _, child := range vnode.Children {
-				renderVNode(frame, child)
+				renderVNode(frame, child, childClip)
 			}
 		}
 	}
 }
 
-// renderText renders text content into the frame, supporting wrapping.
-func renderText(frame *Frame, vnode *VNode, cell Cell) {
+// renderText renders text content into the frame, supporting wrapping and clipping.
+func renderText(frame *Frame, vnode *VNode, cell Cell, clip Rect) {
 	if vnode.Content == "" {
 		return
 	}
@@ -659,7 +679,7 @@ func renderText(frame *Frame, vnode *VNode, cell Cell) {
 	for _, ch := range vnode.Content {
 		w := RuneWidth(ch)
 		if w == 0 {
-			continue // skip zero-width chars (combining marks, ZWJ, etc.)
+			continue
 		}
 
 		// Wrap if this character would exceed available width
@@ -670,23 +690,23 @@ func renderText(frame *Frame, vnode *VNode, cell Cell) {
 
 		px := startX + col
 		py := startY + row
-		if px >= 0 && py >= 0 && px < frame.Width && py < frame.Height {
-			frame.Cells[py][px] = Cell{
-				Char:       ch,
+		frame.SetCellClipped(px, py, Cell{
+			Char:       ch,
+			Foreground: cell.Foreground,
+			Background: cell.Background,
+			Bold:       cell.Bold,
+			Dim:        cell.Dim,
+			Underline:  cell.Underline,
+			OwnerNode:  vnode, OwnerID: getVNodeID(vnode), CellRole: "content",
+		}, clip)
+		// For wide chars, place a padding cell in the next column
+		if w == 2 {
+			frame.SetCellClipped(px+1, py, Cell{
+				Char:       0,
 				Foreground: cell.Foreground,
 				Background: cell.Background,
-				Bold:       cell.Bold,
-				Dim:        cell.Dim,
-				Underline:  cell.Underline,
-			}
-			// For wide chars, place a padding cell in the next column
-			if w == 2 && px+1 < frame.Width {
-				frame.Cells[py][px+1] = Cell{
-					Char:       0, // padding cell
-					Foreground: cell.Foreground,
-					Background: cell.Background,
-				}
-			}
+				OwnerNode:  vnode, OwnerID: getVNodeID(vnode), CellRole: "padding",
+			}, clip)
 		}
 		col += w
 	}
@@ -694,7 +714,7 @@ func renderText(frame *Frame, vnode *VNode, cell Cell) {
 
 // renderFocusIndicator draws a focus indicator around a VNode.
 // Uses reverse video (swap foreground/background) for the border.
-func renderFocusIndicator(frame *Frame, vnode *VNode) {
+func renderFocusIndicator(frame *Frame, vnode *VNode, clip Rect) {
 	x, y := vnode.X, vnode.Y
 	w, h := vnode.W, vnode.H
 
@@ -702,57 +722,42 @@ func renderFocusIndicator(frame *Frame, vnode *VNode) {
 		return
 	}
 
-	// Focus border characters (using bracket style for clarity)
 	focusTl := '['
 	focusTr := ']'
 	focusBl := '['
 	focusBr := ']'
 	focusH := '-'
 	focusV := '|'
+	fc := "#FFFF00"
+	oid := getVNodeID(vnode)
 
-	// Top-left corner
-	if y < frame.Height && x < frame.Width {
-		frame.Cells[y][x] = Cell{Char: focusTl, Foreground: "#FFFF00"} // Yellow
+	bc := func(ch rune) Cell {
+		return Cell{Char: ch, Foreground: fc, OwnerNode: vnode, OwnerID: oid, CellRole: "border"}
 	}
+
 	// Top border
-	for i := 1; i < w-1 && x+i < frame.Width; i++ {
-		if y < frame.Height {
-			frame.Cells[y][x+i] = Cell{Char: focusH, Foreground: "#FFFF00"}
-		}
+	frame.SetCellClipped(x, y, bc(focusTl), clip)
+	for i := 1; i < w-1; i++ {
+		frame.SetCellClipped(x+i, y, bc(focusH), clip)
 	}
-	// Top-right corner
-	if y < frame.Height && x+w-1 < frame.Width {
-		frame.Cells[y][x+w-1] = Cell{Char: focusTr, Foreground: "#FFFF00"}
-	}
+	frame.SetCellClipped(x+w-1, y, bc(focusTr), clip)
 
 	// Side borders
-	for i := 1; i < h-1 && y+i < frame.Height; i++ {
-		if x < frame.Width {
-			frame.Cells[y+i][x] = Cell{Char: focusV, Foreground: "#FFFF00"}
-		}
-		if x+w-1 < frame.Width {
-			frame.Cells[y+i][x+w-1] = Cell{Char: focusV, Foreground: "#FFFF00"}
-		}
+	for i := 1; i < h-1; i++ {
+		frame.SetCellClipped(x, y+i, bc(focusV), clip)
+		frame.SetCellClipped(x+w-1, y+i, bc(focusV), clip)
 	}
 
-	// Bottom-left corner
-	if y+h-1 < frame.Height && x < frame.Width {
-		frame.Cells[y+h-1][x] = Cell{Char: focusBl, Foreground: "#FFFF00"}
-	}
 	// Bottom border
-	for i := 1; i < w-1 && x+i < frame.Width; i++ {
-		if y+h-1 < frame.Height {
-			frame.Cells[y+h-1][x+i] = Cell{Char: focusH, Foreground: "#FFFF00"}
-		}
+	frame.SetCellClipped(x, y+h-1, bc(focusBl), clip)
+	for i := 1; i < w-1; i++ {
+		frame.SetCellClipped(x+i, y+h-1, bc(focusH), clip)
 	}
-	// Bottom-right corner
-	if y+h-1 < frame.Height && x+w-1 < frame.Width {
-		frame.Cells[y+h-1][x+w-1] = Cell{Char: focusBr, Foreground: "#FFFF00"}
-	}
+	frame.SetCellClipped(x+w-1, y+h-1, bc(focusBr), clip)
 }
 
 // renderBorder draws a border around a VNode.
-func renderBorder(frame *Frame, vnode *VNode, borderType string) {
+func renderBorder(frame *Frame, vnode *VNode, borderType string, clip Rect) {
 	x, y := vnode.X, vnode.Y
 	w, h := vnode.W, vnode.H
 
@@ -760,7 +765,6 @@ func renderBorder(frame *Frame, vnode *VNode, borderType string) {
 		return
 	}
 
-	// Box drawing characters
 	var tl, tr, bl, br, hLine, vLine rune
 	switch borderType {
 	case "single":
@@ -773,38 +777,29 @@ func renderBorder(frame *Frame, vnode *VNode, borderType string) {
 		return
 	}
 
+	oid := getVNodeID(vnode)
+	bc := func(ch rune) Cell {
+		return Cell{Char: ch, OwnerNode: vnode, OwnerID: oid, CellRole: "border"}
+	}
+
 	// Top border
-	if y < frame.Height && x < frame.Width {
-		frame.Cells[y][x] = Cell{Char: tl}
+	frame.SetCellClipped(x, y, bc(tl), clip)
+	for i := 1; i < w-1; i++ {
+		frame.SetCellClipped(x+i, y, bc(hLine), clip)
 	}
-	for i := 1; i < w-1 && x+i < frame.Width; i++ {
-		frame.Cells[y][x+i] = Cell{Char: hLine}
-	}
-	if y < frame.Height && x+w-1 < frame.Width {
-		frame.Cells[y][x+w-1] = Cell{Char: tr}
-	}
+	frame.SetCellClipped(x+w-1, y, bc(tr), clip)
 
 	// Bottom border
-	if y+h-1 < frame.Height && x < frame.Width {
-		frame.Cells[y+h-1][x] = Cell{Char: bl}
+	frame.SetCellClipped(x, y+h-1, bc(bl), clip)
+	for i := 1; i < w-1; i++ {
+		frame.SetCellClipped(x+i, y+h-1, bc(hLine), clip)
 	}
-	for i := 1; i < w-1 && x+i < frame.Width; i++ {
-		if y+h-1 < frame.Height {
-			frame.Cells[y+h-1][x+i] = Cell{Char: hLine}
-		}
-	}
-	if y+h-1 < frame.Height && x+w-1 < frame.Width {
-		frame.Cells[y+h-1][x+w-1] = Cell{Char: br}
-	}
+	frame.SetCellClipped(x+w-1, y+h-1, bc(br), clip)
 
 	// Vertical borders
-	for i := 1; i < h-1 && y+i < frame.Height; i++ {
-		if x < frame.Width {
-			frame.Cells[y+i][x] = Cell{Char: vLine}
-		}
-		if x+w-1 < frame.Width {
-			frame.Cells[y+i][x+w-1] = Cell{Char: vLine}
-		}
+	for i := 1; i < h-1; i++ {
+		frame.SetCellClipped(x, y+i, bc(vLine), clip)
+		frame.SetCellClipped(x+w-1, y+i, bc(vLine), clip)
 	}
 }
 
@@ -842,30 +837,20 @@ func SetTerminalTitle(title string) error {
 
 // renderScrollableChildren renders children of a scrollable container,
 // clipping them to the container's visible area and rendering a scrollbar.
-func renderScrollableChildren(frame *Frame, vnode *VNode, style Style) {
-	// Calculate the clip region (content area inside border + padding)
-	borderW := 0
-	if style.Border == "single" || style.Border == "double" || style.Border == "rounded" {
-		borderW = 1
+func renderScrollableChildren(frame *Frame, vnode *VNode, style Style, clip Rect) {
+	if clip.W <= 0 || clip.H <= 0 {
+		return
 	}
-
-	clipX := vnode.X + borderW + style.PaddingLeft
-	clipY := vnode.Y + borderW + style.PaddingTop
-	clipW := vnode.W - 2*borderW - style.PaddingLeft - style.PaddingRight
-	clipH := vnode.H - 2*borderW - style.PaddingTop - style.PaddingBottom
 
 	// Reserve 1 column for scrollbar
-	if clipW > 1 {
-		clipW-- // scrollbar takes rightmost column
-	}
-
-	if clipW <= 0 || clipH <= 0 {
-		return
+	contentClip := clip
+	if contentClip.W > 1 {
+		contentClip.W--
 	}
 
 	// Render children with clipping
 	for _, child := range vnode.Children {
-		renderVNodeClipped(frame, child, clipX, clipY, clipW, clipH)
+		renderVNode(frame, child, contentClip)
 	}
 
 	// Render scrollbar if needed
@@ -873,185 +858,15 @@ func renderScrollableChildren(frame *Frame, vnode *VNode, style Style) {
 	if nodeID != "" {
 		vp := GetViewport(nodeID)
 		if vp.NeedsScroll() {
-			scrollbarX := clipX + clipW // right edge of content area
-			renderScrollbar(frame, scrollbarX, clipY, clipH, vp)
+			scrollbarX := clip.X + contentClip.W
+			renderScrollbar(frame, scrollbarX, clip.Y, clip.H, vp, clip)
 		}
 	}
 }
-
-// renderVNodeClipped renders a VNode and its children, clipping to the given rect.
-func renderVNodeClipped(frame *Frame, vnode *VNode, clipX, clipY, clipW, clipH int) {
-	// Quick reject: if the node is entirely outside the clip region, skip it
-	if vnode.Y+vnode.H <= clipY || vnode.Y >= clipY+clipH {
-		return // entirely above or below
-	}
-	if vnode.X+vnode.W <= clipX || vnode.X >= clipX+clipW {
-		return // entirely left or right
-	}
-
-	style := vnode.Style
-
-	switch vnode.Type {
-	case "fragment":
-		// Fragment: render children directly, no background/border
-		for _, child := range vnode.Children {
-			renderVNodeClipped(frame, child, clipX, clipY, clipW, clipH)
-		}
-		return
-
-	case "text":
-		// Render text with clipping
-		renderTextClipped(frame, vnode, style, clipX, clipY, clipW, clipH)
-
-	default:
-		// Container: render background clipped
-		if style.Background != "" {
-			for y := vnode.Y; y < vnode.Y+vnode.H; y++ {
-				if y < clipY || y >= clipY+clipH {
-					continue
-				}
-				if y < 0 || y >= frame.Height {
-					continue
-				}
-				for x := vnode.X; x < vnode.X+vnode.W; x++ {
-					if x < clipX || x >= clipX+clipW {
-						continue
-					}
-					if x < 0 || x >= frame.Width {
-						continue
-					}
-					frame.Cells[y][x] = Cell{Char: ' ', Background: style.Background}
-				}
-			}
-		}
-
-		// Render border clipped (only if visible)
-		if style.Border != "" {
-			renderBorderClipped(frame, vnode, style.Border, clipX, clipY, clipW, clipH)
-		}
-
-		// Render children clipped
-		for _, child := range vnode.Children {
-			renderVNodeClipped(frame, child, clipX, clipY, clipW, clipH)
-		}
-	}
-}
-
-// renderTextClipped renders text content clipped to the given rect.
-func renderTextClipped(frame *Frame, vnode *VNode, style Style, clipX, clipY, clipW, clipH int) {
-	if vnode.Content == "" {
-		return
-	}
-
-	borderW := 0
-	if style.Border == "single" || style.Border == "double" || style.Border == "rounded" {
-		borderW = 1
-	}
-
-	startX := vnode.X + borderW + style.PaddingLeft
-	startY := vnode.Y + borderW + style.PaddingTop
-	availW := vnode.W - 2*borderW - style.PaddingLeft - style.PaddingRight
-	if availW <= 0 {
-		availW = vnode.W
-	}
-
-	col := 0
-	row := 0
-	for _, ch := range vnode.Content {
-		w := RuneWidth(ch)
-		if w == 0 {
-			continue // skip zero-width chars
-		}
-
-		// Wrap if this character would exceed available width
-		if availW > 0 && col+w > availW {
-			col = 0
-			row++
-		}
-
-		px := startX + col
-		py := startY + row
-
-		// Clip check
-		if py >= clipY && py < clipY+clipH && px >= clipX && px < clipX+clipW {
-			if px >= 0 && px < frame.Width && py >= 0 && py < frame.Height {
-				frame.Cells[py][px] = Cell{
-					Char:       ch,
-					Foreground: style.Foreground,
-					Background: style.Background,
-					Bold:       style.Bold,
-					Dim:        style.Dim,
-					Underline:  style.Underline,
-				}
-				// For wide chars, place a padding cell
-				if w == 2 && px+1 < clipX+clipW && px+1 < frame.Width {
-					frame.Cells[py][px+1] = Cell{
-						Char:       0,
-						Foreground: style.Foreground,
-						Background: style.Background,
-					}
-				}
-			}
-		}
-
-		col += w
-	}
-}
-
-// renderBorderClipped draws a border clipped to the given rect.
-func renderBorderClipped(frame *Frame, vnode *VNode, borderType string, clipX, clipY, clipW, clipH int) {
-	x, y := vnode.X, vnode.Y
-	w, h := vnode.W, vnode.H
-
-	if w < 2 || h < 2 {
-		return
-	}
-
-	var tl, tr, bl, br, hLine, vLine rune
-	switch borderType {
-	case "single":
-		tl, tr, bl, br, hLine, vLine = '┌', '┐', '└', '┘', '─', '│'
-	case "double":
-		tl, tr, bl, br, hLine, vLine = '╔', '╗', '╚', '╝', '═', '║'
-	case "rounded":
-		tl, tr, bl, br, hLine, vLine = '╭', '╮', '╰', '╯', '─', '│'
-	default:
-		return
-	}
-
-	setClipped := func(px, py int, ch rune) {
-		if px >= clipX && px < clipX+clipW && py >= clipY && py < clipY+clipH {
-			if px >= 0 && px < frame.Width && py >= 0 && py < frame.Height {
-				frame.Cells[py][px] = Cell{Char: ch}
-			}
-		}
-	}
-
-	// Top border
-	setClipped(x, y, tl)
-	for i := 1; i < w-1; i++ {
-		setClipped(x+i, y, hLine)
-	}
-	setClipped(x+w-1, y, tr)
-
-	// Bottom border
-	setClipped(x, y+h-1, bl)
-	for i := 1; i < w-1; i++ {
-		setClipped(x+i, y+h-1, hLine)
-	}
-	setClipped(x+w-1, y+h-1, br)
-
-	// Vertical borders
-	for i := 1; i < h-1; i++ {
-		setClipped(x, y+i, vLine)
-		setClipped(x+w-1, y+i, vLine)
-	}
-}
-
 // renderScrollbar draws a vertical scrollbar at the given position.
 // Uses │ for the track and █ for the thumb.
-func renderScrollbar(frame *Frame, x, y, trackH int, vp *Viewport) {
-	if x < 0 || x >= frame.Width || trackH <= 0 {
+func renderScrollbar(frame *Frame, x, y, trackH int, vp *Viewport, clip Rect) {
+	if trackH <= 0 {
 		return
 	}
 
@@ -1059,29 +874,24 @@ func renderScrollbar(frame *Frame, x, y, trackH int, vp *Viewport) {
 
 	for i := 0; i < trackH; i++ {
 		py := y + i
-		if py < 0 || py >= frame.Height {
-			continue
-		}
-
 		var ch rune
 		if i >= thumbStart && i < thumbStart+thumbSize {
-			ch = '█' // thumb
+			ch = '█'
 		} else {
-			ch = '│' // track
+			ch = '│'
 		}
-
-		frame.Cells[py][x] = Cell{
+		frame.SetCellClipped(x, py, Cell{
 			Char:       ch,
-			Foreground: "#666666", // dim gray for scrollbar
-		}
+			Foreground: "#666666",
+		}, clip)
 	}
 }
 
 // renderInput renders a single-line text input VNode.
-func renderInput(frame *Frame, vnode *VNode, style Style) {
+func renderInput(frame *Frame, vnode *VNode, style Style, clip Rect) {
 	x, y := vnode.X, vnode.Y
 	w, h := vnode.W, vnode.H
-	if w <= 0 || h <= 0 || y >= frame.Height || x >= frame.Width {
+	if w <= 0 || h <= 0 {
 		return
 	}
 
@@ -1094,7 +904,6 @@ func renderInput(frame *Frame, vnode *VNode, style Style) {
 		state.Height = 1
 		state.MultiLine = false
 		state.Focused = vnode.Focused
-		// Sync value from Lua props if provided
 		if val, ok := vnode.Props["value"].(string); ok {
 			if val != state.Text {
 				state.Text = val
@@ -1133,19 +942,19 @@ func renderInput(frame *Frame, vnode *VNode, style Style) {
 	// Render background
 	bg := style.Background
 	if bg == "" {
-		bg = "#1a1a2e" // default input background (dark)
+		bg = "#1a1a2e"
 	}
-	for cx := x; cx < x+w && cx < frame.Width; cx++ {
-		if y < frame.Height {
-			frame.Cells[y][cx] = Cell{Char: ' ', Background: bg}
-		}
+	oid := getVNodeID(vnode)
+	for cx := x; cx < x+w; cx++ {
+		frame.SetCellClipped(cx, y, Cell{Char: ' ', Background: bg,
+			OwnerNode: vnode, OwnerID: oid, CellRole: "background"}, clip)
 	}
 
 	// Render text (with horizontal scroll)
 	runes := []rune(text)
 	fg := style.Foreground
 	if isPlaceholder {
-		fg = "#666666" // dim placeholder
+		fg = "#666666"
 	}
 
 	for col := 0; col < w; col++ {
@@ -1154,15 +963,11 @@ func renderInput(frame *Frame, vnode *VNode, style Style) {
 			break
 		}
 		px := x + col
-		if px >= frame.Width {
-			break
-		}
 
 		cellFg := fg
 		cellBg := bg
 		reverse := false
 
-		// Check if this position is in the selection
 		if state != nil && state.HasSelection() {
 			lo := state.selMin()
 			hi := state.selMax()
@@ -1171,46 +976,46 @@ func renderInput(frame *Frame, vnode *VNode, style Style) {
 			}
 		}
 
-		frame.Cells[y][px] = Cell{
+		frame.SetCellClipped(px, y, Cell{
 			Char:       runes[runeIdx],
 			Foreground: cellFg,
 			Background: cellBg,
 			Bold:       style.Bold,
 			Reverse:    reverse,
-		}
+			OwnerNode:  vnode, OwnerID: oid, CellRole: "content",
+		}, clip)
 	}
 
-	// Render cursor (reverse video at cursor position)
+	// Render cursor
 	if state != nil && state.Focused {
 		cursorCol := state.CursorPos - scrollX
 		if cursorCol >= 0 && cursorCol < w {
 			px := x + cursorCol
-			if px < frame.Width && y < frame.Height {
-				ch := ' '
-				if state.CursorPos < len(runes) {
-					ch = runes[state.CursorPos]
-				}
-				frame.Cells[y][px] = Cell{
-					Char:       ch,
-					Foreground: bg,  // swap fg/bg for cursor
-					Background: fg,
-					Reverse:    true,
-				}
+			ch := ' '
+			if state.CursorPos < len(runes) {
+				ch = runes[state.CursorPos]
 			}
+			frame.SetCellClipped(px, y, Cell{
+				Char:       ch,
+				Foreground: bg,
+				Background: fg,
+				Reverse:    true,
+				OwnerNode:  vnode, OwnerID: oid, CellRole: "content",
+			}, clip)
 		}
 	}
 
 	// Render border if specified
 	if style.Border != "" {
-		renderBorder(frame, vnode, style.Border)
+		renderBorder(frame, vnode, style.Border, clip)
 	}
 }
 
 // renderTextArea renders a multi-line text area VNode.
-func renderTextArea(frame *Frame, vnode *VNode, style Style) {
+func renderTextArea(frame *Frame, vnode *VNode, style Style, clip Rect) {
 	x, y := vnode.X, vnode.Y
 	w, h := vnode.W, vnode.H
-	if w <= 0 || h <= 0 || y >= frame.Height || x >= frame.Width {
+	if w <= 0 || h <= 0 {
 		return
 	}
 
@@ -1255,21 +1060,22 @@ func renderTextArea(frame *Frame, vnode *VNode, style Style) {
 		}
 	}
 
-	// Render background
+	// Render background (clipped)
 	bg := style.Background
 	if bg == "" {
 		bg = "#1a1a2e"
 	}
-	for ry := y; ry < y+h && ry < frame.Height; ry++ {
-		for cx := x; cx < x+w && cx < frame.Width; cx++ {
-			frame.Cells[ry][cx] = Cell{Char: ' ', Background: bg}
-		}
+	oid := getVNodeID(vnode)
+	frame.FillClipped(x, y, w, h, Cell{Char: ' ', Background: bg,
+		OwnerNode: vnode, OwnerID: oid, CellRole: "background"}, clip)
+
+	// Render border (clipped)
+	if style.Border != "" {
+		renderBorder(frame, vnode, style.Border, clip)
 	}
 
-	// Render border
-	if style.Border != "" {
-		renderBorder(frame, vnode, style.Border)
-	}
+	// Content clip = intersection of parent clip and content area
+	contentClip := IntersectRect(clip, Rect{X: contentX, Y: contentY, W: contentW, H: contentH})
 
 	// Determine text and scroll
 	text := ""
@@ -1307,9 +1113,6 @@ func renderTextArea(frame *Frame, vnode *VNode, style Style) {
 		line := []rune(lines[lineIdx])
 
 		py := contentY + row
-		if py >= frame.Height {
-			break
-		}
 
 		for col := 0; col < contentW; col++ {
 			runeIdx := col + scrollX
@@ -1317,16 +1120,11 @@ func renderTextArea(frame *Frame, vnode *VNode, style Style) {
 				break
 			}
 			px := contentX + col
-			if px >= frame.Width {
-				break
-			}
 
 			cellFg := fg
 			reverse := false
 
-			// Check selection
 			if state != nil && state.HasSelection() && !isPlaceholder {
-				// Convert line/col to absolute rune position
 				absPos := lineColToPos(lines, lineIdx, runeIdx)
 				lo := state.selMin()
 				hi := state.selMax()
@@ -1335,13 +1133,14 @@ func renderTextArea(frame *Frame, vnode *VNode, style Style) {
 				}
 			}
 
-			frame.Cells[py][px] = Cell{
+			frame.SetCellClipped(px, py, Cell{
 				Char:       line[runeIdx],
 				Foreground: cellFg,
 				Background: bg,
 				Bold:       style.Bold,
 				Reverse:    reverse,
-			}
+				OwnerNode:  vnode, OwnerID: oid, CellRole: "content",
+			}, contentClip)
 		}
 	}
 
@@ -1355,18 +1154,17 @@ func renderTextArea(frame *Frame, vnode *VNode, style Style) {
 		if screenRow >= 0 && screenRow < contentH && screenCol >= 0 && screenCol < contentW {
 			px := contentX + screenCol
 			py := contentY + screenRow
-			if px < frame.Width && py < frame.Height {
-				ch := ' '
-				if state.CursorPos < len(runes) {
-					ch = runes[state.CursorPos]
-				}
-				frame.Cells[py][px] = Cell{
-					Char:       ch,
-					Foreground: bg,
-					Background: fg,
-					Reverse:    true,
-				}
+			ch := ' '
+			if state.CursorPos < len(runes) {
+				ch = runes[state.CursorPos]
 			}
+			frame.SetCellClipped(px, py, Cell{
+				Char:       ch,
+				Foreground: bg,
+				Background: fg,
+				Reverse:    true,
+				OwnerNode:  vnode, OwnerID: oid, CellRole: "content",
+			}, contentClip)
 		}
 	}
 }

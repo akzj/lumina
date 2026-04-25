@@ -660,7 +660,8 @@ func (app *App) renderComponent(comp *Component, adapter OutputAdapter) {
 			}
 			if ov.VNode != nil {
 				computeFlexLayout(ov.VNode, ov.X, ov.Y, ov.W, ov.H)
-				renderVNode(frame, ov.VNode)
+				ovClip := Rect{X: ov.X, Y: ov.Y, W: ov.W, H: ov.H}
+				renderVNode(frame, ov.VNode, ovClip)
 			}
 		}
 	}

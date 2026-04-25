@@ -660,7 +660,15 @@ func layoutHBox(vnode *VNode, contentX, contentY, contentW, contentH int, style 
 			children[i].flexGrow = cs.Flex
 			flexTotal += cs.Flex
 		} else {
-			children[i].fixedW = 1 + marginH
+			// For text nodes, use natural content width instead of 1
+			naturalW := 1
+			if child.Type == "text" && child.Content != "" {
+				naturalW = StringWidth(child.Content)
+				if naturalW < 1 {
+					naturalW = 1
+				}
+			}
+			children[i].fixedW = naturalW + marginH
 			fixedTotal += children[i].fixedW
 		}
 	}
