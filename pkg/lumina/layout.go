@@ -770,6 +770,15 @@ func layoutHBox(vnode *VNode, contentX, contentY, contentW, contentH int, style 
 		default: // "stretch"
 		}
 
+		// Clamp child width so it doesn't extend beyond the parent's content area
+		maxChildW := (contentX + contentW) - curX
+		if maxChildW < 0 {
+			maxChildW = 0
+		}
+		if childW > maxChildW {
+			childW = maxChildW
+		}
+
 		computeFlexLayout(child, curX, childY, childW, childH)
 		curX += childW
 		flowIdx++
