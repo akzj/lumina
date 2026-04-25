@@ -392,21 +392,17 @@ func layoutText(vnode *VNode, availW int) {
 		vnode.H = 1
 		return
 	}
-	contentLen := len(vnode.Content)
-	if contentLen == 0 {
+	// Use display width (accounts for wide chars like emoji/CJK)
+	contentW := StringWidth(vnode.Content)
+	if contentW == 0 {
 		vnode.H = 1
 		vnode.W = maxInt(vnode.W, 0)
 		return
 	}
-	// Calculate wrapped height
-	lines := (contentLen + availW - 1) / availW // ceiling division
+	// Calculate wrapped height based on display width
+	lines := (contentW + availW - 1) / availW // ceiling division
 	if lines < 1 {
 		lines = 1
-	}
-	// Text node width is min(contentLen, availW)
-	if contentLen < availW {
-		// Don't shrink the node below content width if parent hasn't constrained it
-		// but also don't exceed the allocated width
 	}
 	vnode.H = lines
 }
