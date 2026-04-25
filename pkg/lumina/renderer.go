@@ -607,6 +607,24 @@ func renderVNode(frame *Frame, vnode *VNode) {
 		scrollable := style.Overflow == "scroll"
 		if scrollable {
 			renderScrollableChildren(frame, vnode, style)
+		} else if style.Border != "" && vnode.W > 2 && vnode.H > 2 {
+			// Bordered container: clip container-type children that overflow
+			// the content area to prevent them from rendering over the border.
+			// Text nodes are never clipped (they have unreliable W/H from layout).
+			clipX := vnode.X + 1
+			clipY := vnode.Y + 1
+			clipW := vnode.W - 2
+			clipH := vnode.H - 2
+			for _, child := range vnode.Children {
+				if child.Type != "text" && child.Type != "fragment" &&
+					child.W > 0 && child.H > 0 &&
+					(child.X+child.W > clipX+clipW || child.Y+child.H > clipY+clipH ||
+						child.X < clipX || child.Y < clipY) {
+					renderVNodeClipped(frame, child, clipX, clipY, clipW, clipH)
+				} else {
+					renderVNode(frame, child)
+				}
+			}
 		} else {
 			// Render children normally
 			for _, child := range vnode.Children {
