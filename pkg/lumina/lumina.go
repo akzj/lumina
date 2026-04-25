@@ -493,18 +493,29 @@ func renderComponent(L *lua.State) int {
 	// Convert Lua table to VNode tree.
 	newVNode := LuaVNodeToVNode(L, -1)
 
+	// Get actual terminal size from app (fallback to 80x24)
+	renderW, renderH := 80, 24
+	if appInst := GetApp(L); appInst != nil {
+		if appInst.width > 0 {
+			renderW = appInst.width
+		}
+		if appInst.height > 0 {
+			renderH = appInst.height
+		}
+	}
+
 	// Diff against previous render.
 	var frame *Frame
 	if comp != nil && comp.LastVNode != nil {
 		patches := DiffVNode(comp.LastVNode, newVNode)
 		_ = patches // diff available for future incremental updates
-		frame = VNodeToFrame(newVNode, 80, 24)
+		frame = VNodeToFrame(newVNode, renderW, renderH)
 	} else {
-		frame = VNodeToFrame(newVNode, 80, 24)
+		frame = VNodeToFrame(newVNode, renderW, renderH)
 	}
-	if comp != nil {
-		comp.LastVNode = newVNode
-	}
+	// Do NOT set comp.LastVNode here — let Go-side renderComponent be
+	// the single source of truth for LastVNode. This ensures
+	// app.renderAllDirty() does a full re-render on first tick.
 
 	// Bridge VNode event handlers to EventBus
 	if app := GetApp(L); app != nil {
