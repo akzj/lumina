@@ -541,8 +541,11 @@ func Open(L *lua.State) {
 	L.SetField(-2, ModuleName)
 	L.Pop(2)
 
-	// Register shadcn component preloads
+	// Register shadcn component preloads (backward compat)
 	RegisterShadcn(L)
+
+	// Register lumina/ui component preloads (new naming)
+	RegisterUI(L)
 }
 
 func init() {
