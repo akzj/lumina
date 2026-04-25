@@ -1,8 +1,18 @@
 -- shadcn/command — Command palette (like VS Code Ctrl+K)
 local lumina = require("lumina")
 
+local c = {
+    fg = "#CDD6F4",
+    muted = "#6C7086",
+    primary = "#89B4FA",
+    border = "#45475A",
+    bg = "#181825",
+    surface = "#313244",
+}
+
 local Command = lumina.defineComponent({
     name = "ShadcnCommand",
+
     init = function(props)
         return {
             open = props.open or false,
@@ -12,21 +22,40 @@ local Command = lumina.defineComponent({
             groups = props.groups or {},
             selectedIndex = 0,
             width = props.width or 50,
+            id = props.id,
+            className = props.className,
+            style = props.style,
         }
     end,
+
     render = function(self)
         if not self.open then
-            return { type = "fragment", children = {} }
+            return { type = "empty" }
+        end
+
+        local style = {
+            border = "rounded",
+            borderColor = c.border,
+            background = c.bg,
+            foreground = c.fg,
+            padding = 1,
+            width = self.width,
+        }
+        if self.className and type(self.className) == "table" then
+            for k, v in pairs(self.className) do style[k] = v end
+        end
+        if self.style and type(self.style) == "table" then
+            for k, v in pairs(self.style) do style[k] = v end
         end
 
         local children = {}
 
         -- Search input
         local searchDisplay = self.search ~= "" and self.search or self.placeholder
-        local searchFg = self.search == "" and "#64748B" or "#E2E8F0"
+        local searchFg = self.search == "" and c.muted or c.fg
         children[#children + 1] = {
             type = "hbox",
-            style = { padding = 1 },
+            style = { paddingTop = 1 },
             children = {
                 { type = "text", content = "🔍 " .. searchDisplay, style = { foreground = searchFg } },
             },
@@ -36,7 +65,7 @@ local Command = lumina.defineComponent({
         children[#children + 1] = {
             type = "text",
             content = string.rep("─", self.width - 4),
-            style = { foreground = "#334155" },
+            style = { foreground = c.border },
         }
 
         -- Groups and items
@@ -45,13 +74,13 @@ local Command = lumina.defineComponent({
                 children[#children + 1] = {
                     type = "text",
                     content = "  " .. (group.heading or ""),
-                    style = { foreground = "#64748B", bold = true },
+                    style = { foreground = c.muted, bold = true },
                 }
                 for _, item in ipairs(group.items or {}) do
                     children[#children + 1] = {
                         type = "text",
                         content = "    " .. (item.label or item),
-                        style = { foreground = "#E2E8F0" },
+                        style = { foreground = c.fg },
                     }
                 end
             end
@@ -62,16 +91,15 @@ local Command = lumina.defineComponent({
                 local shortcut = type(item) == "table" and (item.shortcut or "") or ""
                 local content = "  " .. label
                 if shortcut ~= "" then
-                    local pad = self.width - 8 - #label - #shortcut
-                    if pad < 1 then pad = 1 end
+                    local pad = math.max(1, self.width - 8 - #label - #shortcut)
                     content = content .. string.rep(" ", pad) .. shortcut
                 end
                 children[#children + 1] = {
                     type = "text",
                     content = content,
                     style = {
-                        foreground = isSelected and "#E2E8F0" or "#94A3B8",
-                        background = isSelected and "#334155" or "",
+                        foreground = isSelected and c.fg or c.muted,
+                        background = isSelected and c.surface or "",
                     },
                 }
             end
@@ -82,22 +110,17 @@ local Command = lumina.defineComponent({
             children[#children + 1] = {
                 type = "text",
                 content = "  No results found.",
-                style = { foreground = "#64748B" },
+                style = { foreground = c.muted },
             }
         end
 
         return {
             type = "vbox",
-            style = {
-                border = "rounded",
-                background = "#1E1E2E",
-                foreground = "#CDD6F4",
-                padding = 1,
-                width = self.width,
-            },
+            id = self.id,
+            style = style,
             children = children,
         }
-    end
+    end,
 })
 
 return Command
