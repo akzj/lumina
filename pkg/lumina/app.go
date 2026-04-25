@@ -64,6 +64,10 @@ func NewApp() *App {
 
 // NewAppWithSize creates a new app with custom terminal size.
 func NewAppWithSize(width, height int) *App {
+	// Reset global state so tests don't leak between runs
+	ClearComponents()
+	globalEventBus.ClearBridgedHandlers()
+
 	L := lua.NewState()
 
 	app := &App{
