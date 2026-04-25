@@ -761,6 +761,27 @@ compositeAndWrite:
 		frame = compositor.Compose(frame, overlays)
 	}
 
+	// Composite managed windows on top of overlays
+	windows := globalWindowManager.GetVisible()
+	if len(windows) > 0 {
+		compositor := NewCompositor(app.width, app.height)
+		var winOverlays []*Overlay
+		for _, win := range windows {
+			winVNode := BuildWindowVNode(win)
+			winOverlays = append(winOverlays, &Overlay{
+				ID:      "window-" + win.ID,
+				VNode:   winVNode,
+				X:       win.X,
+				Y:       win.Y,
+				W:       win.W,
+				H:       win.H,
+				ZIndex:  win.ZIndex,
+				Visible: true,
+			})
+		}
+		frame = compositor.Compose(frame, winOverlays)
+	}
+
 	frame.FocusedID = globalEventBus.GetFocused()
 	adapter.Write(frame)
 	app.lastRenderTime = time.Now()
