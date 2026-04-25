@@ -16,6 +16,7 @@ type ANSIAdapter struct {
 	colorMode         ColorMode // detected or configured color capability
 	prevFrame         *Frame    // previous frame for cell-level diff
 	DefaultBackground string    // fallback bg for cells with empty Background
+	lastStyle         string    // last emitted style codes (skip reset when unchanged)
 }
 
 // NewANSIAdapter creates a new ANSIAdapter writing to the given writer.
@@ -222,13 +223,11 @@ func (a *ANSIAdapter) writeDiffRegion(newFrame, oldFrame *Frame, rect Rect) {
 func (a *ANSIAdapter) writeChar(ch rune) {
 	switch ch {
 	case '\\':
-		a.buf.WriteString("\\\\")
+		a.buf.WriteByte('\\') // write backslash as-is (no double-escape)
 	case '\x1b':
-		a.buf.WriteString("\\e")
-	case '\r':
-		a.buf.WriteString("\\r")
-	case '\n':
-		a.buf.WriteString("\\n")
+		// Skip raw escape characters — they'd be interpreted by terminal
+	case '\r', '\n':
+		// Skip control characters that would break cell grid
 	default:
 		a.buf.WriteRune(ch)
 	}

@@ -2,7 +2,6 @@ package lumina
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/akzj/go-lua/pkg/lua"
 )
@@ -265,14 +264,8 @@ func (eb *EventBus) ClearBridgedHandlers() {
 	}
 	eb.bridgedHandlers = nil
 
-	// Clear auto-registered focusable IDs (those with "auto_" prefix)
-	filtered := make([]string, 0, len(eb.focusableIDs))
-	for _, id := range eb.focusableIDs {
-		if !strings.HasPrefix(id, "auto_") {
-			filtered = append(filtered, id)
-		}
-	}
-	eb.focusableIDs = filtered
+	// Clear all focusable IDs (re-registered each render cycle)
+	eb.focusableIDs = nil
 }
 
 // RegisterBridgedHandler registers a handler that will be cleared on next render cycle.

@@ -37,6 +37,8 @@ type VNode struct {
 	PortalTarget string // target container ID for portal rendering
 	// Ref support (forwardRef)
 	Ref string // ref ID for forwardRef
+	// Style cache — avoids re-parsing props on every layout pass
+	cachedStyle *Style
 }
 
 // NewVNode creates a new VNode.
@@ -720,6 +722,13 @@ func renderText(frame *Frame, vnode *VNode, cell Cell, clip Rect) {
 	col := 0
 	row := 0
 	for _, ch := range vnode.Content {
+		// Handle newlines
+		if ch == '\n' {
+			col = 0
+			row++
+			continue
+		}
+
 		w := RuneWidth(ch)
 		if w == 0 {
 			continue
@@ -1350,7 +1359,11 @@ func luaProfilerToVNode(L *lua.State, idx int) *VNode {
 		L.PushNumber(actualDuration) // baseDuration ≈ actualDuration for now
 		L.PushNumber(startTime)
 		L.PushNumber(commitTime)
-		_ = L.PCall(6, 0, 0)
+		if err := L.PCall(6, 0, 0); err != 0 {
+			errMsg, _ := L.ToString(-1)
+			L.Pop(1) // pop error message
+			fmt.Printf("lumina: profiler callback error: %s\n", errMsg)
+		}
 	}
 
 	L.Pop(1) // pop onRender

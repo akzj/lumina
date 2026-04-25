@@ -1,7 +1,10 @@
 // Package lumina provides Lua bindings for the Lumina UI framework.
 package lumina
 
-import "fmt"
+import (
+	"fmt"
+	"reflect"
+)
 
 // PatchType identifies the kind of VNode tree mutation.
 type PatchType int
@@ -165,9 +168,14 @@ func diffChildren(oldChildren, newChildren []*VNode, parentPath []int, patches *
 // It builds a map of old key→index, then walks new children to detect
 // inserts, removes, moves, and in-place updates.
 func diffKeyedChildren(oldChildren, newChildren []*VNode, parentPath []int, patches *[]Patch) {
+	// Build key maps, detecting duplicates
+	dupKeys := make(map[string]bool)
 	oldKeyMap := make(map[string]int, len(oldChildren))
 	for i, child := range oldChildren {
 		if key := childKey(child); key != "" {
+			if _, exists := oldKeyMap[key]; exists {
+				dupKeys[key] = true // duplicate key — skip keyed reconciliation for this key
+			}
 			oldKeyMap[key] = i
 		}
 	}
@@ -175,8 +183,17 @@ func diffKeyedChildren(oldChildren, newChildren []*VNode, parentPath []int, patc
 	newKeyMap := make(map[string]int, len(newChildren))
 	for i, child := range newChildren {
 		if key := childKey(child); key != "" {
+			if _, exists := newKeyMap[key]; exists {
+				dupKeys[key] = true
+			}
 			newKeyMap[key] = i
 		}
+	}
+
+	// Remove duplicate keys from maps — fall back to index-based for those
+	for key := range dupKeys {
+		delete(oldKeyMap, key)
+		delete(newKeyMap, key)
 	}
 
 	// Track which old children have been matched.
@@ -457,9 +474,12 @@ func shallowEqual(a, b any) bool {
 	case bool:
 		bv, ok := b.(bool)
 		return ok && av == bv
+	case LuaFuncRef:
+		bv, ok := b.(LuaFuncRef)
+		return ok && av.Ref == bv.Ref
 	default:
-		// For non-comparable types (maps, slices), identity check via fmt.
-		return fmt.Sprintf("%v", a) == fmt.Sprintf("%v", b)
+		// For non-comparable types (maps, slices), use reflect.DeepEqual.
+		return reflect.DeepEqual(a, b)
 	}
 }
 
