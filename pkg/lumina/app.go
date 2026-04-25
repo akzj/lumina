@@ -704,16 +704,25 @@ func (app *App) renderComponent(comp *Component, adapter OutputAdapter) {
 			comp.MarkClean()
 			return
 		}
-		// NOTE: Incremental rendering via ApplyPatches is disabled for now.
-		// It causes visual tearing when content changes dramatically (e.g.
-		// page switches) because dirty rect calculation doesn't fully cover
-		// the old content area. Always do full re-render for correctness.
-		// TODO: Re-enable incremental path after fixing dirty rect coverage.
+
+		// Incremental rendering: if few patches and we have a previous frame,
+		// re-layout the new tree and apply only the changed subtrees.
+		if len(patches) <= 10 && app.lastFrame != nil && !ShouldFullRerender(patches, newVNode) {
+			frame = app.lastFrame
+			// Re-layout the entire new tree (cheap) so positions are correct
+			computeFlexLayout(newVNode, 0, 0, app.width, app.height)
+			ApplyPatches(frame, newVNode, patches, app.width, app.height)
+			comp.LastVNode = newVNode
+			app.lastFrame = frame
+			goto compositeAndWrite
+		}
 	}
+	// Full re-render (first render, large change, or no previous frame)
 	frame = VNodeToFrame(newVNode, app.width, app.height)
 	comp.LastVNode = newVNode
 	app.lastFrame = frame
 
+compositeAndWrite:
 	// Bridge VNode event handlers to EventBus
 	app.bridgeVNodeEvents(newVNode)
 

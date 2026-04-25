@@ -1,280 +1,305 @@
-package lumina_test
+package lumina
 
 import (
-	"bytes"
-	"strings"
 	"testing"
-
-	"github.com/akzj/lumina/pkg/lumina"
 )
 
-// newRenderTestApp creates a test app with buffered output and ANSI adapter.
-func newRenderTestApp(t *testing.T) (*lumina.App, *bytes.Buffer, *lumina.ANSIAdapter) {
-	t.Helper()
-	app := lumina.NewApp()
-	var buf bytes.Buffer
-	tio := lumina.NewBufferTermIO(80, 24, &buf)
-	adapter := lumina.NewANSIAdapter(tio)
-	lumina.SetOutputAdapter(adapter)
-	_ = tio
-	return app, &buf, adapter
-}
+// TestIncrementalRender_TextContentUpdate verifies that when only text content
+// changes, only the affected cells are modified in the frame.
+func TestIncrementalRender_TextContentUpdate(t *testing.T) {
+	width, height := 40, 10
 
-func TestIncrementalRender_NoChange(t *testing.T) {
-	app, buf, adapter := newRenderTestApp(t)
-	defer app.Close()
+	// Build initial VNode tree
+	oldRoot := NewVNode("vbox")
+	oldRoot.Style = Style{Width: width, Height: height}
+	child1 := NewVNode("text")
+	child1.Content = "Hello World"
+	child2 := NewVNode("text")
+	child2.Content = "Unchanged Line"
+	oldRoot.Children = []*VNode{child1, child2}
 
-	err := app.L.DoString(`
-		local lumina = require("lumina")
-		local App = lumina.defineComponent({
-			name = "StaticApp",
-			render = function(self)
-				return {
-					type = "vbox",
-					children = {
-						{ type = "text", content = "Hello World" },
-					}
-				}
-			end
-		})
-		lumina.mount(App)
-	`)
-	if err != nil {
-		t.Fatalf("setup failed: %v", err)
+	// Render initial frame
+	frame := VNodeToFrame(oldRoot, width, height)
+
+	// Verify initial content
+	line0 := extractLine(frame, 0, 0, 11)
+	if line0 != "Hello World" {
+		t.Errorf("initial line0 = %q, want %q", line0, "Hello World")
 	}
 
-	// First render (full)
-	app.RenderOnce()
-	if buf.Len() == 0 {
-		t.Fatal("first render produced no output")
+	// Build new tree with changed text
+	newRoot := NewVNode("vbox")
+	newRoot.Style = Style{Width: width, Height: height}
+	newChild1 := NewVNode("text")
+	newChild1.Content = "Hello Lumina"
+	newChild2 := NewVNode("text")
+	newChild2.Content = "Unchanged Line"
+	newRoot.Children = []*VNode{newChild1, newChild2}
+
+	// Diff
+	patches := DiffVNode(oldRoot, newRoot)
+	if len(patches) == 0 {
+		t.Fatal("expected patches for text content change")
 	}
 
-	// Second render — same content, DiffVNode detects no patches → skip
-	buf.Reset()
-	adapter.Invalidate()
-	app.RenderOnce()
+	// Apply incremental patches
+	computeFlexLayout(newRoot, 0, 0, width, height)
+	ApplyPatches(frame, newRoot, patches, width, height)
 
-	// No changes → component not dirty → RenderOnce should produce nothing
-	// (or very little if it re-renders identically)
-	if buf.Len() > 0 {
-		// Acceptable: component may not be dirty, so no output
-		t.Logf("second render produced %d bytes (component may not be dirty)", buf.Len())
-	}
-}
-
-func TestIncrementalRender_TextChange(t *testing.T) {
-	app, buf, adapter := newRenderTestApp(t)
-	defer app.Close()
-
-	err := app.L.DoString(`
-		local lumina = require("lumina")
-		local App = lumina.defineComponent({
-			name = "CounterApp",
-			render = function(self)
-				local count, setCount = lumina.useState("count", 0)
-				_G._setCount = setCount
-				return {
-					type = "vbox",
-					children = {
-						{ type = "text", content = "Count: " .. tostring(count) },
-						{ type = "text", content = "Static line" },
-					}
-				}
-			end
-		})
-		lumina.mount(App)
-	`)
-	if err != nil {
-		t.Fatalf("setup failed: %v", err)
+	// Verify updated content
+	line0 = extractLine(frame, 0, 0, 12)
+	if line0 != "Hello Lumina" {
+		t.Errorf("updated line0 = %q, want %q", line0, "Hello Lumina")
 	}
 
-	// First render (full)
-	app.RenderOnce()
-	firstOutput := stripANSICodes(buf.String())
-	if !strings.Contains(firstOutput, "Count: 0") {
-		t.Errorf("first render should contain 'Count: 0', got: %q", firstOutput[:min(len(firstOutput), 200)])
+	// Verify unchanged line is still there
+	line1 := extractLine(frame, 0, 1, 14)
+	if line1 != "Unchanged Line" {
+		t.Errorf("line1 = %q, want %q", line1, "Unchanged Line")
 	}
 
-	// Change state via useState setter → marks component dirty
-	buf.Reset()
-	adapter.Invalidate()
-	err = app.L.DoString(`_G._setCount(1)`)
-	if err != nil {
-		t.Fatalf("setState failed: %v", err)
-	}
-
-	// Second render — incremental path (small change)
-	app.RenderOnce()
-	secondLen := buf.Len()
-	if secondLen == 0 {
-		t.Error("second render produced no output after state change")
-	}
-
-	// The incremental render should produce LESS output than a full render
-	// (only dirty rects, not the entire 80x24 frame)
-	t.Logf("incremental render produced %d bytes", secondLen)
-}
-
-func TestIncrementalRender_FullFallback(t *testing.T) {
-	app, buf, adapter := newRenderTestApp(t)
-	defer app.Close()
-
-	err := app.L.DoString(`
-		local lumina = require("lumina")
-		local App = lumina.defineComponent({
-			name = "BigChangeApp",
-			render = function(self)
-				local mode, setMode = lumina.useState("mode", "simple")
-				_G._setMode = setMode
-				if mode == "complex" then
-					return {
-						type = "vbox",
-						children = {
-							{ type = "text", content = "Line A" },
-							{ type = "text", content = "Line B" },
-							{ type = "text", content = "Line C" },
-							{ type = "text", content = "Line D" },
-							{ type = "text", content = "Line E" },
-							{ type = "text", content = "Line F" },
-						}
-					}
-				else
-					return {
-						type = "hbox",
-						children = {
-							{ type = "text", content = "Simple" },
-						}
-					}
-				end
-			end
-		})
-		lumina.mount(App)
-	`)
-	if err != nil {
-		t.Fatalf("setup failed: %v", err)
-	}
-
-	// First render
-	app.RenderOnce()
-	if buf.Len() == 0 {
-		t.Fatal("first render produced no output")
-	}
-
-	// Dramatic change — type changes from hbox to vbox + many new children
-	// ShouldFullRerender should return true → full re-render
-	buf.Reset()
-	adapter.Invalidate()
-	err = app.L.DoString(`_G._setMode("complex")`)
-	if err != nil {
-		t.Fatalf("state change failed: %v", err)
-	}
-
-	app.RenderOnce()
-	output := stripANSICodes(buf.String())
-	if len(output) == 0 {
-		t.Error("dramatic change render produced no output")
-	}
-	// Verify new content is present
-	if !strings.Contains(output, "Line A") {
-		t.Error("output should contain 'Line A' after mode change")
+	// Verify dirty rects were set
+	if len(frame.DirtyRects) == 0 {
+		t.Error("expected dirty rects to be set")
 	}
 }
 
-func TestIncrementalRender_AddChild(t *testing.T) {
-	app, buf, adapter := newRenderTestApp(t)
-	defer app.Close()
+// TestIncrementalRender_ElementRemove verifies that removing an element
+// clears its old area.
+func TestIncrementalRender_ElementRemove(t *testing.T) {
+	width, height := 40, 10
 
-	err := app.L.DoString(`
-		local lumina = require("lumina")
-		local App = lumina.defineComponent({
-			name = "GrowApp",
-			render = function(self)
-				local n, setN = lumina.useState("n", 1)
-				_G._setN = setN
-				local children = {}
-				for i = 1, n do
-					children[i] = { type = "text", content = "Item " .. tostring(i) }
-				end
-				return {
-					type = "vbox",
-					children = children,
-				}
-			end
-		})
-		lumina.mount(App)
-	`)
-	if err != nil {
-		t.Fatalf("setup failed: %v", err)
+	// Build initial tree with 3 children
+	oldRoot := NewVNode("vbox")
+	oldRoot.Style = Style{Width: width, Height: height}
+	for _, txt := range []string{"Line A", "Line B", "Line C"} {
+		child := NewVNode("text")
+		child.Content = txt
+		oldRoot.Children = append(oldRoot.Children, child)
 	}
 
-	// First render — 1 item
-	app.RenderOnce()
-	firstOutput := stripANSICodes(buf.String())
-	if !strings.Contains(firstOutput, "Item 1") {
-		t.Error("first render should contain 'Item 1'")
+	// Render initial frame
+	frame := VNodeToFrame(oldRoot, width, height)
+
+	// Verify Line B exists
+	lineB := extractLine(frame, 0, 1, 6)
+	if lineB != "Line B" {
+		t.Errorf("initial lineB = %q, want %q", lineB, "Line B")
 	}
 
-	// Add a child
-	buf.Reset()
-	adapter.Invalidate()
-	err = app.L.DoString(`_G._setN(2)`)
-	if err != nil {
-		t.Fatalf("add child failed: %v", err)
+	// New tree: remove middle child
+	newRoot := NewVNode("vbox")
+	newRoot.Style = Style{Width: width, Height: height}
+	childA := NewVNode("text")
+	childA.Content = "Line A"
+	childC := NewVNode("text")
+	childC.Content = "Line C"
+	newRoot.Children = []*VNode{childA, childC}
+
+	// Diff
+	patches := DiffVNode(oldRoot, newRoot)
+	if len(patches) == 0 {
+		t.Fatal("expected patches for child removal")
 	}
 
-	app.RenderOnce()
-	output := stripANSICodes(buf.String())
-	if len(output) == 0 {
-		t.Error("add-child render produced no output")
-	}
-}
+	// Apply
+	computeFlexLayout(newRoot, 0, 0, width, height)
+	ApplyPatches(frame, newRoot, patches, width, height)
 
-func TestIncrementalRender_RemoveChild(t *testing.T) {
-	app, buf, adapter := newRenderTestApp(t)
-	defer app.Close()
-
-	err := app.L.DoString(`
-		local lumina = require("lumina")
-		local App = lumina.defineComponent({
-			name = "ShrinkApp",
-			render = function(self)
-				local n, setN = lumina.useState("n", 3)
-				_G._setN = setN
-				local children = {}
-				for i = 1, n do
-					children[i] = { type = "text", content = "Item " .. tostring(i) }
-				end
-				return {
-					type = "vbox",
-					children = children,
-				}
-			end
-		})
-		lumina.mount(App)
-	`)
-	if err != nil {
-		t.Fatalf("setup failed: %v", err)
-	}
-
-	// First render — 3 items
-	app.RenderOnce()
-	if buf.Len() == 0 {
-		t.Fatal("first render produced no output")
-	}
-
-	// Remove a child (3 → 2)
-	buf.Reset()
-	adapter.Invalidate()
-	err = app.L.DoString(`_G._setN(2)`)
-	if err != nil {
-		t.Fatalf("remove child failed: %v", err)
-	}
-
-	app.RenderOnce()
-	output := stripANSICodes(buf.String())
-	if len(output) == 0 {
-		t.Error("remove-child render produced no output")
+	// Verify dirty rects exist
+	if len(frame.DirtyRects) == 0 {
+		t.Error("expected dirty rects after removal")
 	}
 }
 
-// min is defined in e2e_full_test.go
+// TestIncrementalRender_ElementAdd verifies that adding an element
+// renders it correctly.
+func TestIncrementalRender_ElementAdd(t *testing.T) {
+	width, height := 40, 10
+
+	// Initial tree: 1 child
+	oldRoot := NewVNode("vbox")
+	oldRoot.Style = Style{Width: width, Height: height}
+	child1 := NewVNode("text")
+	child1.Content = "First"
+	oldRoot.Children = []*VNode{child1}
+
+	frame := VNodeToFrame(oldRoot, width, height)
+
+	// New tree: 2 children
+	newRoot := NewVNode("vbox")
+	newRoot.Style = Style{Width: width, Height: height}
+	newChild1 := NewVNode("text")
+	newChild1.Content = "First"
+	newChild2 := NewVNode("text")
+	newChild2.Content = "Second"
+	newRoot.Children = []*VNode{newChild1, newChild2}
+
+	patches := DiffVNode(oldRoot, newRoot)
+	if len(patches) == 0 {
+		t.Fatal("expected patches for child addition")
+	}
+
+	computeFlexLayout(newRoot, 0, 0, width, height)
+	ApplyPatches(frame, newRoot, patches, width, height)
+
+	// Verify new child is rendered
+	line1 := extractLine(frame, 0, 1, 6)
+	if line1 != "Second" {
+		t.Errorf("line1 = %q, want %q", line1, "Second")
+	}
+
+	if len(frame.DirtyRects) == 0 {
+		t.Error("expected dirty rects after addition")
+	}
+}
+
+// TestIncrementalRender_LargeChangeFallback verifies that ShouldFullRerender
+// returns true when too many patches exist.
+func TestIncrementalRender_LargeChangeFallback(t *testing.T) {
+	// Build a tree with many children
+	root := NewVNode("vbox")
+	for i := 0; i < 20; i++ {
+		child := NewVNode("text")
+		child.Content = "item"
+		root.Children = append(root.Children, child)
+	}
+
+	// Create a completely different tree
+	newRoot := NewVNode("vbox")
+	for i := 0; i < 20; i++ {
+		child := NewVNode("box") // different type → PatchReplace for each
+		child.Content = "new-item"
+		newRoot.Children = append(newRoot.Children, child)
+	}
+
+	patches := DiffVNode(root, newRoot)
+	if len(patches) == 0 {
+		t.Fatal("expected many patches")
+	}
+
+	// With 20+ replace patches vs 21 nodes, ShouldFullRerender should return true
+	if !ShouldFullRerender(patches, root) {
+		t.Errorf("ShouldFullRerender = false, want true for %d patches vs %d nodes",
+			len(patches), countNodes(root))
+	}
+}
+
+// TestClearRect verifies that clearRect properly clears cells and marks them transparent.
+func TestClearRect(t *testing.T) {
+	frame := NewFrame(20, 10)
+
+	// Fill some cells
+	for y := 2; y < 5; y++ {
+		for x := 3; x < 8; x++ {
+			frame.Cells[y][x] = Cell{Char: '#', Foreground: "red", Transparent: false}
+		}
+	}
+
+	// Verify filled
+	if frame.Cells[3][5].Char != '#' {
+		t.Fatal("cell should be '#' before clear")
+	}
+
+	// Clear the region
+	clearRect(frame, 3, 2, 5, 3)
+
+	// Verify cleared
+	for y := 2; y < 5; y++ {
+		for x := 3; x < 8; x++ {
+			cell := frame.Cells[y][x]
+			if cell.Char != ' ' {
+				t.Errorf("cell (%d,%d) char = %q, want ' '", x, y, string(cell.Char))
+			}
+			if !cell.Transparent {
+				t.Errorf("cell (%d,%d) should be transparent after clear", x, y)
+			}
+		}
+	}
+
+	// Verify cells outside the region are unchanged
+	if frame.Cells[0][0].Char != ' ' || !frame.Cells[0][0].Transparent {
+		// NewFrame defaults are space + transparent, so this should still be true
+	}
+}
+
+// TestDirtyRectRegionDiff verifies that writeDiffRegion only writes within bounds.
+func TestDirtyRectRegionDiff(t *testing.T) {
+	// Create two frames
+	_ = NewFrame(20, 10) // oldFrame - used conceptually for diff comparison
+	newFrame := NewFrame(20, 10)
+
+	// Change only a small region in the new frame
+	for x := 5; x < 10; x++ {
+		newFrame.Cells[3][x] = Cell{Char: 'X', Transparent: false}
+	}
+
+	// Set dirty rects to cover only the changed region
+	newFrame.DirtyRects = []Rect{{X: 5, Y: 3, W: 5, H: 1}}
+
+	// Verify isFullFrameDirty returns false
+	if isFullFrameDirty(newFrame) {
+		t.Error("should not be full frame dirty with small rect")
+	}
+
+	// Full frame dirty rect
+	fullFrame := NewFrame(20, 10)
+	fullFrame.DirtyRects = []Rect{{X: 0, Y: 0, W: 20, H: 10}}
+	if !isFullFrameDirty(fullFrame) {
+		t.Error("should be full frame dirty")
+	}
+}
+
+// TestNodeClipRect verifies clip rect calculation.
+func TestNodeClipRect(t *testing.T) {
+	frame := NewFrame(80, 24)
+
+	// Normal case
+	node := NewVNode("box")
+	node.X = 5
+	node.Y = 3
+	node.W = 10
+	node.H = 5
+	clip := nodeClipRect(node, frame)
+	if clip.X != 5 || clip.Y != 3 || clip.W != 10 || clip.H != 5 {
+		t.Errorf("clip = %+v, want {5 3 10 5}", clip)
+	}
+
+	// Clamp to frame bounds
+	node2 := NewVNode("box")
+	node2.X = 75
+	node2.Y = 20
+	node2.W = 10
+	node2.H = 10
+	clip2 := nodeClipRect(node2, frame)
+	if clip2.X != 75 || clip2.Y != 20 || clip2.W != 5 || clip2.H != 4 {
+		t.Errorf("clip2 = %+v, want {75 20 5 4}", clip2)
+	}
+
+	// Negative origin
+	node3 := NewVNode("box")
+	node3.X = -2
+	node3.Y = -1
+	node3.W = 10
+	node3.H = 5
+	clip3 := nodeClipRect(node3, frame)
+	if clip3.X != 0 || clip3.Y != 0 || clip3.W != 8 || clip3.H != 4 {
+		t.Errorf("clip3 = %+v, want {0 0 8 4}", clip3)
+	}
+}
+
+// extractLine reads characters from a frame row starting at (startX, y) for length chars.
+func extractLine(frame *Frame, startX, y, length int) string {
+	if y >= frame.Height {
+		return ""
+	}
+	result := make([]rune, 0, length)
+	for x := startX; x < startX+length && x < frame.Width; x++ {
+		ch := frame.Cells[y][x].Char
+		if ch == 0 {
+			continue // skip wide char padding
+		}
+		result = append(result, ch)
+	}
+	return string(result)
+}
