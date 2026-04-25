@@ -30,7 +30,7 @@ local store = lumina.createStore({
 -- Clicked cells: "x,y" -> true
 local clickedCells = {}
 
--- Register global mouse events
+-- Register global mouse events (empty componentID = wildcard, matches all)
 lumina.on("mousemove", "", function(e)
     store.dispatch("setState", { hoverX = e.x, hoverY = e.y })
 end)
@@ -53,7 +53,7 @@ end)
 
 lumina.onKey("q", function() lumina.quit() end)
 
--- Build a single row as a text node with segments
+-- Build a single row as text segments (optimized: accumulate same-style chars)
 local function buildRow(y, width, hoverX, hoverY)
     -- Check if this row has any special cells
     local isHoverRow = (y == hoverY)
@@ -67,16 +67,16 @@ local function buildRow(y, width, hoverX, hoverY)
         end
     end
 
-    -- Fast path: uniform row
+    -- Fast path: uniform row (most rows)
     if not isHoverRow and not hasClicks then
         return {
             type = "text",
-            content = string.rep("·", width),
+            content = string.rep(".", width),
             style = { foreground = theme.dot, background = theme.bg },
         }
     end
 
-    -- Slow path: build segments for special cells
+    -- Slow path: build segments for rows with special cells
     local segments = {}
     local curChars = {}
     local curFg = theme.dot
@@ -98,20 +98,20 @@ local function buildRow(y, width, hoverX, hoverY)
         local isHover = (x == hoverX and y == hoverY)
         local isClick = clickedCells[key]
 
-        local char = "·"
+        local char = "."
         local fg = theme.dot
         local bg = theme.bg
 
         if isHover and isClick then
-            char = "█"
+            char = "#"
             fg = theme.both
             bg = "#45475A"
         elseif isHover then
-            char = "█"
+            char = "@"
             fg = theme.hover
             bg = "#313244"
         elseif isClick then
-            char = "█"
+            char = "*"
             fg = theme.click
             bg = "#313244"
         end
@@ -142,17 +142,15 @@ local App = lumina.defineComponent({
         local cy = state.clickY or -1
         local total = state.totalClicks or 0
 
+        -- Get actual terminal size
+        local width, height = lumina.getSize()
+
         -- Status bar (row 0)
         local status = string.format(
             " Mouse: (%d, %d) | Clicked: (%d, %d) | Total: %d | [c] Clear  [q] Quit",
             hx, hy, cx, cy, total
         )
 
-        -- Build rows (skip row 0 for status bar)
-        -- We don't know exact screen size, use 80x24 as reasonable default
-        -- The framework will clip to actual size
-        local width = 120
-        local height = 40
         local children = {
             {
                 type = "text",

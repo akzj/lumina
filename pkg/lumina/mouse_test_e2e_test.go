@@ -30,17 +30,17 @@ func TestMouseTest_LoadsAndRenders(t *testing.T) {
 		t.Errorf("Expected status bar with 'Mouse:', got: %q", row0)
 	}
 
-	// Check that canvas rows have dots
+	// Check that canvas rows have dots (ASCII '.')
 	dotsFound := false
 	for y := 1; y < 10; y++ {
 		row := getFrameRow(frame, y)
-		if strings.Contains(row, "·") {
+		if strings.Contains(row, "...") {
 			dotsFound = true
 			break
 		}
 	}
 	if !dotsFound {
-		t.Error("Expected canvas rows with '·' dots")
+		t.Error("Expected canvas rows with '.' dots")
 	}
 
 	t.Logf("Row 0: %s", strings.TrimSpace(getFrameRow(frame, 0)))

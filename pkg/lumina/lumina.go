@@ -57,6 +57,7 @@ func luaLoader(L *lua.State) int {
 		"quit":            luaQuit,
 		"onKey":           luaOnKey,
 		"createState":     createState,
+		"getSize":         luaGetSize,
 		// Style & Theme API
 		"defineStyle":        defineStyle,
 		"defineGlobalStyles": defineGlobalStyles,
@@ -886,6 +887,24 @@ func luaQuit(L *lua.State) int {
 		app.Stop()
 	}
 	return 0
+}
+
+// luaGetSize returns the terminal width and height.
+// Usage: local w, h = lumina.getSize()
+func luaGetSize(L *lua.State) int {
+	app := GetApp(L)
+	w, h := 80, 24 // defaults
+	if app != nil {
+		if app.width > 0 {
+			w = app.width
+		}
+		if app.height > 0 {
+			h = app.height
+		}
+	}
+	L.PushInteger(int64(w))
+	L.PushInteger(int64(h))
+	return 2
 }
 
 // keyBindings stores key → Lua function ref mappings for lumina.onKey().
