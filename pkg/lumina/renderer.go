@@ -657,9 +657,20 @@ func renderText(frame *Frame, vnode *VNode, cell Cell) {
 	col := 0
 	row := 0
 	for _, ch := range vnode.Content {
+		w := RuneWidth(ch)
+		if w == 0 {
+			continue // skip zero-width chars (combining marks, ZWJ, etc.)
+		}
+
+		// Wrap if this character would exceed available width
+		if availW > 0 && col+w > availW {
+			col = 0
+			row++
+		}
+
 		px := startX + col
 		py := startY + row
-		if px < frame.Width && py < frame.Height && px >= 0 && py >= 0 {
+		if px >= 0 && py >= 0 && px < frame.Width && py < frame.Height {
 			frame.Cells[py][px] = Cell{
 				Char:       ch,
 				Foreground: cell.Foreground,
@@ -668,12 +679,16 @@ func renderText(frame *Frame, vnode *VNode, cell Cell) {
 				Dim:        cell.Dim,
 				Underline:  cell.Underline,
 			}
+			// For wide chars, place a padding cell in the next column
+			if w == 2 && px+1 < frame.Width {
+				frame.Cells[py][px+1] = Cell{
+					Char:       0, // padding cell
+					Foreground: cell.Foreground,
+					Background: cell.Background,
+				}
+			}
 		}
-		col++
-		if col >= availW {
-			col = 0
-			row++
-		}
+		col += w
 	}
 }
 
@@ -943,6 +958,17 @@ func renderTextClipped(frame *Frame, vnode *VNode, style Style, clipX, clipY, cl
 	col := 0
 	row := 0
 	for _, ch := range vnode.Content {
+		w := RuneWidth(ch)
+		if w == 0 {
+			continue // skip zero-width chars
+		}
+
+		// Wrap if this character would exceed available width
+		if availW > 0 && col+w > availW {
+			col = 0
+			row++
+		}
+
 		px := startX + col
 		py := startY + row
 
@@ -957,14 +983,18 @@ func renderTextClipped(frame *Frame, vnode *VNode, style Style, clipX, clipY, cl
 					Dim:        style.Dim,
 					Underline:  style.Underline,
 				}
+				// For wide chars, place a padding cell
+				if w == 2 && px+1 < clipX+clipW && px+1 < frame.Width {
+					frame.Cells[py][px+1] = Cell{
+						Char:       0,
+						Foreground: style.Foreground,
+						Background: style.Background,
+					}
+				}
 			}
 		}
 
-		col++
-		if col >= availW {
-			col = 0
-			row++
-		}
+		col += w
 	}
 }
 

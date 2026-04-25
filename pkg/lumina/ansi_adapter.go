@@ -74,6 +74,14 @@ func (a *ANSIAdapter) Write(frame *Frame) error {
 			var lastStyle string
 			for x := rect.X; x < rect.X+rect.W && x < frame.Width; x++ {
 				cell := frame.Cells[y][x]
+
+				// Skip padding cells after wide characters.
+				// The terminal cursor already advances past them when the
+				// wide char is emitted.
+				if cell.Char == 0 {
+					continue
+				}
+
 				style := a.styleCodes(&cell)
 
 				// Only emit style change if different from last
