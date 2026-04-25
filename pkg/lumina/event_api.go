@@ -267,3 +267,21 @@ func registerCaptureEvent(L *lua.State) int {
 
 	return 0
 }
+
+// luaIsFocused checks if a component is currently focused.
+// lumina.isFocused(id) → boolean
+func luaIsFocused(L *lua.State) int {
+	id := L.CheckString(1)
+	focused := globalEventBus.GetFocused() == id
+	L.PushBoolean(focused)
+	return 1
+}
+
+// luaIsHovered checks if a component is currently under the mouse cursor.
+// lumina.isHovered(id) → boolean
+func luaIsHovered(L *lua.State) int {
+	id := L.CheckString(1)
+	app := GetApp(L)
+	L.PushBoolean(app != nil && app.hoveredID == id)
+	return 1
+}

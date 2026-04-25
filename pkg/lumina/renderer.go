@@ -729,13 +729,40 @@ func renderFocusIndicator(frame *Frame, vnode *VNode, clip Rect) {
 		return
 	}
 
+	style := vnode.Style
+
+	// Use focus-specific border chars if available, else defaults
 	focusTl := '['
 	focusTr := ']'
 	focusBl := '['
 	focusBr := ']'
 	focusH := '-'
 	focusV := '|'
-	fc := "#FFFF00"
+
+	// If the node has a border, use matching border chars for focus indicator
+	if style.FocusBorder != "" || style.Border != "" {
+		bt := style.FocusBorder
+		if bt == "" {
+			bt = style.Border
+		}
+		switch bt {
+		case "single":
+			focusTl, focusTr, focusBl, focusBr, focusH, focusV = '┌', '┐', '└', '┘', '─', '│'
+		case "double":
+			focusTl, focusTr, focusBl, focusBr, focusH, focusV = '╔', '╗', '╚', '╝', '═', '║'
+		case "rounded":
+			focusTl, focusTr, focusBl, focusBr, focusH, focusV = '╭', '╮', '╰', '╯', '─', '│'
+		}
+	}
+
+	// Focus color: prefer FocusForeground, then Foreground, then fallback
+	fc := style.FocusForeground
+	if fc == "" {
+		fc = style.Foreground
+		if fc == "" {
+			fc = "#FFFF00" // last resort fallback
+		}
+	}
 	oid := getVNodeID(vnode)
 
 	bc := func(ch rune) Cell {
@@ -773,20 +800,34 @@ func renderBorder(frame *Frame, vnode *VNode, borderType string, clip Rect) {
 	}
 
 	var tl, tr, bl, br, hLine, vLine rune
-	switch borderType {
-	case "single":
-		tl, tr, bl, br, hLine, vLine = '┌', '┐', '└', '┘', '─', '│'
-	case "double":
-		tl, tr, bl, br, hLine, vLine = '╔', '╗', '╚', '╝', '═', '║'
-	case "rounded":
-		tl, tr, bl, br, hLine, vLine = '╭', '╮', '╰', '╯', '─', '│'
-	default:
-		return
+	style := vnode.Style
+
+	// Check for custom border chars first
+	if style.BorderChars != nil {
+		tl = firstRune(style.BorderChars["tl"], '┌')
+		tr = firstRune(style.BorderChars["tr"], '┐')
+		bl = firstRune(style.BorderChars["bl"], '└')
+		br = firstRune(style.BorderChars["br"], '┘')
+		hLine = firstRune(style.BorderChars["h"], '─')
+		vLine = firstRune(style.BorderChars["v"], '│')
+	} else {
+		switch borderType {
+		case "single":
+			tl, tr, bl, br, hLine, vLine = '┌', '┐', '└', '┘', '─', '│'
+		case "double":
+			tl, tr, bl, br, hLine, vLine = '╔', '╗', '╚', '╝', '═', '║'
+		case "rounded":
+			tl, tr, bl, br, hLine, vLine = '╭', '╮', '╰', '╯', '─', '│'
+		default:
+			return
+		}
 	}
 
+	// Border foreground color from style
+	borderFg := style.Foreground // borders inherit foreground color
 	oid := getVNodeID(vnode)
 	bc := func(ch rune) Cell {
-		return Cell{Char: ch, OwnerNode: vnode, OwnerID: oid, CellRole: "border"}
+		return Cell{Char: ch, Foreground: borderFg, OwnerNode: vnode, OwnerID: oid, CellRole: "border"}
 	}
 
 	// Top border
@@ -866,32 +907,48 @@ func renderScrollableChildren(frame *Frame, vnode *VNode, style Style, clip Rect
 		vp := GetViewport(nodeID)
 		if vp.NeedsScroll() {
 			scrollbarX := clip.X + contentClip.W
-			renderScrollbar(frame, scrollbarX, clip.Y, clip.H, vp, clip)
+			renderScrollbar(frame, scrollbarX, clip.Y, clip.H, vp, style, clip)
 		}
 	}
 }
 // renderScrollbar draws a vertical scrollbar at the given position.
-// Uses │ for the track and █ for the thumb.
-func renderScrollbar(frame *Frame, x, y, trackH int, vp *Viewport, clip Rect) {
+// Reads styling from the parent VNode's style if available.
+func renderScrollbar(frame *Frame, x, y, trackH int, vp *Viewport, style Style, clip Rect) {
 	if trackH <= 0 {
 		return
 	}
 
 	thumbStart, thumbSize := vp.ScrollbarThumb(trackH)
 
+	// Use style-specified chars/colors, or defaults
+	trackChar := firstRune(style.ScrollbarTrackChar, '│')
+	thumbChar := firstRune(style.ScrollbarThumbChar, '█')
+	fg := style.ScrollbarForeground // empty = terminal default
+
 	for i := 0; i < trackH; i++ {
 		py := y + i
 		var ch rune
 		if i >= thumbStart && i < thumbStart+thumbSize {
-			ch = '█'
+			ch = thumbChar
 		} else {
-			ch = '│'
+			ch = trackChar
 		}
 		frame.SetCellClipped(x, py, Cell{
 			Char:       ch,
-			Foreground: "#666666",
+			Foreground: fg,
 		}, clip)
 	}
+}
+
+// firstRune returns the first rune of s, or the fallback if s is empty.
+func firstRune(s string, fallback rune) rune {
+	if s == "" {
+		return fallback
+	}
+	for _, r := range s {
+		return r
+	}
+	return fallback
 }
 
 // renderInput renders a single-line text input VNode.
@@ -947,10 +1004,7 @@ func renderInput(frame *Frame, vnode *VNode, style Style, clip Rect) {
 	}
 
 	// Render background
-	bg := style.Background
-	if bg == "" {
-		bg = "#1a1a2e"
-	}
+	bg := style.Background // empty = transparent (terminal default)
 	oid := getVNodeID(vnode)
 	for cx := x; cx < x+w; cx++ {
 		frame.SetCellClipped(cx, y, Cell{Char: ' ', Background: bg,
@@ -959,9 +1013,13 @@ func renderInput(frame *Frame, vnode *VNode, style Style, clip Rect) {
 
 	// Render text (with horizontal scroll)
 	runes := []rune(text)
-	fg := style.Foreground
+	fg := style.Foreground // empty = terminal default
 	if isPlaceholder {
-		fg = "#666666"
+		if style.PlaceholderColor != "" {
+			fg = style.PlaceholderColor
+		} else if fg == "" {
+			fg = "#888888" // last resort fallback for placeholder
+		}
 	}
 
 	for col := 0; col < w; col++ {
@@ -1068,10 +1126,7 @@ func renderTextArea(frame *Frame, vnode *VNode, style Style, clip Rect) {
 	}
 
 	// Render background (clipped)
-	bg := style.Background
-	if bg == "" {
-		bg = "#1a1a2e"
-	}
+	bg := style.Background // empty = transparent (terminal default)
 	oid := getVNodeID(vnode)
 	frame.FillClipped(x, y, w, h, Cell{Char: ' ', Background: bg,
 		OwnerNode: vnode, OwnerID: oid, CellRole: "background"}, clip)
@@ -1106,9 +1161,13 @@ func renderTextArea(frame *Frame, vnode *VNode, style Style, clip Rect) {
 	// Split into lines
 	lines := splitLines(text)
 
-	fg := style.Foreground
+	fg := style.Foreground // empty = terminal default
 	if isPlaceholder {
-		fg = "#666666"
+		if style.PlaceholderColor != "" {
+			fg = style.PlaceholderColor
+		} else if fg == "" {
+			fg = "#888888" // last resort fallback for placeholder
+		}
 	}
 
 	// Render visible lines
