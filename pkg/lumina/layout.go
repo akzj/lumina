@@ -877,6 +877,60 @@ func layoutHBox(vnode *VNode, contentX, contentY, contentW, contentH int, style 
 	}
 }
 
+// estimateNaturalHeight computes the natural (unclamped) height a VNode needs.
+// Used by scrollable containers to determine total content height.
+func estimateNaturalHeight(node *VNode, style Style) int {
+	marginV := style.MarginTop + style.MarginBottom
+
+	// Explicit height takes precedence
+	if style.Height > 0 {
+		return clamp(style.Height, style.MinHeight, style.MaxHeight) + marginV
+	}
+	if style.MinHeight > 0 {
+		return style.MinHeight + marginV
+	}
+
+	// Text nodes: 1 row
+	if node.Type == "text" {
+		return 1 + marginV
+	}
+
+	// Container: sum children heights + border + padding + gaps
+	if len(node.Children) == 0 {
+		return 1 + marginV
+	}
+
+	borderW := 0
+	if style.Border != "" && style.Border != "none" {
+		borderW = 1
+	}
+	paddingV := style.PaddingTop + style.PaddingBottom
+
+	childrenH := 0
+	for i, child := range node.Children {
+		cs := parseStyle(child.Props)
+		childrenH += estimateNaturalHeight(child, cs)
+		if i < len(node.Children)-1 {
+			childrenH += style.Gap
+		}
+	}
+
+	// For hbox: height = max child height (not sum)
+	if node.Type == "hbox" {
+		maxH := 0
+		for _, child := range node.Children {
+			cs := parseStyle(child.Props)
+			h := estimateNaturalHeight(child, cs)
+			if h > maxH {
+				maxH = h
+			}
+		}
+		childrenH = maxH
+	}
+
+	return childrenH + 2*borderW + paddingV + marginV
+}
+
 // layoutScrollableVBox lays out children in a vertical stack without clamping
 // to the container height. Children get their natural size, and a Viewport
 // is created/updated to track the scroll state.
@@ -902,20 +956,7 @@ func layoutScrollableVBox(vnode *VNode, contentX, contentY, contentW, contentH i
 		cs := parseStyle(child.Props)
 		children[i].style = cs
 
-		marginV := cs.MarginTop + cs.MarginBottom
-		var h int
-		if cs.Height > 0 {
-			h = clamp(cs.Height, cs.MinHeight, cs.MaxHeight) + marginV
-		} else if cs.MinHeight > 0 {
-			h = cs.MinHeight + marginV
-		} else {
-			// Default: 1 row for text, or estimate for containers
-			h = 1 + marginV
-			if child.Type != "text" && len(child.Children) > 0 {
-				// Estimate based on number of children
-				h = len(child.Children) + marginV
-			}
-		}
+		h := estimateNaturalHeight(child, cs)
 		children[i].height = h
 		totalH += h
 	}

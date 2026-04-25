@@ -83,7 +83,7 @@ local function Content()
     -- Wrap page content in a scrollable container
     return {
         type = "vbox",
-        props = { id = "content-scroll" },
+        id = "content-scroll",
         style = {
             flex = 1,
             overflow = "scroll",

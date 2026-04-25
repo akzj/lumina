@@ -45,7 +45,7 @@ local function Button(props)
 
     return {
         type = "box",
-        props = { id = id },
+        id = id,
         style = {
             foreground = fg,
             background = bg,
