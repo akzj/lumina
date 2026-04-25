@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -173,6 +175,7 @@ func (app *App) RunInteractive(scriptPath string) error {
 			term.RestoreMode()
 			return fmt.Errorf("file not found: %s", scriptPath)
 		}
+		addScriptDirToPackagePath(app.L, scriptPath)
 		if err := app.L.DoFile(scriptPath); err != nil {
 			term.RestoreMode()
 			return fmt.Errorf("script error: %w", err)
@@ -922,6 +925,9 @@ func (app *App) LoadScript(scriptPath string, tio TermIO) error {
 	// Set output adapter to write through the TermIO
 	SetOutputAdapter(NewANSIAdapter(tio))
 
+	// Add script directory to package.path for multi-file require
+	addScriptDirToPackagePath(app.L, scriptPath)
+
 	// Execute the Lua script (on caller goroutine — safe)
 	if err := app.L.DoFile(scriptPath); err != nil {
 		return fmt.Errorf("script error: %w", err)
@@ -1299,4 +1305,18 @@ func clearScreenWithBg() string {
 	}
 	r, g, b := hexToRGB(bg)
 	return fmt.Sprintf("\x1b[48;2;%d;%d;%dm\x1b[2J\x1b[H", r, g, b)
+}
+
+// addScriptDirToPackagePath prepends the script's directory to Lua's package.path
+// so that multi-file require() calls resolve relative to the script, not the CWD.
+func addScriptDirToPackagePath(L *lua.State, scriptPath string) {
+	scriptDir := filepath.Dir(scriptPath)
+	absDir, err := filepath.Abs(scriptDir)
+	if err != nil {
+		return
+	}
+	// Escape backslashes for Windows paths in Lua string
+	escaped := strings.ReplaceAll(absDir, `\`, `\\`)
+	code := fmt.Sprintf(`package.path = "%s/?.lua;%s/?/init.lua;" .. package.path`, escaped, escaped)
+	L.DoString(code)
 }
