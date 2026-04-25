@@ -3,10 +3,18 @@ package lumina
 
 import (
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/akzj/go-lua/pkg/lua"
 )
+
+// sortByZIndex sorts VNodes by Style.ZIndex ascending (lower z-index first).
+func sortByZIndex(nodes []*VNode) {
+	sort.Slice(nodes, func(i, j int) bool {
+		return nodes[i].Style.ZIndex < nodes[j].Style.ZIndex
+	})
+}
 
 // VNode represents a virtual DOM node.
 type VNode struct {
@@ -627,12 +635,27 @@ func renderVNode(frame *Frame, vnode *VNode, clip Rect) {
 		}
 		childClip := IntersectRect(clip, innerRect)
 
-		// Render children with child clip
+		// Render children with child clip.
+		// Positioned children (absolute/fixed) render after flow children,
+		// sorted by z-index so higher z-index paints on top.
 		if style.Overflow == "scroll" {
 			renderScrollableChildren(frame, vnode, style, childClip)
 		} else {
+			var positioned []*VNode
 			for _, child := range vnode.Children {
-				renderVNode(frame, child, childClip)
+				cs := child.Style
+				if cs.Position == "absolute" || cs.Position == "fixed" {
+					positioned = append(positioned, child)
+				} else {
+					renderVNode(frame, child, childClip)
+				}
+			}
+			// Render positioned children sorted by z-index (ascending = lower first)
+			if len(positioned) > 0 {
+				sortByZIndex(positioned)
+				for _, child := range positioned {
+					renderVNode(frame, child, childClip)
+				}
 			}
 		}
 	}

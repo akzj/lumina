@@ -19,6 +19,9 @@ type WebTerminal struct {
 	// Input pipe: WebSocket read loop writes here, Read() reads from here.
 	inputR *io.PipeReader
 	inputW *io.PipeWriter
+
+	// Resize callback — notifies the App when browser resizes.
+	onResize func(w, h int)
 }
 
 // resizeMsg is the JSON message sent by the browser on resize.
@@ -68,12 +71,23 @@ func (wt *WebTerminal) Size() (int, int) {
 	return wt.width, wt.height
 }
 
-// SetSize updates terminal dimensions.
+// SetSize updates terminal dimensions and notifies the resize callback.
 func (wt *WebTerminal) SetSize(w, h int) {
 	wt.mu.Lock()
-	defer wt.mu.Unlock()
 	wt.width = w
 	wt.height = h
+	cb := wt.onResize
+	wt.mu.Unlock()
+	if cb != nil {
+		cb(w, h)
+	}
+}
+
+// SetOnResize registers a callback that fires when the terminal is resized.
+func (wt *WebTerminal) SetOnResize(fn func(w, h int)) {
+	wt.mu.Lock()
+	defer wt.mu.Unlock()
+	wt.onResize = fn
 }
 
 // Close closes the WebTerminal and underlying WebSocket.

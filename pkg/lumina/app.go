@@ -26,15 +26,16 @@ type LuaCallbackEvent struct {
 // App represents an interactive Lumina application.
 // All Lua State operations happen on the goroutine that calls Run().
 type App struct {
-	L          *lua.State
-	sched      *lua.Scheduler // async coroutine scheduler
-	events     chan AppEvent
-	width      int
-	height     int
-	running    bool
-	batchDepth int    // >0 means we're inside a batch (suppress per-setState renders)
-	termIO     TermIO // terminal I/O abstraction (nil = default local)
-	lastFrame  *Frame // previous render frame for incremental updates
+	L              *lua.State
+	sched          *lua.Scheduler // async coroutine scheduler
+	events         chan AppEvent
+	width          int
+	height         int
+	running        bool
+	batchDepth     int       // >0 means we're inside a batch (suppress per-setState renders)
+	termIO         TermIO    // terminal I/O abstraction (nil = default local)
+	lastFrame      *Frame    // previous render frame for incremental updates
+	lastRenderTime time.Time // frame rate limiting
 }
 
 // NewApp creates a new interactive Lumina application.
@@ -229,6 +230,20 @@ func (app *App) RunWithTermIO(tio TermIO, scriptPath string) error {
 
 	// Set output adapter to write through the TermIO
 	SetOutputAdapter(NewANSIAdapter(tio))
+
+	// Wire resize callback for WebTerminal
+	if wt, ok := tio.(*WebTerminal); ok {
+		wt.SetOnResize(func(newW, newH int) {
+			app.width = newW
+			app.height = newH
+			// Mark all components dirty for re-render at new size
+			globalRegistry.mu.RLock()
+			for _, comp := range globalRegistry.components {
+				comp.Dirty.Store(true)
+			}
+			globalRegistry.mu.RUnlock()
+		})
+	}
 
 	// Load script
 	if scriptPath != "" {
@@ -657,6 +672,12 @@ func (app *App) ReloadScript(scriptPath string) error {
 }
 
 func (app *App) renderAllDirty() {
+	// Frame rate limiting: skip if less than 16ms since last render
+	now := time.Now()
+	if !app.lastRenderTime.IsZero() && now.Sub(app.lastRenderTime) < 16*time.Millisecond {
+		return // will catch on next tick
+	}
+
 	globalRegistry.mu.RLock()
 	components := make([]*Component, 0, len(globalRegistry.components))
 	for _, comp := range globalRegistry.components {
@@ -735,6 +756,7 @@ compositeAndWrite:
 
 	frame.FocusedID = globalEventBus.GetFocused()
 	adapter.Write(frame)
+	app.lastRenderTime = time.Now()
 	comp.MarkClean()
 }
 
