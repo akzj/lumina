@@ -1,15 +1,28 @@
 -- shadcn/table — Data table
 local lumina = require("lumina")
 
+local c = {
+    fg = "#CDD6F4",
+    muted = "#6C7086",
+    primary = "#89B4FA",
+    border = "#45475A",
+    surface = "#313244",
+}
+
 local Table = lumina.defineComponent({
     name = "ShadcnTable",
+
     init = function(props)
         return {
             headers = props.headers or {},
             rows = props.rows or {},
             colWidth = props.colWidth or 15,
+            id = props.id,
+            className = props.className,
+            style = props.style,
         }
     end,
+
     render = function(self)
         local children = {}
         local cw = self.colWidth
@@ -30,12 +43,12 @@ local Table = lumina.defineComponent({
             children[#children + 1] = {
                 type = "text",
                 content = hdr,
-                style = { foreground = "#94A3B8", bold = true },
+                style = { foreground = c.primary, bold = true },
             }
             children[#children + 1] = {
                 type = "text",
                 content = string.rep("─", cw * #self.headers),
-                style = { foreground = "#334155" },
+                style = { foreground = c.border },
             }
         end
 
@@ -48,15 +61,25 @@ local Table = lumina.defineComponent({
             children[#children + 1] = {
                 type = "text",
                 content = line,
-                style = { foreground = "#E2E8F0" },
+                style = { foreground = c.fg },
             }
+        end
+
+        local style = {}
+        if self.className and type(self.className) == "table" then
+            for k, v in pairs(self.className) do style[k] = v end
+        end
+        if self.style and type(self.style) == "table" then
+            for k, v in pairs(self.style) do style[k] = v end
         end
 
         return {
             type = "vbox",
+            id = self.id,
+            style = style,
             children = children,
         }
-    end
+    end,
 })
 
 return Table
