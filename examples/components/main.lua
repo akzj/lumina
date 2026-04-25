@@ -19,6 +19,8 @@ for i, page in ipairs(pages) do
     end)
 end
 lumina.onKey("q", function() lumina.quit() end)
+lumina.onKey("j", function() lumina.scrollBy("content-scroll", 1) end)
+lumina.onKey("k", function() lumina.scrollBy("content-scroll", -1) end)
 
 -- Sidebar component
 local function Sidebar()
@@ -44,6 +46,7 @@ local function Sidebar()
     end
     -- Footer
     children[#children + 1] = { type = "text", content = "", style = {} }
+    children[#children + 1] = { type = "text", content = " [j/k] Scroll", style = { foreground = theme.muted, dim = true } }
     children[#children + 1] = { type = "text", content = " [q] Quit", style = { foreground = theme.muted, dim = true } }
 
     return {
@@ -77,7 +80,17 @@ local function Content()
         }
     end
 
-    return pageModule.render()
+    -- Wrap page content in a scrollable container
+    return {
+        type = "vbox",
+        props = { id = "content-scroll" },
+        style = {
+            flex = 1,
+            overflow = "scroll",
+            background = theme.bg,
+        },
+        children = { pageModule.render() }
+    }
 end
 
 -- App root
