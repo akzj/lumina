@@ -30,7 +30,10 @@ type Component struct {
 	memoHooks          []*MemoHook          // useMemo hooks in call order
 	externalStoreHooks []*ExternalStoreHook // useSyncExternalStore hooks
 	animationHooks     []string             // animation IDs owned by this component
-	hookIndex          int                  // current hook index during render
+	effectHookIndex       int // current index for useEffect hooks
+	memoHookIndex         int // current index for useMemo hooks
+	layoutEffectHookIndex int // current index for useLayoutEffect hooks
+	generalHookIndex      int // current index for useReducer, useId, useTransition, useDeferredValue, useSyncExternalStore, useAnimation
 	debugValues        []string             // useDebugValue labels (reset each render)
 	// Component tree
 	Parent       *Component     // Parent component (nil for root)
@@ -198,7 +201,13 @@ func (c *Component) PushInitFn(L *lua.State) bool {
 }
 
 // Cleanup removes the component from registry and cleans up references.
+// Runs effect and layout-effect cleanups before releasing Lua refs.
 func (c *Component) Cleanup(L *lua.State) {
+	// Run effect cleanups (useEffect return functions)
+	RunEffectCleanups(L, c)
+	// Run layout effect cleanups (useLayoutEffect return functions)
+	RunLayoutEffectCleanups(L, c)
+
 	if c.initFn != nil {
 		L.Unref(lua.RegistryIndex, c.initFn.RefID)
 	}
@@ -237,6 +246,40 @@ func ClearComponents() {
 	globalRegistry.mu.Unlock()
 }
 
+
+// ReconcileComponents compares old and new VNode trees, calling Cleanup on removed components.
+func ReconcileComponents(L *lua.State, oldTree, newTree *VNode) {
+	oldIDs := collectComponentIDs(oldTree)
+	newIDs := collectComponentIDs(newTree)
+	for id := range oldIDs {
+		if _, exists := newIDs[id]; !exists {
+			globalRegistry.mu.RLock()
+			comp, ok := globalRegistry.components[id]
+			globalRegistry.mu.RUnlock()
+			if ok {
+				comp.Cleanup(L)
+			}
+		}
+	}
+}
+
+// collectComponentIDs walks a VNode tree and returns all component IDs found.
+func collectComponentIDs(node *VNode) map[string]bool {
+	ids := make(map[string]bool)
+	if node == nil {
+		return ids
+	}
+	if node.ComponentRef != nil {
+		ids[node.ComponentRef.ID] = true
+	}
+	for _, child := range node.Children {
+		for id := range collectComponentIDs(child) {
+			ids[id] = true
+		}
+	}
+	return ids
+}
+
 // GetComponentByID returns a component by its ID.
 func GetComponentByID(id string) (*Component, bool) {
 	globalRegistry.mu.RLock()
@@ -260,9 +303,12 @@ func UserdataToComponent(L *lua.State, idx int) *Component {
 	return nil
 }
 
-// ResetHookIndex resets the hook call counter for a new render pass.
+// ResetHookIndex resets all per-type hook call counters for a new render pass.
 func (c *Component) ResetHookIndex() {
-	c.hookIndex = 0
+	c.effectHookIndex = 0
+	c.memoHookIndex = 0
+	c.layoutEffectHookIndex = 0
+	c.generalHookIndex = 0
 	c.debugValues = c.debugValues[:0] // reset debug values each render
 }
 

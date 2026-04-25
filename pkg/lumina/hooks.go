@@ -183,8 +183,8 @@ func useEffect(L *lua.State) int {
 }
 
 func (c *Component) nextEffectHookLocked() *EffectHook {
-	idx := c.hookIndex
-	c.hookIndex++
+	idx := c.effectHookIndex
+	c.effectHookIndex++
 	if idx < len(c.effectHooks) {
 		return c.effectHooks[idx]
 	}
@@ -194,8 +194,8 @@ func (c *Component) nextEffectHookLocked() *EffectHook {
 }
 
 func (c *Component) nextMemoHookLocked() *MemoHook {
-	idx := c.hookIndex
-	c.hookIndex++
+	idx := c.memoHookIndex
+	c.memoHookIndex++
 	if idx < len(c.memoHooks) {
 		return c.memoHooks[idx]
 	}
@@ -344,8 +344,8 @@ func useReducer(L *lua.State) int {
 	L.CheckAny(2)
 
 	comp.mu.Lock()
-	hookIdx := comp.hookIndex
-	comp.hookIndex++
+	hookIdx := comp.generalHookIndex
+	comp.generalHookIndex++
 	key := fmt.Sprintf("__reducer_%d", hookIdx)
 	if _, exists := comp.State[key]; !exists {
 		comp.State[key] = L.ToAny(2)
@@ -634,8 +634,8 @@ func useLayoutEffect(L *lua.State) int {
 }
 
 func (c *Component) nextLayoutEffectHookLocked() *LayoutEffectHook {
-	idx := c.hookIndex
-	c.hookIndex++
+	idx := c.layoutEffectHookIndex
+	c.layoutEffectHookIndex++
 	if idx < len(c.layoutEffectHooks) {
 		return c.layoutEffectHooks[idx]
 	}
@@ -678,8 +678,8 @@ func useId(L *lua.State) int {
 	}
 
 	comp.mu.Lock()
-	idx := comp.hookIndex
-	comp.hookIndex++
+	idx := comp.generalHookIndex
+	comp.generalHookIndex++
 	comp.mu.Unlock()
 
 	// Generate stable ID based on component ID + hook index
@@ -775,8 +775,8 @@ func useTransition(L *lua.State) int {
 	}
 
 	comp.mu.Lock()
-	idx := comp.hookIndex
-	comp.hookIndex++
+	idx := comp.generalHookIndex
+	comp.generalHookIndex++
 
 	// Use a MemoHook to store isPending state
 	var hook *MemoHook
@@ -841,8 +841,8 @@ func useDeferredValue(L *lua.State) int {
 	}
 
 	comp.mu.Lock()
-	idx := comp.hookIndex
-	comp.hookIndex++
+	idx := comp.generalHookIndex
+	comp.generalHookIndex++
 
 	var hook *MemoHook
 	if idx < len(comp.memoHooks) {
@@ -910,8 +910,8 @@ func useSyncExternalStore(L *lua.State) int {
 	}
 
 	comp.mu.Lock()
-	idx := comp.hookIndex
-	comp.hookIndex++
+	idx := comp.generalHookIndex
+	comp.generalHookIndex++
 
 	// Grow externalStoreHooks if needed
 	for idx >= len(comp.externalStoreHooks) {
@@ -1091,8 +1091,8 @@ func useAnimation(L *lua.State) int {
 		return 1
 	}
 
-	idx := comp.hookIndex
-	comp.hookIndex++
+	idx := comp.generalHookIndex
+	comp.generalHookIndex++
 
 	// Parse config from Lua table argument
 	from := 0.0

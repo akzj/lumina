@@ -497,11 +497,11 @@ func renderComponent(L *lua.State) int {
 	// Get actual terminal size from app (fallback to 80x24)
 	renderW, renderH := 80, 24
 	if appInst := GetApp(L); appInst != nil {
-		if appInst.width > 0 {
-			renderW = appInst.width
+		if aw := appInst.getWidth(); aw > 0 {
+			renderW = aw
 		}
-		if appInst.height > 0 {
-			renderH = appInst.height
+		if ah := appInst.getHeight(); ah > 0 {
+			renderH = ah
 		}
 	}
 
@@ -895,11 +895,11 @@ func luaGetSize(L *lua.State) int {
 	app := GetApp(L)
 	w, h := 80, 24 // defaults
 	if app != nil {
-		if app.width > 0 {
-			w = app.width
+		if aw := app.getWidth(); aw > 0 {
+			w = aw
 		}
-		if app.height > 0 {
-			h = app.height
+		if ah := app.getHeight(); ah > 0 {
+			h = ah
 		}
 	}
 	L.PushInteger(int64(w))

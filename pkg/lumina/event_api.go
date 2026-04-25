@@ -145,6 +145,7 @@ func registerShortcut(L *lua.State) int {
 	// Get the App for safe event posting
 	app := GetApp(L)
 
+	globalEventBus.mu.Lock()
 	globalEventBus.shortcuts[normKey] = eventHandler{
 		componentID: "global",
 		handler: func(e *Event) {
@@ -165,6 +166,7 @@ func registerShortcut(L *lua.State) int {
 			}
 		},
 	}
+	globalEventBus.mu.Unlock()
 
 	return 0
 }

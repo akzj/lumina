@@ -204,6 +204,12 @@ func (eb *EventBus) Off(eventType string, compID string) {
 
 // Emit fires an event: capture phase (top→target), then target, then bubble phase (target→top).
 func (eb *EventBus) Emit(event *Event) {
+	// Auto-apply bubble policy based on event type if not explicitly set.
+	// This ensures events created without Bubbles field still bubble correctly.
+	if !event.Bubbles && eventBubbles(event.Type) {
+		event.Bubbles = true
+	}
+
 	eb.mu.RLock()
 	defer eb.mu.RUnlock()
 
@@ -347,16 +353,8 @@ func buildShortcutKey(e *Event) string {
 // SetFocus sets focus to a component.
 func (eb *EventBus) SetFocus(compID string) {
 	eb.mu.Lock()
-	defer eb.mu.Unlock()
-
-	// Blur previous
-	if eb.focusedID != "" && eb.focusedID != compID {
-		eb.EmitUnsafe(&Event{Type: "blur", Target: eb.focusedID, Bubbles: false})
-	}
-
-	// Focus new
+	oldFocus := eb.focusedID
 	eb.focusedID = compID
-	eb.EmitUnsafe(&Event{Type: "focus", Target: compID, Bubbles: false})
 
 	// Update focus stack
 	for i, id := range eb.focusStack {
@@ -366,6 +364,15 @@ func (eb *EventBus) SetFocus(compID string) {
 		}
 	}
 	eb.focusStack = append(eb.focusStack, compID)
+	eb.mu.Unlock()
+
+	// Emit blur/focus outside lock to avoid deadlock
+	if oldFocus != "" && oldFocus != compID {
+		eb.Emit(&Event{Type: "blur", Target: oldFocus, Bubbles: false})
+	}
+	if compID != "" {
+		eb.Emit(&Event{Type: "focus", Target: compID, Bubbles: false})
+	}
 }
 
 // EmitUnsafe emits without locking (caller must hold lock).

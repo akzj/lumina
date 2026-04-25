@@ -598,7 +598,7 @@ func TestLua_UseAnimationHook(t *testing.T) {
 	globalAnimationManager.Tick(500)
 
 	// Re-render (simulate)
-	comp.hookIndex = 0
+	comp.ResetHookIndex()
 	err = L.DoString(`
 		local anim = lumina.useAnimation({
 			from = 0,

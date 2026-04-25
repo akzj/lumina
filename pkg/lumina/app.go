@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/akzj/go-lua/pkg/lua"
@@ -31,8 +32,8 @@ type App struct {
 	L              *lua.State
 	sched          *lua.Scheduler // async coroutine scheduler
 	events         chan AppEvent
-	width          int
-	height         int
+	width          atomic.Int32 // terminal width (atomic for concurrent resize)
+	height         atomic.Int32 // terminal height (atomic for concurrent resize)
 	running        bool
 	batchDepth     int       // >0 means we're inside a batch (suppress per-setState renders)
 	termIO         TermIO    // terminal I/O abstraction (nil = default local)
@@ -40,6 +41,19 @@ type App struct {
 	lastRenderTime time.Time // frame rate limiting
 	hoveredID      string    // ID of element currently under mouse cursor
 }
+
+// getWidth returns the current terminal width (goroutine-safe).
+func (app *App) getWidth() int { return int(app.width.Load()) }
+
+// getHeight returns the current terminal height (goroutine-safe).
+func (app *App) getHeight() int { return int(app.height.Load()) }
+
+// setSize stores width and height atomically.
+func (app *App) setSize(w, h int) {
+	app.width.Store(int32(w))
+	app.height.Store(int32(h))
+}
+
 
 // NewApp creates a new interactive Lumina application.
 func NewApp() *App {
@@ -49,9 +63,9 @@ func NewApp() *App {
 		L:      L,
 		sched:  lua.NewScheduler(L),
 		events: make(chan AppEvent, 256),
-		width:  80,
-		height: 24,
 	}
+	app.width.Store(80)
+	app.height.Store(24)
 
 	// Store app reference on the Lua state for event handlers
 	L.SetUserValue("lumina_app", app)
@@ -74,9 +88,9 @@ func NewAppWithSize(width, height int) *App {
 		L:      L,
 		sched:  lua.NewScheduler(L),
 		events: make(chan AppEvent, 256),
-		width:  width,
-		height: height,
 	}
+	app.width.Store(int32(width))
+	app.height.Store(int32(height))
 
 	L.SetUserValue("lumina_app", app)
 	Open(L)
@@ -156,8 +170,7 @@ func (app *App) RunInteractive(scriptPath string) error {
 
 	// Get terminal size
 	w, h, _ := term.GetSize()
-	app.width = w
-	app.height = h
+	app.setSize(w, h)
 	localIO.SetSize(w, h)
 	app.termIO = localIO
 
@@ -195,8 +208,7 @@ func (app *App) RunInteractive(scriptPath string) error {
 
 	// Watch for terminal resize (SIGWINCH)
 	term.WatchResize(func(w, h int) {
-		app.width = w
-		app.height = h
+		app.setSize(w, h)
 		localIO.SetSize(w, h)
 		// Mark all components dirty for re-render at new size
 		globalRegistry.mu.RLock()
@@ -238,8 +250,7 @@ func (app *App) RunInteractive(scriptPath string) error {
 // This enables the same Lua app to run over a network connection.
 func (app *App) RunWithTermIO(tio TermIO, scriptPath string) error {
 	w, h := tio.Size()
-	app.width = w
-	app.height = h
+	app.setSize(w, h)
 	app.termIO = tio
 
 	// Set output adapter to write through the TermIO
@@ -248,8 +259,7 @@ func (app *App) RunWithTermIO(tio TermIO, scriptPath string) error {
 	// Wire resize callback for WebTerminal
 	if wt, ok := tio.(*WebTerminal); ok {
 		wt.SetOnResize(func(newW, newH int) {
-			app.width = newW
-			app.height = newH
+			app.setSize(newW, newH)
 			// Mark all components dirty for re-render at new size
 			globalRegistry.mu.RLock()
 			for _, comp := range globalRegistry.components {
@@ -883,6 +893,12 @@ func (app *App) renderComponent(comp *Component, adapter OutputAdapter) {
 	comp.ResetHookIndex()
 	defer SetCurrentComponent(nil)
 
+	// Release Lua refs from previous render cycle before creating new ones
+	SwapRenderRefs(app.L)
+
+	// Cache dimensions locally (atomic reads)
+	w, h := app.getWidth(), app.getHeight()
+
 	if !comp.PushRenderFn(app.L) {
 		return
 	}
@@ -914,15 +930,23 @@ func (app *App) renderComponent(comp *Component, adapter OutputAdapter) {
 		if len(patches) <= 10 && app.lastFrame != nil && !ShouldFullRerender(patches, newVNode) && !scrollDirty {
 			frame = app.lastFrame
 			// Re-layout the entire new tree (cheap) so positions are correct
-			computeFlexLayout(newVNode, 0, 0, app.width, app.height)
-			ApplyPatches(frame, newVNode, patches, app.width, app.height)
+			computeFlexLayout(newVNode, 0, 0, w, h)
+			ApplyPatches(frame, newVNode, patches, w, h)
+			// Reconcile components: cleanup any removed in incremental update
+			ReconcileComponents(app.L, comp.LastVNode, newVNode)
 			comp.LastVNode = newVNode
 			app.lastFrame = frame
 			goto compositeAndWrite
 		}
 	}
 	// Full re-render (first render, large change, or no previous frame)
-	frame = VNodeToFrame(newVNode, app.width, app.height)
+	frame = VNodeToFrame(newVNode, w, h)
+
+	// Reconcile components: cleanup any that were in old tree but not in new
+	if comp.LastVNode != nil {
+		ReconcileComponents(app.L, comp.LastVNode, newVNode)
+	}
+
 	comp.LastVNode = newVNode
 	app.lastFrame = frame
 
@@ -935,14 +959,14 @@ compositeAndWrite:
 	// Composite overlays on top of the base frame using the layer compositor
 	overlays := globalOverlayManager.GetVisible()
 	if len(overlays) > 0 {
-		compositor := NewCompositor(app.width, app.height)
+		compositor := NewCompositor(w, h)
 		frame = compositor.Compose(frame, overlays)
 	}
 
 	// Composite managed windows on top of overlays
 	windows := globalWindowManager.GetVisible()
 	if len(windows) > 0 {
-		compositor := NewCompositor(app.width, app.height)
+		compositor := NewCompositor(w, h)
 		var winOverlays []*Overlay
 		for _, win := range windows {
 			winVNode := BuildWindowVNode(win)
@@ -976,23 +1000,23 @@ compositeAndWrite:
 		}
 
 		// Render inspector panel as overlay on right side
-		panelVNode := BuildInspectorVNode(newVNode, app.width, app.height)
+		panelVNode := BuildInspectorVNode(newVNode, w, h)
 		if panelVNode != nil {
 			panelW := globalInspector.panelWidth
-			if panelW > app.width/2 {
-				panelW = app.width / 2
+			if panelW > w/2 {
+				panelW = w / 2
 			}
 			panelOverlay := &Overlay{
 				ID:      "devtools-panel",
 				VNode:   panelVNode,
-				X:       app.width - panelW,
+				X:       w - panelW,
 				Y:       0,
 				W:       panelW,
-				H:       app.height,
+				H:       h,
 				ZIndex:  9999,
 				Visible: true,
 			}
-			dtCompositor := NewCompositor(app.width, app.height)
+			dtCompositor := NewCompositor(w, h)
 			frame = dtCompositor.Compose(frame, []*Overlay{panelOverlay})
 		}
 	}
@@ -1029,7 +1053,7 @@ func (app *App) InitialRender() {
 			continue
 		}
 
-		frame := RenderLuaVNode(app.L, -1, app.width, app.height)
+		frame := RenderLuaVNode(app.L, -1, app.getWidth(), app.getHeight())
 		app.L.Pop(1)
 		frame.FocusedID = globalEventBus.GetFocused()
 		adapter.Write(frame)
@@ -1055,8 +1079,7 @@ func (app *App) LoadScript(scriptPath string, tio TermIO) error {
 
 	// Configure terminal I/O
 	w, h := tio.Size()
-	app.width = w
-	app.height = h
+	app.setSize(w, h)
 	app.termIO = tio
 
 	// Set output adapter to write through the TermIO

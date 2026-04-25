@@ -347,8 +347,8 @@ func luaUseStore(L *lua.State) int {
 
 	// Track subscription via hook index
 	comp.mu.Lock()
-	idx := comp.hookIndex
-	comp.hookIndex++
+	idx := comp.generalHookIndex
+	comp.generalHookIndex++
 	for idx >= len(comp.externalStoreHooks) {
 		comp.externalStoreHooks = append(comp.externalStoreHooks, &ExternalStoreHook{})
 	}
