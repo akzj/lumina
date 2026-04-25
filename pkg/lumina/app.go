@@ -32,8 +32,9 @@ type App struct {
 	width      int
 	height     int
 	running    bool
-	batchDepth int // >0 means we're inside a batch (suppress per-setState renders)
+	batchDepth int    // >0 means we're inside a batch (suppress per-setState renders)
 	termIO     TermIO // terminal I/O abstraction (nil = default local)
+	lastFrame  *Frame // previous render frame for incremental updates
 }
 
 // NewApp creates a new interactive Lumina application.
@@ -637,11 +638,38 @@ func (app *App) renderComponent(comp *Component, adapter OutputAdapter) {
 			comp.MarkClean()
 			return
 		}
-		frame = VNodeToFrame(newVNode, app.width, app.height)
+
+		// Decide: incremental or full re-render
+		if !ShouldFullRerender(patches, newVNode) && app.lastFrame != nil {
+			// INCREMENTAL: re-layout the new VNode tree
+			computeFlexLayout(newVNode, 0, 0, app.width, app.height)
+
+			// Apply patches to existing frame
+			frame = app.lastFrame
+			frame.DirtyRects = nil // clear old dirty rects
+			ApplyPatches(frame, newVNode, patches, app.width, app.height)
+
+			// Mark dirty rects from patches
+			for _, p := range patches {
+				// Mark old region dirty (for clears/replacements)
+				if p.OldNode != nil && p.OldNode.W > 0 && p.OldNode.H > 0 {
+					frame.AddDirtyRect(p.OldNode.X, p.OldNode.Y, p.OldNode.W, p.OldNode.H)
+				}
+				// Mark new region dirty
+				if p.NewNode != nil && p.NewNode.W > 0 && p.NewNode.H > 0 {
+					frame.AddDirtyRect(p.NewNode.X, p.NewNode.Y, p.NewNode.W, p.NewNode.H)
+				}
+			}
+		} else {
+			// Full re-render (too many changes)
+			frame = VNodeToFrame(newVNode, app.width, app.height)
+		}
 	} else {
+		// First render — always full
 		frame = VNodeToFrame(newVNode, app.width, app.height)
 	}
 	comp.LastVNode = newVNode
+	app.lastFrame = frame
 
 	// Bridge VNode event handlers to EventBus
 	app.bridgeVNodeEvents(newVNode)

@@ -254,6 +254,7 @@ func diffKeyedChildren(oldChildren, newChildren []*VNode, parentPath []int, patc
 
 // ApplyPatches applies a set of patches to a Frame via incremental re-render.
 // It re-renders only the affected subtrees by walking the patch paths.
+// The root VNode should already have layout computed before calling this.
 func ApplyPatches(frame *Frame, root *VNode, patches []Patch, width, height int) {
 	if len(patches) == 0 {
 		return
@@ -261,27 +262,37 @@ func ApplyPatches(frame *Frame, root *VNode, patches []Patch, width, height int)
 
 	// For each patch, find the affected VNode and re-render its region.
 	for _, p := range patches {
-		node := p.NewNode
-		if node == nil {
-			node = p.OldNode
-		}
-		if node == nil {
-			continue
-		}
-
-		// Re-layout and re-render the affected subtree.
 		switch p.Type {
 		case PatchRemove:
 			// Clear the old node's region.
-			clearRegion(frame, node)
-		case PatchReplace, PatchUpdate, PatchText, PatchInsert:
+			if p.OldNode != nil {
+				clearRegion(frame, p.OldNode)
+			}
+
+		case PatchReplace:
+			// Clear old region first, then render new.
+			if p.OldNode != nil {
+				clearRegion(frame, p.OldNode)
+			}
 			if p.NewNode != nil {
-				// Re-compute layout for the new node at its current position.
-				computeFlexLayout(p.NewNode, node.X, node.Y, node.W, node.H)
+				// NewNode already has layout from the full tree relayout.
 				renderVNode(frame, p.NewNode)
 			}
+
+		case PatchUpdate, PatchText:
+			// Re-render in place — the new node already has correct layout.
+			if p.NewNode != nil {
+				renderVNode(frame, p.NewNode)
+			}
+
+		case PatchInsert:
+			// Render the new child — it already has layout from the full tree relayout.
+			if p.NewNode != nil {
+				renderVNode(frame, p.NewNode)
+			}
+
 		case PatchReorder:
-			// Reorder is handled by the full re-render path; individual
+			// Reorder is handled by the full tree relayout; individual
 			// patches are already emitted for content changes.
 		}
 	}
