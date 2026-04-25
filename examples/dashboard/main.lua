@@ -68,7 +68,7 @@ local function StatCard(props)
     return {
         type = "vbox",
         style = {
-            width = 18, height = 5, border = "rounded",
+            flex = 1, height = 5, border = "rounded",
             background = theme.colors.card or "#1E1E2E",
             padding = 1,
         },
@@ -93,13 +93,11 @@ local function HomePage()
             { type = "text", content = "" },
             {
                 type = "hbox",
+                style = { gap = 1 },
                 children = {
                     StatCard({ label = t("stats.users"),   value = stats.users or 0 }),
-                    { type = "text", content = " " },
                     StatCard({ label = t("stats.revenue"), value = "$" .. tostring(stats.revenue or 0) }),
-                    { type = "text", content = " " },
                     StatCard({ label = t("stats.orders"),  value = stats.orders or 0 }),
-                    { type = "text", content = " " },
                     StatCard({ label = t("stats.growth"),  value = tostring(stats.growth or 0) .. "%" }),
                 },
             },
