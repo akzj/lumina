@@ -73,6 +73,9 @@ type Cell struct {
 	Reverse bool
 	// Blink indicates blinking text.
 	Blink bool
+	// Transparent indicates this cell has not been written to — compositing
+	// should preserve the layer below. Default true for new frames.
+	Transparent bool
 	// OwnerID is the VNode id (from props["id"]) that produced this cell.
 	OwnerID string
 	// OwnerNode is a direct reference to the source VNode.
@@ -103,9 +106,9 @@ func NewFrame(width, height int) *Frame {
 	cells := make([][]Cell, height)
 	for y := 0; y < height; y++ {
 		cells[y] = make([]Cell, width)
-		// Initialize with empty cells
+		// Initialize with empty transparent cells
 		for x := 0; x < width; x++ {
-			cells[y][x] = Cell{Char: ' '}
+			cells[y][x] = Cell{Char: ' ', Transparent: true}
 		}
 	}
 	return &Frame{
@@ -152,6 +155,7 @@ func (f *Frame) SetCellClipped(x, y int, cell Cell, clip Rect) {
 	if x < 0 || x >= f.Width || y < 0 || y >= f.Height {
 		return // out of frame bounds
 	}
+	cell.Transparent = false // any written cell is opaque
 	f.Cells[y][x] = cell
 }
 

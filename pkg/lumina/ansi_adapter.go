@@ -186,7 +186,8 @@ func cellEqual(a, b Cell) bool {
 		a.Dim == b.Dim &&
 		a.Underline == b.Underline &&
 		a.Reverse == b.Reverse &&
-		a.Blink == b.Blink
+		a.Blink == b.Blink &&
+		a.Transparent == b.Transparent
 }
 
 // Invalidate clears the previous frame, forcing the next Write to do a full rewrite.

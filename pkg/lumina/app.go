@@ -651,19 +651,11 @@ func (app *App) renderComponent(comp *Component, adapter OutputAdapter) {
 	// Bridge VNode event handlers to EventBus
 	app.bridgeVNodeEvents(newVNode)
 
-	// Render overlays on top of the base frame
+	// Composite overlays on top of the base frame using the layer compositor
 	overlays := globalOverlayManager.GetVisible()
 	if len(overlays) > 0 {
-		for _, ov := range overlays {
-			if ov.Modal {
-				renderBackdrop(frame)
-			}
-			if ov.VNode != nil {
-				computeFlexLayout(ov.VNode, ov.X, ov.Y, ov.W, ov.H)
-				ovClip := Rect{X: ov.X, Y: ov.Y, W: ov.W, H: ov.H}
-				renderVNode(frame, ov.VNode, ovClip)
-			}
-		}
+		compositor := NewCompositor(app.width, app.height)
+		frame = compositor.Compose(frame, overlays)
 	}
 
 	frame.FocusedID = globalEventBus.GetFocused()

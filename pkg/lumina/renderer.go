@@ -497,7 +497,7 @@ func VNodeToFrameWithFocus(vnode *VNode, width, height int, focusedID string) *F
 }
 
 
-// VNodeToFrameWithOverlays renders the base VNode tree, then renders overlay layers on top.
+// VNodeToFrameWithOverlays renders the base VNode tree, then composites overlay layers on top.
 func VNodeToFrameWithOverlays(vnode *VNode, width, height int, overlays []*Overlay) *Frame {
 	// 1. Render base layer
 	frame := VNodeToFrame(vnode, width, height)
@@ -506,26 +506,9 @@ func VNodeToFrameWithOverlays(vnode *VNode, width, height int, overlays []*Overl
 		return frame
 	}
 
-	// 2. Render each overlay on top (overlays should already be sorted by ZIndex)
-	for _, ov := range overlays {
-		if !ov.Visible {
-			continue
-		}
-
-		// If modal, render semi-transparent backdrop first
-		if ov.Modal {
-			renderBackdrop(frame)
-		}
-
-		// Layout the overlay VNode at its absolute position
-		if ov.VNode != nil {
-			computeFlexLayout(ov.VNode, ov.X, ov.Y, ov.W, ov.H)
-			ovClip := Rect{X: ov.X, Y: ov.Y, W: ov.W, H: ov.H}
-			renderVNode(frame, ov.VNode, ovClip)
-		}
-	}
-
-	return frame
+	// 2. Composite overlays using the layer compositor
+	compositor := NewCompositor(width, height)
+	return compositor.Compose(frame, overlays)
 }
 
 // renderBackdrop dims the entire screen for a modal overlay.
@@ -533,6 +516,7 @@ func renderBackdrop(frame *Frame) {
 	for y := 0; y < frame.Height; y++ {
 		for x := 0; x < frame.Width; x++ {
 			frame.Cells[y][x].Dim = true
+			frame.Cells[y][x].Transparent = false
 		}
 	}
 }
