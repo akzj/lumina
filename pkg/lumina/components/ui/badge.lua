@@ -1,33 +1,69 @@
--- shadcn/badge — Badge component
+-- shadcn/badge — Status/count badge
 local lumina = require("lumina")
+
+local c = {
+    fg = "#CDD6F4",
+    muted = "#6C7086",
+    primary = "#89B4FA",
+    destructive = "#F38BA8",
+    success = "#A6E3A1",
+    warning = "#F9E2AF",
+    border = "#45475A",
+}
 
 local Badge = lumina.defineComponent({
     name = "ShadcnBadge",
+
     init = function(props)
         return {
-            variant = props.variant or "default",
-            label = props.label or "",
+            variant = props.variant or "default", -- default, secondary, destructive, outline
+            children = props.children or props.label or "",
+            id = props.id,
+            className = props.className,
+            style = props.style,
         }
     end,
+
     render = function(self)
+        local variant = self.variant
+
         local styles = {
-            default      = { bg = "#2563EB", fg = "#FFFFFF" },
-            secondary    = { bg = "#1E293B", fg = "#E2E8F0" },
-            destructive  = { bg = "#DC2626", fg = "#FFFFFF" },
-            outline      = { bg = "",        fg = "#E2E8F0" },
-            ghost        = { bg = "",        fg = "#94A3B8" },
+            default = { fg = c.fg, bg = "#313244" },
+            secondary = { fg = c.fg, bg = "#45475A" },
+            destructive = { fg = c.destructive, bg = "" },
+            outline = { fg = c.fg, bg = "" },
+            success = { fg = c.success, bg = "" },
+            warning = { fg = c.warning, bg = "" },
         }
-        local s = styles[self.variant] or styles.default
+        local s = styles[variant] or styles.default
+
+        local style = {
+            foreground = s.fg,
+            background = s.bg,
+            border = "rounded",
+            borderColor = c.border,
+            paddingLeft = 1,
+            paddingRight = 1,
+        }
+        if self.className and type(self.className) == "table" then
+            for k, v in pairs(self.className) do style[k] = v end
+        end
+        if self.style and type(self.style) == "table" then
+            for k, v in pairs(self.style) do style[k] = v end
+        end
+
+        local content = self.children
+        if type(content) ~= "string" then
+            content = tostring(content)
+        end
+
         return {
             type = "text",
-            content = self.label,
-            style = {
-                background = s.bg,
-                foreground = s.fg,
-                bold = true,
-            },
+            id = self.id,
+            content = " " .. content .. " ",
+            style = style,
         }
-    end
+    end,
 })
 
 return Badge
