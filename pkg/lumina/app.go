@@ -74,6 +74,7 @@ func NewAppWithSize(width, height int) *App {
 	globalStyles = make(map[string]map[string]any)
 	globalInspector = &DevToolsInspector{panelWidth: 40}
 	globalConsole = &Console{maxSize: 1000}
+	ResetRenderRefs()
 
 	L := lua.NewState()
 
@@ -886,9 +887,6 @@ func (app *App) renderComponent(comp *Component, adapter OutputAdapter) {
 	SetCurrentComponent(comp)
 	comp.ResetHookIndex()
 	defer SetCurrentComponent(nil)
-
-	// Release Lua refs from previous render cycle before creating new ones
-	SwapRenderRefs(app.L)
 
 	// Cache dimensions locally (atomic reads)
 	w, h := app.getWidth(), app.getHeight()

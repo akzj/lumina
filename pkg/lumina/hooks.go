@@ -775,17 +775,7 @@ func useTransition(L *lua.State) int {
 	}
 
 	comp.mu.Lock()
-	idx := comp.generalHookIndex
-	comp.generalHookIndex++
-
-	// Use a MemoHook to store isPending state
-	var hook *MemoHook
-	if idx < len(comp.memoHooks) {
-		hook = comp.memoHooks[idx]
-	} else {
-		hook = &MemoHook{}
-		comp.memoHooks = append(comp.memoHooks, hook)
-	}
+	hook := comp.nextMemoHookLocked()
 	comp.mu.Unlock()
 
 	// isPending
@@ -841,16 +831,7 @@ func useDeferredValue(L *lua.State) int {
 	}
 
 	comp.mu.Lock()
-	idx := comp.generalHookIndex
-	comp.generalHookIndex++
-
-	var hook *MemoHook
-	if idx < len(comp.memoHooks) {
-		hook = comp.memoHooks[idx]
-	} else {
-		hook = &MemoHook{}
-		comp.memoHooks = append(comp.memoHooks, hook)
-	}
+	hook := comp.nextMemoHookLocked()
 	comp.mu.Unlock()
 
 	// Get current value from Lua
@@ -1095,8 +1076,10 @@ func useAnimation(L *lua.State) int {
 		return 1
 	}
 
+	comp.mu.Lock()
 	idx := comp.generalHookIndex
 	comp.generalHookIndex++
+	comp.mu.Unlock()
 
 	// Parse config from Lua table argument
 	from := 0.0
@@ -1141,7 +1124,14 @@ func useAnimation(L *lua.State) int {
 	// On first render for this hook index, create the animation
 	animID := fmt.Sprintf("%s:anim:%d", comp.ID, idx)
 
-	if idx >= len(comp.animationHooks) {
+	comp.mu.Lock()
+	needsCreate := idx >= len(comp.animationHooks)
+	if needsCreate {
+		comp.animationHooks = append(comp.animationHooks, animID)
+	}
+	comp.mu.Unlock()
+
+	if needsCreate {
 		anim := &AnimationState{
 			ID:        animID,
 			StartTime: timeNowMs(),
@@ -1154,7 +1144,6 @@ func useAnimation(L *lua.State) int {
 			CompID:    comp.ID,
 		}
 		globalAnimationManager.Start(anim)
-		comp.animationHooks = append(comp.animationHooks, animID)
 	}
 
 	// Get current animation state

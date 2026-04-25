@@ -15,6 +15,7 @@ type Store struct {
 	state      map[string]any
 	actionRefs map[string]int // Lua registry refs for action functions
 	listeners  []func()
+	nilCount   int // track nil'd listeners for periodic compaction
 	mu         sync.RWMutex
 }
 
@@ -92,6 +93,18 @@ func (s *Store) Subscribe(listener func()) func() {
 		defer s.mu.Unlock()
 		if idx < len(s.listeners) {
 			s.listeners[idx] = nil
+			s.nilCount++
+			// Compact when more than half are nil
+			if s.nilCount > len(s.listeners)/2 && s.nilCount > 4 {
+				compacted := make([]func(), 0, len(s.listeners)-s.nilCount)
+				for _, fn := range s.listeners {
+					if fn != nil {
+						compacted = append(compacted, fn)
+					}
+				}
+				s.listeners = compacted
+				s.nilCount = 0
+			}
 		}
 	}
 }
@@ -195,12 +208,26 @@ func storeSubscribeFn(store *Store) lua.Function {
 		L.PushValue(1)
 		ref := L.Ref(lua.RegistryIndex)
 
+		// Get the app so we can post events safely from any goroutine.
+		// If no app exists (direct Lua usage), call the function synchronously
+		// which is safe since we're on the main thread.
+		app := GetApp(L)
+
 		unsub := store.Subscribe(func() {
-			L.RawGetI(lua.RegistryIndex, int64(ref))
-			if L.Type(-1) == lua.TypeFunction {
-				_ = L.PCall(0, 0, 0)
+			if app != nil {
+				// Post a lua_callback event — safe from any goroutine
+				app.PostEvent(AppEvent{
+					Type:    "lua_callback",
+					Payload: LuaCallbackEvent{RefID: ref},
+				})
 			} else {
-				L.Pop(1)
+				// No app — direct call (synchronous, main thread only)
+				L.RawGetI(lua.RegistryIndex, int64(ref))
+				if L.Type(-1) == lua.TypeFunction {
+					_ = L.PCall(0, 0, 0)
+				} else {
+					L.Pop(1)
+				}
 			}
 		})
 
