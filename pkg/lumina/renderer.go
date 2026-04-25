@@ -193,23 +193,36 @@ func luaComponentToVNode(L *lua.State, idx int) *VNode {
 	L.Pop(1)
 	_ = isForwardRef // used for tagging only
 
-	// Get _props as Go map for prop comparison/storage
+	// Get _props as Go map for prop comparison/storage.
+	// Walk the table manually to preserve Lua function refs (L.ToMap drops them).
 	L.GetField(absIdx, "_props")
-	var props map[string]any
+	props := make(map[string]any)
 	if L.Type(-1) == lua.TypeTable {
-		if m, ok := L.ToMap(-1); ok {
-			props = m
+		propsIdx := L.AbsIndex(-1)
+		L.PushNil()
+		for L.Next(propsIdx) {
+			if L.Type(-2) == lua.TypeString {
+				key, _ := L.ToString(-2)
+				if L.Type(-1) == lua.TypeFunction {
+					// Store Lua function as a registry ref so it survives
+					props[key] = storeLuaFuncRef(L, -1)
+				} else {
+					props[key] = L.ToAny(-1)
+				}
+			}
+			L.Pop(1) // pop value, keep key for next iteration
 		}
-	}
-	if props == nil {
-		props = make(map[string]any)
 	}
 	L.Pop(1) // pop _props
 
-	// Get optional key from props for reconciliation
+	// Get optional key from props for reconciliation.
+	// Fall back to props["id"] so each createElement with a unique id
+	// gets its own Component instance (and thus its own useState state).
 	compKey := ""
 	if k, ok := props["key"].(string); ok {
 		compKey = k
+	} else if id, ok := props["id"].(string); ok {
+		compKey = id
 	} else if k, ok := props["key"].(int64); ok {
 		compKey = fmt.Sprintf("%d", k)
 	}
@@ -307,7 +320,12 @@ func luaComponentToVNode(L *lua.State, idx int) *VNode {
 	L.NewTableFrom(fields)
 	for k, v := range props {
 		if k != "children" {
-			L.PushAny(v)
+			if ref, ok := v.(LuaFuncRef); ok {
+				// Push Lua function from registry ref
+				L.RawGetI(lua.RegistryIndex, int64(ref.Ref))
+			} else {
+				L.PushAny(v)
+			}
 			L.SetField(-2, k)
 		}
 	}
@@ -438,7 +456,15 @@ func findChildComponent(parent *Component, factoryName, key string) *Component {
 	defer parent.mu.RUnlock()
 	for _, child := range parent.ChildComps {
 		if child.Type == factoryName {
-			if key == "" || child.Props["key"] == key {
+			if key == "" {
+				return child
+			}
+			// Match by explicit "key" prop, or fall back to "id" prop
+			childKey, _ := child.Props["key"].(string)
+			if childKey == "" {
+				childKey, _ = child.Props["id"].(string)
+			}
+			if childKey == key {
 				return child
 			}
 		}

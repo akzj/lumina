@@ -410,6 +410,18 @@ func (app *App) handleEvent(event AppEvent) {
 			if targetNode != nil {
 				if id, ok := targetNode.Props["id"].(string); ok && id != "" {
 					e.Target = id
+				} else {
+					// Walk up the VNode tree to find nearest ancestor with an id
+					tree := globalEventBus.GetVNodeTree()
+					if tree != nil {
+						for node := tree.Parents[targetNode]; node != nil; node = tree.Parents[node] {
+							if id, ok := node.Props["id"].(string); ok && id != "" {
+								e.Target = id
+								targetNode = node
+								break
+							}
+						}
+					}
 				}
 				e.TargetNode = targetNode
 				// Compute local coordinates (relative to target VNode top-left)

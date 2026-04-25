@@ -136,10 +136,21 @@ func (c *Component) SetState(key string, value any) {
 	c.Dirty.Store(true)
 	c.mu.Unlock()
 
+	// Walk up to root component and mark it dirty too.
+	// Child components only re-render when the root re-renders and
+	// hits luaComponentToVNode inline, so the root must be dirty.
+	root := c
+	for root.Parent != nil {
+		root = root.Parent
+	}
+	if root != c {
+		root.Dirty.Store(true)
+	}
+
 	// Notify render loop that this component needs re-render
-	if c.RenderNotify != nil {
+	if root.RenderNotify != nil {
 		select {
-		case c.RenderNotify <- struct{}{}:
+		case root.RenderNotify <- struct{}{}:
 		default:
 		}
 	}
