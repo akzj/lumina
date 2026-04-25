@@ -173,7 +173,8 @@ func luaLoader(L *lua.State) int {
 	L.NewTable()
 	RegisterHooks(L)
 	L.SetField(-3, "hooks")
-	L.Pop(1)
+
+	L.SetField(-2, "devtools")
 
 	// Also register common hooks directly on lumina for convenience
 	L.SetFuncs(map[string]lua.Function{
