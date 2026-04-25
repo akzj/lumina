@@ -1,74 +1,80 @@
--- shadcn/carousel — Content carousel with navigation
+-- shadcn/carousel — Carousel/slideshow
 local lumina = require("lumina")
+
+local c = {
+    fg = "#CDD6F4",
+    muted = "#6C7086",
+    primary = "#89B4FA",
+    border = "#45475A",
+    bg = "#181825",
+}
 
 local Carousel = lumina.defineComponent({
     name = "ShadcnCarousel",
+
     init = function(props)
         return {
             items = props.items or {},
-            currentIndex = props.currentIndex or 1,
-            showIndicators = props.showIndicators ~= false,
+            activeIndex = props.activeIndex or 0,
+            orientation = props.orientation or "horizontal",
+            id = props.id,
+            className = props.className,
+            style = props.style,
         }
     end,
+
     render = function(self)
-        local children = {}
-        local total = #self.items
-        local idx = self.currentIndex
+        local idx = math.max(0, math.min(self.activeIndex, #self.items - 1))
+        local activeItem = self.items[idx + 1]
 
-        -- Navigation + content
-        local navChildren = {}
-        navChildren[#navChildren + 1] = {
-            type = "text",
-            content = idx > 1 and "◄ " or "  ",
-            style = { foreground = idx > 1 and "#3B82F6" or "#475569" },
+        local style = {
+            border = "rounded",
+            borderColor = c.border,
+            background = c.bg,
+            foreground = c.fg,
+            padding = 1,
         }
-
-        -- Current item
-        local currentItem = self.items[idx]
-        if currentItem then
-            if type(currentItem) == "table" then
-                navChildren[#navChildren + 1] = currentItem
-            else
-                navChildren[#navChildren + 1] = {
-                    type = "text",
-                    content = tostring(currentItem),
-                    style = { foreground = "#E2E8F0" },
-                }
-            end
+        if self.className and type(self.className) == "table" then
+            for k, v in pairs(self.className) do style[k] = v end
+        end
+        if self.style and type(self.style) == "table" then
+            for k, v in pairs(self.style) do style[k] = v end
         end
 
-        navChildren[#navChildren + 1] = {
-            type = "text",
-            content = idx < total and " ►" or "  ",
-            style = { foreground = idx < total and "#3B82F6" or "#475569" },
-        }
+        local children = {}
 
-        children[#children + 1] = {
-            type = "hbox",
-            style = { justify = "center", align = "center" },
-            children = navChildren,
-        }
+        -- Slide content
+        if activeItem then
+            local content = type(activeItem) == "string" and activeItem or (activeItem.content or activeItem.label or "")
+            children[#children + 1] = {
+                type = "text",
+                content = tostring(content),
+                style = { foreground = c.fg },
+            }
+        end
 
-        -- Dot indicators
-        if self.showIndicators and total > 1 then
+        -- Indicators
+        if #self.items > 1 then
             local dots = ""
-            for i = 1, total do
-                dots = dots .. (i == idx and "●" or "○") .. " "
+            for i = 1, #self.items do
+                dots = dots .. (i == idx + 1 and "◉" or "○") .. " "
             end
             children[#children + 1] = {
                 type = "hbox",
-                style = { justify = "center" },
+                style = { justify = "center", paddingTop = 1 },
                 children = {
-                    { type = "text", content = dots, style = { foreground = "#64748B" } },
+                    { type = "text", content = dots, style = { foreground = c.primary } },
                 },
             }
         end
 
         return {
             type = "vbox",
+            id = self.id,
+            style = style,
             children = children,
         }
-    end
+    end,
 })
 
 return Carousel
