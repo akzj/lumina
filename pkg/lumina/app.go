@@ -204,6 +204,12 @@ func (app *App) RunInteractive(scriptPath string) error {
 			comp.Dirty.Store(true)
 		}
 		globalRegistry.mu.RUnlock()
+		// Emit resize event for onResize handlers
+		globalEventBus.Emit(&Event{
+			Type:      "resize",
+			Bubbles:   false,
+			Timestamp: time.Now().UnixMilli(),
+		})
 	})
 	defer term.StopResize()
 
@@ -250,6 +256,12 @@ func (app *App) RunWithTermIO(tio TermIO, scriptPath string) error {
 				comp.Dirty.Store(true)
 			}
 			globalRegistry.mu.RUnlock()
+			// Emit resize event for onResize handlers
+			globalEventBus.Emit(&Event{
+				Type:      "resize",
+				Bubbles:   false,
+				Timestamp: time.Now().UnixMilli(),
+			})
 		})
 	}
 
@@ -471,6 +483,7 @@ func (app *App) handleEvent(event AppEvent) {
 						globalEventBus.Emit(&Event{
 							Type:      "mouseleave",
 							Target:    oldHoverID,
+							Bubbles:   false,
 							X:         e.X,
 							Y:         e.Y,
 							Timestamp: e.Timestamp,
@@ -482,6 +495,7 @@ func (app *App) handleEvent(event AppEvent) {
 						globalEventBus.Emit(&Event{
 							Type:      "mouseenter",
 							Target:    newHoverID,
+							Bubbles:   false,
 							X:         e.X,
 							Y:         e.Y,
 							Timestamp: e.Timestamp,
@@ -503,7 +517,7 @@ func (app *App) handleEvent(event AppEvent) {
 						if _, hasOnDrop := e.TargetNode.Props["onDrop"]; hasOnDrop {
 							globalDragState.SetDropTarget(e.Target)
 							globalEventBus.Emit(&Event{
-								Type: "dragover", Target: e.Target,
+								Type: "dragover", Target: e.Target, Bubbles: true,
 								X: e.X, Y: e.Y, LocalX: e.LocalX, LocalY: e.LocalY,
 								Timestamp: e.Timestamp,
 							})
@@ -516,7 +530,7 @@ func (app *App) handleEvent(event AppEvent) {
 					sourceID, dropTargetID, _ := globalDragState.EndDrag()
 					if dropTargetID != "" {
 						globalEventBus.Emit(&Event{
-							Type: "drop", Target: dropTargetID,
+							Type: "drop", Target: dropTargetID, Bubbles: true,
 							X: e.X, Y: e.Y,
 							Timestamp: e.Timestamp,
 						})
@@ -534,6 +548,7 @@ func (app *App) handleEvent(event AppEvent) {
 			clickEvent := &Event{
 				Type:       "click",
 				Target:     e.Target,
+				Bubbles:    true,
 				X:          e.X,
 				Y:          e.Y,
 				LocalX:     e.LocalX,
@@ -544,6 +559,18 @@ func (app *App) handleEvent(event AppEvent) {
 				TargetNode: e.TargetNode,
 			}
 			globalEventBus.Emit(clickEvent)
+
+			// Right-click → emit contextmenu
+			if e.Button == "right" {
+				globalEventBus.Emit(&Event{
+					Type:      "contextmenu",
+					Target:    e.Target,
+					Bubbles:   true,
+					X:         e.X,
+					Y:         e.Y,
+					Timestamp: e.Timestamp,
+				})
+			}
 		}
 
 		// Handle text input events first (if focused element is input/textarea)
@@ -741,6 +768,17 @@ func (app *App) handleScrollEvent(e *Event) {
 			ScrollViewport(targetID, scrollAmount)
 			markAllDirty()
 		}
+
+		// Also emit wheel event for onWheel handlers
+		globalEventBus.Emit(&Event{
+			Type:      "wheel",
+			Target:    e.Target,
+			Bubbles:   true,
+			X:         e.X,
+			Y:         e.Y,
+			Button:    e.Button, // "up" or "down"
+			Timestamp: e.Timestamp,
+		})
 
 	case "keydown":
 		focusedID := globalEventBus.GetFocused()
@@ -1291,8 +1329,9 @@ func (app *App) mcpInspectStyles(id string) map[string]interface{} {
 // mcpSimulateClick simulates a click on a component.
 func (app *App) mcpSimulateClick(id string) map[string]interface{} {
 	globalEventBus.Emit(&Event{
-		Type:   "click",
-		Target: id,
+		Type:    "click",
+		Target:  id,
+		Bubbles: true,
 	})
 	return map[string]interface{}{"clicked": id}
 }

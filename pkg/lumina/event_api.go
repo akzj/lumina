@@ -13,12 +13,26 @@ func pushEventToLua(L *lua.State, e *Event) {
 		"type": e.Type, "key": e.Key, "code": e.Code,
 		"x": int64(e.X), "y": int64(e.Y), "button": e.Button,
 		"localX": int64(e.LocalX), "localY": int64(e.LocalY),
-		"target": e.Target, "timestamp": e.Timestamp,
+		"target": e.Target, "currentTarget": e.CurrentTarget,
+		"bubbles": e.Bubbles, "timestamp": e.Timestamp,
 		"modifiers": map[string]any{
 			"ctrl": e.Modifiers.Ctrl, "shift": e.Modifiers.Shift,
 			"alt": e.Modifiers.Alt, "meta": e.Modifiers.Meta,
 		},
 	})
+
+	// Add stopPropagation() and preventDefault() methods
+	L.PushFunction(func(L *lua.State) int {
+		e.StopPropagation()
+		return 0
+	})
+	L.SetField(-2, "stopPropagation")
+
+	L.PushFunction(func(L *lua.State) int {
+		e.PreventDefault()
+		return 0
+	})
+	L.SetField(-2, "preventDefault")
 }
 
 // registerEvent(eventType, componentID?, handler) — register event handler
@@ -82,8 +96,9 @@ func emitEvent(L *lua.State) int {
 	eventType := L.CheckString(2)
 
 	e := &Event{
-		Type:   eventType,
-		Target: targetID,
+		Type:    eventType,
+		Target:  targetID,
+		Bubbles: eventBubbles(eventType),
 	}
 
 	// Optional event data table
@@ -220,6 +235,7 @@ func emitKeyEvent(L *lua.State) int {
 	e := &Event{
 		Type:      "keydown",
 		Key:       strings.ToLower(key),
+		Bubbles:   true,
 		Timestamp: time.Now().UnixMilli(),
 	}
 

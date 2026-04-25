@@ -132,6 +132,26 @@ func (app *App) walkVNodeForEvents(vnode *VNode) {
 			app.registerBridgedLuaHandler("drop", id, ref)
 		}
 
+		// Register onWheel handler
+		if ref, ok := getLuaRef(vnode.Props["onWheel"]); ok {
+			app.registerBridgedLuaHandler("wheel", id, ref)
+		}
+
+		// Register onInput handler
+		if ref, ok := getLuaRef(vnode.Props["onInput"]); ok {
+			app.registerBridgedLuaHandler("input", id, ref)
+		}
+
+		// Register onResize handler
+		if ref, ok := getLuaRef(vnode.Props["onResize"]); ok {
+			app.registerBridgedLuaHandler("resize", id, ref)
+		}
+
+		// Register onContextMenu handler
+		if ref, ok := getLuaRef(vnode.Props["onContextMenu"]); ok {
+			app.registerBridgedLuaHandler("contextmenu", id, ref)
+		}
+
 		// If element type is inherently focusable, register it
 		if isFocusableType(vnode.Type) {
 			globalEventBus.RegisterFocusable(id)
@@ -181,6 +201,7 @@ func isEventProp(key string) bool {
 		key == "onSubmit" || key == "onScroll" ||
 		key == "onMouseDown" || key == "onMouseUp" || key == "onMouseMove" ||
 		key == "onMouseEnter" || key == "onMouseLeave" ||
+		key == "onWheel" || key == "onInput" || key == "onResize" || key == "onContextMenu" ||
 		key == "onDragOver" || key == "onDrop"
 }
 

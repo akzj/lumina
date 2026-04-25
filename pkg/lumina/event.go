@@ -23,6 +23,14 @@ type Event struct {
 	Timestamp int64
 	Target    string // component ID
 
+	// Bubbles indicates whether this event type supports bubbling.
+	// Set automatically based on event type. Non-bubbling events skip the bubble phase.
+	Bubbles bool
+
+	// CurrentTarget is the component ID currently handling the event during bubble phase.
+	// Differs from Target during bubbling: Target = original source, CurrentTarget = current handler.
+	CurrentTarget string
+
 	// Keyboard
 	Key       string // "Enter", "Escape", "a", etc.
 	Code      string // physical key code
@@ -64,6 +72,21 @@ func (e *Event) StopPropagation() {
 // IsStopped returns whether propagation was stopped.
 func (e *Event) IsStopped() bool {
 	return e.stopped
+}
+
+// eventBubbles returns true if the given event type supports bubbling by default.
+func eventBubbles(eventType string) bool {
+	switch eventType {
+	case "click", "mousedown", "mouseup", "mousemove",
+		"input", "change", "submit",
+		"scroll", "wheel", "contextmenu",
+		"keydown", "keyup":
+		return true
+	case "mouseenter", "mouseleave", "focus", "blur", "resize":
+		return false
+	default:
+		return true // unknown events bubble by default
+	}
 }
 
 // eventHandler holds a handler for a specific component.
@@ -204,6 +227,7 @@ func (eb *EventBus) Emit(event *Event) {
 	}
 
 	// Target phase: emit to registered handlers (direct match, non-capture)
+	event.CurrentTarget = event.Target
 	handlers := eb.handlers[event.Type]
 	for _, h := range handlers {
 		if (h.componentID == "" || event.Target == "" || h.componentID == event.Target) && !h.capture {
@@ -214,8 +238,8 @@ func (eb *EventBus) Emit(event *Event) {
 		}
 	}
 
-	// Bubble phase: walk up the VNode tree if we have one and event has a target
-	if !event.IsStopped() && eb.vnodeTree != nil && event.Target != "" {
+	// Bubble phase: only if event supports bubbling
+	if !event.IsStopped() && event.Bubbles && eb.vnodeTree != nil && event.Target != "" {
 		eb.bubbleUp(event)
 	}
 }
@@ -247,6 +271,7 @@ func (eb *EventBus) captureDown(event *Event) {
 		}
 		node := path[i]
 		if nodeID, ok := node.Props["id"].(string); ok && nodeID != "" {
+			event.CurrentTarget = nodeID
 			handlers := eb.handlers[event.Type]
 			for _, h := range handlers {
 				if h.componentID == nodeID && h.capture {
@@ -282,6 +307,7 @@ func (eb *EventBus) bubbleUp(event *Event) {
 
 		// Check if this node has an ID with registered handlers
 		if parentID, ok := current.Props["id"].(string); ok && parentID != "" {
+			event.CurrentTarget = parentID
 			handlers := eb.handlers[event.Type]
 			for _, h := range handlers {
 				if h.componentID == parentID && !h.capture {
@@ -325,12 +351,12 @@ func (eb *EventBus) SetFocus(compID string) {
 
 	// Blur previous
 	if eb.focusedID != "" && eb.focusedID != compID {
-		eb.EmitUnsafe(&Event{Type: "blur", Target: eb.focusedID})
+		eb.EmitUnsafe(&Event{Type: "blur", Target: eb.focusedID, Bubbles: false})
 	}
 
 	// Focus new
 	eb.focusedID = compID
-	eb.EmitUnsafe(&Event{Type: "focus", Target: compID})
+	eb.EmitUnsafe(&Event{Type: "focus", Target: compID, Bubbles: false})
 
 	// Update focus stack
 	for i, id := range eb.focusStack {
@@ -472,7 +498,7 @@ func (eb *EventBus) FocusNext() {
 
 	// Blur current
 	if eb.focusedID != "" {
-		eb.EmitUnsafe(&Event{Type: "blur", Target: eb.focusedID})
+		eb.EmitUnsafe(&Event{Type: "blur", Target: eb.focusedID, Bubbles: false})
 	}
 
 	// Move to next (wrap around)
@@ -483,7 +509,7 @@ func (eb *EventBus) FocusNext() {
 	}
 
 	// Focus new
-	eb.EmitUnsafe(&Event{Type: "focus", Target: eb.focusedID})
+	eb.EmitUnsafe(&Event{Type: "focus", Target: eb.focusedID, Bubbles: false})
 }
 
 // FocusPrev moves focus to the previous focusable component.
@@ -512,7 +538,7 @@ func (eb *EventBus) FocusPrev() {
 
 	// Blur current
 	if eb.focusedID != "" {
-		eb.EmitUnsafe(&Event{Type: "blur", Target: eb.focusedID})
+		eb.EmitUnsafe(&Event{Type: "blur", Target: eb.focusedID, Bubbles: false})
 	}
 
 	// Move to previous (wrap around)
@@ -523,7 +549,7 @@ func (eb *EventBus) FocusPrev() {
 	}
 
 	// Focus new
-	eb.EmitUnsafe(&Event{Type: "focus", Target: eb.focusedID})
+	eb.EmitUnsafe(&Event{Type: "focus", Target: eb.focusedID, Bubbles: false})
 }
 
 // HandleKeyEvent handles keyboard navigation.
@@ -544,13 +570,14 @@ func (eb *EventBus) HandleKeyEvent(key string, modifiers EventModifiers) {
 			eb.EmitUnsafe(&Event{
 				Type:      "click",
 				Target:    eb.focusedID,
+				Bubbles:   true,
 				Modifiers: modifiers,
 			})
 		}
 	case KeyEscape, "Escape":
 		// Close dialogs or blur
 		if eb.focusedID != "" {
-			eb.EmitUnsafe(&Event{Type: "blur", Target: eb.focusedID})
+			eb.EmitUnsafe(&Event{Type: "blur", Target: eb.focusedID, Bubbles: false})
 			eb.focusedID = ""
 		}
 	}
@@ -571,7 +598,7 @@ func (eb *EventBus) focusNextUnsafe() {
 	}
 
 	if eb.focusedID != "" {
-		eb.EmitUnsafe(&Event{Type: "blur", Target: eb.focusedID})
+		eb.EmitUnsafe(&Event{Type: "blur", Target: eb.focusedID, Bubbles: false})
 	}
 
 	if currentIdx == -1 || currentIdx >= len(eb.focusableIDs)-1 {
@@ -580,7 +607,7 @@ func (eb *EventBus) focusNextUnsafe() {
 		eb.focusedID = eb.focusableIDs[currentIdx+1]
 	}
 
-	eb.EmitUnsafe(&Event{Type: "focus", Target: eb.focusedID})
+	eb.EmitUnsafe(&Event{Type: "focus", Target: eb.focusedID, Bubbles: false})
 }
 
 // focusPrevUnsafe moves to prev focusable (caller must hold lock).
@@ -598,7 +625,7 @@ func (eb *EventBus) focusPrevUnsafe() {
 	}
 
 	if eb.focusedID != "" {
-		eb.EmitUnsafe(&Event{Type: "blur", Target: eb.focusedID})
+		eb.EmitUnsafe(&Event{Type: "blur", Target: eb.focusedID, Bubbles: false})
 	}
 
 	if currentIdx <= 0 {
@@ -607,7 +634,7 @@ func (eb *EventBus) focusPrevUnsafe() {
 		eb.focusedID = eb.focusableIDs[currentIdx-1]
 	}
 
-	eb.EmitUnsafe(&Event{Type: "focus", Target: eb.focusedID})
+	eb.EmitUnsafe(&Event{Type: "focus", Target: eb.focusedID, Bubbles: false})
 }
 
 // TriggerFocusedClick triggers a click event on the currently focused component.
@@ -616,7 +643,7 @@ func (eb *EventBus) TriggerFocusedClick() {
 	defer eb.mu.Unlock()
 
 	if eb.focusedID != "" {
-		eb.EmitUnsafe(&Event{Type: "click", Target: eb.focusedID})
+		eb.EmitUnsafe(&Event{Type: "click", Target: eb.focusedID, Bubbles: true})
 	}
 }
 
@@ -646,7 +673,7 @@ func (eb *EventBus) Blur() {
 	eb.mu.Lock()
 	defer eb.mu.Unlock()
 	if eb.focusedID != "" {
-		eb.EmitUnsafe(&Event{Type: "blur", Target: eb.focusedID})
+		eb.EmitUnsafe(&Event{Type: "blur", Target: eb.focusedID, Bubbles: false})
 		eb.focusedID = ""
 	}
 }
@@ -684,6 +711,7 @@ func normalizeShortcutKey(key string) string {
 func CreateEvent(eventType string) *Event {
 	return &Event{
 		Type:      eventType,
+		Bubbles:   eventBubbles(eventType),
 		Timestamp: time.Now().UnixMilli(),
 	}
 }
