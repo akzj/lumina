@@ -206,7 +206,7 @@ func (eb *EventBus) Emit(event *Event) {
 	// Target phase: emit to registered handlers (direct match, non-capture)
 	handlers := eb.handlers[event.Type]
 	for _, h := range handlers {
-		if (event.Target == "" || h.componentID == event.Target) && !h.capture {
+		if (h.componentID == "" || event.Target == "" || h.componentID == event.Target) && !h.capture {
 			h.handler(event)
 			if event.IsStopped() {
 				return
