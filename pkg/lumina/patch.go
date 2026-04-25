@@ -6,6 +6,14 @@ import (
 
 // patchComponent replaces a component's render function with new code.
 // lumina.patch(id, code) → success, error?
+//
+// TODO: Currently this only validates that the new code compiles and executes
+// without error. It does NOT actually replace the component's render function.
+// A full implementation would need to:
+//   1. Parse the code to extract the new render function
+//   2. Update comp.RenderRef in the Lua registry
+//   3. Mark the component dirty to trigger re-render
+// For now, this is useful for hot-reload validation (syntax check) only.
 func patchComponent(L *lua.State) int {
 	id := L.CheckString(1)
 	code := L.CheckString(2)

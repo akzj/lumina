@@ -273,6 +273,13 @@ func diffKeyedChildren(oldChildren, newChildren []*VNode, parentPath []int, patc
 // It re-renders only the affected subtrees by walking the patch paths.
 // The root VNode should already have layout computed before calling this.
 // Dirty rects are added to the frame for each affected region.
+// ApplyPatches applies VNode diff patches to a frame by re-rendering affected parent containers.
+//
+// LIMITATION: This function re-renders the full parent container of each patched node,
+// not just the patched node itself. This is necessary because layout changes in one child
+// (e.g., content size change) can shift sibling positions. A more granular approach would
+// require incremental layout, which is not yet implemented. For most TUI use cases,
+// re-rendering the parent container is fast enough.
 func ApplyPatches(frame *Frame, root *VNode, patches []Patch, width, height int) {
 	if len(patches) == 0 {
 		return

@@ -97,6 +97,7 @@ func (app *App) PostEvent(event AppEvent) {
 	case app.events <- event:
 	default:
 		// Drop if channel full (non-blocking)
+		fmt.Printf("lumina: warning: event dropped (channel full): %s\n", event.Type)
 	}
 }
 

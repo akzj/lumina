@@ -15,6 +15,7 @@ func pushEventToLua(L *lua.State, e *Event) {
 		"localX": int64(e.LocalX), "localY": int64(e.LocalY),
 		"target": e.Target, "currentTarget": e.CurrentTarget,
 		"bubbles": e.Bubbles, "timestamp": e.Timestamp,
+		"defaultPrevented": e.defaultPrevented,
 		"modifiers": map[string]any{
 			"ctrl": e.Modifiers.Ctrl, "shift": e.Modifiers.Shift,
 			"alt": e.Modifiers.Alt, "meta": e.Modifiers.Meta,

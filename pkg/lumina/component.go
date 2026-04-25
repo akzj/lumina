@@ -224,6 +224,11 @@ func (c *Component) Cleanup(L *lua.State) {
 }
 
 // SetCurrentComponent sets the currently rendering component.
+// IMPORTANT: This uses a global variable protected by a mutex, which means
+// only one component can be rendering at a time. This is safe because the
+// Lua VM is single-threaded — all component renders happen sequentially on
+// the main goroutine. If concurrent rendering is ever needed, this must be
+// replaced with a per-goroutine or per-VM context (e.g., stored on the Lua State).
 func SetCurrentComponent(comp *Component) {
 	globalRegistry.mu.Lock()
 	globalRegistry.current = comp
