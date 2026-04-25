@@ -49,7 +49,8 @@ type Event struct {
 	TargetNode *VNode
 
 	// Error for propagation
-	stopped bool
+	stopped          bool
+	defaultPrevented bool // set by PreventDefault(); checked by default action handlers
 }
 
 // EventModifiers holds keyboard modifier state.
@@ -60,9 +61,14 @@ type EventModifiers struct {
 	Meta  bool
 }
 
-// PreventDefault prevents default behavior.
+// PreventDefault prevents the default browser/terminal action for this event.
 func (e *Event) PreventDefault() {
-	// Mark event as handled
+	e.defaultPrevented = true
+}
+
+// DefaultPrevented returns true if PreventDefault() was called.
+func (e *Event) DefaultPrevented() bool {
+	return e.defaultPrevented
 }
 
 // StopPropagation stops event from bubbling.
@@ -233,7 +239,11 @@ func (eb *EventBus) Emit(event *Event) {
 		return
 	}
 
-	// Target phase: emit to registered handlers (direct match, non-capture)
+	// Target phase: emit to registered handlers (direct match, non-capture).
+	// NOTE: Handlers with componentID="" are global handlers that fire for ALL events
+	// of this type, regardless of target. This is intentional — it allows global
+	// listeners (e.g., keyboard shortcuts, analytics) to observe all events.
+	// Handlers with a specific componentID only fire when event.Target matches.
 	event.CurrentTarget = event.Target
 	handlers := eb.handlers[event.Type]
 	for _, h := range handlers {
@@ -377,6 +387,16 @@ func (eb *EventBus) SetFocus(compID string) {
 
 // EmitUnsafe emits without locking (caller must hold lock).
 func (eb *EventBus) EmitUnsafe(event *Event) {
+	// Capture phase: walk top-down from root to target's parent (same as Emit)
+	if !event.IsStopped() && eb.vnodeTree != nil && event.Target != "" {
+		eb.captureDown(event)
+	}
+
+	if event.IsStopped() {
+		return
+	}
+
+	// Target phase: emit to registered handlers
 	handlers := eb.handlers[event.Type]
 	for _, h := range handlers {
 		h.handler(event)

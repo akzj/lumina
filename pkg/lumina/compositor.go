@@ -36,6 +36,11 @@ func (c *Compositor) Compose(baseFrame *Frame, overlays []*Overlay) *Frame {
 
 		// Composite overlay frame onto output at (ov.X, ov.Y)
 		compositeFrame(baseFrame, ovFrame, ov.X, ov.Y)
+
+		// Mark overlay region as dirty so the ANSI adapter re-renders it
+		baseFrame.DirtyRects = append(baseFrame.DirtyRects, Rect{
+			X: ov.X, Y: ov.Y, W: ov.W, H: ov.H,
+		})
 	}
 
 	return baseFrame

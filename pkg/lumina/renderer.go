@@ -1056,6 +1056,11 @@ func renderInput(frame *Frame, vnode *VNode, style Style, clip Rect) {
 			OwnerNode: vnode, OwnerID: oid, CellRole: "background"}, clip)
 	}
 
+	// Render border first (before content, so content draws inside the border)
+	if style.Border != "" {
+		renderBorder(frame, vnode, style.Border, clip)
+	}
+
 	// Render text (with horizontal scroll)
 	runes := []rune(text)
 	fg := style.Foreground // empty = terminal default
@@ -1115,10 +1120,6 @@ func renderInput(frame *Frame, vnode *VNode, style Style, clip Rect) {
 		}
 	}
 
-	// Render border if specified
-	if style.Border != "" {
-		renderBorder(frame, vnode, style.Border, clip)
-	}
 }
 
 // renderTextArea renders a multi-line text area VNode.

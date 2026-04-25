@@ -102,20 +102,54 @@ func (r Rect) Contains(x, y int) bool {
 }
 
 // NewFrame creates a new frame with the given dimensions.
+// framePool reduces GC pressure by reusing Frame allocations.
+var framePool = sync.Pool{
+	New: func() any { return &Frame{} },
+}
+
+// NewFrame creates a new frame with the given dimensions.
+// Uses sync.Pool to reduce allocations when frames are recycled via ReleaseFrame.
 func NewFrame(width, height int) *Frame {
-	cells := make([][]Cell, height)
+	f := framePool.Get().(*Frame)
+	f.Width = width
+	f.Height = height
+	f.DirtyRects = f.DirtyRects[:0]
+	f.Timestamp = 0
+	f.FocusedID = ""
+
+	// Reuse or allocate cell rows
+	if cap(f.Cells) >= height {
+		f.Cells = f.Cells[:height]
+	} else {
+		f.Cells = make([][]Cell, height)
+	}
 	for y := 0; y < height; y++ {
-		cells[y] = make([]Cell, width)
+		if cap(f.Cells[y]) >= width {
+			f.Cells[y] = f.Cells[y][:width]
+		} else {
+			f.Cells[y] = make([]Cell, width)
+		}
 		// Initialize with empty transparent cells
 		for x := 0; x < width; x++ {
-			cells[y][x] = Cell{Char: ' ', Transparent: true}
+			f.Cells[y][x] = Cell{Char: ' ', Transparent: true}
 		}
 	}
-	return &Frame{
-		Cells:  cells,
-		Width:  width,
-		Height: height,
+	return f
+}
+
+// ReleaseFrame returns a frame to the pool for reuse.
+// The caller must not use the frame after calling this.
+func ReleaseFrame(f *Frame) {
+	if f == nil {
+		return
 	}
+	// Clear OwnerNode references to avoid retaining VNode trees
+	for y := range f.Cells {
+		for x := range f.Cells[y] {
+			f.Cells[y][x].OwnerNode = nil
+		}
+	}
+	framePool.Put(f)
 }
 
 // Clone creates a deep copy of the frame (cells only — OwnerNode pointers are nil'd
