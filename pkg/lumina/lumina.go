@@ -156,6 +156,16 @@ func luaLoader(L *lua.State) int {
 		"getInputValue":    luaGetInputValue,
 		"registerInput":    luaRegisterInput,
 		"focusInput":       luaFocusInput,
+		// Window Manager API
+		"createWindow":     luaCreateWindow,
+		"closeWindow":      luaCloseWindow,
+		"focusWindow":      luaFocusWindow,
+		"moveWindow":       luaMoveWindow,
+		"resizeWindow":     luaResizeWindow,
+		"minimizeWindow":   luaMinimizeWindow,
+		"maximizeWindow":   luaMaximizeWindow,
+		"restoreWindow":    luaRestoreWindow,
+		"tileWindows":      luaTileWindows,
 	}, 0)
 
 	// Register hooks as sub-table
