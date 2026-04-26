@@ -249,6 +249,8 @@ func storeDispatchFn(store *Store) lua.Function {
 			L.Error()
 			return 0
 		}
+		origTop := L.GetTop()
+		fmt.Fprintf(os.Stderr, "[DISPATCH-ENTRY %s] origTop=%d\n", actionName, origTop)
 
 		// Built-in "setState" action: merges payload into state directly
 		if actionName == "setState" {
@@ -299,6 +301,9 @@ func storeDispatchFn(store *Store) lua.Function {
 		nargs := 1
 		if L.GetTop() >= 2 && !L.IsNoneOrNil(2) {
 			L.PushValue(2)
+			if actionName == "setHover" {
+				fmt.Fprintf(os.Stderr, "[DISPATCH-PRE setHover] payload Lua-type=%d GetTop=%d arg2-type=%d\n", L.Type(-1), L.GetTop(), L.Type(2))
+			}
 			nargs = 2
 		}
 
