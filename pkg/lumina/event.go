@@ -111,6 +111,7 @@ type EventBus struct {
 	focusStack      []string                // component ID stack for focus management
 	focusedID       string
 	focusableIDs    []string          // ordered list of focusable component IDs
+	focusableSet    map[string]bool   // O(1) dedup for RegisterFocusable
 	vnodeTree       *VNodeTree        // current VNode tree for event bubbling
 	bridgedHandlers []bridgedHandler  // handlers from VNode→EventBus bridge (cleared each render)
 	mu              sync.RWMutex
@@ -471,12 +472,14 @@ func (eb *EventBus) RegisterFocusable(compID string) {
 	eb.mu.Lock()
 	defer eb.mu.Unlock()
 
-	// Check if already registered
-	for _, id := range eb.focusableIDs {
-		if id == compID {
-			return
-		}
+	// O(1) dedup via set
+	if eb.focusableSet[compID] {
+		return
 	}
+	if eb.focusableSet == nil {
+		eb.focusableSet = make(map[string]bool)
+	}
+	eb.focusableSet[compID] = true
 	eb.focusableIDs = append(eb.focusableIDs, compID)
 }
 
@@ -492,6 +495,7 @@ func (eb *EventBus) UnregisterFocusable(compID string) {
 		}
 	}
 	eb.focusableIDs = filtered
+	delete(eb.focusableSet, compID)
 
 	// If this was focused, move to next
 	if eb.focusedID == compID {
