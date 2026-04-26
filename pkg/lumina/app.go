@@ -702,9 +702,17 @@ func (app *App) handleEvent(event AppEvent) {
 		}
 
 		// Handle keyboard navigation (Tab, Enter, Escape, etc.)
-		// Skip if text input consumed the event (except Tab which is not consumed)
+		// Skip if text input consumed the event (except Tab which is not consumed).
+		// Also skip if there's a user-defined onKey binding for this key,
+		// to prevent double-dispatch (e.g., Enter triggering both onKey callback
+		// and built-in click on focused element).
 		if e.Type == "keydown" && !textHandled {
-			globalEventBus.HandleKeyEvent(e.Key, e.Modifiers)
+			keyBindingsMu.Lock()
+			_, hasBinding := keyBindings[e.Key]
+			keyBindingsMu.Unlock()
+			if !hasBinding {
+				globalEventBus.HandleKeyEvent(e.Key, e.Modifiers)
+			}
 		}
 
 		// Dispatch lumina.onKey() bindings
