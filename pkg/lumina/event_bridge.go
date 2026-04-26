@@ -2,7 +2,6 @@ package lumina
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/akzj/go-lua/pkg/lua"
 )
@@ -175,7 +174,6 @@ func (app *App) walkVNodeForEvents(vnode *VNode) {
 // synchronously so that state changes are visible before EndBatch renders.
 // When called from another goroutine, it falls back to PostEvent (async).
 func (app *App) registerBridgedLuaHandler(eventType, compID string, luaRef int) {
-	fmt.Fprintf(os.Stderr, "[BRIDGE-REG] event=%s comp=%s ref=%d\n", eventType, compID, luaRef)
 	globalEventBus.RegisterBridgedHandler(eventType, compID, func(e *Event) {
 		if app.IsBatching() {
 			// Already on main thread — call Lua directly (synchronous).
@@ -197,15 +195,11 @@ func (app *App) registerBridgedLuaHandler(eventType, compID string, luaRef int) 
 func (app *App) invokeLuaCallback(luaRef int, e *Event) {
 	app.L.RawGetI(lua.RegistryIndex, int64(luaRef))
 	if app.L.IsFunction(-1) {
-		fmt.Fprintf(os.Stderr, "[INVOKE] ref=%d event=%s target=%s\n", luaRef, e.Type, e.Target)
 		pushEventToLua(app.L, e)
 		if status := app.L.PCall(1, 0, 0); status != lua.OK {
-			msg, _ := app.L.ToString(-1)
-			fmt.Fprintf(os.Stderr, "[INVOKE-ERR] ref=%d err=%s\n", luaRef, msg)
 			app.L.Pop(1) // pop error
 		}
 	} else {
-		fmt.Fprintf(os.Stderr, "[INVOKE-NOTFUNC] ref=%d type=%d\n", luaRef, app.L.Type(-1))
 		app.L.Pop(1) // pop non-function
 	}
 }
@@ -256,7 +250,9 @@ type LuaFuncRef struct {
 func storeLuaFuncRef(L *lua.State, idx int) LuaFuncRef {
 	L.PushValue(idx)
 	ref := L.Ref(lua.RegistryIndex)
-	trackRenderRef(ref)
+	// DON'T call trackRenderRef(ref) — prop refs are managed per-component
+	// to avoid SwapRenderRefs freeing them and causing registry slot reuse
+	// that corrupts component renderFn refs.
 	return LuaFuncRef{Ref: ref}
 }
 
@@ -279,9 +275,6 @@ func ResetRenderRefs() {
 // SwapRenderRefs releases all Lua registry refs from the previous render cycle
 // and promotes the current cycle's refs to "previous". Call at the start of each render.
 func SwapRenderRefs(L *lua.State) {
-	if len(previousRenderRefs) > 0 {
-		fmt.Fprintf(os.Stderr, "[SWAP-REFS] releasing %d refs: %v\n", len(previousRenderRefs), previousRenderRefs)
-	}
 	for _, ref := range previousRenderRefs {
 		L.Unref(lua.RegistryIndex, ref)
 	}

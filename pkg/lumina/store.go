@@ -3,7 +3,6 @@ package lumina
 
 import (
 	"fmt"
-	"os"
 	"sync"
 	"sync/atomic"
 
@@ -249,9 +248,6 @@ func storeDispatchFn(store *Store) lua.Function {
 			L.Error()
 			return 0
 		}
-		origTop := L.GetTop()
-		fmt.Fprintf(os.Stderr, "[DISPATCH-ENTRY %s] origTop=%d\n", actionName, origTop)
-
 		// Built-in "setState" action: merges payload into state directly
 		if actionName == "setState" {
 			if L.Type(2) == lua.TypeTable {
@@ -301,9 +297,6 @@ func storeDispatchFn(store *Store) lua.Function {
 		nargs := 1
 		if L.GetTop() >= 2 && !L.IsNoneOrNil(2) {
 			L.PushValue(2)
-			if actionName == "setHover" {
-				fmt.Fprintf(os.Stderr, "[DISPATCH-PRE setHover] payload Lua-type=%d GetTop=%d arg2-type=%d\n", L.Type(-1), L.GetTop(), L.Type(2))
-			}
 			nargs = 2
 		}
 
@@ -325,12 +318,6 @@ func storeDispatchFn(store *Store) lua.Function {
 				store.state[k] = v
 			}
 			store.mu.Unlock()
-		}
-		// DEBUG: track lastHover type after dispatch
-		if actionName == "setHover" || actionName == "clickCell" || actionName == "toggleCell" || actionName == "clearAll" || actionName == "moveCursor" {
-			if lh, ok := store.state["lastHover"]; ok {
-				fmt.Fprintf(os.Stderr, "[DISPATCH %s] lastHover Go-type=%T value=%v\n", actionName, lh, lh)
-			}
 		}
 		L.Pop(1)
 		L.Unref(lua.RegistryIndex, stateRef)
@@ -403,11 +390,6 @@ func luaUseStore(L *lua.State) int {
 	}
 
 	// Return current state snapshot
-	// DEBUG: track lastHover type in useStore
-	st := store.GetState()
-	if lh, ok := st["lastHover"]; ok {
-		fmt.Fprintf(os.Stderr, "[USESTORE] lastHover Go-type=%T value=%v\n", lh, lh)
-	}
-	L.PushAny(st)
+	L.PushAny(store.GetState())
 	return 1
 }
