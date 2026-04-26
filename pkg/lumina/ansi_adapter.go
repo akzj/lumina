@@ -102,8 +102,13 @@ func (a *ANSIAdapter) Write(frame *Frame) error {
 	// Atomic write — single write call to terminal
 	_, err := a.writer.Write(a.buf.Bytes())
 
-	// Store current frame as previous for next diff
-	a.prevFrame = frame.Clone()
+	// Store current frame as previous for next diff.
+	// Reuse prevFrame's cell arrays when dimensions match to avoid allocation.
+	if a.prevFrame == nil {
+		a.prevFrame = frame.Clone()
+	} else {
+		frame.CloneInto(a.prevFrame)
+	}
 
 	return err
 }

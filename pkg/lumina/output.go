@@ -171,6 +171,27 @@ func (f *Frame) Clone() *Frame {
 	return clone
 }
 
+// CloneInto copies frame cells into dst, reusing dst's cell arrays if
+// dimensions match. This avoids allocating new [][]Cell every render.
+func (f *Frame) CloneInto(dst *Frame) {
+	if dst.Width != f.Width || dst.Height != f.Height {
+		// Size changed — must reallocate
+		dst.Width = f.Width
+		dst.Height = f.Height
+		dst.Cells = make([][]Cell, f.Height)
+		for y := 0; y < f.Height; y++ {
+			dst.Cells[y] = make([]Cell, f.Width)
+		}
+	}
+	for y := 0; y < f.Height; y++ {
+		copy(dst.Cells[y], f.Cells[y])
+		// Nil out OwnerNode pointers to avoid retaining old VNode trees.
+		for x := range dst.Cells[y] {
+			dst.Cells[y][x].OwnerNode = nil
+		}
+	}
+}
+
 // MarkDirty marks the entire frame as dirty.
 func (f *Frame) MarkDirty() {
 	f.DirtyRects = []Rect{{X: 0, Y: 0, W: f.Width, H: f.Height}}
