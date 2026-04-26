@@ -225,6 +225,12 @@ func reRenderDirtySubtree(L *lua.State, vnode *VNode) bool {
 				vnode.Style = newChild.Style
 				vnode.ComponentRef = newChild.ComponentRef
 				vnode.ComponentKey = newChild.ComponentKey
+
+				// LOCAL LAYOUT: New children have no layout (X=0,Y=0,W=0,H=0).
+				// Run computeFlexLayout on just this subtree using the parent's
+				// cached position and size. O(children) not O(total_nodes).
+				computeFlexLayout(vnode, vnode.X, vnode.Y, vnode.W, vnode.H)
+
 				changed = true
 			} else {
 				L.Pop(1) // pop error
