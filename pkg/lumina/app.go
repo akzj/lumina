@@ -235,18 +235,8 @@ func (app *App) RunInteractive(scriptPath string) error {
 	term.WatchResize(func(w, h int) {
 		app.setSize(w, h)
 		localIO.SetSize(w, h)
-		// Mark all components dirty for re-render at new size
-		globalRegistry.mu.RLock()
-		for _, comp := range globalRegistry.components {
-			comp.Dirty.Store(true)
-		}
-		globalRegistry.mu.RUnlock()
-		// Emit resize event for onResize handlers
-		globalEventBus.Emit(&Event{
-			Type:      "resize",
-			Bubbles:   false,
-			Timestamp: time.Now().UnixMilli(),
-		})
+		// Post to main thread — don't touch components/EventBus from SIGWINCH goroutine
+		app.PostEvent(AppEvent{Type: "resize"})
 	})
 	defer term.StopResize()
 
@@ -285,18 +275,8 @@ func (app *App) RunWithTermIO(tio TermIO, scriptPath string) error {
 	if wt, ok := tio.(*WebTerminal); ok {
 		wt.SetOnResize(func(newW, newH int) {
 			app.setSize(newW, newH)
-			// Mark all components dirty for re-render at new size
-			globalRegistry.mu.RLock()
-			for _, comp := range globalRegistry.components {
-				comp.Dirty.Store(true)
-			}
-			globalRegistry.mu.RUnlock()
-			// Emit resize event for onResize handlers
-			globalEventBus.Emit(&Event{
-				Type:      "resize",
-				Bubbles:   false,
-				Timestamp: time.Now().UnixMilli(),
-			})
+			// Post to main thread — don't touch components/EventBus from resize goroutine
+			app.PostEvent(AppEvent{Type: "resize"})
 		})
 	}
 
@@ -384,6 +364,28 @@ func (app *App) handleEvent(event AppEvent) {
 	switch event.Type {
 	case "quit":
 		app.running = false
+
+	case "resize":
+		// Mark all components dirty for re-render at new size
+		globalRegistry.mu.RLock()
+		for _, comp := range globalRegistry.components {
+			comp.Dirty.Store(true)
+		}
+		globalRegistry.mu.RUnlock()
+		// Invalidate ANSI adapter to force full frame rewrite (not diff)
+		if adapter := GetOutputAdapter(); adapter != nil {
+			if ansi, ok := adapter.(*ANSIAdapter); ok {
+				ansi.Invalidate()
+			}
+		}
+		// Clear hover state — old cell IDs may be invalid after resize
+		app.hoveredID = ""
+		// Emit resize event for onResize handlers (now safely on main thread)
+		globalEventBus.Emit(&Event{
+			Type:      "resize",
+			Bubbles:   false,
+			Timestamp: time.Now().UnixMilli(),
+		})
 
 	case "mcp_request":
 		call, ok := event.Payload.(MCPCallEvent)
