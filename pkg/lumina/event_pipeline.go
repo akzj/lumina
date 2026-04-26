@@ -1,5 +1,7 @@
 package lumina
 
+import "time"
+
 // Event pipeline: ordered stages for processing input events.
 // Extracted from handleEvent's input_event case for clarity and
 // to prevent bugs where multiple handlers fire for the same event.
@@ -17,6 +19,7 @@ func (app *App) runInputPipeline(e *Event) {
 	ctx := &inputPipelineCtx{e: e}
 
 	for _, stage := range []func(*App, *inputPipelineCtx) bool{
+		stageMouseThrottle,   // Drop high-frequency mousemove events (16ms throttle)
 		stageQuitShortcut,    // Ctrl+C/Q → quit
 		stageDevTools,        // F12 toggle + inspector mouse hover/selection
 		stageModalIntercept,  // Modal: Escape closes, others retarget
@@ -45,6 +48,34 @@ func markAllComponentsDirty() {
 		comp.Dirty.Store(true)
 	}
 	globalRegistry.mu.RUnlock()
+}
+
+// stageMouseThrottle drops duplicate mousemove events at the same coordinates.
+// Terminal ANY_EVENT mouse tracking (mode 1003) sends continuous mousemove
+// reports even when the mouse is stationary. We drop these duplicates
+// and also throttle same-position events to at most once per 16ms.
+// Events with changed coordinates always pass through immediately.
+func stageMouseThrottle(app *App, ctx *inputPipelineCtx) bool {
+	if ctx.e.Type != "mousemove" {
+		return false
+	}
+	e := ctx.e
+	now := time.Now()
+
+	// If coordinates changed, always process
+	if e.X != app.lastMouseX || e.Y != app.lastMouseY {
+		app.lastMouseX = e.X
+		app.lastMouseY = e.Y
+		app.lastMouseMoveTime = now
+		return false
+	}
+
+	// Same coordinates — throttle to 16ms
+	if !app.lastMouseMoveTime.IsZero() && now.Sub(app.lastMouseMoveTime) < 16*time.Millisecond {
+		return true // consumed (dropped)
+	}
+	app.lastMouseMoveTime = now
+	return false
 }
 
 // stageQuitShortcut handles Ctrl+C / Ctrl+Q to quit (always works, even with modal).

@@ -43,9 +43,12 @@ type App struct {
 	running        bool
 	batchDepth     int       // >0 means we're inside a batch (suppress per-setState renders)
 	termIO         TermIO    // terminal I/O abstraction (nil = default local)
-	lastFrame      *Frame    // previous render frame for incremental updates
-	lastRenderTime time.Time // frame rate limiting
-	hoveredID      string    // ID of element currently under mouse cursor
+	lastFrame         *Frame    // previous render frame for incremental updates
+	lastRenderTime    time.Time // frame rate limiting
+	lastMouseMoveTime time.Time // for mousemove throttling
+	lastMouseX        int       // last processed mousemove X
+	lastMouseY        int       // last processed mousemove Y
+	hoveredID         string    // ID of element currently under mouse cursor
 	lastRenderWidth  int     // previous render width for detecting resize
 	lastRenderHeight int     // previous render height for detecting resize
 }
