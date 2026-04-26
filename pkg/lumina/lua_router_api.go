@@ -62,11 +62,9 @@ func luaNavigate(L *lua.State) int {
 	globalRouter.Navigate(path)
 
 	// Mark all components dirty to re-render with new route
-	globalRegistry.mu.RLock()
 	for _, comp := range globalRegistry.components {
 		comp.Dirty.Store(true)
 	}
-	globalRegistry.mu.RUnlock()
 
 	return 0
 }
@@ -83,11 +81,9 @@ func luaBack(L *lua.State) int {
 
 	if ok {
 		// Mark all components dirty
-		globalRegistry.mu.RLock()
 		for _, comp := range globalRegistry.components {
 			comp.Dirty.Store(true)
 		}
-		globalRegistry.mu.RUnlock()
 	}
 
 	return 1

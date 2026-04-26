@@ -60,15 +60,11 @@ func TestSnapshotAllComponents_SavesAllStates(t *testing.T) {
 		State: map[string]any{"elapsed": 42},
 	}
 
-	globalRegistry.mu.Lock()
 	globalRegistry.components["c1"] = comp1
 	globalRegistry.components["c2"] = comp2
-	globalRegistry.mu.Unlock()
 	defer func() {
-		globalRegistry.mu.Lock()
 		delete(globalRegistry.components, "c1")
 		delete(globalRegistry.components, "c2")
-		globalRegistry.mu.Unlock()
 	}()
 
 	hr.SnapshotAllComponents()

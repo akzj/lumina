@@ -3,7 +3,6 @@ package lumina
 
 import (
 	"fmt"
-	"sync"
 	"sync/atomic"
 
 	"github.com/akzj/go-lua/pkg/lua"
@@ -16,7 +15,7 @@ type Store struct {
 	actionRefs map[string]int // Lua registry refs for action functions
 	listeners  []func()
 	nilCount   int // track nil'd listeners for periodic compaction
-	mu         sync.RWMutex
+	// No mutex — all access is from the main thread (actor model).
 }
 
 var storeCounter int64
@@ -36,8 +35,6 @@ func NewStore(initialState map[string]any) *Store {
 
 // GetState returns a shallow copy of the current state.
 func (s *Store) GetState() map[string]any {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
 	cp := make(map[string]any, len(s.state))
 	for k, v := range s.state {
 		cp[k] = v
@@ -47,18 +44,14 @@ func (s *Store) GetState() map[string]any {
 
 // GetValue returns a single value from the store.
 func (s *Store) GetValue(key string) any {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
 	return s.state[key]
 }
 
 // SetState updates a single key and notifies listeners.
 func (s *Store) SetState(key string, value any) {
-	s.mu.Lock()
 	s.state[key] = value
 	listeners := make([]func(), len(s.listeners))
 	copy(listeners, s.listeners)
-	s.mu.Unlock()
 	for _, fn := range listeners {
 		if fn != nil {
 			fn()
@@ -68,13 +61,11 @@ func (s *Store) SetState(key string, value any) {
 
 // SetBatch updates multiple keys and notifies listeners once.
 func (s *Store) SetBatch(updates map[string]any) {
-	s.mu.Lock()
 	for k, v := range updates {
 		s.state[k] = v
 	}
 	listeners := make([]func(), len(s.listeners))
 	copy(listeners, s.listeners)
-	s.mu.Unlock()
 	for _, fn := range listeners {
 		if fn != nil {
 			fn()
@@ -84,13 +75,9 @@ func (s *Store) SetBatch(updates map[string]any) {
 
 // Subscribe adds a listener and returns an unsubscribe function.
 func (s *Store) Subscribe(listener func()) func() {
-	s.mu.Lock()
 	s.listeners = append(s.listeners, listener)
 	idx := len(s.listeners) - 1
-	s.mu.Unlock()
 	return func() {
-		s.mu.Lock()
-		defer s.mu.Unlock()
 		if idx < len(s.listeners) {
 			s.listeners[idx] = nil
 			s.nilCount++
@@ -252,18 +239,14 @@ func storeDispatchFn(store *Store) lua.Function {
 		if actionName == "setState" {
 			if L.Type(2) == lua.TypeTable {
 				if payload, ok := L.ToMap(2); ok {
-					store.mu.Lock()
 					for k, v := range payload {
 						store.state[k] = v
 					}
-					store.mu.Unlock()
 				}
 			}
 			// Notify listeners
-			store.mu.RLock()
 			listeners := make([]func(), len(store.listeners))
 			copy(listeners, store.listeners)
-			store.mu.RUnlock()
 			for _, fn := range listeners {
 				if fn != nil {
 					fn()
@@ -272,9 +255,7 @@ func storeDispatchFn(store *Store) lua.Function {
 			return 0
 		}
 
-		store.mu.RLock()
 		ref, exists := store.actionRefs[actionName]
-		store.mu.RUnlock()
 		if !exists {
 			L.PushString(fmt.Sprintf("store.dispatch: unknown action %q", actionName))
 			L.Error()
@@ -285,9 +266,7 @@ func storeDispatchFn(store *Store) lua.Function {
 		L.RawGetI(lua.RegistryIndex, int64(ref))
 
 		// Push current state as Lua table — action modifies it in-place
-		store.mu.RLock()
 		L.PushAny(store.state)
-		store.mu.RUnlock()
 
 		// Keep a ref to the state table so we can read it back after PCall
 		L.PushValue(-1) // duplicate state table
@@ -313,20 +292,16 @@ func storeDispatchFn(store *Store) lua.Function {
 		// Read back the state table that the action modified in-place
 		L.RawGetI(lua.RegistryIndex, int64(stateRef))
 		if m, ok := L.ToMap(-1); ok {
-			store.mu.Lock()
 			for k, v := range m {
 				store.state[k] = v
 			}
-			store.mu.Unlock()
 		}
 		L.Pop(1)
 		L.Unref(lua.RegistryIndex, stateRef)
 
 		// Notify listeners
-		store.mu.RLock()
 		listeners := make([]func(), len(store.listeners))
 		copy(listeners, store.listeners)
-		store.mu.RUnlock()
 		for _, fn := range listeners {
 			if fn != nil {
 				fn()
@@ -372,14 +347,12 @@ func luaUseStore(L *lua.State) int {
 	}
 
 	// Track subscription via hook index
-	comp.mu.Lock()
 	idx := comp.generalHookIndex
 	comp.generalHookIndex++
 	for idx >= len(comp.externalStoreHooks) {
 		comp.externalStoreHooks = append(comp.externalStoreHooks, &ExternalStoreHook{})
 	}
 	hook := comp.externalStoreHooks[idx]
-	comp.mu.Unlock()
 
 	// Subscribe on first render
 	if !hook.Subscribed {

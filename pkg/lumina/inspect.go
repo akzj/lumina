@@ -54,8 +54,6 @@ func GetFrameHistory() []*Frame {
 
 // InspectTree returns the component tree structure.
 func InspectTree() []*ComponentSnapshot {
-	globalRegistry.mu.RLock()
-	defer globalRegistry.mu.RUnlock()
 
 	snapshots := make([]*ComponentSnapshot, 0, len(globalRegistry.components))
 	for _, comp := range globalRegistry.components {
@@ -88,8 +86,6 @@ func InspectTree() []*ComponentSnapshot {
 
 // InspectComponent returns detailed info for a specific component.
 func InspectComponent(id string) *ComponentSnapshot {
-	globalRegistry.mu.RLock()
-	defer globalRegistry.mu.RUnlock()
 
 	if comp, ok := globalRegistry.components[id]; ok {
 		return &ComponentSnapshot{
@@ -119,8 +115,6 @@ func getChildren(comp *Component) []string {
 
 // InspectStyles returns computed styles for a component.
 func InspectStyles(id string) *ComputedStyles {
-	globalRegistry.mu.RLock()
-	defer globalRegistry.mu.RUnlock()
 
 	if comp, ok := globalRegistry.components[id]; ok {
 		return computeStyles(comp)
@@ -196,8 +190,6 @@ func computeStyles(comp *Component) *ComputedStyles {
 
 // GetState returns component state.
 func GetState(id string) (map[string]any, bool) {
-	globalRegistry.mu.RLock()
-	defer globalRegistry.mu.RUnlock()
 
 	if comp, ok := globalRegistry.components[id]; ok {
 		return copyStringAnyMap(comp.State), true
@@ -226,8 +218,6 @@ func copyStringAnyMap(m map[string]any) map[string]any {
 
 // GetAllComponentIDs returns all registered component IDs.
 func GetAllComponentIDs() []string {
-	globalRegistry.mu.RLock()
-	defer globalRegistry.mu.RUnlock()
 
 	ids := make([]string, 0, len(globalRegistry.components))
 	for id := range globalRegistry.components {

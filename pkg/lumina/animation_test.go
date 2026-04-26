@@ -554,15 +554,11 @@ func TestLua_UseAnimationHook(t *testing.T) {
 		Props: make(map[string]any),
 		State: make(map[string]any),
 	}
-	globalRegistry.mu.Lock()
 	globalRegistry.components[comp.ID] = comp
-	globalRegistry.mu.Unlock()
 	SetCurrentComponent(comp)
 	defer func() {
 		SetCurrentComponent(nil)
-		globalRegistry.mu.Lock()
 		delete(globalRegistry.components, comp.ID)
-		globalRegistry.mu.Unlock()
 	}()
 
 	err := L.DoString(`

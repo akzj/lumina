@@ -274,15 +274,11 @@ func TestMemo_SkipsRenderOnSameProps(t *testing.T) {
 		Props: make(map[string]any),
 		State: make(map[string]any),
 	}
-	globalRegistry.mu.Lock()
 	globalRegistry.components[parent.ID] = parent
-	globalRegistry.mu.Unlock()
 	SetCurrentComponent(parent)
 	defer func() {
 		SetCurrentComponent(nil)
-		globalRegistry.mu.Lock()
 		delete(globalRegistry.components, parent.ID)
-		globalRegistry.mu.Unlock()
 	}()
 
 	err := L.DoString(`
@@ -465,15 +461,11 @@ func TestMemo_ComplexPropsComparison(t *testing.T) {
 		Props: make(map[string]any),
 		State: make(map[string]any),
 	}
-	globalRegistry.mu.Lock()
 	globalRegistry.components[parent.ID] = parent
-	globalRegistry.mu.Unlock()
 	SetCurrentComponent(parent)
 	defer func() {
 		SetCurrentComponent(nil)
-		globalRegistry.mu.Lock()
 		delete(globalRegistry.components, parent.ID)
-		globalRegistry.mu.Unlock()
 	}()
 
 	err := L.DoString(`
@@ -704,15 +696,11 @@ func TestContextTree_ChildReadsFromParent(t *testing.T) {
 	}
 	parent.AddChild(child)
 
-	globalRegistry.mu.Lock()
 	globalRegistry.components[parent.ID] = parent
 	globalRegistry.components[child.ID] = child
-	globalRegistry.mu.Unlock()
 	defer func() {
-		globalRegistry.mu.Lock()
 		delete(globalRegistry.components, parent.ID)
 		delete(globalRegistry.components, child.ID)
-		globalRegistry.mu.Unlock()
 	}()
 
 	// Create a context
@@ -812,15 +800,11 @@ func TestContextTree_UseContextViaLua(t *testing.T) {
 		State:         make(map[string]any),
 		ContextValues: make(map[int64]any),
 	}
-	globalRegistry.mu.Lock()
 	globalRegistry.components[comp.ID] = comp
-	globalRegistry.mu.Unlock()
 	SetCurrentComponent(comp)
 	defer func() {
 		SetCurrentComponent(nil)
-		globalRegistry.mu.Lock()
 		delete(globalRegistry.components, comp.ID)
-		globalRegistry.mu.Unlock()
 	}()
 
 	// Create context and set value on comp

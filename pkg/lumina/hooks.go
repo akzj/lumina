@@ -100,12 +100,10 @@ func useState(L *lua.State) int {
 	if L.GetTop() >= 2 && !L.IsNoneOrNil(2) {
 		initial = L.ToAny(2)
 	}
-	comp.mu.Lock()
 	if _, exists := comp.State[key]; !exists {
 		comp.State[key] = initial
 	}
 	value := comp.State[key]
-	comp.mu.Unlock()
 	L.PushAny(value)
 	L.PushFunction(func(L *lua.State) int {
 		newValue := L.ToAny(1)
@@ -136,9 +134,7 @@ func useEffect(L *lua.State) int {
 		hasDeps = true
 		newDeps = luaTableToSlice(L, 2)
 	}
-	comp.mu.Lock()
 	hook := comp.nextEffectHookLocked()
-	comp.mu.Unlock()
 
 	shouldRun := false
 	if !hook.Ran {
@@ -224,9 +220,7 @@ func useMemo(L *lua.State) int {
 		hasDeps = true
 		newDeps = luaTableToSlice(L, 2)
 	}
-	comp.mu.Lock()
 	hook := comp.nextMemoHookLocked()
-	comp.mu.Unlock()
 
 	shouldCompute := !hook.HasValue || !hasDeps || !depsEqual(hook.Deps, newDeps)
 	if shouldCompute {
@@ -281,9 +275,7 @@ func useCallback(L *lua.State) int {
 		hasDeps = true
 		newDeps = luaTableToSlice(L, 2)
 	}
-	comp.mu.Lock()
 	hook := comp.nextMemoHookLocked()
-	comp.mu.Unlock()
 
 	shouldCache := !hook.HasValue || !hasDeps || !depsEqual(hook.Deps, newDeps)
 	if shouldCache {
@@ -343,7 +335,6 @@ func useReducer(L *lua.State) int {
 	}
 	L.CheckAny(2)
 
-	comp.mu.Lock()
 	hookIdx := comp.generalHookIndex
 	comp.generalHookIndex++
 	key := fmt.Sprintf("__reducer_%d", hookIdx)
@@ -351,26 +342,19 @@ func useReducer(L *lua.State) int {
 		comp.State[key] = L.ToAny(2)
 	}
 	currentState := comp.State[key]
-	comp.mu.Unlock()
 
 	reducerKey := key + "_ref"
-	comp.mu.RLock()
 	_, hasRef := comp.State[reducerKey]
-	comp.mu.RUnlock()
 	if !hasRef {
 		L.PushValue(1)
 		refID := L.Ref(lua.RegistryIndex)
-		comp.mu.Lock()
 		comp.State[reducerKey] = refID
-		comp.mu.Unlock()
 	}
 
 	L.PushAny(currentState)
 	L.PushFunction(func(L *lua.State) int {
 		action := L.ToAny(1)
-		comp.mu.RLock()
 		refIDRaw, ok := comp.State[reducerKey]
-		comp.mu.RUnlock()
 		if !ok {
 			return 0
 		}
@@ -383,9 +367,7 @@ func useReducer(L *lua.State) int {
 			L.Pop(1)
 			return 0
 		}
-		comp.mu.RLock()
 		curState := comp.State[key]
-		comp.mu.RUnlock()
 		L.PushAny(curState)
 		L.PushAny(action)
 		status := L.PCall(2, 1, 0)
@@ -441,14 +423,11 @@ func useContext(L *lua.State) int {
 // resolveContextFromTree walks up the component tree to find a context value.
 func resolveContextFromTree(comp *Component, contextID int64) (any, bool) {
 	for c := comp; c != nil; c = c.Parent {
-		c.mu.RLock()
 		if c.ContextValues != nil {
 			if val, ok := c.ContextValues[contextID]; ok {
-				c.mu.RUnlock()
 				return val, true
 			}
 		}
-		c.mu.RUnlock()
 	}
 	return nil, false
 }
@@ -472,12 +451,10 @@ func setContextValueLua(L *lua.State) int {
 	// If we're inside a component render, set on the component (tree-scoped)
 	comp := GetCurrentComponent()
 	if comp != nil {
-		comp.mu.Lock()
 		if comp.ContextValues == nil {
 			comp.ContextValues = make(map[int64]any)
 		}
 		comp.ContextValues[ctx.ID] = value
-		comp.mu.Unlock()
 	}
 
 	// Also set globally for backward compatibility
@@ -524,9 +501,7 @@ func depsEqual(a, b []any) bool {
 
 // RunEffectCleanups runs all effect cleanup functions for a component.
 func RunEffectCleanups(L *lua.State, comp *Component) {
-	comp.mu.Lock()
 	hooks := comp.effectHooks
-	comp.mu.Unlock()
 	for _, hook := range hooks {
 		if hook.CleanupRef != 0 {
 			L.RawGetI(lua.RegistryIndex, int64(hook.CleanupRef))
@@ -580,9 +555,7 @@ func useLayoutEffect(L *lua.State) int {
 		newDeps = luaTableToSlice(L, 2)
 	}
 
-	comp.mu.Lock()
 	hook := comp.nextLayoutEffectHookLocked()
-	comp.mu.Unlock()
 
 	shouldRun := false
 	if !hook.Ran {
@@ -646,9 +619,7 @@ func (c *Component) nextLayoutEffectHookLocked() *LayoutEffectHook {
 
 // RunLayoutEffectCleanups runs all layout effect cleanups for a component.
 func RunLayoutEffectCleanups(L *lua.State, comp *Component) {
-	comp.mu.Lock()
 	hooks := comp.layoutEffectHooks
-	comp.mu.Unlock()
 	for _, hook := range hooks {
 		if hook.CleanupRef != 0 {
 			L.RawGetI(lua.RegistryIndex, int64(hook.CleanupRef))
@@ -677,10 +648,8 @@ func useId(L *lua.State) int {
 		return 1
 	}
 
-	comp.mu.Lock()
 	idx := comp.generalHookIndex
 	comp.generalHookIndex++
-	comp.mu.Unlock()
 
 	// Generate stable ID based on component ID + hook index
 	id := fmt.Sprintf(":r%s:%d:", comp.ID, idx)
@@ -724,9 +693,7 @@ func useImperativeHandle(L *lua.State) int {
 		newDeps = luaTableToSlice(L, 3)
 	}
 
-	comp.mu.Lock()
 	hook := comp.nextMemoHookLocked() // Reuse MemoHook for deps tracking
-	comp.mu.Unlock()
 
 	shouldRun := false
 	if !hook.HasValue {
@@ -774,9 +741,7 @@ func useTransition(L *lua.State) int {
 		return 2
 	}
 
-	comp.mu.Lock()
 	hook := comp.nextMemoHookLocked()
-	comp.mu.Unlock()
 
 	// isPending
 	isPending := false
@@ -792,10 +757,8 @@ func useTransition(L *lua.State) int {
 		}
 
 		// Mark as pending
-		comp.mu.Lock()
 		hook.Value = true
 		hook.HasValue = true
-		comp.mu.Unlock()
 
 		// Run the callback immediately (synchronous for simplicity)
 		L.PushValue(1)
@@ -805,9 +768,7 @@ func useTransition(L *lua.State) int {
 		}
 
 		// Mark as no longer pending
-		comp.mu.Lock()
 		hook.Value = false
-		comp.mu.Unlock()
 
 		return 0
 	})
@@ -830,9 +791,7 @@ func useDeferredValue(L *lua.State) int {
 		return 1
 	}
 
-	comp.mu.Lock()
 	hook := comp.nextMemoHookLocked()
-	comp.mu.Unlock()
 
 	// Get current value from Lua
 	var currentValue any
@@ -897,7 +856,6 @@ func useSyncExternalStore(L *lua.State) int {
 		return 0
 	}
 
-	comp.mu.Lock()
 	idx := comp.generalHookIndex
 	comp.generalHookIndex++
 
@@ -906,7 +864,6 @@ func useSyncExternalStore(L *lua.State) int {
 		comp.externalStoreHooks = append(comp.externalStoreHooks, &ExternalStoreHook{})
 	}
 	hook := comp.externalStoreHooks[idx]
-	comp.mu.Unlock()
 
 	// arg1 = subscribe function (not called here — subscription is app-level)
 	// arg2 = getSnapshot function
@@ -1005,8 +962,6 @@ func useDebugValue(L *lua.State) int {
 		return 0
 	}
 
-	comp.mu.Lock()
-	defer comp.mu.Unlock()
 
 	var label string
 	if L.GetTop() >= 2 && L.IsFunction(2) {
@@ -1029,8 +984,6 @@ func useDebugValue(L *lua.State) int {
 
 // GetDebugValues returns the debug values for a component.
 func (c *Component) GetDebugValues() []string {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
 	result := make([]string, len(c.debugValues))
 	copy(result, c.debugValues)
 	return result
@@ -1082,10 +1035,8 @@ func useAnimation(L *lua.State) int {
 		return 1
 	}
 
-	comp.mu.Lock()
 	idx := comp.generalHookIndex
 	comp.generalHookIndex++
-	comp.mu.Unlock()
 
 	// Parse config from Lua table argument
 	from := 0.0
@@ -1130,12 +1081,10 @@ func useAnimation(L *lua.State) int {
 	// On first render for this hook index, create the animation
 	animID := fmt.Sprintf("%s:anim:%d", comp.ID, idx)
 
-	comp.mu.Lock()
 	needsCreate := idx >= len(comp.animationHooks)
 	if needsCreate {
 		comp.animationHooks = append(comp.animationHooks, animID)
 	}
-	comp.mu.Unlock()
 
 	if needsCreate {
 		anim := &AnimationState{

@@ -92,12 +92,10 @@ func CaptureDebugSnapshot(compID string) *DebugSnapshot {
 		return nil
 	}
 
-	comp.mu.RLock()
 	stateCopy := make(map[string]any, len(comp.State))
 	for k, v := range comp.State {
 		stateCopy[k] = v
 	}
-	comp.mu.RUnlock()
 
 	snapshotMu.Lock()
 	defer snapshotMu.Unlock()
@@ -137,11 +135,9 @@ func RestoreDebugSnapshot(snapshotID int) bool {
 		return false
 	}
 
-	comp.mu.Lock()
 	for k, v := range snap.State {
 		comp.State[k] = v
 	}
-	comp.mu.Unlock()
 	comp.Dirty.Store(true)
 
 	// Notify render loop.
@@ -384,12 +380,10 @@ func debugInspectLua(L *lua.State) int {
 		return 1
 	}
 
-	comp.mu.RLock()
 	state := make(map[string]any, len(comp.State))
 	for k, v := range comp.State {
 		state[k] = v
 	}
-	comp.mu.RUnlock()
 
 	L.NewTableFrom(map[string]any{
 		"id":    comp.ID,

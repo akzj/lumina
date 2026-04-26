@@ -28,15 +28,11 @@ func TestUseSyncExternalStore_ReturnsSnapshot(t *testing.T) {
 		ID: "ses_parent", Type: "SESParent", Name: "SESParent",
 		Props: make(map[string]any), State: make(map[string]any),
 	}
-	globalRegistry.mu.Lock()
 	globalRegistry.components[parent.ID] = parent
-	globalRegistry.mu.Unlock()
 	SetCurrentComponent(parent)
 	defer func() {
 		SetCurrentComponent(nil)
-		globalRegistry.mu.Lock()
 		delete(globalRegistry.components, parent.ID)
-		globalRegistry.mu.Unlock()
 	}()
 
 	err := L.DoString(`
@@ -78,15 +74,11 @@ func TestUseSyncExternalStore_SubscribeCalled(t *testing.T) {
 		ID: "ses_sub_parent", Type: "SESSubParent", Name: "SESSubParent",
 		Props: make(map[string]any), State: make(map[string]any),
 	}
-	globalRegistry.mu.Lock()
 	globalRegistry.components[parent.ID] = parent
-	globalRegistry.mu.Unlock()
 	SetCurrentComponent(parent)
 	defer func() {
 		SetCurrentComponent(nil)
-		globalRegistry.mu.Lock()
 		delete(globalRegistry.components, parent.ID)
-		globalRegistry.mu.Unlock()
 	}()
 
 	err := L.DoString(`
@@ -130,15 +122,11 @@ func TestUseSyncExternalStore_SnapshotUpdatesOnRerender(t *testing.T) {
 		ID: "ses_update_parent", Type: "SESUpdateParent", Name: "SESUpdateParent",
 		Props: make(map[string]any), State: make(map[string]any),
 	}
-	globalRegistry.mu.Lock()
 	globalRegistry.components[parent.ID] = parent
-	globalRegistry.mu.Unlock()
 	SetCurrentComponent(parent)
 	defer func() {
 		SetCurrentComponent(nil)
-		globalRegistry.mu.Lock()
 		delete(globalRegistry.components, parent.ID)
-		globalRegistry.mu.Unlock()
 	}()
 
 	err := L.DoString(`
@@ -207,15 +195,11 @@ func TestUseDebugValue_StoresLabel(t *testing.T) {
 		ID: "dv_parent", Type: "DVParent", Name: "DVParent",
 		Props: make(map[string]any), State: make(map[string]any),
 	}
-	globalRegistry.mu.Lock()
 	globalRegistry.components[parent.ID] = parent
-	globalRegistry.mu.Unlock()
 	SetCurrentComponent(parent)
 	defer func() {
 		SetCurrentComponent(nil)
-		globalRegistry.mu.Lock()
 		delete(globalRegistry.components, parent.ID)
-		globalRegistry.mu.Unlock()
 	}()
 
 	err := L.DoString(`
@@ -354,15 +338,11 @@ func TestStrictMode_DoubleRenders(t *testing.T) {
 		ID: "sm_parent", Type: "SMParent", Name: "SMParent",
 		Props: make(map[string]any), State: make(map[string]any),
 	}
-	globalRegistry.mu.Lock()
 	globalRegistry.components[parent.ID] = parent
-	globalRegistry.mu.Unlock()
 	SetCurrentComponent(parent)
 	defer func() {
 		SetCurrentComponent(nil)
-		globalRegistry.mu.Lock()
 		delete(globalRegistry.components, parent.ID)
-		globalRegistry.mu.Unlock()
 	}()
 
 	err := L.DoString(`

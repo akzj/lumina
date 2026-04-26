@@ -18,8 +18,6 @@ func patchComponent(L *lua.State) int {
 	id := L.CheckString(1)
 	code := L.CheckString(2)
 
-	globalRegistry.mu.Lock()
-	defer globalRegistry.mu.Unlock()
 
 	comp, ok := globalRegistry.components[id]
 	if !ok {

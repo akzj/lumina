@@ -25,13 +25,11 @@ func TestComponentLib_LayoutDiag(t *testing.T) {
 	}
 
 	// Find the root VNode
-	globalRegistry.mu.RLock()
 	for _, comp := range globalRegistry.components {
 		if comp.LastVNode != nil {
 			dumpVNode(comp.LastVNode, 0)
 		}
 	}
-	globalRegistry.mu.RUnlock()
 
 	// Check viewport for content-scroll
 	vp := GetViewport("content-scroll")

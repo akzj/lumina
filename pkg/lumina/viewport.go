@@ -2,7 +2,6 @@ package lumina
 
 import (
 	"math"
-	"sync"
 
 	"github.com/akzj/go-lua/pkg/lua"
 )
@@ -279,23 +278,17 @@ func (v *Viewport) ScrollbarThumb(trackH int) (int, int) {
 // --- Viewport Registry ---
 // Viewports persist across re-renders so scroll position is maintained.
 
-var (
-	viewportRegistry = make(map[string]*Viewport)
-	viewportMu       sync.RWMutex
-)
+// All access is from the main thread (actor model) — no mutex needed.
+var viewportRegistry = make(map[string]*Viewport)
 
 // GetViewport returns the viewport for the given VNode ID, creating one if needed.
 func GetViewport(id string) *Viewport {
-	viewportMu.RLock()
 	vp, ok := viewportRegistry[id]
-	viewportMu.RUnlock()
 	if ok {
 		return vp
 	}
 
 	// Create new viewport
-	viewportMu.Lock()
-	defer viewportMu.Unlock()
 	// Double-check after acquiring write lock
 	if vp, ok := viewportRegistry[id]; ok {
 		return vp
@@ -307,30 +300,22 @@ func GetViewport(id string) *Viewport {
 
 // SetViewport stores a viewport for the given VNode ID.
 func SetViewport(id string, vp *Viewport) {
-	viewportMu.Lock()
-	defer viewportMu.Unlock()
 	viewportRegistry[id] = vp
 }
 
 // RemoveViewport removes a viewport from the registry.
 func RemoveViewport(id string) {
-	viewportMu.Lock()
-	defer viewportMu.Unlock()
 	delete(viewportRegistry, id)
 }
 
 // ClearViewports removes all viewports (useful for testing).
 func ClearViewports() {
-	viewportMu.Lock()
-	defer viewportMu.Unlock()
 	viewportRegistry = make(map[string]*Viewport)
 }
 
 // AnyViewportScrollDirty returns true if any viewport has been scrolled
 // since the last render. Used to force re-render even when VNode diff is empty.
 func AnyViewportScrollDirty() bool {
-	viewportMu.RLock()
-	defer viewportMu.RUnlock()
 	for _, vp := range viewportRegistry {
 		if vp.ScrollDirty {
 			return true
@@ -342,8 +327,6 @@ func AnyViewportScrollDirty() bool {
 // ClearAllScrollDirty clears the ScrollDirty flag on all viewports.
 // Called after a successful re-render.
 func ClearAllScrollDirty() {
-	viewportMu.RLock()
-	defer viewportMu.RUnlock()
 	for _, vp := range viewportRegistry {
 		vp.ScrollDirty = false
 	}
@@ -352,8 +335,6 @@ func ClearAllScrollDirty() {
 // TickAllViewports ticks smooth scrolling for all viewports.
 // Returns true if any viewport was updated (needs re-render).
 func TickAllViewports() bool {
-	viewportMu.RLock()
-	defer viewportMu.RUnlock()
 	updated := false
 	for _, vp := range viewportRegistry {
 		if vp.Tick() {
@@ -367,9 +348,7 @@ func TickAllViewports() bool {
 // Positive dy = scroll down, negative dy = scroll up.
 // Returns false if no viewport exists for the ID.
 func ScrollViewport(id string, dy int) bool {
-	viewportMu.RLock()
 	vp, ok := viewportRegistry[id]
-	viewportMu.RUnlock()
 	if !ok {
 		return false
 	}
@@ -467,11 +446,9 @@ func luaScrollBy(L *lua.State) int {
 	}
 
 	// Mark all components dirty to trigger re-render with new scroll position
-	globalRegistry.mu.RLock()
 	for _, comp := range globalRegistry.components {
 		comp.Dirty.Store(true)
 	}
-	globalRegistry.mu.RUnlock()
 
 	return 0
 }
@@ -481,9 +458,7 @@ func luaScrollBy(L *lua.State) int {
 func luaGetScrollInfo(L *lua.State) int {
 	id := L.CheckString(1)
 
-	viewportMu.RLock()
 	vp, ok := viewportRegistry[id]
-	viewportMu.RUnlock()
 
 	if !ok {
 		L.PushNil()

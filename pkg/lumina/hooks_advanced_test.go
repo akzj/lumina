@@ -168,15 +168,11 @@ func TestUseLayoutEffect_RunsAfterRender(t *testing.T) {
 		Props: make(map[string]any),
 		State: make(map[string]any),
 	}
-	globalRegistry.mu.Lock()
 	globalRegistry.components[parent.ID] = parent
-	globalRegistry.mu.Unlock()
 	SetCurrentComponent(parent)
 	defer func() {
 		SetCurrentComponent(nil)
-		globalRegistry.mu.Lock()
 		delete(globalRegistry.components, parent.ID)
-		globalRegistry.mu.Unlock()
 	}()
 
 	err := L.DoString(`
@@ -221,15 +217,11 @@ func TestUseLayoutEffect_CleanupRunsBeforeNext(t *testing.T) {
 		Props: make(map[string]any),
 		State: make(map[string]any),
 	}
-	globalRegistry.mu.Lock()
 	globalRegistry.components[parent.ID] = parent
-	globalRegistry.mu.Unlock()
 	SetCurrentComponent(parent)
 	defer func() {
 		SetCurrentComponent(nil)
-		globalRegistry.mu.Lock()
 		delete(globalRegistry.components, parent.ID)
-		globalRegistry.mu.Unlock()
 	}()
 
 	// Use counters instead of table.insert (simpler Lua, avoids potential table issues)
@@ -313,15 +305,11 @@ func TestUseLayoutEffect_SkipsWhenDepsUnchanged(t *testing.T) {
 		Props: make(map[string]any),
 		State: make(map[string]any),
 	}
-	globalRegistry.mu.Lock()
 	globalRegistry.components[parent.ID] = parent
-	globalRegistry.mu.Unlock()
 	SetCurrentComponent(parent)
 	defer func() {
 		SetCurrentComponent(nil)
-		globalRegistry.mu.Lock()
 		delete(globalRegistry.components, parent.ID)
-		globalRegistry.mu.Unlock()
 	}()
 
 	err := L.DoString(`
@@ -381,15 +369,11 @@ func TestUseId_ReturnsStableId(t *testing.T) {
 		Props: make(map[string]any),
 		State: make(map[string]any),
 	}
-	globalRegistry.mu.Lock()
 	globalRegistry.components[parent.ID] = parent
-	globalRegistry.mu.Unlock()
 	SetCurrentComponent(parent)
 	defer func() {
 		SetCurrentComponent(nil)
-		globalRegistry.mu.Lock()
 		delete(globalRegistry.components, parent.ID)
-		globalRegistry.mu.Unlock()
 	}()
 
 	err := L.DoString(`
@@ -451,15 +435,11 @@ func TestUseId_MultipleCallsReturnDifferentIds(t *testing.T) {
 		Props: make(map[string]any),
 		State: make(map[string]any),
 	}
-	globalRegistry.mu.Lock()
 	globalRegistry.components[parent.ID] = parent
-	globalRegistry.mu.Unlock()
 	SetCurrentComponent(parent)
 	defer func() {
 		SetCurrentComponent(nil)
-		globalRegistry.mu.Lock()
 		delete(globalRegistry.components, parent.ID)
-		globalRegistry.mu.Unlock()
 	}()
 
 	err := L.DoString(`
@@ -506,15 +486,11 @@ func TestUseId_DifferentComponentsDifferentPrefixes(t *testing.T) {
 		Props: make(map[string]any),
 		State: make(map[string]any),
 	}
-	globalRegistry.mu.Lock()
 	globalRegistry.components[parent.ID] = parent
-	globalRegistry.mu.Unlock()
 	SetCurrentComponent(parent)
 	defer func() {
 		SetCurrentComponent(nil)
-		globalRegistry.mu.Lock()
 		delete(globalRegistry.components, parent.ID)
-		globalRegistry.mu.Unlock()
 	}()
 
 	err := L.DoString(`
@@ -577,15 +553,11 @@ func TestUseImperativeHandle_SetsRefCurrent(t *testing.T) {
 		Props: make(map[string]any),
 		State: make(map[string]any),
 	}
-	globalRegistry.mu.Lock()
 	globalRegistry.components[parent.ID] = parent
-	globalRegistry.mu.Unlock()
 	SetCurrentComponent(parent)
 	defer func() {
 		SetCurrentComponent(nil)
-		globalRegistry.mu.Lock()
 		delete(globalRegistry.components, parent.ID)
-		globalRegistry.mu.Unlock()
 	}()
 
 	err := L.DoString(`
@@ -641,15 +613,11 @@ func TestUseImperativeHandle_UpdatesOnDepsChange(t *testing.T) {
 		Props: make(map[string]any),
 		State: make(map[string]any),
 	}
-	globalRegistry.mu.Lock()
 	globalRegistry.components[parent.ID] = parent
-	globalRegistry.mu.Unlock()
 	SetCurrentComponent(parent)
 	defer func() {
 		SetCurrentComponent(nil)
-		globalRegistry.mu.Lock()
 		delete(globalRegistry.components, parent.ID)
-		globalRegistry.mu.Unlock()
 	}()
 
 	err := L.DoString(`
@@ -729,15 +697,11 @@ func TestSuspense_ShowsFallbackForPendingLazy(t *testing.T) {
 		Props: make(map[string]any),
 		State: make(map[string]any),
 	}
-	globalRegistry.mu.Lock()
 	globalRegistry.components[parent.ID] = parent
-	globalRegistry.mu.Unlock()
 	SetCurrentComponent(parent)
 	defer func() {
 		SetCurrentComponent(nil)
-		globalRegistry.mu.Lock()
 		delete(globalRegistry.components, parent.ID)
-		globalRegistry.mu.Unlock()
 	}()
 
 	// Create a Suspense boundary with a lazy child that has _lazy_status = "pending"
@@ -780,15 +744,11 @@ func TestSuspense_RendersComponentAfterLoad(t *testing.T) {
 		Props: make(map[string]any),
 		State: make(map[string]any),
 	}
-	globalRegistry.mu.Lock()
 	globalRegistry.components[parent.ID] = parent
-	globalRegistry.mu.Unlock()
 	SetCurrentComponent(parent)
 	defer func() {
 		SetCurrentComponent(nil)
-		globalRegistry.mu.Lock()
 		delete(globalRegistry.components, parent.ID)
-		globalRegistry.mu.Unlock()
 	}()
 
 	err := L.DoString(`
@@ -834,15 +794,11 @@ func TestSuspense_NestedBoundaries(t *testing.T) {
 		Props: make(map[string]any),
 		State: make(map[string]any),
 	}
-	globalRegistry.mu.Lock()
 	globalRegistry.components[parent.ID] = parent
-	globalRegistry.mu.Unlock()
 	SetCurrentComponent(parent)
 	defer func() {
 		SetCurrentComponent(nil)
-		globalRegistry.mu.Lock()
 		delete(globalRegistry.components, parent.ID)
-		globalRegistry.mu.Unlock()
 	}()
 
 	err := L.DoString(`
@@ -902,15 +858,11 @@ func TestUseTransition_IsPendingDuringTransition(t *testing.T) {
 		Props: make(map[string]any),
 		State: make(map[string]any),
 	}
-	globalRegistry.mu.Lock()
 	globalRegistry.components[parent.ID] = parent
-	globalRegistry.mu.Unlock()
 	SetCurrentComponent(parent)
 	defer func() {
 		SetCurrentComponent(nil)
-		globalRegistry.mu.Lock()
 		delete(globalRegistry.components, parent.ID)
-		globalRegistry.mu.Unlock()
 	}()
 
 	err := L.DoString(`
@@ -960,15 +912,11 @@ func TestUseTransition_IsPendingFalseAfterComplete(t *testing.T) {
 		Props: make(map[string]any),
 		State: make(map[string]any),
 	}
-	globalRegistry.mu.Lock()
 	globalRegistry.components[parent.ID] = parent
-	globalRegistry.mu.Unlock()
 	SetCurrentComponent(parent)
 	defer func() {
 		SetCurrentComponent(nil)
-		globalRegistry.mu.Lock()
 		delete(globalRegistry.components, parent.ID)
-		globalRegistry.mu.Unlock()
 	}()
 
 	err := L.DoString(`
@@ -1035,15 +983,11 @@ func TestUseDeferredValue_LagsBehindCurrentValue(t *testing.T) {
 		Props: make(map[string]any),
 		State: make(map[string]any),
 	}
-	globalRegistry.mu.Lock()
 	globalRegistry.components[parent.ID] = parent
-	globalRegistry.mu.Unlock()
 	SetCurrentComponent(parent)
 	defer func() {
 		SetCurrentComponent(nil)
-		globalRegistry.mu.Lock()
 		delete(globalRegistry.components, parent.ID)
-		globalRegistry.mu.Unlock()
 	}()
 
 	err := L.DoString(`
@@ -1108,15 +1052,11 @@ func TestUseDeferredValue_CatchesUp(t *testing.T) {
 		Props: make(map[string]any),
 		State: make(map[string]any),
 	}
-	globalRegistry.mu.Lock()
 	globalRegistry.components[parent.ID] = parent
-	globalRegistry.mu.Unlock()
 	SetCurrentComponent(parent)
 	defer func() {
 		SetCurrentComponent(nil)
-		globalRegistry.mu.Lock()
 		delete(globalRegistry.components, parent.ID)
-		globalRegistry.mu.Unlock()
 	}()
 
 	err := L.DoString(`

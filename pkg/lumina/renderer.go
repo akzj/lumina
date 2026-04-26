@@ -340,11 +340,9 @@ func luaComponentToVNode(L *lua.State, idx int) *VNode {
 	fields := map[string]any{
 		"_instance": comp.ID,
 	}
-	comp.mu.RLock()
 	for k, v := range comp.State {
 		fields[k] = v
 	}
-	comp.mu.RUnlock()
 	fields["props"] = props
 
 	L.NewTableFrom(fields)
@@ -482,8 +480,6 @@ func copyProps(props map[string]any) map[string]any {
 
 // findChildComponent looks for an existing child component by factory name and key.
 func findChildComponent(parent *Component, factoryName, key string) *Component {
-	parent.mu.RLock()
-	defer parent.mu.RUnlock()
 
 	// O(1) map lookup
 	mapKey := factoryName

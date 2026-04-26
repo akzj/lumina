@@ -341,11 +341,9 @@ func (app *App) eventLoop() error {
 			// Tick animations — mark owning components dirty
 			dirtyComps := globalAnimationManager.Tick(time.Now().UnixMilli())
 			for _, compID := range dirtyComps {
-				globalRegistry.mu.RLock()
 				if c, ok := globalRegistry.components[compID]; ok {
 					c.Dirty.Store(true)
 				}
-				globalRegistry.mu.RUnlock()
 			}
 			// Tick smooth scrolling
 			TickAllViewports()
