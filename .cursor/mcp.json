@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "lumina-example-components": {
+      "command": "go",
+      "args": [
+        "run",
+        "./cmd/lumina-server",
+        "./examples/components/main.lua"
+      ]
+    },
+    "lumina-example-components-http": {
+      "url": "http://localhost:8088/mcp"
+    }
+  }
+}
+
