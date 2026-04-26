@@ -841,9 +841,11 @@ func useDeferredValue(L *lua.State) int {
 
 // ExternalStoreHook stores subscription state for useSyncExternalStore.
 type ExternalStoreHook struct {
-	LastSnapshot any // last snapshot value returned to the component
+	LastSnapshot any  // last snapshot value returned to the component
 	Subscribed   bool
-	UnsubRef     int // Lua registry ref for unsubscribe function (0 = none)
+	UnsubRef     int  // Lua registry ref for unsubscribe function (0 = none)
+	SelectorRef  int  // Lua registry ref for useStore selector (0 = no selector)
+	LastSelected any  // last value returned by selector (for dirty comparison)
 }
 
 // useSyncExternalStore subscribes to an external store.
