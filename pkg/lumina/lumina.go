@@ -930,33 +930,6 @@ func luaOnKey(L *lua.State) int {
 	keyBindings[key] = ref
 	keyBindingsMu.Unlock()
 
-	// Register as a keyboard shortcut in the event bus
-	normKey := normalizeShortcutKey(key)
-	app := GetApp(L)
-
-	globalEventBus.mu.Lock()
-	globalEventBus.shortcuts[normKey] = eventHandler{
-		componentID: "global",
-		handler: func(e *Event) {
-			if app != nil {
-				app.PostEvent(AppEvent{
-					Type:    "lua_callback",
-					Payload: LuaCallbackEvent{RefID: ref, Event: e},
-				})
-			} else {
-				L.RawGetI(lua.RegistryIndex, int64(ref))
-				if L.Type(-1) == lua.TypeFunction {
-					pushEventToLua(L, e)
-					status := L.PCall(1, 0, 0)
-					if status != lua.OK {
-						L.Pop(1)
-					}
-				}
-			}
-		},
-	}
-	globalEventBus.mu.Unlock()
-
 	return 0
 }
 

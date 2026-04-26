@@ -135,16 +135,19 @@ func TestEventBridge_KeyBindingDispatched(t *testing.T) {
 
 	app.RenderOnce()
 
-	// Simulate key press via Lua emitKeyEvent
-	err = app.L.DoString(`
-		local lumina = require("lumina")
-		lumina.emitKeyEvent("x")
-	`)
-	if err != nil {
-		t.Fatalf("emitKeyEvent failed: %v", err)
-	}
+	// Simulate key press by posting a keydown event to the app's event queue.
+	// onKey bindings are dispatched via handleEvent → dispatchKeyBinding,
+	// not via globalEventBus shortcuts.
+	app.PostEvent(lumina.AppEvent{
+		Type: "input_event",
+		Payload: &lumina.Event{
+			Type:    "keydown",
+			Key:     "x",
+			Bubbles: true,
+		},
+	})
 
-	// Process the lua_callback event that was posted
+	// Process the keydown event → handleEvent → dispatchKeyBinding
 	app.ProcessPendingEvents()
 
 	// Check if the key handler was called
