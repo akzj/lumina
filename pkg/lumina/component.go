@@ -191,6 +191,14 @@ func (c *Component) PushRenderFn(L *lua.State) bool {
 	return L.Type(-1) == lua.TypeFunction
 }
 
+// RenderRefID returns the Lua registry reference ID for the render function.
+func (c *Component) RenderRefID() int {
+	if c.renderFn == nil {
+		return -1
+	}
+	return c.renderFn.RefID
+}
+
 // PushInitFn pushes the init function onto the stack.
 func (c *Component) PushInitFn(L *lua.State) bool {
 	if c.initFn == nil {

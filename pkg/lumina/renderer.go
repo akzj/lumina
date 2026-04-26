@@ -3,6 +3,7 @@ package lumina
 
 import (
 	"fmt"
+	"os"
 	"sort"
 	"time"
 
@@ -307,6 +308,9 @@ func luaComponentToVNode(L *lua.State, idx int) *VNode {
 		SetCurrentComponent(prevComp)
 		return NewVNode("box")
 	}
+	// DEBUG: log what function we're about to call
+	fmt.Fprintf(os.Stderr, "[RENDER-CALL] comp=%s factory=%s renderRef=%d fnType=%d\n",
+		comp.ID, comp.Name, comp.RenderRefID(), L.Type(-1))
 
 	// Build instance table: state + props
 	fields := map[string]any{
