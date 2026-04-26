@@ -263,6 +263,18 @@ func handleToolsList(req jsonrpcRequest) jsonrpcResponse {
 			Description: "Reset performance metrics, snapshots, and debug log.",
 			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}, "additionalProperties": false},
 		},
+		{
+			Name:        "lumina.debug.checkInspectorBounds",
+			Title:       "Check inspector panel bounds",
+			Description: "Scan the last rendered frame and report any writes that break the inspector right border.",
+			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}, "additionalProperties": false},
+		},
+		{
+			Name:        "lumina.debug.toggleInspector",
+			Title:       "Toggle inspector panel",
+			Description: "Toggle the DevTools Inspector panel visibility (same as F12).",
+			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}, "additionalProperties": false},
+		},
 	}
 
 	return jsonrpcResponse{
