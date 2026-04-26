@@ -1105,7 +1105,7 @@ compositeAndWrite:
 			dtCompositor := NewCompositor(w, h)
 			frame = dtCompositor.Compose(frame, []*Overlay{panelOverlay})
 		}
-	} else if app.lastFrame != nil && inspectorDirty {
+	} else if app.lastFrame != nil && needsInspectorRerender.Load() {
 		// Inspector was just hidden - clear its area to remove residual content
 		panelW := globalInspector.panelWidth
 		if panelW > w/2 {
