@@ -865,6 +865,12 @@ func useDeferredValue(L *lua.State) int {
 	previousValue := hook.Value
 	hook.Value = currentValue
 
+	// If the deferred value hasn't caught up to the current value,
+	// mark the component dirty so it re-renders to catch up.
+	if previousValue != currentValue {
+		comp.Dirty.Store(true)
+	}
+
 	// Push the previous (deferred) value
 	L.PushAny(previousValue)
 	return 1
