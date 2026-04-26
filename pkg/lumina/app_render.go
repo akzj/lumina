@@ -6,6 +6,26 @@ import (
 	"github.com/akzj/go-lua/pkg/lua"
 )
 
+// tickFPS updates the FPS counter. Called once per tick (~60Hz), not per render.
+func (app *App) tickFPS() {
+	app.frameCount++
+	now := time.Now()
+	if now.Sub(app.fpsLastTime) >= time.Second {
+		app.fps = app.frameCount
+		app.frameCount = 0
+		app.fpsLastTime = now
+		// When FPS changes and DevTools is visible, force a re-render
+		// so the FPS display updates (once per second, not every tick)
+		if IsInspectorVisible() {
+			for _, comp := range globalRegistry.components {
+				if comp.IsRoot {
+					comp.HasDirtyChild.Store(true)
+				}
+			}
+		}
+	}
+}
+
 func (app *App) renderAllDirty() {
 	// Frame rate limiting: skip if less than 16ms since last render
 	now := time.Now()
@@ -23,14 +43,6 @@ func (app *App) renderAllDirty() {
 	}
 	if !hasDirty {
 		return
-	}
-
-	// FPS tracking
-	app.frameCount++
-	if now.Sub(app.fpsLastTime) >= time.Second {
-		app.fps = app.frameCount
-		app.frameCount = 0
-		app.fpsLastTime = now
 	}
 
 	// Collect root components that need work
