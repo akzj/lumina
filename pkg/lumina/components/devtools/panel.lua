@@ -127,7 +127,7 @@ function _devtools_render()
     -- Header
     table.insert(children, {
         type = "text",
-        content = " 🔍 DevTools Inspector ",
+        content = " [*] DevTools Inspector ",
         style = {
             bold = true,
             foreground = "#FFFFFF",
