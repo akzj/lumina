@@ -315,6 +315,18 @@ func luaComponentToVNode(L *lua.State, idx int) *VNode {
 		}
 	}
 
+	// Fast path: if component is not dirty and has a cached render result,
+	// skip re-rendering. Dirty is set by SetState (hover/click changes),
+	// UpdateProps (non-function prop changes), or useDeferredValue (value
+	// not yet caught up). This means only the cells that changed state
+	// will actually call their Lua render function; the rest return their
+	// cached VNode instantly.
+	// Exception: StrictMode intentionally double-renders children.
+	if !comp.Dirty.Load() && comp.LastVNode != nil && !IsStrictMode() {
+		return comp.LastVNode
+	}
+	comp.MarkClean() // clear dirty flag before rendering
+
 	// Render the component
 	prevComp := GetCurrentComponent()
 	SetCurrentComponent(comp)
