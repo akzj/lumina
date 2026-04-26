@@ -250,9 +250,11 @@ func (app *App) RunInteractive(scriptPath string) error {
 	defer ticker.Stop()
 
 	app.running = true
+	app.fpsLastTime = time.Now()
 	for app.running {
 		select {
 		case <-ticker.C:
+			app.tickFPS()
 			app.sched.Tick()
 			// Tick smooth scrolling
 			TickAllViewports()
@@ -310,9 +312,11 @@ func (app *App) RunWithTermIO(tio TermIO, scriptPath string) error {
 	defer ticker.Stop()
 
 	app.running = true
+	app.fpsLastTime = time.Now()
 	for app.running {
 		select {
 		case <-ticker.C:
+			app.tickFPS()
 			app.sched.Tick()
 			TickAllViewports()
 			app.renderAllDirty()
@@ -337,9 +341,11 @@ func (app *App) eventLoop() error {
 	defer ticker.Stop()
 
 	app.running = true
+	app.fpsLastTime = time.Now()
 	for app.running {
 		select {
 		case <-ticker.C:
+			app.tickFPS()
 			app.sched.Tick() // process async coroutines
 			// Tick animations — mark owning components dirty
 			dirtyComps := globalAnimationManager.Tick(time.Now().UnixMilli())
