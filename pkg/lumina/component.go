@@ -17,7 +17,8 @@ type Component struct {
 	Name         string // Component name
 	Props        map[string]any
 	State        map[string]any
-	Dirty        atomic.Bool   // True if state changed and needs re-render
+	Dirty          atomic.Bool   // True if state changed and needs re-render
+	HasDirtyChild  atomic.Bool   // True if a descendant is dirty (skip root PCall)
 	RenderNotify chan struct{} // Notify render loop when state changes
 	LastVNode    *VNode        // Previous render result for VDom diffing
 	initFn       *luaFunctionRef
@@ -141,18 +142,20 @@ func (c *Component) SetState(key string, value any) {
 	c.State[key] = value
 	c.Dirty.Store(true)
 
-	// Walk up to root component and mark it dirty too.
-	// Child components only re-render when the root re-renders and
-	// hits luaComponentToVNode inline, so the root must be dirty.
+	// Mark ancestors as having dirty children (but don't mark them self-dirty).
+	// This allows renderComponent to skip the root's Lua PCall and reuse
+	// the cached VNode tree, only re-rendering the dirty child.
+	p := c.Parent
+	for p != nil {
+		p.HasDirtyChild.Store(true)
+		p = p.Parent
+	}
+
+	// Notify render loop that this component needs re-render
 	root := c
 	for root.Parent != nil {
 		root = root.Parent
 	}
-	if root != c {
-		root.Dirty.Store(true)
-	}
-
-	// Notify render loop that this component needs re-render
 	if root.RenderNotify != nil {
 		select {
 		case root.RenderNotify <- struct{}{}:

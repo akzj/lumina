@@ -57,6 +57,7 @@ func luaLoader(L *lua.State) int {
 		"onKey":           luaOnKey,
 		"createState":     createState,
 		"getSize":         luaGetSize,
+		"getFPS":          luaGetFPS,
 		// Style & Theme API
 		"defineStyle":        defineStyle,
 		"defineGlobalStyles": defineGlobalStyles,
