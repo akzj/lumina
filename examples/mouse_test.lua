@@ -60,7 +60,7 @@ local store = lumina.createStore({
             state.lastClick = ""
         end,
         setHover = function(state, id)
-            state.lastHover = id
+            state.lastHover = tostring(id or "")
         end,
     },
 })

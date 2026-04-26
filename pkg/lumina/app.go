@@ -380,6 +380,10 @@ func (app *App) handleEvent(event AppEvent) {
 		}
 		// Clear hover state — old cell IDs may be invalid after resize
 		app.hoveredID = ""
+		// Invalidate lastFrame — old frame's OwnerNode pointers are stale
+		// after resize (grid dimensions changed, cells removed/added).
+		// Hit-test must wait for a fresh render.
+		app.lastFrame = nil
 		// Emit resize event for onResize handlers (now safely on main thread)
 		globalEventBus.Emit(&Event{
 			Type:      "resize",
