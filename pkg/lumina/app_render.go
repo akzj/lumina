@@ -1,8 +1,6 @@
 package lumina
 
 import (
-	"fmt"
-	"os"
 	"time"
 
 	"github.com/akzj/go-lua/pkg/lua"
@@ -72,7 +70,6 @@ func (app *App) renderAllDirty() {
 // diff/layout/write pipeline. This avoids the root's Lua PCall which would
 // create 1800+ createElement tables for unchanged children.
 func (app *App) renderDirtyChildren(comp *Component, adapter OutputAdapter) {
-	fmt.Fprintf(os.Stderr, "[RENDER] renderDirtyChildren for %s\n", comp.ID)
 	comp.HasDirtyChild.Store(false)
 
 	if comp.LastVNode == nil {
@@ -94,7 +91,6 @@ func (app *App) renderDirtyChildren(comp *Component, adapter OutputAdapter) {
 	newVNode := comp.LastVNode
 
 	w, h := app.getWidth(), app.getHeight()
-	sizeChanged := (w != app.lastRenderWidth) || (h != app.lastRenderHeight)
 
 	// Always do full layout + frame since subtrees changed
 	frame := VNodeToFrame(newVNode, w, h)
@@ -104,8 +100,9 @@ func (app *App) renderDirtyChildren(comp *Component, adapter OutputAdapter) {
 
 	// Clear scroll dirty flags
 	ClearAllScrollDirty()
-	// Bridge VNode event handlers to EventBus
-	app.bridgeVNodeEvents(newVNode)
+	// SKIP bridgeVNodeEvents — handlers are still valid from last full render.
+	// Cell IDs don't change during hover, so existing EventBus registrations work.
+	// Only do full bridgeVNodeEvents when the root itself re-renders (renderComponent path).
 
 	// Composite overlays
 	overlays := globalOverlayManager.GetVisible()
@@ -153,7 +150,6 @@ func (app *App) renderDirtyChildren(comp *Component, adapter OutputAdapter) {
 
 	adapter.Write(frame)
 	app.lastRenderTime = time.Now()
-	_ = sizeChanged
 }
 
 // reRenderDirtySubtree walks a VNode tree and re-renders any child component
@@ -216,7 +212,6 @@ func reRenderDirtySubtree(L *lua.State, vnode *VNode) bool {
 				vnode.ComponentRef = newChild.ComponentRef
 				vnode.ComponentKey = newChild.ComponentKey
 				changed = true
-				fmt.Fprintf(os.Stderr, "[RENDER] re-rendered %s type=%s\n", comp.ID, comp.Type)
 			} else {
 				L.Pop(1) // pop error
 			}
