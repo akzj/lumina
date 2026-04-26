@@ -129,7 +129,16 @@ local Cell = lumina.defineComponent({
             onMouseEnter = function()
                 setHovered(true)
                 if props.onCellHover then
-                    props.onCellHover(props.id)
+                    -- DEBUG: check props.id type
+                    local id = props.id
+                    if type(id) ~= "string" then
+                        io.stderr:write("[LUA-DEBUG] props.id type=" .. type(id) .. " tostring=" .. tostring(id) .. "\n")
+                        io.stderr:write("[LUA-DEBUG] props type=" .. type(props) .. "\n")
+                        for k, v in pairs(props) do
+                            io.stderr:write("[LUA-DEBUG]   props." .. tostring(k) .. " = " .. type(v) .. ": " .. tostring(v) .. "\n")
+                        end
+                    end
+                    props.onCellHover(id)
                 end
             end,
             onMouseLeave = function()
@@ -186,6 +195,9 @@ local App = lumina.defineComponent({
                     clicked = isClicked,
                     cursorActive = isCursorHere,
                     onCellHover = function(id)
+                        if type(id) ~= "string" then
+                            io.stderr:write("[LUA-DEBUG onCellHover] id type=" .. type(id) .. " tostring=" .. tostring(id) .. "\n")
+                        end
                         store.dispatch("setHover", id)
                     end,
                 })
