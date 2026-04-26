@@ -117,9 +117,13 @@ func (a *ANSIAdapter) writeFullFrame(frame *Frame) {
 		for x := 0; x < frame.Width; x++ {
 			cell := frame.Cells[y][x]
 
-			// Skip padding cells after wide characters
+			// Handle padding cells after wide characters — write space only if has background
 			if cell.Char == 0 {
-				continue
+				if cell.Background != "" {
+					cell.Char = ' '
+				} else {
+					continue
+				}
 			}
 
 			style := a.styleCodes(&cell)
@@ -184,9 +188,13 @@ func (a *ANSIAdapter) writeDiffRegion(newFrame, oldFrame *Frame, rect Rect) {
 		for x := startX; x < endX; x++ {
 			newCell := newFrame.Cells[y][x]
 
-			// Skip padding cells after wide characters
+			// Handle padding cells after wide characters — write space only if has background
 			if newCell.Char == 0 {
-				continue
+				if newCell.Background != "" {
+					newCell.Char = ' '
+				} else {
+					continue
+				}
 			}
 
 			oldCell := oldFrame.Cells[y][x]
