@@ -43,11 +43,9 @@ func (app *App) runInputPipeline(e *Event) {
 
 // markAllComponentsDirty marks all registered components as needing re-render.
 func markAllComponentsDirty() {
-	globalRegistry.mu.RLock()
 	for _, comp := range globalRegistry.components {
 		comp.Dirty.Store(true)
 	}
-	globalRegistry.mu.RUnlock()
 }
 
 // stageMouseThrottle drops duplicate mousemove events at the same coordinates.

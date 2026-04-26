@@ -24,8 +24,6 @@ var (
 
 // Simulate executes a simulated event on a component.
 func Simulate(event *SimulatedEvent) error {
-	globalRegistry.mu.RLock()
-	defer globalRegistry.mu.RUnlock()
 
 	// Find target component
 	var comp *Component

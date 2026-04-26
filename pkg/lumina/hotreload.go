@@ -53,11 +53,9 @@ func NewHotReloader(config HotReloadConfig) *HotReloader {
 // SnapshotState saves the current state of a component.
 func (hr *HotReloader) SnapshotState(comp *Component) {
 	// Read component state under its lock first
-	comp.mu.RLock()
 	stateCopy := copyMap(comp.State)
 	compID := comp.ID
 	compType := comp.Type
-	comp.mu.RUnlock()
 
 	hr.mu.Lock()
 	defer hr.mu.Unlock()
@@ -76,9 +74,7 @@ func (hr *HotReloader) RestoreState(comp *Component) bool {
 	defer hr.mu.RUnlock()
 
 	if snap, ok := hr.snapshots[comp.ID]; ok {
-		comp.mu.Lock()
 		comp.State = copyMap(snap.State)
-		comp.mu.Unlock()
 		return true
 	}
 	return false
@@ -156,8 +152,6 @@ func (hr *HotReloader) ClearSnapshots() {
 
 // SnapshotAllComponents snapshots all registered components.
 func (hr *HotReloader) SnapshotAllComponents() {
-	globalRegistry.mu.RLock()
-	defer globalRegistry.mu.RUnlock()
 	for _, comp := range globalRegistry.components {
 		hr.SnapshotState(comp)
 	}
@@ -171,10 +165,8 @@ func (hr *HotReloader) RestoreByType(comp *Component) bool {
 
 	for _, snap := range hr.snapshots {
 		if snap.ComponentType == comp.Type {
-			comp.mu.Lock()
 			comp.State = copyMap(snap.State)
 			comp.Dirty.Store(true)
-			comp.mu.Unlock()
 			return true
 		}
 	}
@@ -183,8 +175,6 @@ func (hr *HotReloader) RestoreByType(comp *Component) bool {
 
 // RestoreAllByType restores state to all registered components by type matching.
 func (hr *HotReloader) RestoreAllByType() {
-	globalRegistry.mu.RLock()
-	defer globalRegistry.mu.RUnlock()
 	for _, comp := range globalRegistry.components {
 		hr.RestoreByType(comp)
 	}

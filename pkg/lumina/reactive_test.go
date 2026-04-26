@@ -89,9 +89,7 @@ func TestReactiveIntegration(t *testing.T) {
 	}
 
 	// Register it
-	globalRegistry.mu.Lock()
 	globalRegistry.components[comp.ID] = comp
-	globalRegistry.mu.Unlock()
 
 	// Simulate state change
 	comp.SetState("count", 1)
@@ -102,9 +100,7 @@ func TestReactiveIntegration(t *testing.T) {
 	}
 
 	// Clean up
-	globalRegistry.mu.Lock()
 	delete(globalRegistry.components, comp.ID)
-	globalRegistry.mu.Unlock()
 
 	t.Log("Reactive chain verified: SetState -> Dirty flag set")
 }

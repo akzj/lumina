@@ -721,15 +721,11 @@ func TestComponentTree_ParentChildReferences(t *testing.T) {
 		Props: make(map[string]any),
 		State: make(map[string]any),
 	}
-	globalRegistry.mu.Lock()
 	globalRegistry.components[parent.ID] = parent
-	globalRegistry.mu.Unlock()
 	SetCurrentComponent(parent)
 	defer func() {
 		SetCurrentComponent(nil)
-		globalRegistry.mu.Lock()
 		delete(globalRegistry.components, parent.ID)
-		globalRegistry.mu.Unlock()
 	}()
 
 	err := L.DoString(`
@@ -794,13 +790,9 @@ func TestBatching_MultipleSetStateSingleRender(t *testing.T) {
 		State:        make(map[string]any),
 		RenderNotify: make(chan struct{}, 1),
 	}
-	globalRegistry.mu.Lock()
 	globalRegistry.components[comp.ID] = comp
-	globalRegistry.mu.Unlock()
 	defer func() {
-		globalRegistry.mu.Lock()
 		delete(globalRegistry.components, comp.ID)
-		globalRegistry.mu.Unlock()
 	}()
 
 	// Without batching: each SetState marks dirty
@@ -899,13 +891,9 @@ func TestBatching_HandleEventWrapped(t *testing.T) {
 		State:        make(map[string]any),
 		RenderNotify: make(chan struct{}, 1),
 	}
-	globalRegistry.mu.Lock()
 	globalRegistry.components[comp.ID] = comp
-	globalRegistry.mu.Unlock()
 	defer func() {
-		globalRegistry.mu.Lock()
 		delete(globalRegistry.components, comp.ID)
-		globalRegistry.mu.Unlock()
 	}()
 
 	// handleEvent should be wrapped in batch

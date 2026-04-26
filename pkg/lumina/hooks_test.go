@@ -19,9 +19,7 @@ func newTestState(t *testing.T) (*lua.State, *Component) {
 		Props: make(map[string]any),
 		State: make(map[string]any),
 	}
-	globalRegistry.mu.Lock()
 	globalRegistry.components[comp.ID] = comp
-	globalRegistry.mu.Unlock()
 
 	SetCurrentComponent(comp)
 	return L, comp
@@ -29,9 +27,7 @@ func newTestState(t *testing.T) (*lua.State, *Component) {
 
 func cleanupTestState(L *lua.State, comp *Component) {
 	SetCurrentComponent(nil)
-	globalRegistry.mu.Lock()
 	delete(globalRegistry.components, comp.ID)
-	globalRegistry.mu.Unlock()
 	L.Close()
 }
 

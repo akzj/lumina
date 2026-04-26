@@ -18,7 +18,6 @@ func (app *App) renderAllDirty() {
 	// children directly causes Lua errors (render expects props arg)
 	// and infinite retry loops.
 	hasDirty := false
-	globalRegistry.mu.RLock()
 	for _, comp := range globalRegistry.components {
 		if comp.IsRoot && comp.Dirty.Load() {
 			hasDirty = true
@@ -26,7 +25,6 @@ func (app *App) renderAllDirty() {
 		}
 	}
 	if !hasDirty {
-		globalRegistry.mu.RUnlock()
 		return
 	}
 
@@ -37,7 +35,6 @@ func (app *App) renderAllDirty() {
 			roots = append(roots, comp)
 		}
 	}
-	globalRegistry.mu.RUnlock()
 
 	adapter := GetOutputAdapter()
 	if adapter == nil {
@@ -210,12 +207,10 @@ compositeAndWrite:
 // InitialRender renders all components once (for testing/compatibility).
 // InitialRender renders all components once (for testing/compatibility).
 func (app *App) InitialRender() {
-	globalRegistry.mu.RLock()
 	components := make([]*Component, 0, len(globalRegistry.components))
 	for _, comp := range globalRegistry.components {
 		components = append(components, comp)
 	}
-	globalRegistry.mu.RUnlock()
 
 	adapter := GetOutputAdapter()
 	if adapter == nil {
@@ -277,8 +272,6 @@ func HitTestVNode(vnode *VNode, px, py int) string {
 // findRootVNode returns the last rendered VNode tree from the root component.
 // findRootVNode returns the last rendered VNode tree from the root component.
 func (app *App) findRootVNode() *VNode {
-	globalRegistry.mu.RLock()
-	defer globalRegistry.mu.RUnlock()
 	for _, comp := range globalRegistry.components {
 		if comp.LastVNode != nil {
 			return comp.LastVNode

@@ -176,9 +176,7 @@ func (app *App) handleScrollEvent(e *Event) {
 		// Fallback: try focused element's viewport
 		if targetID == "" {
 			focusedID := globalEventBus.GetFocused()
-			viewportMu.RLock()
 			_, hasFocusedVP := viewportRegistry[focusedID]
-			viewportMu.RUnlock()
 			if hasFocusedVP {
 				targetID = focusedID
 			}
@@ -186,14 +184,12 @@ func (app *App) handleScrollEvent(e *Event) {
 
 		// Last resort: find any viewport that needs scroll
 		if targetID == "" {
-			viewportMu.RLock()
 			for id, vp := range viewportRegistry {
 				if vp.NeedsScroll() {
 					targetID = id
 					break
 				}
 			}
-			viewportMu.RUnlock()
 		}
 
 		if targetID != "" {
@@ -221,33 +217,25 @@ func (app *App) handleScrollEvent(e *Event) {
 		scrolled := false
 		switch e.Key {
 		case "PageUp":
-			viewportMu.RLock()
 			vp, ok := viewportRegistry[focusedID]
-			viewportMu.RUnlock()
 			if ok {
 				vp.ScrollUp(vp.ViewH)
 				scrolled = true
 			}
 		case "PageDown":
-			viewportMu.RLock()
 			vp, ok := viewportRegistry[focusedID]
-			viewportMu.RUnlock()
 			if ok {
 				vp.ScrollDown(vp.ViewH)
 				scrolled = true
 			}
 		case "Home":
-			viewportMu.RLock()
 			vp, ok := viewportRegistry[focusedID]
-			viewportMu.RUnlock()
 			if ok {
 				vp.ScrollToTop()
 				scrolled = true
 			}
 		case "End":
-			viewportMu.RLock()
 			vp, ok := viewportRegistry[focusedID]
-			viewportMu.RUnlock()
 			if ok {
 				vp.ScrollToBottom()
 				scrolled = true

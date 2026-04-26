@@ -85,11 +85,9 @@ func (app *App) HandleMCPRequest(req MCPRequest) MCPResponse {
 	case "debug.toggleInspector":
 		ToggleInspector()
 		// Force re-render so the panel appears/disappears immediately.
-		globalRegistry.mu.RLock()
 		for _, c := range globalRegistry.components {
 			c.Dirty.Store(true)
 		}
-		globalRegistry.mu.RUnlock()
 		result = map[string]any{"visible": IsInspectorVisible()}
 	case "debug.checkInspectorBounds":
 		result = app.mcpCheckInspectorBounds()
@@ -117,7 +115,6 @@ func (app *App) HandleMCPRequest(req MCPRequest) MCPResponse {
 func (app *App) mcpInspectTree() map[string]interface{} {
 	tree := []map[string]interface{}{}
 
-	globalRegistry.mu.RLock()
 	for id, comp := range globalRegistry.components {
 		tree = append(tree, map[string]interface{}{
 			"id":      id,
@@ -126,7 +123,6 @@ func (app *App) mcpInspectTree() map[string]interface{} {
 			"focused": id == globalEventBus.GetFocused(),
 		})
 	}
-	globalRegistry.mu.RUnlock()
 
 	return map[string]interface{}{
 		"tree":         tree,
@@ -143,8 +139,6 @@ func (app *App) mcpInspectComponent(id string) map[string]interface{} {
 		return map[string]interface{}{"error": "component not found"}
 	}
 
-	globalRegistry.mu.RLock()
-	defer globalRegistry.mu.RUnlock()
 
 	return map[string]interface{}{
 		"id":      comp.ID,

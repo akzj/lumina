@@ -33,12 +33,10 @@ func (rl *RenderLoop) Stop() {}
 // InitialRender renders all components once using the render loop's state.
 // This is used for non-App usage (e.g., tests that create RenderLoop directly).
 func (rl *RenderLoop) InitialRender() {
-	globalRegistry.mu.RLock()
 	components := make([]*Component, 0, len(globalRegistry.components))
 	for _, comp := range globalRegistry.components {
 		components = append(components, comp)
 	}
-	globalRegistry.mu.RUnlock()
 
 	adapter := GetOutputAdapter()
 	if adapter == nil {

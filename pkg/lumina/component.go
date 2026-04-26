@@ -4,7 +4,6 @@ package lumina
 import (
 	"errors"
 	"fmt"
-	"sync"
 	"sync/atomic"
 
 	"github.com/akzj/go-lua/pkg/lua"
@@ -53,7 +52,7 @@ type Component struct {
 	// Managed per-component to avoid SwapRenderRefs freeing them and
 	// causing registry slot reuse that corrupts renderFn refs.
 	propRefs []int
-	mu       sync.RWMutex
+
 }
 
 // luaFunctionRef holds a reference to a Lua function on the stack.
@@ -62,10 +61,10 @@ type luaFunctionRef struct {
 }
 
 // ComponentRegistry stores all active components.
+// All access is from the main thread (actor model) — no mutex needed.
 type ComponentRegistry struct {
 	components map[string]*Component
 	current    *Component // Currently rendering component
-	mu         sync.RWMutex
 }
 
 var (
@@ -131,9 +130,7 @@ func NewComponent(L *lua.State, factoryIdx int, props map[string]any) (*Componen
 	}
 
 	// Register component and mark dirty for initial render
-	globalRegistry.mu.Lock()
 	globalRegistry.components[comp.ID] = comp
-	globalRegistry.mu.Unlock()
 	comp.Dirty.Store(true)
 
 	return comp, nil
@@ -141,10 +138,8 @@ func NewComponent(L *lua.State, factoryIdx int, props map[string]any) (*Componen
 
 // SetState updates a component state value and marks it dirty.
 func (c *Component) SetState(key string, value any) {
-	c.mu.Lock()
 	c.State[key] = value
 	c.Dirty.Store(true)
-	c.mu.Unlock()
 
 	// Walk up to root component and mark it dirty too.
 	// Child components only re-render when the root re-renders and
@@ -168,8 +163,6 @@ func (c *Component) SetState(key string, value any) {
 
 // GetState returns a state value.
 func (c *Component) GetState(key string) (any, bool) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
 	v, ok := c.State[key]
 	return v, ok
 }
@@ -251,9 +244,7 @@ func (c *Component) Cleanup(L *lua.State) {
 		c.Parent.RemoveChild(c)
 	}
 
-	globalRegistry.mu.Lock()
 	delete(globalRegistry.components, c.ID)
-	globalRegistry.mu.Unlock()
 }
 
 // SetCurrentComponent sets the currently rendering component.
@@ -263,25 +254,19 @@ func (c *Component) Cleanup(L *lua.State) {
 // the main goroutine. If concurrent rendering is ever needed, this must be
 // replaced with a per-goroutine or per-VM context (e.g., stored on the Lua State).
 func SetCurrentComponent(comp *Component) {
-	globalRegistry.mu.Lock()
 	globalRegistry.current = comp
-	globalRegistry.mu.Unlock()
 }
 
 // GetCurrentComponent returns the currently rendering component.
 func GetCurrentComponent() *Component {
-	globalRegistry.mu.RLock()
-	defer globalRegistry.mu.RUnlock()
 	return globalRegistry.current
 }
 
 // ClearComponents removes all components from the global registry.
 // Used for test isolation.
 func ClearComponents() {
-	globalRegistry.mu.Lock()
 	globalRegistry.components = make(map[string]*Component)
 	globalRegistry.current = nil
-	globalRegistry.mu.Unlock()
 }
 
 
@@ -291,9 +276,7 @@ func ReconcileComponents(L *lua.State, oldTree, newTree *VNode) {
 	newIDs := collectComponentIDs(newTree)
 	for id := range oldIDs {
 		if _, exists := newIDs[id]; !exists {
-			globalRegistry.mu.RLock()
 			comp, ok := globalRegistry.components[id]
-			globalRegistry.mu.RUnlock()
 			if ok {
 				comp.Cleanup(L)
 			}
@@ -322,8 +305,6 @@ func collectComponentIDsInto(node *VNode, ids map[string]bool) {
 
 // GetComponentByID returns a component by its ID.
 func GetComponentByID(id string) (*Component, bool) {
-	globalRegistry.mu.RLock()
-	defer globalRegistry.mu.RUnlock()
 	comp, ok := globalRegistry.components[id]
 	return comp, ok
 }
@@ -356,14 +337,12 @@ func (c *Component) ResetHookIndex() {
 // Returns true if props actually changed.
 func (c *Component) UpdateProps(newProps map[string]any) bool {
 	changed := !propsEqualSkipFuncs(c.Props, newProps)
-	c.mu.Lock()
 	// Always update props so new function refs (closures) are used,
 	// even if only function props changed.
 	c.Props = newProps
 	if changed {
 		c.Dirty.Store(true)
 	}
-	c.mu.Unlock()
 	return changed
 }
 
@@ -381,21 +360,16 @@ func childMapKey(comp *Component) string {
 
 // AddChild adds a child component to this component's tree.
 func (c *Component) AddChild(child *Component) {
-	c.mu.Lock()
 	c.ChildComps = append(c.ChildComps, child)
 	if c.ChildMap == nil {
 		c.ChildMap = make(map[string]*Component)
 	}
 	c.ChildMap[childMapKey(child)] = child
-	c.mu.Unlock()
-	child.mu.Lock()
 	child.Parent = c
-	child.mu.Unlock()
 }
 
 // RemoveChild removes a child component from this component's tree.
 func (c *Component) RemoveChild(child *Component) {
-	c.mu.Lock()
 	for i, ch := range c.ChildComps {
 		if ch.ID == child.ID {
 			c.ChildComps = append(c.ChildComps[:i], c.ChildComps[i+1:]...)
@@ -403,16 +377,11 @@ func (c *Component) RemoveChild(child *Component) {
 		}
 	}
 	delete(c.ChildMap, childMapKey(child))
-	c.mu.Unlock()
-	child.mu.Lock()
 	child.Parent = nil
-	child.mu.Unlock()
 }
 
 // GetChildren returns a copy of the child components slice.
 func (c *Component) GetChildren() []*Component {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
 	result := make([]*Component, len(c.ChildComps))
 	copy(result, c.ChildComps)
 	return result
