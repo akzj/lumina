@@ -707,8 +707,9 @@ func (app *App) handleEvent(event AppEvent) {
 		// to prevent double-dispatch (e.g., Enter triggering both onKey callback
 		// and built-in click on focused element).
 		if e.Type == "keydown" && !textHandled {
+			normalized := normalizeKeyName(e.Key)
 			keyBindingsMu.Lock()
-			_, hasBinding := keyBindings[e.Key]
+			_, hasBinding := keyBindings[normalized]
 			keyBindingsMu.Unlock()
 			if !hasBinding {
 				globalEventBus.HandleKeyEvent(e.Key, e.Modifiers)
@@ -735,10 +736,47 @@ func (app *App) handleEvent(event AppEvent) {
 	}
 }
 
+// normalizeKeyName maps terminal key names to user-friendly names used in onKey().
+func normalizeKeyName(key string) string {
+	switch key {
+	case "Enter":
+		return "enter"
+	case "Escape":
+		return "escape"
+	case "Backspace":
+		return "backspace"
+	case "Tab":
+		return "tab"
+	case "ArrowLeft":
+		return "left"
+	case "ArrowRight":
+		return "right"
+	case "ArrowUp":
+		return "up"
+	case "ArrowDown":
+		return "down"
+	case "Delete":
+		return "delete"
+	case "Home":
+		return "home"
+	case "End":
+		return "end"
+	case "PageUp":
+		return "pageup"
+	case "PageDown":
+		return "pagedown"
+	case "Insert":
+		return "insert"
+	default:
+		return key // regular characters like "h", "j", " ", etc. pass through
+	}
+}
+
 // dispatchKeyBinding checks if a key has a lumina.onKey() binding and calls it directly.
 func (app *App) dispatchKeyBinding(key string) {
+	normalized := normalizeKeyName(key)
 	keyBindingsMu.Lock()
-	ref, ok := keyBindings[key]
+	ref, ok := keyBindings[normalized]
 	keyBindingsMu.Unlock()
 
 	if ok {
