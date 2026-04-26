@@ -7,15 +7,27 @@ import (
 )
 
 // tickFPS updates the FPS counter. Called once per tick (~60Hz), not per render.
+// Uses precise elapsed time and exponential moving average for smooth display.
 func (app *App) tickFPS() {
 	app.frameCount++
 	now := time.Now()
-	if now.Sub(app.fpsLastTime) >= time.Second {
-		app.fps = app.frameCount
+	elapsed := now.Sub(app.fpsLastTime)
+	if elapsed >= 300*time.Millisecond {
+		// Calculate precise FPS: frames / actual_elapsed_seconds
+		fps := float64(app.frameCount) / elapsed.Seconds()
+
+		// Exponential moving average for smoothing (weight 0.3 new, 0.7 old)
+		if app.fps == 0 {
+			app.fps = int(fps + 0.5) // first measurement
+		} else {
+			smoothed := 0.3*fps + 0.7*float64(app.fps)
+			app.fps = int(smoothed + 0.5)
+		}
+
 		app.frameCount = 0
 		app.fpsLastTime = now
-		// When FPS changes and DevTools is visible, force a re-render
-		// so the FPS display updates (once per second, not every tick)
+
+		// When DevTools is visible, force re-render to update FPS display
 		if IsInspectorVisible() {
 			for _, comp := range globalRegistry.components {
 				if comp.IsRoot {
