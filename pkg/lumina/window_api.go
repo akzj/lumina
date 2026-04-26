@@ -47,7 +47,6 @@ func luaCreateWindow(L *lua.State) int {
 
 	win := globalWindowManager.CreateWindow(id, title, int(x64), int(y64), int(w64), int(h64))
 
-	// Check for content VNode
 	L.GetField(1, "content")
 	if !L.IsNil(-1) {
 		win.VNode = LuaVNodeToVNode(L, -1)
@@ -59,7 +58,6 @@ func luaCreateWindow(L *lua.State) int {
 }
 
 // luaCloseWindow closes a managed window.
-// lumina.closeWindow("win1")
 func luaCloseWindow(L *lua.State) int {
 	id := L.CheckString(1)
 	globalWindowManager.CloseWindow(id)
@@ -67,7 +65,6 @@ func luaCloseWindow(L *lua.State) int {
 }
 
 // luaFocusWindow brings a window to the front.
-// lumina.focusWindow("win1")
 func luaFocusWindow(L *lua.State) int {
 	id := L.CheckString(1)
 	globalWindowManager.FocusWindow(id)
@@ -75,7 +72,6 @@ func luaFocusWindow(L *lua.State) int {
 }
 
 // luaMoveWindow moves a window to a new position.
-// lumina.moveWindow("win1", 20, 10)
 func luaMoveWindow(L *lua.State) int {
 	id := L.CheckString(1)
 	x := int(L.CheckInteger(2))
@@ -85,7 +81,6 @@ func luaMoveWindow(L *lua.State) int {
 }
 
 // luaResizeWindow resizes a window.
-// lumina.resizeWindow("win1", 50, 30)
 func luaResizeWindow(L *lua.State) int {
 	id := L.CheckString(1)
 	w := int(L.CheckInteger(2))
@@ -95,7 +90,6 @@ func luaResizeWindow(L *lua.State) int {
 }
 
 // luaMinimizeWindow minimizes a window.
-// lumina.minimizeWindow("win1")
 func luaMinimizeWindow(L *lua.State) int {
 	id := L.CheckString(1)
 	globalWindowManager.MinimizeWindow(id)
@@ -103,7 +97,6 @@ func luaMinimizeWindow(L *lua.State) int {
 }
 
 // luaMaximizeWindow maximizes a window to fill the screen.
-// lumina.maximizeWindow("win1")
 func luaMaximizeWindow(L *lua.State) int {
 	id := L.CheckString(1)
 	globalWindowManager.MaximizeWindow(id)
@@ -111,7 +104,6 @@ func luaMaximizeWindow(L *lua.State) int {
 }
 
 // luaRestoreWindow restores a minimized or maximized window.
-// lumina.restoreWindow("win1")
 func luaRestoreWindow(L *lua.State) int {
 	id := L.CheckString(1)
 	globalWindowManager.RestoreWindow(id)
@@ -119,7 +111,6 @@ func luaRestoreWindow(L *lua.State) int {
 }
 
 // luaTileWindows arranges windows in a tiling layout.
-// lumina.tileWindows("horizontal") | "vertical" | "grid"
 func luaTileWindows(L *lua.State) int {
 	layout := L.OptString(1, "grid")
 	switch layout {
@@ -131,4 +122,63 @@ func luaTileWindows(L *lua.State) int {
 		globalWindowManager.TileGrid()
 	}
 	return 0
+}
+
+// luaGetFocusedWindow returns the ID of the focused window, or nil.
+func luaGetFocusedWindow(L *lua.State) int {
+	globalWindowManager.mu.RLock()
+	defer globalWindowManager.mu.RUnlock()
+	if w := globalWindowManager.GetFocused(); w != nil {
+		L.PushString(w.ID)
+		return 1
+	}
+	L.PushNil()
+	return 1
+}
+
+// luaGetWindow returns window info as a table, or nil.
+func luaGetWindow(L *lua.State) int {
+	id := L.CheckString(1)
+	globalWindowManager.mu.RLock()
+	defer globalWindowManager.mu.RUnlock()
+	w := globalWindowManager.GetWindow(id)
+	if w == nil {
+		L.PushNil()
+		return 1
+	}
+	L.NewTable()
+	L.PushString(w.ID)
+	L.SetField(-2, "id")
+	L.PushString(w.Title)
+	L.SetField(-2, "title")
+	L.PushNumber(float64(w.X))
+	L.SetField(-2, "x")
+	L.PushNumber(float64(w.Y))
+	L.SetField(-2, "y")
+	L.PushNumber(float64(w.W))
+	L.SetField(-2, "w")
+	L.PushNumber(float64(w.H))
+	L.SetField(-2, "h")
+	L.PushBoolean(w.Visible)
+	L.SetField(-2, "visible")
+	L.PushBoolean(w.Focused)
+	L.SetField(-2, "focused")
+	L.PushBoolean(w.Minimized)
+	L.SetField(-2, "minimized")
+	L.PushBoolean(w.Maximized)
+	L.SetField(-2, "maximized")
+	return 1
+}
+
+// luaListWindows returns a list of all window IDs.
+func luaListWindows(L *lua.State) int {
+	globalWindowManager.mu.RLock()
+	defer globalWindowManager.mu.RUnlock()
+	wins := globalWindowManager.GetVisible()
+	L.NewTable()
+	for i, w := range wins {
+		L.PushString(w.ID)
+		L.RawSetI(-2, int64(i+1))
+	}
+	return 1
 }

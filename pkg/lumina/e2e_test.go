@@ -292,3 +292,62 @@ func TestE2E_NewDemos(t *testing.T) {
         })
     }
 }
+
+func TestE2E_WindowManagerAPI(t *testing.T) {
+    app := lumina.NewApp()
+    defer app.Close()
+
+    var buf bytes.Buffer
+    tio := lumina.NewBufferTermIO(80, 24, &buf)
+
+    err := app.LoadScript("../../examples/window-manager-demo/main.lua", tio)
+    if err != nil {
+        t.Fatalf("LoadScript: %v", err)
+    }
+    app.RenderOnce()
+
+    // Verify windows were created via globalWindowManager
+    wm := app.GetWindowManager()
+    if wm == nil {
+        t.Fatal("GetWindowManager() returned nil")
+    }
+    if wm.Count() < 2 {
+        t.Fatalf("expected at least 2 windows, got %d", wm.Count())
+    }
+}
+
+func TestE2E_DevToolsDemo(t *testing.T) {
+    app := lumina.NewApp()
+    defer app.Close()
+
+    var buf bytes.Buffer
+    tio := lumina.NewBufferTermIO(80, 24, &buf)
+
+    err := app.LoadScript("../../examples/devtools-demo/main.lua", tio)
+    if err != nil {
+        t.Fatalf("LoadScript: %v", err)
+    }
+    app.RenderOnce()
+
+    // Verify DevTools can be toggled
+    devtools := app.GetDevTools()
+    if devtools == nil {
+        t.Fatal("devTools is nil")
+    }
+
+    devtools.Enable()
+    if !devtools.IsEnabled() {
+        t.Fatal("DevTools should be enabled")
+    }
+
+    devtools.Disable()
+    if devtools.IsEnabled() {
+        t.Fatal("DevTools should be disabled")
+    }
+
+    // Toggle via F12 simulation
+    devtools.Toggle()
+    if !devtools.IsEnabled() {
+        t.Fatal("DevTools should be enabled after toggle")
+    }
+}
