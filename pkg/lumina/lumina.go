@@ -566,6 +566,9 @@ func Open(L *lua.State) {
 
 	// Register lumina/ui component preloads (new naming)
 	RegisterUI(L)
+
+	// Register DevTools panel (Lua implementation)
+	RegisterDevToolsPanel(L)
 }
 
 func init() {
