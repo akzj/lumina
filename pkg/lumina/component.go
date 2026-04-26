@@ -350,14 +350,16 @@ func (c *Component) ResetHookIndex() {
 // UpdateProps updates the component's props and marks it dirty if they changed.
 // Returns true if props actually changed.
 func (c *Component) UpdateProps(newProps map[string]any) bool {
-	if propsEqual(c.Props, newProps) {
-		return false
-	}
+	changed := !propsEqualSkipFuncs(c.Props, newProps)
 	c.mu.Lock()
+	// Always update props so new function refs (closures) are used,
+	// even if only function props changed.
 	c.Props = newProps
-	c.Dirty.Store(true)
+	if changed {
+		c.Dirty.Store(true)
+	}
 	c.mu.Unlock()
-	return true
+	return changed
 }
 
 // AddChild adds a child component to this component's tree.

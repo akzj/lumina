@@ -421,20 +421,45 @@ func hasKeys(children []*VNode) bool {
 // propsEqual performs a shallow comparison of two prop maps.
 // It ignores the "children" and "key" keys (handled separately).
 func propsEqual(a, b map[string]any) bool {
+	return propsEqualImpl(a, b, false)
+}
+
+// propsEqualSkipFuncs performs a shallow comparison of two prop maps,
+// ignoring LuaFuncRef values. Function props get new Lua registry refs
+// every render cycle, so comparing them would ALWAYS return false,
+// causing infinite re-render loops. Used by UpdateProps to decide
+// whether to mark a component dirty.
+func propsEqualSkipFuncs(a, b map[string]any) bool {
+	return propsEqualImpl(a, b, true)
+}
+
+func propsEqualImpl(a, b map[string]any, skipFuncs bool) bool {
 	// Fast path: same length check.
 	skipKeys := map[string]bool{"children": true, "key": true}
 
 	countA := 0
-	for k := range a {
-		if !skipKeys[k] {
-			countA++
+	for k, v := range a {
+		if skipKeys[k] {
+			continue
 		}
+		if skipFuncs {
+			if _, isFunc := v.(LuaFuncRef); isFunc {
+				continue
+			}
+		}
+		countA++
 	}
 	countB := 0
-	for k := range b {
-		if !skipKeys[k] {
-			countB++
+	for k, v := range b {
+		if skipKeys[k] {
+			continue
 		}
+		if skipFuncs {
+			if _, isFunc := v.(LuaFuncRef); isFunc {
+				continue
+			}
+		}
+		countB++
 	}
 	if countA != countB {
 		return false
@@ -443,6 +468,11 @@ func propsEqual(a, b map[string]any) bool {
 	for k, va := range a {
 		if skipKeys[k] {
 			continue
+		}
+		if skipFuncs {
+			if _, isFunc := va.(LuaFuncRef); isFunc {
+				continue
+			}
 		}
 		vb, ok := b[k]
 		if !ok {
