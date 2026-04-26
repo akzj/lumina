@@ -477,8 +477,12 @@ func renderComponent(L *lua.State) int {
 
 	// Call render(instance)
 	status := L.PCall(1, 1, 0)
-	SetCurrentComponent(nil)
+	// NOTE: Do NOT call SetCurrentComponent(nil) here — LuaVNodeToVNode below
+	// may create child components that need GetCurrentComponent() to return
+	// this component so they are properly parented via AddChild.
+	// SetCurrentComponent(nil) is called after VNode processing below.
 	if status != lua.OK {
+		SetCurrentComponent(nil)
 		msg, _ := L.ToString(-1)
 		L.Pop(1)
 		L.PushString(fmt.Sprintf("render: %v", msg))
@@ -488,7 +492,11 @@ func renderComponent(L *lua.State) int {
 
 	// vdom is now on stack at -1
 	// Convert Lua table to VNode tree.
+	// NOTE: LuaVNodeToVNode may call luaComponentToVNode which creates
+	// child components. GetCurrentComponent() must still return this
+	// component so children are properly parented via AddChild.
 	newVNode := LuaVNodeToVNode(L, -1)
+	SetCurrentComponent(nil) // safe to clear now — child components are created
 
 	// Get actual terminal size from app (fallback to 80x24)
 	renderW, renderH := 80, 24
