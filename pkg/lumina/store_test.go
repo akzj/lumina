@@ -292,3 +292,4 @@ func TestLua_UseStore(t *testing.T) {
 		t.Fatalf("expected label=hello, got %v", label)
 	}
 }
+

@@ -110,6 +110,9 @@ func (a *ANSIAdapter) Write(frame *Frame) error {
 
 // writeFullFrame writes every cell in the frame (used for first render or resize).
 func (a *ANSIAdapter) writeFullFrame(frame *Frame) {
+	// Clear the entire screen first — ensures no stale content remains
+	// after terminal resize (where new frame may be smaller than old).
+	a.buf.WriteString("\x1b[2J")
 	for y := 0; y < frame.Height; y++ {
 		// Move to start of line
 		a.buf.WriteString(fmt.Sprintf("\x1b[%d;1H", y+1))

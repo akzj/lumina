@@ -169,7 +169,7 @@ local App = lumina.defineComponent({
             type = "text",
             content = string.format(
                 " Hover: %s | Click: %s | Cursor: (%d,%d) | [hjkl] Move [Enter] Select [c] Clear [q] Quit",
-                state.lastHover, state.lastClick, cursorX, cursorY),
+                tostring(state.lastHover or ""), tostring(state.lastClick or ""), cursorX, cursorY),
             style = { foreground = theme.accent, background = theme.bar, bold = true },
         }
 
