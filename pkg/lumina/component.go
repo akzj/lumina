@@ -40,6 +40,7 @@ type Component struct {
 	ChildComps   []*Component   // Child component instances
 	// Error boundary
 	IsErrorBoundary bool            // true if this component catches child render errors
+	IsRoot          bool            // true if this component was created by lumina.mount()
 	FallbackFn      *luaFunctionRef // fallback(errorMsg) → VNode
 	CaughtError     string          // last caught error message (empty = no error)
 	// Memoization

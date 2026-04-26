@@ -428,6 +428,7 @@ func renderComponent(L *lua.State) int {
 				L.Error()
 				return 0
 			}
+			comp.IsRoot = true // mounted via lumina.mount() → renderComponent
 			// Call init function to populate initial state
 			if comp.PushInitFn(L) {
 				// Push props table
