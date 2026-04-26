@@ -596,6 +596,7 @@ func (app *App) handleEvent(event AppEvent) {
 			case "mousemove":
 				// Update hover state and synthesize mouseenter/mouseleave
 				newHoverID := e.Target
+				fmt.Fprintf(os.Stderr, "[MOUSEMOVE] x=%d y=%d target=%q lastFrame=%v\n", e.X, e.Y, e.Target, app.lastFrame != nil)
 				if newHoverID != app.hoveredID {
 					oldHoverID := app.hoveredID
 					app.hoveredID = newHoverID
