@@ -13,7 +13,22 @@ func (app *App) renderAllDirty() {
 		return // will catch on next tick
 	}
 
+	// Fast path: check if any component is dirty before allocating.
+	// This avoids a []Component slice allocation every 16ms when idle.
+	hasDirty := false
 	globalRegistry.mu.RLock()
+	for _, comp := range globalRegistry.components {
+		if comp.Dirty.Load() {
+			hasDirty = true
+			break
+		}
+	}
+	if !hasDirty {
+		globalRegistry.mu.RUnlock()
+		return
+	}
+
+	// Collect all components (some may become dirty during iteration)
 	components := make([]*Component, 0, len(globalRegistry.components))
 	for _, comp := range globalRegistry.components {
 		components = append(components, comp)
