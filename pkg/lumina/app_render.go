@@ -105,7 +105,7 @@ func (app *App) renderDirtyChildren(comp *Component, adapter OutputAdapter) {
 
 	// Walk the VNode tree and re-render dirty child components in-place.
 	// This modifies comp.LastVNode's subtrees where children are dirty.
-	changed := reRenderDirtySubtree(app.L, comp.LastVNode)
+	changed, structureChanged := reRenderDirtySubtree(app.L, comp.LastVNode)
 	if !changed {
 		return // nothing actually changed
 	}
@@ -136,7 +136,12 @@ func (app *App) renderDirtyChildren(comp *Component, adapter OutputAdapter) {
 		fullClip := Rect{X: 0, Y: 0, W: w, H: h}
 		renderVNode(frame, newVNode, fullClip)
 		frame.MarkDirty()
-		// SKIP bridgeVNodeEvents — handlers still valid from last full render.
+		// Only re-bridge events if a component with children was re-rendered
+		// (e.g., Grid re-render creates new Cell VNodes with new onClick closures).
+		// Leaf-only changes (e.g., Cell hover) don't need re-bridging.
+		if structureChanged {
+			app.bridgeVNodeEvents(newVNode)
+		}
 	}
 
 	// Clear scroll dirty flags
@@ -191,13 +196,13 @@ func (app *App) renderDirtyChildren(comp *Component, adapter OutputAdapter) {
 }
 
 // reRenderDirtySubtree walks a VNode tree and re-renders any child component
-// whose Dirty flag is set. Returns true if any subtree was changed.
-func reRenderDirtySubtree(L *lua.State, vnode *VNode) bool {
+// whose Dirty flag is set. Returns changed=true if any subtree was modified,
+// and structureChanged=true if a component with child components was re-rendered
+// (meaning new event handlers need registration via bridgeVNodeEvents).
+func reRenderDirtySubtree(L *lua.State, vnode *VNode) (changed bool, structureChanged bool) {
 	if vnode == nil {
-		return false
+		return false, false
 	}
-
-	changed := false
 
 	// If this VNode is backed by a dirty component, re-render it
 	if vnode.ComponentRef != nil && vnode.ComponentRef.Dirty.Load() {
@@ -256,6 +261,11 @@ func reRenderDirtySubtree(L *lua.State, vnode *VNode) bool {
 				computeFlexLayout(vnode, vnode.X, vnode.Y, vnode.W, vnode.H)
 
 				changed = true
+				// If this component has child components, its re-render creates
+				// new VNodes with new event handler closures that need registration.
+				if len(comp.ChildComps) > 0 {
+					structureChanged = true
+				}
 			} else {
 				L.Pop(1) // pop error
 			}
@@ -263,7 +273,7 @@ func reRenderDirtySubtree(L *lua.State, vnode *VNode) bool {
 
 		SetCurrentComponent(prevComp)
 		// Don't recurse into freshly rendered children — they're already up to date
-		return changed
+		return changed, structureChanged
 	}
 
 	// If this component has dirty children, recurse
@@ -273,12 +283,16 @@ func reRenderDirtySubtree(L *lua.State, vnode *VNode) bool {
 
 	// Recurse into children
 	for _, child := range vnode.Children {
-		if reRenderDirtySubtree(L, child) {
+		childChanged, childStructure := reRenderDirtySubtree(L, child)
+		if childChanged {
 			changed = true
+		}
+		if childStructure {
+			structureChanged = true
 		}
 	}
 
-	return changed
+	return changed, structureChanged
 }
 
 // renderComponent re-renders a single component on the main thread.
