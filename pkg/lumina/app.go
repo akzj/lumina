@@ -26,6 +26,13 @@ type LuaCallbackEvent struct {
 	Event *Event
 }
 
+// MCPCallEvent is an AppEvent payload used to execute an MCP request on the app's
+// main goroutine (the one running the event loop), which is required for Lua safety.
+type MCPCallEvent struct {
+	Req  MCPRequest
+	Resp chan MCPResponse
+}
+
 // App represents an interactive Lumina application.
 // All Lua State operations happen on the goroutine that calls Run().
 type App struct {
@@ -377,6 +384,19 @@ func (app *App) handleEvent(event AppEvent) {
 	switch event.Type {
 	case "quit":
 		app.running = false
+
+	case "mcp_request":
+		call, ok := event.Payload.(MCPCallEvent)
+		if !ok || call.Resp == nil {
+			return
+		}
+		// Debug methods are handled by HandleDebugMCPRequest (stateless).
+		if res, handled := HandleDebugMCPRequest(call.Req); handled {
+			call.Resp <- MCPResponse{ID: call.Req.ID, Result: res}
+			return
+		}
+		// All other methods go through HandleMCPRequest (needs app/Lua State).
+		call.Resp <- app.HandleMCPRequest(call.Req)
 
 	case "input_event":
 		e, ok := event.Payload.(*Event)
@@ -1386,6 +1406,17 @@ func (app *App) HandleMCPRequest(req MCPRequest) MCPResponse {
 		result = map[string]interface{}{"ids": globalEventBus.GetFocusableIDs()}
 	case "getFrame":
 		result = app.mcpGetFrame()
+	case "debug.toggleInspector":
+		ToggleInspector()
+		// Force re-render so the panel appears/disappears immediately.
+		globalRegistry.mu.RLock()
+		for _, c := range globalRegistry.components {
+			c.Dirty.Store(true)
+		}
+		globalRegistry.mu.RUnlock()
+		result = map[string]any{"visible": IsInspectorVisible()}
+	case "debug.checkInspectorBounds":
+		result = app.mcpCheckInspectorBounds()
 	case "getVersion":
 		result = map[string]string{"version": ModuleName}
 	default:
@@ -1563,6 +1594,62 @@ func (app *App) mcpGetFrame() map[string]interface{} {
 	return map[string]interface{}{
 		"focusedID":      globalEventBus.GetFocused(),
 		"componentCount": len(globalRegistry.components),
+	}
+}
+
+// mcpCheckInspectorBounds checks if inspector right border has unexpected chars.
+func (app *App) mcpCheckInspectorBounds() map[string]any {
+	w, h := app.getWidth(), app.getHeight()
+	if !IsInspectorVisible() {
+		return map[string]any{"ok": false, "reason": "inspector not visible"}
+	}
+	if app.lastFrame == nil || len(app.lastFrame.Cells) == 0 {
+		return map[string]any{"ok": false, "reason": "no lastFrame available yet"}
+	}
+
+	panelW := globalInspector.panelWidth
+	if panelW > w/2 {
+		panelW = w / 2
+	}
+	if panelW < 1 {
+		return map[string]any{"ok": false, "reason": "panelW < 1", "w": w, "h": h}
+	}
+	rightX := w - 1
+	if rightX >= app.lastFrame.Width {
+		rightX = app.lastFrame.Width - 1
+	}
+
+	allowed := map[rune]bool{
+		'│': true, '┐': true, '┘': true, '┤': true, ' ': true,
+	}
+
+	type borderCell struct {
+		X    int    `json:"x"`
+		Y    int    `json:"y"`
+		Char string `json:"char"`
+	}
+
+	var violations []borderCell
+	maxY := h
+	if maxY > app.lastFrame.Height {
+		maxY = app.lastFrame.Height
+	}
+
+	for y := 0; y < maxY; y++ {
+		c := app.lastFrame.Cells[y][rightX]
+		if !allowed[c.Char] && !c.Transparent {
+			violations = append(violations, borderCell{X: rightX, Y: y, Char: string(c.Char)})
+		}
+	}
+
+	return map[string]any{
+		"ok":              len(violations) == 0,
+		"w":               w,
+		"h":               h,
+		"panelW":          panelW,
+		"rightBorderX":    rightX,
+		"violationCount":  len(violations),
+		"violations":      violations,
 	}
 }
 
