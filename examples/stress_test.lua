@@ -9,16 +9,11 @@ local theme = {
 
 local store = lumina.createStore({
     state = {
-        hoverX = -1,
-        hoverY = -1,
         clickedCells = {},
         lastClick = "",
+        clickCount = 0,
     },
     actions = {
-        setHover = function(state, x, y)
-            state.hoverX = x
-            state.hoverY = y
-        end,
         clickCell = function(state, id)
             if state.clickedCells[id] then
                 state.clickedCells[id] = nil
@@ -26,9 +21,11 @@ local store = lumina.createStore({
                 state.clickedCells[id] = true
             end
             state.lastClick = id
+            state.clickCount = state.clickCount + 1
         end,
         clearAll = function(state)
             state.clickedCells = {}
+            state.clickCount = 0
         end,
     },
 })
@@ -70,7 +67,6 @@ local Cell = lumina.defineComponent({
             end,
             onMouseEnter = function()
                 setHovered(true)
-                store.dispatch("setHover", props.col, props.row)
             end,
             onMouseLeave = function()
                 setHovered(false)
@@ -83,10 +79,14 @@ local Cell = lumina.defineComponent({
 })
 
 -- App: fullscreen grid
+-- Uses store selector to only re-render when clickCount changes
+-- (not on every hover, which only affects individual Cell components)
 local App = lumina.defineComponent({
     name = "StressGrid",
     render = function()
-        local state = lumina.useStore(store)
+        local state = lumina.useStore(store, function(s)
+            return s.clickCount
+        end)
         local fps = lumina.getFPS and lumina.getFPS() or 0
 
         local width, height = lumina.getSize()
@@ -100,10 +100,10 @@ local App = lumina.defineComponent({
         children[1] = {
             type = "text",
             content = string.format(
-                " %dx%d=%d cells | FPS:%d | Hover:(%d,%d) | Click:%s | [c]Clear [q]Quit",
+                " %dx%d=%d cells | FPS:%d | Click:%s | Clicked:%d | [c]Clear [q]Quit",
                 cols, rows, cellCount, fps,
-                state.hoverX, state.hoverY,
-                state.lastClick or ""),
+                state.lastClick or "",
+                state.clickCount or 0),
             style = { foreground = theme.accent, background = theme.bar, bold = true },
         }
 

@@ -313,8 +313,18 @@ func storeDispatchFn(store *Store) lua.Function {
 }
 
 // luaUseStore is a hook that subscribes a component to a store.
-// Args: store table
+// Args: store table [, selector function]
 // Returns: current state table
+//
+// Without selector: marks component dirty on ANY store state change.
+// With selector: calls selector(state) and only marks dirty when the
+// selected value changes (shallow comparison). This avoids O(n) dirty
+// marking when many components subscribe to the same store.
+//
+// Example:
+//
+//	local state = lumina.useStore(store)                           -- always dirty
+//	local state = lumina.useStore(store, function(s) return s.count end) -- only when count changes
 func luaUseStore(L *lua.State) int {
 	comp := GetCurrentComponent()
 	if comp == nil {
@@ -346,6 +356,9 @@ func luaUseStore(L *lua.State) int {
 		return 0
 	}
 
+	// Check for optional selector function (arg 2)
+	hasSelector := L.GetTop() >= 2 && L.Type(2) == lua.TypeFunction
+
 	// Track subscription via hook index
 	idx := comp.generalHookIndex
 	comp.generalHookIndex++
@@ -357,12 +370,89 @@ func luaUseStore(L *lua.State) int {
 	// Subscribe on first render
 	if !hook.Subscribed {
 		hook.Subscribed = true
-		store.Subscribe(func() {
-			comp.Dirty.Store(true)
-		})
+
+		if hasSelector {
+			// Store selector ref in Lua registry
+			L.PushValue(2)
+			selectorRef := L.Ref(lua.RegistryIndex)
+			hook.SelectorRef = selectorRef
+
+			// Compute initial selected value
+			hook.LastSelected = callSelector(L, selectorRef, store)
+
+			store.Subscribe(func() {
+				// Call selector with current state and compare
+				newSelected := callSelector(L, selectorRef, store)
+				if !selectorValuesEqual(hook.LastSelected, newSelected) {
+					hook.LastSelected = newSelected
+					comp.Dirty.Store(true)
+					// Propagate HasDirtyChild up to root
+					p := comp.Parent
+					for p != nil {
+						p.HasDirtyChild.Store(true)
+						p = p.Parent
+					}
+				}
+				// If equal, DON'T mark dirty — this is the key optimization
+			})
+		} else {
+			// No selector — always mark dirty (backward compatible)
+			store.Subscribe(func() {
+				comp.Dirty.Store(true)
+				// Propagate HasDirtyChild up to root
+				p := comp.Parent
+				for p != nil {
+					p.HasDirtyChild.Store(true)
+					p = p.Parent
+				}
+			})
+		}
 	}
 
 	// Return current state snapshot
 	L.PushAny(store.GetState())
 	return 1
+}
+
+// callSelector calls a Lua selector function with the store's current state.
+// Returns the Go value of the selector result.
+func callSelector(L *lua.State, selectorRef int, store *Store) any {
+	L.RawGetI(lua.RegistryIndex, int64(selectorRef))
+	L.PushAny(store.GetState())
+	status := L.PCall(1, 1, 0)
+	if status != lua.OK {
+		L.Pop(1) // pop error
+		return nil
+	}
+	result := L.ToAny(-1)
+	L.Pop(1)
+	return result
+}
+
+// selectorValuesEqual compares two selector results for equality.
+// Uses type-specific comparison for primitives, reflect.DeepEqual for tables.
+func selectorValuesEqual(a, b any) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	switch av := a.(type) {
+	case string:
+		bv, ok := b.(string)
+		return ok && av == bv
+	case int64:
+		bv, ok := b.(int64)
+		return ok && av == bv
+	case float64:
+		bv, ok := b.(float64)
+		return ok && av == bv
+	case bool:
+		bv, ok := b.(bool)
+		return ok && av == bv
+	default:
+		// For tables (map[string]any, []any), use shallowEqual from vdom_diff.go
+		return shallowEqual(a, b)
+	}
 }
