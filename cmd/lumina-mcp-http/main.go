@@ -12,7 +12,6 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/akzj/lumina/pkg/lumina"
@@ -66,9 +65,6 @@ func main() {
 		}
 	}
 
-	// App is not designed for concurrent calls; serialize handler execution.
-	var appMu sync.Mutex
-
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -95,9 +91,7 @@ func main() {
 			return
 		}
 
-		appMu.Lock()
 		resp := handleRequest(app, req)
-		appMu.Unlock()
 
 		writeJSON(w, resp)
 	})
@@ -109,7 +103,24 @@ func main() {
 	}
 
 	log.Printf("lumina MCP HTTP listening on %s (POST /mcp)", *addr)
-	log.Fatal(srv.ListenAndServe())
+	go func() {
+		log.Fatal(srv.ListenAndServe())
+	}()
+
+	// Run interactive UI in the current terminal.
+	if *scriptPath == "" {
+		log.Fatal("missing -script")
+	}
+	if _, err := os.Stat(*scriptPath); err != nil {
+		log.Fatalf("script not found: %s (%v)", *scriptPath, err)
+	}
+	if err := app.RunInteractive(*scriptPath); err != nil {
+		// Fallback to non-interactive mode (headless).
+		log.Printf("interactive terminal unavailable (%v); falling back to headless event loop", err)
+		if err2 := app.Run(*scriptPath); err2 != nil {
+			log.Fatalf("run headless: %v", err2)
+		}
+	}
 }
 
 func writeJSON(w http.ResponseWriter, v any) {
@@ -285,6 +296,18 @@ func handleToolsList(req jsonrpcRequest) jsonrpcResponse {
 			Description: "Reset performance metrics, snapshots, and debug log.",
 			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}, "additionalProperties": false},
 		},
+		{
+			Name:        "lumina.debug.checkInspectorBounds",
+			Title:       "Check inspector panel bounds",
+			Description: "Scan the last rendered frame and report any writes that break the inspector right border.",
+			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}, "additionalProperties": false},
+		},
+		{
+			Name:        "lumina.debug.toggleInspector",
+			Title:       "Toggle inspector panel",
+			Description: "Toggle the DevTools Inspector panel visibility (same as F12).",
+			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}, "additionalProperties": false},
+		},
 	}
 
 	return jsonrpcResponse{
@@ -311,31 +334,32 @@ func handleToolsCall(app *lumina.App, req jsonrpcRequest) jsonrpcResponse {
 	}
 
 	if strings.HasPrefix(method, "debug.") {
-		return callLuminaDebug(req, method, params.Arguments)
+		return callLuminaDebug(app, req, method, params.Arguments)
 	}
 	return callLuminaMethodWithArgs(app, req, method, params.Arguments)
 }
 
 func callLuminaMethod(app *lumina.App, req jsonrpcRequest, method string) jsonrpcResponse {
 	lreq := lumina.MCPRequest{Method: method, Params: req.Params, ID: req.ID}
-	lresp := app.HandleMCPRequest(lreq)
+	lresp := callOnAppThread(app, lreq)
 	return wrapLuminaResult(req.ID, lresp.Result, lresp.Error)
 }
 
 func callLuminaMethodWithArgs(app *lumina.App, req jsonrpcRequest, method string, args map[string]any) jsonrpcResponse {
 	raw, _ := json.Marshal(args)
 	lreq := lumina.MCPRequest{Method: method, Params: raw, ID: req.ID}
-	lresp := app.HandleMCPRequest(lreq)
+	lresp := callOnAppThread(app, lreq)
 	return wrapLuminaResult(req.ID, lresp.Result, lresp.Error)
 }
 
-func callLuminaDebug(req jsonrpcRequest, method string, args map[string]any) jsonrpcResponse {
+func callLuminaDebug(app *lumina.App, req jsonrpcRequest, method string, args map[string]any) jsonrpcResponse {
 	raw, _ := json.Marshal(args)
 	lreq := lumina.MCPRequest{Method: method, Params: raw, ID: req.ID}
-	if res, handled := lumina.HandleDebugMCPRequest(lreq); handled {
-		return wrapToolContent(req.ID, res, false)
+	lresp := callOnAppThread(app, lreq)
+	if lresp.Error != nil {
+		return jsonrpcResponse{JSONRPC: "2.0", ID: req.ID, Error: &jsonrpcErr{Code: lresp.Error.Code, Message: lresp.Error.Message}}
 	}
-	return jsonrpcResponse{JSONRPC: "2.0", ID: req.ID, Error: &jsonrpcErr{Code: -32601, Message: "Unknown tool"}}
+	return wrapToolContent(req.ID, lresp.Result, false)
 }
 
 func wrapLuminaResult(id any, result any, err *lumina.MCPError) jsonrpcResponse {
@@ -366,5 +390,20 @@ func toPrettyJSON(v any) string {
 		return ""
 	}
 	return string(b)
+}
+
+func callOnAppThread(app *lumina.App, req lumina.MCPRequest) lumina.MCPResponse {
+	respCh := make(chan lumina.MCPResponse, 1)
+	app.PostEvent(lumina.AppEvent{
+		Type:    "mcp_request",
+		Payload: lumina.MCPCallEvent{Req: req, Resp: respCh},
+	})
+
+	select {
+	case resp := <-respCh:
+		return resp
+	case <-time.After(10 * time.Second):
+		return lumina.MCPResponse{ID: req.ID, Error: &lumina.MCPError{Code: -32000, Message: "MCP request timeout"}}
+	}
 }
 
