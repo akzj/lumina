@@ -303,6 +303,7 @@ func (eb *EventBus) ClearBridgedHandlers() {
 
 	// Clear all focusable IDs (re-registered each render cycle)
 	eb.focusableIDs = nil
+	eb.focusableSet = nil
 }
 
 // RegisterBridgedHandler registers a handler that will be cleared on next render cycle.
