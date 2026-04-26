@@ -992,10 +992,12 @@ func (app *App) renderComponent(comp *Component, adapter OutputAdapter) {
 	// Diff against previous render to detect no-change case.
 	var frame *Frame
 	sizeChanged := (w != app.lastRenderWidth) || (h != app.lastRenderHeight)
+	inspectorDirty := needsInspectorRerender.Load()
+	needsInspectorRerender.Store(false)
 	if comp.LastVNode != nil {
 		patches := DiffVNode(comp.LastVNode, newVNode)
 		scrollDirty := AnyViewportScrollDirty()
-		if len(patches) == 0 && !scrollDirty && !sizeChanged {
+		if len(patches) == 0 && !scrollDirty && !sizeChanged && !inspectorDirty {
 			// Nothing changed — skip rendering.
 			comp.MarkClean()
 			ClearAllScrollDirty()

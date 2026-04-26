@@ -6,6 +6,7 @@ package lumina
 import (
 	"fmt"
 	"strings"
+	"sync/atomic"
 )
 
 // DevToolsInspector manages the element inspector overlay.
@@ -22,12 +23,18 @@ var globalInspector = &DevToolsInspector{
 	panelWidth: 40,
 }
 
+// needsInspectorRerender is set when inspector visibility changes.
+// This forces a re-render even when component patches are empty.
+var needsInspectorRerender atomic.Bool
+
 // ToggleInspector toggles the devtools inspector panel.
 func ToggleInspector() {
 	globalInspector.enabled = !globalInspector.enabled
 	if globalInspector.enabled {
 		globalDevTools.Enable()
 	}
+	// Signal that a re-render is needed due to inspector change
+	needsInspectorRerender.Store(true)
 }
 
 // IsInspectorVisible returns whether the inspector is visible.
