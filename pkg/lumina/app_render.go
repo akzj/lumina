@@ -41,7 +41,7 @@ func (app *App) tickFPS() {
 func (app *App) renderAllDirty() {
 	// Frame rate limiting: skip if less than 16ms since last render
 	now := time.Now()
-	if !app.lastRenderTime.IsZero() && now.Sub(app.lastRenderTime) < 16*time.Millisecond {
+	if !app.lastRenderTime.IsZero() && now.Sub(app.lastRenderTime) < 16667*time.Microsecond {
 		return // will catch on next tick
 	}
 

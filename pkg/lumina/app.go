@@ -246,7 +246,7 @@ func (app *App) RunInteractive(scriptPath string) error {
 	defer term.StopResize()
 
 	// Event loop (same as eventLoop but inlined for clarity)
-	ticker := time.NewTicker(16 * time.Millisecond)
+	ticker := time.NewTicker(16667 * time.Microsecond) // 1/60s = 16.667ms
 	defer ticker.Stop()
 
 	app.running = true
@@ -308,7 +308,7 @@ func (app *App) RunWithTermIO(tio TermIO, scriptPath string) error {
 	input.Start()
 
 	// Event loop
-	ticker := time.NewTicker(16 * time.Millisecond)
+	ticker := time.NewTicker(16667 * time.Microsecond) // 1/60s = 16.667ms
 	defer ticker.Stop()
 
 	app.running = true
@@ -337,7 +337,7 @@ func (app *App) GetTermIO() TermIO {
 // eventLoop is the single-threaded event loop.
 // All Lua operations happen here on the calling goroutine.
 func (app *App) eventLoop() error {
-	ticker := time.NewTicker(16 * time.Millisecond) // ~60fps
+	ticker := time.NewTicker(16667 * time.Microsecond) // 1/60s = 16.667ms
 	defer ticker.Stop()
 
 	app.running = true
