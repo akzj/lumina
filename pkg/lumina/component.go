@@ -242,6 +242,12 @@ func (c *Component) Cleanup(L *lua.State) {
 		L.Unref(lua.RegistryIndex, c.cleanupFn.RefID)
 	}
 
+	// Remove from parent's child list so findChildComponent won't
+	// find this cleaned-up component after resize (stale renderFn refs).
+	if c.Parent != nil {
+		c.Parent.RemoveChild(c)
+	}
+
 	globalRegistry.mu.Lock()
 	delete(globalRegistry.components, c.ID)
 	globalRegistry.mu.Unlock()
