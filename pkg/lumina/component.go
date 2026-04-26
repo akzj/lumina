@@ -36,8 +36,9 @@ type Component struct {
 	generalHookIndex      int // current index for useReducer, useId, useTransition, useDeferredValue, useSyncExternalStore, useAnimation
 	debugValues        []string             // useDebugValue labels (reset each render)
 	// Component tree
-	Parent       *Component     // Parent component (nil for root)
-	ChildComps   []*Component   // Child component instances
+	Parent       *Component              // Parent component (nil for root)
+	ChildComps   []*Component            // Child component instances
+	ChildMap     map[string]*Component   // keyed by "factoryName:key" for O(1) lookup
 	// Error boundary
 	IsErrorBoundary bool            // true if this component catches child render errors
 	IsRoot          bool            // true if this component was created by lumina.mount()
@@ -97,6 +98,7 @@ func NewComponent(L *lua.State, factoryIdx int, props map[string]any) (*Componen
 		Name:         name,
 		Props:        props,
 		State:        make(map[string]any),
+		ChildMap:     make(map[string]*Component),
 		RenderNotify: make(chan struct{}, 1),
 	}
 
@@ -302,18 +304,20 @@ func ReconcileComponents(L *lua.State, oldTree, newTree *VNode) {
 // collectComponentIDs walks a VNode tree and returns all component IDs found.
 func collectComponentIDs(node *VNode) map[string]bool {
 	ids := make(map[string]bool)
+	collectComponentIDsInto(node, ids)
+	return ids
+}
+
+func collectComponentIDsInto(node *VNode, ids map[string]bool) {
 	if node == nil {
-		return ids
+		return
 	}
 	if node.ComponentRef != nil {
 		ids[node.ComponentRef.ID] = true
 	}
 	for _, child := range node.Children {
-		for id := range collectComponentIDs(child) {
-			ids[id] = true
-		}
+		collectComponentIDsInto(child, ids)
 	}
-	return ids
 }
 
 // GetComponentByID returns a component by its ID.
@@ -363,10 +367,26 @@ func (c *Component) UpdateProps(newProps map[string]any) bool {
 	return changed
 }
 
+// childMapKey builds the lookup key for ChildMap: "Type:key" or "Type:id" or "Type".
+func childMapKey(comp *Component) string {
+	key := comp.Type
+	if k, ok := comp.Props["key"].(string); ok && k != "" {
+		return key + ":" + k
+	}
+	if id, ok := comp.Props["id"].(string); ok && id != "" {
+		return key + ":" + id
+	}
+	return key
+}
+
 // AddChild adds a child component to this component's tree.
 func (c *Component) AddChild(child *Component) {
 	c.mu.Lock()
 	c.ChildComps = append(c.ChildComps, child)
+	if c.ChildMap == nil {
+		c.ChildMap = make(map[string]*Component)
+	}
+	c.ChildMap[childMapKey(child)] = child
 	c.mu.Unlock()
 	child.mu.Lock()
 	child.Parent = c
@@ -382,6 +402,7 @@ func (c *Component) RemoveChild(child *Component) {
 			break
 		}
 	}
+	delete(c.ChildMap, childMapKey(child))
 	c.mu.Unlock()
 	child.mu.Lock()
 	child.Parent = nil

@@ -484,20 +484,14 @@ func copyProps(props map[string]any) map[string]any {
 func findChildComponent(parent *Component, factoryName, key string) *Component {
 	parent.mu.RLock()
 	defer parent.mu.RUnlock()
-	for _, child := range parent.ChildComps {
-		if child.Type == factoryName {
-			if key == "" {
-				return child
-			}
-			// Match by explicit "key" prop, or fall back to "id" prop
-			childKey, _ := child.Props["key"].(string)
-			if childKey == "" {
-				childKey, _ = child.Props["id"].(string)
-			}
-			if childKey == key {
-				return child
-			}
-		}
+
+	// O(1) map lookup
+	mapKey := factoryName
+	if key != "" {
+		mapKey = factoryName + ":" + key
+	}
+	if comp, ok := parent.ChildMap[mapKey]; ok {
+		return comp
 	}
 	return nil
 }
