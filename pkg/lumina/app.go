@@ -1122,6 +1122,16 @@ func (app *App) Close() {
 	}
 }
 
+// GetWindowManager returns the app's window manager.
+func (app *App) GetWindowManager() *WindowManager {
+	return globalWindowManager
+}
+
+// GetDevTools returns the app's DevTools instance.
+func (app *App) GetDevTools() *DevTools {
+	return globalDevTools
+}
+
 // Scheduler returns the App's async coroutine scheduler.
 func (app *App) Scheduler() *lua.Scheduler {
 	return app.sched
