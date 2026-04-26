@@ -56,14 +56,6 @@ func main() {
 	flag.Parse()
 
 	app := lumina.NewApp()
-	if *scriptPath != "" {
-		if _, err := os.Stat(*scriptPath); err != nil {
-			log.Fatalf("script not found: %s (%v)", *scriptPath, err)
-		}
-		if err := app.L.DoFile(*scriptPath); err != nil {
-			log.Fatalf("error loading script: %v", err)
-		}
-	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
