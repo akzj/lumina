@@ -1008,7 +1008,8 @@ func (app *App) renderComponent(comp *Component, adapter OutputAdapter) {
 		// re-layout the new tree and apply only changed subtrees via parent
 		// container re-rendering (handles sibling position shifts correctly).
 		// Scroll-dirty or size-change forces full re-render since layout positions change.
-		if len(patches) <= 10 && app.lastFrame != nil && !ShouldFullRerender(patches, newVNode) && !scrollDirty && !sizeChanged {
+		// Also need full re-render if inspector visibility changed.
+		if len(patches) <= 10 && app.lastFrame != nil && !ShouldFullRerender(patches, newVNode) && !scrollDirty && !sizeChanged && !inspectorDirty {
 			frame = app.lastFrame
 			// Re-layout the entire new tree (cheap) so positions are correct
 			computeFlexLayout(newVNode, 0, 0, w, h)
