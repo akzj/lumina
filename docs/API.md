@@ -1,7 +1,10 @@
 # Lumina API Reference
 
+This file tracks the public Lua `lumina` module as registered in `pkg/lumina/lumina.go` (`luaLoader`), plus submodules attached to that table. When in doubt, the Go loader is the source of truth.
+
 ## Table of Contents
 
+- [Module index](#module-index)
 - [Core](#core)
 - [Hooks](#hooks)
 - [Components](#components)
@@ -21,7 +24,43 @@
 - [Testing Utilities](#testing-utilities)
 - [Plugin System](#plugin-system)
 - [Web Runtime](#web-runtime)
-- [shadcn/ui Components](#shadcnui-components)
+- [lumina/ui Components](#lumina-ui-components)
+
+---
+
+## Module index
+
+The return value of `require("lumina")` is a single table. Most functions also exist on that table; hooks are registered twice — as `lumina.useState` etc. and (subset) as `lumina.hooks.useState` for compatibility.
+
+**Helpers:** `version`, `echo`, `info`
+
+**App lifecycle:** `defineComponent`, `createComponent`, `createElement`, `createErrorBoundary`, `memo`, `createPortal`, `forwardRef`, `lazy`, `render`, `mount`, `run`, `quit`, `onKey`, `getSize`, `createState`
+
+**Styling & built-in UI:** `defineStyle`, `defineGlobalStyles`, `getStyle`, `defineTheme`, `setTheme`, `Select`, `Checkbox`, `Menu`, `TextField`
+
+**Events, focus, keyboard:** `on`, `onCapture`, `off`, `emit`, `registerShortcut`, `setFocus`, `getFocused`, `isFocused`, `isHovered`, `focusNext`, `focusPrev`, `registerFocusable`, `unregisterFocusable`, `isFocusable`, `getFocusableIDs`, `emitKeyEvent`, `pushFocusScope`, `popFocusScope`
+
+**Output / MCP / debug tooling:** `setOutputMode`, `getOutputMode`, `getMCPFrame`, `createComponentRequest`, `createEventNotification`, `inspect`, `inspectTree`, `inspectComponent`, `inspectStyles`, `inspectFrames`, `getState`, `getAllComponents`, `simulate`, `simulateClick`, `simulateKey`, `simulateChange`, `consoleLog`, `consoleGet`, `consoleGetErrors`, `consoleClear`, `consoleSize`, `diff`, `diffFrames`, `patch`, `eval`, `profile`, `profileReset`, `profileSize` — and the **`lumina.console`** sub-table (`log`, `warn`, `error`, `get`, `clear`, `size`) plus **`lumina.debug`** (see `RegisterDebugAPI` in code).
+
+**Async / time:** `useAsync`, `delay`
+
+**Viewport & scroll:** `scrollTo`, `scrollToBottom`, `scrollToTop`, `scrollBy`, `getScrollInfo`, `setScrollBehavior`
+
+**Overlays & hot reload:** `showOverlay`, `hideOverlay`, `isOverlayVisible`, `toggleOverlay`, `enableHotReload`, `disableHotReload`
+
+**Router:** `createRouter`, `navigate`, `back`, `useRoute`, `getCurrentPath`
+
+**Canvas (sub-pixel / Braille):** `createCanvas`
+
+**Text input helpers:** `setInputValue`, `getInputValue`, `registerInput`, `focusInput`
+
+**Tiling window manager (in-app):** `createWindow`, `closeWindow`, `focusWindow`, `moveWindow`, `resizeWindow`, `minimizeWindow`, `maximizeWindow`, `restoreWindow`, `tileWindows`, `getFocusedWindow`, `getWindow`, `listWindows`
+
+**Virtual list:** `createVirtualList`
+
+**Submodules registered on the same loader:** `lumina.hooks` (subset of hook functions), `lumina.animation` (preset-related), `lumina.i18n`, `lumina.devtools`, `lumina.Suspense`, `lumina.Profiler`, `lumina.StrictMode`, `lumina.console`, `lumina.debug`.
+
+**Everything below** documents the most common entries in prose; the index above lists every **top-level** function on the `lumina` table from `luaLoader`.
 
 ---
 
@@ -37,11 +76,19 @@ local MyComponent = lumina.defineComponent({
     init = function(props)         -- optional: initialize state from props
         return { count = props.initial or 0 }
     end,
-    render = function(self)        -- required: return VNode tree
+    render = function(props)        -- required: return VNode tree
         return { type = "text", content = "Hello" }
     end,
 })
 ```
+
+### `lumina.getSize() → width, height`
+
+Returns the current terminal size in **cells** (from the active `App`), or defaults `80, 24` if no app is running.
+
+### `lumina.quit()`
+
+Request a clean exit from the interactive `lumina.run()` loop.
 
 ### `lumina.createElement(component, props) → VNode`
 
@@ -53,36 +100,39 @@ lumina.createElement(MyComponent, { initial = 5, children = {...} })
 
 ### `lumina.mount(component)`
 
-Mount a root component for rendering.
+Register the root **component factory** for `lumina.run()` (see examples — typically a table from `defineComponent`).
 
 ### `lumina.run()`
 
-Start the application in local terminal mode.
+Start the local terminal app (the Go runtime loads the script, sets up the terminal, and runs the event loop).
 
-### `lumina.serve(port)`
+### `lumina.serve(port)` / `lumina.serveBackground(port)`
 
-Start the application as a web server on the given port.
+- **`serve`** — start the HTTP + WebSocket + embedded web UI; **blocks** the Lua thread (intended for “terminal or browser” entrypoints).
+- **`serveBackground`** — start the same server in the background; returns an address string (used heavily in tests).
+
+Documented in more detail under [Web Runtime](#web-runtime).
 
 ### `lumina.render(component, props) → VNode`
 
-Render a component to a VNode tree (useful for testing).
+Render a component to a VNode tree (handy in tests or headless use).
 
 ---
 
 ## Hooks
 
-All hooks are called inside a component's `render` function.
+All hooks are called inside a component's `render` function. The same functions are available as **`lumina.useState`**, **`lumina.useEffect`**, etc., and a subset is duplicated under **`lumina.hooks`** (`lumina.hooks.useState`, …).
 
-### `lumina.useState(initialValue) → value, setter`
+### `lumina.useState(stateKey, initialValue?) → value, setter`
 
-Local state. `setter(newValue)` triggers re-render.
+Local state stored **per component instance** under a string key (required). This mirrors React’s rules of hooks: the key identifies which slot in the component’s state map this call uses.
 
 ```lua
-local count, setCount = lumina.useState(0)
+local count, setCount = lumina.useState("count", 0)
 setCount(count + 1)
--- or functional update:
-setCount(function(prev) return prev + 1 end)
 ```
+
+The setter accepts any new value; there is no separate functional-updater form in the Go binding — compute the next value in Lua and pass it in.
 
 ### `lumina.useEffect(fn, deps)`
 
@@ -218,14 +268,15 @@ local opacity = lumina.useAnimation({
 
 ## Components
 
-### Special Components
+### Special building blocks
 
-| Component | Description |
-|-----------|-------------|
-| `lumina.Suspense` | Shows fallback while children load |
-| `lumina.ErrorBoundary` | Catches render errors in children |
-| `lumina.Portal` | Renders children outside parent tree |
-| `lumina.Fragment` | Groups children without a wrapper node |
+| API | Description |
+|-----|-------------|
+| `lumina.Suspense` | Factory table: shows `fallback` while a `lumina.lazy` child is `pending` |
+| `lumina.createErrorBoundary({…})` | Returns an error-boundary **factory** (see E2E tests) — not a global `lumina.ErrorBoundary` constant |
+| `lumina.createPortal(vnode, targetId)` | Portal VNode (see `luaCreatePortal`) |
+| `{ type = "fragment", children = {…} }` | Native fragment — **no** `lumina.Fragment` symbol is required; use the `type` string |
+| `lumina.Suspense` / `lumina.Profiler` / `lumina.StrictMode` | Small factory tables registered on the module (see `registerProfilerFactory` / `registerStrictModeFactory`) |
 
 ### `lumina.lazy(loader) → LazyComponent`
 
@@ -309,49 +360,43 @@ local state = lumina.useStore(store)
 
 ## Router
 
-### `lumina.createRouter() → router`
+Lumina uses a **process-wide** `globalRouter` (see `pkg/lumina/router.go`). There is no per-instance `router.navigate` in Lua; instead you call **`lumina.navigate`**, **`lumina.back`**, and read state with **`lumina.useRoute`** / **`lumina.getCurrentPath`**.
 
-Create a client-side router.
+### `lumina.createRouter(opts?) → handle`
 
-```lua
-local router = lumina.createRouter()
-```
-
-### `router.addRoute(path, component)`
-
-Register a route. Supports path parameters with `:param`.
+Build the route table and optional initial path. **Routes are path patterns only** (e.g. `/users/:id`); the Lua API does not bind a component per route in Go — your app’s `render` usually switches on `useRoute()`.
 
 ```lua
-router.addRoute("/", HomePage)
-router.addRoute("/users", UsersPage)
-router.addRoute("/users/:id", UserDetailPage)
+lumina.createRouter({
+    routes = {
+        { path = "/" },
+        { path = "/users/:id" },
+    },
+    initialPath = "/",
+})
+-- returns a small table, e.g. { routeCount = n }
 ```
 
-### `router.navigate(path)`
+### `lumina.navigate(path)`
 
-Navigate to a path.
+Set the current path, parse params (e.g. `:id`), push history, and mark **all** components dirty for a re-render.
 
-```lua
-router.navigate("/users/42")
-```
+### `lumina.back() → bool`
 
-### `router.back()` / `router.forward()`
+Pop history if possible. Returns `true` on success, `false` if there is nothing to go back to; on success, components are marked dirty.
 
-Navigate through history.
+### `lumina.getCurrentPath() → string`
 
-### `lumina.useRoute() → { path, params, query }`
+Return the current path string.
 
-Hook to read current route info.
+### `lumina.useRoute() → { path, params }`
 
 ```lua
 local route = lumina.useRoute()
--- route.path = "/users/42"
--- route.params.id = "42"
+-- route.path, route.params (e.g. params.id for "/users/42")
 ```
 
-### `router.Outlet`
-
-Component that renders the matched route's component.
+There is **no** `query` sub-table in the returned route object today; only `path` and `params` are populated in `useRoute` (`hooks.go`).
 
 ---
 
@@ -507,48 +552,30 @@ t("app.title")  -- "我的应用" (when locale is "zh")
 
 ## Layout
 
-### VNode Types
+Lumina’s flex engine (`computeFlexLayout` in `layout.go`) recognizes **`fragment`**, **`text`**, **`vbox`**, **`hbox`**, and treats any other `type` (e.g. **`box`**) as a **generic block** that lays out like a **vertical** box. There is **no** dedicated `type = "grid"` or CSS-style **`type = "flex"`** implementation — if you use those as `type`, they still fall into the default branch and behave like a **vbox**-style column stack, **not** browser CSS flex/grid.
+
+### VNode types you should use
 
 | Type | Description |
 |------|-------------|
-| `text` | Text content |
-| `hbox` | Horizontal box |
-| `vbox` | Vertical box |
-| `flex` | Flexbox container |
-| `grid` | CSS Grid container |
+| `text` | Text; height from wrapping / `content` |
+| `input` / `textarea` | Form controls (see text-input APIs) |
+| `hbox` | Horizontal flow of children |
+| `vbox` | Vertical flow of children |
+| `box` | Generic block (vertical stack, borders/background) |
+| `fragment` | Transparent pass-through; no box border of its own |
 
-### Flexbox
+**Scrolling:** on `vbox` / `hbox` / default container, set `style.overflow = "scroll"` and give the node a stable `props.id` to pair with the viewport APIs (`scrollTo`, `getScrollInfo`, …).
+
+### Row / column example (real flexbox for TUI)
 
 ```lua
 {
-    type = "flex",
-    style = {
-        direction = "row",          -- "row" | "column"
-        justify = "space-between",  -- "flex-start"|"center"|"flex-end"|"space-between"|"space-around"|"space-evenly"
-        align = "center",           -- "flex-start"|"center"|"flex-end"|"stretch"
-        gap = 1,                    -- gap between items
-        wrap = "wrap",              -- "nowrap"|"wrap"
-    },
+    type = "hbox",
+    style = { gap = 1, flex = 1 },
     children = {
         { type = "text", content = "A", style = { flex = 1 } },
         { type = "text", content = "B", style = { flex = 2 } },
-    }
-}
-```
-
-### CSS Grid
-
-```lua
-{
-    type = "grid",
-    style = {
-        columns = "1fr 2fr 1fr",   -- column track definitions
-        rows = "auto auto",         -- row track definitions
-        gap = 1,                    -- gap between cells
-    },
-    children = {
-        { type = "text", content = "A", style = { gridColumn = "1/3" } },  -- spans 2 cols
-        { type = "text", content = "B", style = { gridRow = "1/3" } },     -- spans 2 rows
     }
 }
 ```
@@ -560,15 +587,19 @@ t("app.title")  -- "我的应用" (when locale is "zh")
 | `width` | int | Fixed width |
 | `height` | int | Fixed height |
 | `padding` | int | Padding (all sides) |
-| `border` | string | `"single"` \| `"double"` \| `"rounded"` \| `"bold"` |
-| `background` | string | Background color (hex) |
-| `foreground` | string | Text color (hex) |
+| `border` | string | `"single"` \| `"double"` \| `"rounded"` (and `"none"`-like omissions) — no separate `"bold"` border style in the renderer |
+| `background` | string | Background color (hex); empty = transparent in many paths |
+| `foreground` | string | Text / border (container `foreground` also drives border line color) |
 | `bold` | bool | Bold text |
-| `italic` | bool | Italic text |
 | `underline` | bool | Underlined text |
 | `dim` | bool | Dimmed text |
-| `zIndex` | int | Overlay stacking order |
-| `position` | string | `"relative"` \| `"absolute"` \| `"fixed"` |
+| `flex` | int | Flex grow; containers without fixed height/width get implicit `flex=1` in some cases (see `layout.go`) |
+| `gap` / `padding*` / `margin*` | int | Spacing (see `Style` in `layout.go`) |
+| `justify` | string | **Main-axis** distribution for boxes: `start` (default), `center`, `end`, `space-between`, `space-around` — not the CSS `flex-start` / `flex-end` spellings |
+| `align` | string | **Cross-axis** (e.g. hbox row): `stretch` (default), `start`, `center`, `end` |
+| `overflow` | string | `hidden` (default) or `scroll` (viewport + scrollbar) |
+| `zIndex` | int | Stacking for positioned children |
+| `position` | string | `""` / `relative` (default), `absolute` (offset from parent), `fixed` (offset from **terminal** 0,0; rendering still obeys parent clip — see engine notes) |
 
 ---
 
@@ -605,26 +636,36 @@ Available: `fadeIn`, `fadeOut`, `slideInLeft`, `slideInRight`, `slideInUp`, `sli
 
 ## Data Fetching
 
-### `lumina.useFetch(url) → data, loading, error`
+### `lumina.fetch(url) → body, err`
 
-Simple data fetching hook.
+Synchronous HTTP GET. Returns the response **body** as a string, or `nil` and an error string. Intended for use **inside** `useQuery` fetcher functions (Go implementation in `lua_fetch.go`).
+
+### `lumina.useFetch(url) → { data, loading, error }`
+
+Returns a **single table** with keys `data`, `loading`, and `error` (not three separate return values). Results are also cached in the query cache (see `Fetch` in `pkg/lumina`).
 
 ```lua
-local data, loading, error = lumina.useFetch("/api/users")
-if loading then return { type = "text", content = "Loading..." } end
+local s = lumina.useFetch("https://example.com/api")
+-- s.data, s.loading, s.error
 ```
 
-### `lumina.useQuery(key, fetcher, opts) → result`
+### `lumina.useQuery(key, fetcherFn, opts?) → { data, loading, error }`
 
-Cached data fetching with stale-while-revalidate.
+Cached data fetching. The returned table has **`data`**, **`loading`**, and **`error`** (there is no `refetch` function in the current `luaUseQuery` implementation). `opts` is optional: `{ staleTime = <seconds> }` (default **60** seconds in Go).
 
 ```lua
-local result = lumina.useQuery("users", function()
-    return lumina.fetch("/api/users")
+local r = lumina.useQuery("users", function()
+    local body, err = lumina.fetch("https://example.com/api/users")
+    if err then
+        return nil
+    end
+    return body
 end, { staleTime = 60 })
-
--- result.data, result.loading, result.error, result.refetch()
 ```
+
+The query fetcher is invoked with `PCall(0, 1)` — only the **first** return value is read as `data` (returning `body, err` as two results would be ignored for the second value).
+
+**Invalidation:** `lumina.invalidateQuery(key)`, `lumina.invalidateAllQueries()`.
 
 ---
 
@@ -753,13 +794,13 @@ lumina.announce("Error: invalid input", "assertive")
 
 ## DevTools
 
-### `lumina.devtools.enable()`
+### `lumina.devtools` submodule
 
-Enable the developer tools panel.
+Exposes the Lua-side DevTools helpers (`registerDevToolsModule` in `lua_devtools.go`), including `enable`, `disable`, `toggle`, `isVisible`, `getTree`, `selectElement`, and helpers that mirror the in-process inspector. In interactive apps, **F12** is wired in `app.go` to toggle the inspector and DevTools render path.
 
-### `lumina.devtools.toggle()`
+### `lumina.inspect` / `lumina.inspectTree` / … (MCP)
 
-Toggle the DevTools panel (also available via F12 or Ctrl+Shift+D).
+The **`inspect`**, **`inspectComponent`**, **`getState`**, **`diff`**, **`patch`**, **`eval`**, **`simulateClick`**, etc. entries on the top-level `lumina` table are the **MCP / automation** surface used by the debug server; they are listed in the [module index](#module-index) above.
 
 ### Features
 
@@ -776,25 +817,27 @@ Toggle the DevTools panel (also available via F12 or Ctrl+Shift+D).
 
 ### `lumina.createTestRenderer() → renderer`
 
-Create a headless renderer for testing.
+Headless VNode test utilities (`pkg/lumina/lua_accessibility.go`). The renderer does **not** run full `defineComponent` trees — you pass a **plain VNode table** to `render`.
 
 ```lua
 local renderer = lumina.createTestRenderer()
-renderer.render(MyComponent, { name = "World" })
+renderer.render({ type = "text", content = "Hello" })
+local text = renderer.tostring()  -- snapshot-style string
 ```
 
-### Test Renderer Methods
+### Test renderer methods
 
 | Method | Description |
 |--------|-------------|
-| `renderer.render(component, props)` | Render a component |
-| `renderer.getByText(text) → node` | Find node by text content |
-| `renderer.getByRole(role) → node` | Find node by ARIA role |
-| `renderer.fireEvent(node, event)` | Simulate an event on a node |
+| `renderer.render(vnodeTable)` | Build the internal test tree from a VNode-like table |
+| `renderer.getByText(text) → node` | Find a node |
+| `renderer.getByRole(role) → node` | Find by ARIA `role` |
+| `renderer.getByType(vnodeType) → node` | Find by `type` string |
+| `renderer.fireEvent(target, eventType)` | Fire a test event (string target + type) |
+| `renderer.tostring() → string` | Serialize the current tree to a string |
+| `renderer.reset()` | Clear the root |
 
-### `lumina.renderToString(component, props) → string`
-
-Render a component to a string (useful for snapshot testing).
+**Note:** `lumina.renderToString` is **not** exported on the module; use `renderer.tostring()` from the test renderer.
 
 ---
 
@@ -832,13 +875,14 @@ lumina.usePlugin("my-charts")
 
 ## Web Runtime
 
-### Server Mode
+### Server mode
 
 ```lua
-lumina.serve(8080)  -- Start HTTP + WebSocket server on port 8080
+lumina.serve(8080)          -- starts HTTP + WebSocket + embedded UI; blocks
+lumina.serveBackground(0)   -- non-blocking; port 0 = choose a free port (see tests)
 ```
 
-Opens a web page with xterm.js that connects via WebSocket to the Go backend. The same Lua app runs identically in both terminal and web modes.
+`serveBackground` returns an **address** string (e.g. `http://127.0.0.1:port`) when successful. The browser page uses xterm.js and connects to the same Go backend as the local terminal flavor.
 
 ### Protocol
 
@@ -851,102 +895,107 @@ Web assets (HTML, JS) are embedded in the binary via `//go:embed`, so the binary
 
 ---
 
-## shadcn/ui Components
+## lumina/ui Components
 
-All components are in `pkg/lumina/components/shadcn/` and loaded via:
+Shadcn-style terminal components live under **`pkg/lumina/components/ui/`**. After `lumina.Open(L)` (or `require("lumina")` with the global opener), Go registers **`package.preload`** entries from `RegisterUI` in `pkg/lumina/ui_components.go`.
+
+**Preferred entrypoint**
 
 ```lua
-local shadcn = require("shadcn")
+local ui = require("lumina.ui")
+-- ui.Button, ui.Card, … (see components/ui/init.lua)
 ```
 
-### Component List
-
-| Component | File | Description |
-|-----------|------|-------------|
-| `shadcn.Button` | button.lua | Button with variants: default/outline/secondary/ghost/destructive/link |
-| `shadcn.Badge` | badge.lua | Badge with variants: default/secondary/destructive/outline |
-| `shadcn.Card` | card.lua | Card container with Header/Title/Description/Content/Footer |
-| `shadcn.Alert` | alert.lua | Alert with variants: default/destructive |
-| `shadcn.AlertDialog` | alert_dialog.lua | Confirmation dialog |
-| `shadcn.Label` | label.lua | Form label |
-| `shadcn.Separator` | separator.lua | Horizontal/vertical separator |
-| `shadcn.Skeleton` | skeleton.lua | Loading placeholder |
-| `shadcn.Spinner` | spinner.lua | Animated loading spinner |
-| `shadcn.Avatar` | avatar.lua | Avatar with fallback |
-| `shadcn.Breadcrumb` | breadcrumb.lua | Breadcrumb navigation |
-| `shadcn.Kbd` | kbd.lua | Keyboard shortcut display |
-| `shadcn.Input` | input.lua | Text input field |
-| `shadcn.InputGroup` | input_group.lua | Input with prefix/suffix |
-| `shadcn.InputOTP` | input_otp.lua | OTP code input |
-| `shadcn.Switch` | switch.lua | Toggle switch |
-| `shadcn.Progress` | progress.lua | Progress bar |
-| `shadcn.Accordion` | accordion.lua | Collapsible sections |
-| `shadcn.Tabs` | tabs.lua | Tab navigation |
-| `shadcn.Table` | table.lua | Data table |
-| `shadcn.Pagination` | pagination.lua | Page navigation |
-| `shadcn.Toggle` | toggle.lua | Toggle button |
-| `shadcn.ToggleGroup` | toggle_group.lua | Group of toggles |
-| `shadcn.Select` | select.lua | Dropdown select |
-| `shadcn.NativeSelect` | native_select.lua | Native select |
-| `shadcn.Checkbox` | checkbox.lua | Checkbox |
-| `shadcn.RadioGroup` | radio_group.lua | Radio button group |
-| `shadcn.Slider` | slider.lua | Range slider |
-| `shadcn.Textarea` | textarea.lua | Multi-line text input |
-| `shadcn.Dialog` | dialog.lua | Modal dialog |
-| `shadcn.Sheet` | sheet.lua | Side panel |
-| `shadcn.Drawer` | drawer.lua | Bottom drawer |
-| `shadcn.DropdownMenu` | dropdown_menu.lua | Dropdown menu |
-| `shadcn.ContextMenu` | context_menu.lua | Right-click menu |
-| `shadcn.Popover` | popover.lua | Popover |
-| `shadcn.Tooltip` | tooltip.lua | Tooltip |
-| `shadcn.Command` | command.lua | Command palette |
-| `shadcn.Combobox` | combobox.lua | Searchable select |
-| `shadcn.Menubar` | menubar.lua | Menu bar |
-| `shadcn.ScrollArea` | scroll_area.lua | Scrollable area |
-| `shadcn.Carousel` | carousel.lua | Carousel/slider |
-| `shadcn.Sonner` | sonner.lua | Toast notifications |
-| `shadcn.HoverCard` | hover_card.lua | Hover card |
-| `shadcn.Collapsible` | collapsible.lua | Collapsible section |
-| `shadcn.Form` | form.lua | Form wrapper |
-| `shadcn.Field` | field.lua | Form field |
-
-### Component Usage
+**Piecemeal import** (smaller scripts, same files):
 
 ```lua
-local shadcn = require("shadcn")
+local Button = require("lumina.ui.button")
+```
 
--- Button
-lumina.createElement(shadcn.Button, {
+**Legacy aliases** (`RegisterShadcn` in `pkg/lumina/shadcn.go`): `require("shadcn")` loads the **same** aggregate table as `require("lumina.ui")` (both point at `components/ui/init.lua`). You can also `require("shadcn.button")` etc.; the canonical names are **`lumina.ui.*`**.
+
+There is **no** bare `require("ui")` preload — use **`lumina.ui`**.
+
+### Export table (`require("lumina.ui")`)
+
+| Field on `ui` | Piecemeal `require` | Lua file |
+|-----------------|----------------------|----------|
+| `Button` | `lumina.ui.button` | `button.lua` |
+| `Badge` | `lumina.ui.badge` | `badge.lua` |
+| `Card` | `lumina.ui.card` | `card.lua` |
+| `Alert` | `lumina.ui.alert` | `alert.lua` |
+| `Label` | `lumina.ui.label` | `label.lua` |
+| `Separator` | `lumina.ui.separator` | `separator.lua` |
+| `Skeleton` | `lumina.ui.skeleton` | `skeleton.lua` |
+| `Spinner` | `lumina.ui.spinner` | `spinner.lua` |
+| `Avatar` | `lumina.ui.avatar` | `avatar.lua` |
+| `Breadcrumb` | `lumina.ui.breadcrumb` | `breadcrumb.lua` |
+| `Kbd` | `lumina.ui.kbd` | `kbd.lua` |
+| `Input` | `lumina.ui.input` | `input.lua` |
+| `Switch` | `lumina.ui.switch` | `switch.lua` |
+| `Progress` | `lumina.ui.progress` | `progress.lua` |
+| `Accordion` | `lumina.ui.accordion` | `accordion.lua` |
+| `Tabs` | `lumina.ui.tabs` | `tabs.lua` |
+| `Table` | `lumina.ui.table` | `table.lua` |
+| `Pagination` | `lumina.ui.pagination` | `pagination.lua` |
+| `Toggle` | `lumina.ui.toggle` | `toggle.lua` |
+| `ToggleGroup` | `lumina.ui.toggle_group` | `toggle_group.lua` |
+| `Select` | `lumina.ui.select` | `select.lua` |
+| `Checkbox` | `lumina.ui.checkbox` | `checkbox.lua` |
+| `RadioGroup` | `lumina.ui.radio_group` | `radio_group.lua` |
+| `Slider` | `lumina.ui.slider` | `slider.lua` |
+| `Textarea` | `lumina.ui.textarea` | `textarea.lua` |
+| `Field` | `lumina.ui.field` | `field.lua` |
+| `InputGroup` | `lumina.ui.input_group` | `input_group.lua` |
+| `InputOTP` | `lumina.ui.input_otp` | `input_otp.lua` |
+| `Combobox` | `lumina.ui.combobox` | `combobox.lua` |
+| `NativeSelect` | `lumina.ui.native_select` | `native_select.lua` |
+| `Form` | `lumina.ui.form` | `form.lua` |
+| `Command` | `lumina.ui.command` | `command.lua` |
+| `Menubar` | `lumina.ui.menubar` | `menubar.lua` |
+| `ScrollArea` | `lumina.ui.scroll_area` | `scroll_area.lua` |
+| `Collapsible` | `lumina.ui.collapsible` | `collapsible.lua` |
+| `Carousel` | `lumina.ui.carousel` | `carousel.lua` |
+| `Sonner` | `lumina.ui.sonner` | `sonner.lua` |
+| `Dialog` | `lumina.ui.dialog` | `dialog.lua` |
+| `AlertDialog` | `lumina.ui.alert_dialog` | `alert_dialog.lua` |
+| `Sheet` | `lumina.ui.sheet` | `sheet.lua` |
+| `Drawer` | `lumina.ui.drawer` | `drawer.lua` |
+| `DropdownMenu` | `lumina.ui.dropdown_menu` | `dropdown_menu.lua` |
+| `ContextMenu` | `lumina.ui.context_menu` | `context_menu.lua` |
+| `Popover` | `lumina.ui.popover` | `popover.lua` |
+| `Tooltip` | `lumina.ui.tooltip` | `tooltip.lua` |
+| `HoverCard` | `lumina.ui.hover_card` | `hover_card.lua` |
+| `AspectRatio` | `lumina.ui.aspect_ratio` | `aspect_ratio.lua` |
+| `ButtonGroup` | `lumina.ui.button_group` | `button_group.lua` |
+| `Calendar` | `lumina.ui.calendar` | `calendar.lua` |
+| `DatePicker` | `lumina.ui.date_picker` | `date_picker.lua` |
+| `NavigationMenu` | `lumina.ui.navigation_menu` | `navigation_menu.lua` |
+| `Resizable` | `lumina.ui.resizable` | `resizable.lua` |
+| `Sidebar` | `lumina.ui.sidebar` | `sidebar.lua` |
+| `Chart` | `lumina.ui.chart` | `chart.lua` |
+| `DataTable` | `lumina.ui.data_table` | `data_table.lua` |
+| `ColorPicker` | `lumina.ui.color_picker` | `color_picker.lua` |
+
+### Usage
+
+`lumina.ui.button` (and most single-file widgets) return **one** component factory. `lumina.ui.card` returns a **table** of factories (`Card`, `CardHeader`, `CardTitle`, …) — use `ui.Card.Card` when going through the aggregate `require("lumina.ui")`, or destructure:
+
+```lua
+local ui = require("lumina.ui")
+
+lumina.createElement(ui.Button, {
     label = "Click me",
-    variant = "default",  -- "default"|"outline"|"secondary"|"ghost"|"destructive"|"link"
-    size = "default",     -- "default"|"sm"|"lg"|"icon"
+    variant = "default",
+    size = "default",
     disabled = false,
     onClick = function() print("clicked") end,
 })
 
--- Card
-lumina.createElement(shadcn.Card, {
+lumina.createElement(ui.Card.Card, {
     children = {
-        lumina.createElement(shadcn.CardTitle, { children = {{ type = "text", content = "Title" }} }),
-        lumina.createElement(shadcn.CardContent, { children = {{ type = "text", content = "Content" }} }),
-    }
-})
-
--- Dialog
-lumina.createElement(shadcn.Dialog, {
-    open = showDialog,
-    onClose = function() setShowDialog(false) end,
-    title = "Confirm",
-    children = {{ type = "text", content = "Are you sure?" }},
-})
-
--- Tabs
-lumina.createElement(shadcn.Tabs, {
-    tabs = { "Tab 1", "Tab 2", "Tab 3" },
-    children = {
-        { type = "text", content = "Content 1" },
-        { type = "text", content = "Content 2" },
-        { type = "text", content = "Content 3" },
+        lumina.createElement(ui.Card.CardTitle, { children = {{ type = "text", content = "Title" }} }),
+        lumina.createElement(ui.Card.CardContent, { children = {{ type = "text", content = "Content" }} }),
     }
 })
 ```
