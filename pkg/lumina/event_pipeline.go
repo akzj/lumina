@@ -1,6 +1,8 @@
 package lumina
 
-import "time"
+import (
+	"time"
+)
 
 // Event pipeline: ordered stages for processing input events.
 // Extracted from handleEvent's input_event case for clarity and
