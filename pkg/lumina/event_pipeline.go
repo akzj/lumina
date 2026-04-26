@@ -1,8 +1,6 @@
 package lumina
 
 import (
-	"fmt"
-	"os"
 	"time"
 )
 
@@ -341,7 +339,6 @@ func stageHover(app *App, ctx *inputPipelineCtx) bool {
 	if newHoverID != app.hoveredID {
 		oldHoverID := app.hoveredID
 		app.hoveredID = newHoverID
-		fmt.Fprintf(os.Stderr, "[HOVER] %s → %s\n", oldHoverID, newHoverID)
 
 		// Synthesize mouseleave for old element
 		if oldHoverID != "" {
