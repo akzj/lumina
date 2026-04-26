@@ -1,723 +1,265 @@
-# Lumina 架构设计文档 v0.2
+# Lumina 架构设计文档 v0.3
 
-> **版本**: v0.2 (Phase 2 Complete)  
-> **状态**: ✅ 实现完成  
-> **日期**: 2024-04-24  
-> **核心理念**: 基础牢固，可持续迭代，真实的 TUI 框架，不是 demo
+> **版本**: v0.3（与仓库主分支实现对齐）  
+> **状态**: 持续演进  
+> **日期**: 2026-04-26  
+> **核心理念**: Go 运行时 + Lua 声明式 UI；真实 TUI（布局、事件、差分输出），面向人机协作与 MCP 调试。
+
+**配套文档**: API 细节以 [`docs/API.md`](docs/API.md) 为准（与 `pkg/lumina/lumina.go` 中 `luaLoader` 同步）。
 
 ---
 
 ## 1. 项目定位
 
-**Lumina** = Terminal React for AI Agents
+**Lumina** = 终端上的类 React 体验：Lua 描述 VDOM，Go 负责布局、栅格、输入与输出。
 
 | 维度 | 说明 |
 |------|------|
-| 目标 | 让 AI Agent 能高效研发 TUI 应用 |
-| 核心技术栈 | Go + Lua + MCP |
-| 复用 | go-lua 解释器（100% 控制权） |
-| 目标用户 | AI Agent（机器可解析输出优先） |
-| 类比 | Web 端的 React |
+| 目标 | 高效开发终端 UI；支持本机运行与 WebSocket/xterm 同源体验 |
+| 核心技术栈 | **Go**（运行时、渲染、I/O）+ **Lua**（`github.com/akzj/go-lua`）+ **可选 MCP**（JSON-RPC HTTP 等） |
+| 输出 | **ANSI** 终端栅格为主；可切换 **JSON** 等模式供机器消费 |
+| 类比 | Web 的 React（组件、Hooks、VDOM），但布局为 **字符栅格 Flex**，非浏览器 CSS 全量 |
 
 ---
 
 ## 2. 核心架构
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                         Lumina 架构                              │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│  ┌─────────────┐    ┌─────────────┐    ┌─────────────────────┐   │
-│  │  AI Agent   │◄──►│    MCP      │◄──►│   Lua 组件层         │   │
-│  │  (调试方)   │    │   协议      │    │  (用户代码)          │   │
-│  └─────────────┘    └─────────────┘    └──────────┬──────────┘   │
-│                                                  │               │
-│  ┌─────────────┐    ┌─────────────┐    ┌─────────▼──────────┐   │
-│  │   Go 运行时  │◄──►│  组件模型    │◄──►│   go-lua VM         │   │
-│  │  (渲染引擎)  │    │  (Userdata) │    │                     │   │
-│  └──────┬──────┘    └─────────────┘    └─────────────────────┘   │
-│         │                                                           │
-│         ▼                                                           │
-│  ┌─────────────────────────────────────────────────────────────┐   │
-│  │                    渲染引擎 (Go)                              │   │
-│  │  ┌─────────────┐   ┌──────────┐   ┌──────────────┐           │   │
-│  │  │ Layout      │──►│ Virtual  │──►│ Diff Engine  │           │   │
-│  │  │ Engine      │   │ Terminal │   │ (双缓冲差分)  │           │   │
-│  │  │ (Flexbox)   │   │ Buffer   │   │              │           │   │
-│  │  └─────────────┘   └──────────┘   └───────┬──────┘           │   │
-│  └───────────────────────────────────────────┼──────────────────┘   │
-│                                               ▼                      │
-│                                    ┌──────────────────┐             │
-│                                    │ Output Adapter   │             │
-│                                    │ (ANSI / JSON)    │             │
-│                                    └──────────────────┘             │
-└─────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────┐
+│                         Lumina 运行时                               │
+├────────────────────────────────────────────────────────────────────┤
+│  ┌──────────────┐     JSON-RPC / 工具      ┌───────────────────┐   │
+│  │ MCP / 调试   │◄────────────────────────►│  lumina.inspect   │   │
+│  │ 客户端       │                            │  simulate* 等     │   │
+│  └──────────────┘                            └─────────┬─────────┘   │
+│                                                         │            │
+│  ┌─────────────────────────────────────────────────────▼────────┐   │
+│  │ App（单线程事件循环）                                            │   │
+│  │  ticker / SIGWINCH → renderAllDirty → renderComponent(Lua)     │   │
+│  │  input → handleEvent（键盘、鼠标、resize…）                      │   │
+│  └───────────────┬────────────────────────────────────────────────┘   │
+│                  │                                                    │
+│         ┌────────▼────────┐         ┌─────────────────────────┐     │
+│         │ Component 注册表 │◄───────►│ go-lua State            │     │
+│         │ + Hook 状态      │  PCall  │ defineComponent / hooks │     │
+│         └────────┬────────┘         └─────────────────────────┘     │
+│                  │                                                    │
+│         ┌────────▼────────────────────────────────────────────────┐   │
+│         │ 渲染管线（Go）                                            │   │
+│         │ Lua VNode 表 → VNode 树 → computeFlexLayout               │   │
+│         │ → VNodeToFrame 或 DiffVNode + ApplyPatches（增量）        │   │
+│         │ → Frame（Cells + DirtyRects）→ OutputAdapter.Write        │   │
+│         └──────────────────────────────────────────────────────────┘   │
+└────────────────────────────────────────────────────────────────────┘
 ```
+
+**要点**:
+
+- **单 VM、单线程**：组件渲染与 Lua 调用在同一条逻辑线程上（避免在回调里并发动 VM）。
+- **根组件**通过 `lumina.mount` 注册；`lumina.run()` 进入终端 raw 模式 + 事件循环。
+- **全局注册表**保存 `Component` 指针；子组件在渲染树展开时挂载/通过 `ReconcileComponents` 清理。
 
 ---
 
 ## 3. 组件模型
 
-### 3.1 混合架构（Go Userdata + Lua Metatable）
+### 3.1 三层分工
 
-| 层 | 技术 | 职责 |
+| 层 | 实现 | 职责 |
 |---|------|------|
-| Go Userdata | Component 实例 | Props, State, Methods |
-| Lua Metatable | __index 元方法 | 暴露方法给 Lua |
-| Lua 表 | 用户组件定义 | init(), render() 函数 |
+| Go `*Component` | `pkg/lumina/component.go` | 唯一 ID、`Props`、`State` map、Hook 槽位、脏标记、父子链 |
+| Lua 工厂表 | `defineComponent` 生成 | `init`、`render` 等函数引用在 Registry |
+| VNode 树 | Lua 返回 plain table | `type` / `style` / `children` / `props` / 事件字段；由 Go 转为 `*VNode` |
 
-**优势**：
-- Go 侧类型安全 + 方法分发
-- Lua 侧灵活性 + 动态性
-- 可逐步将性能关键路径迁移到 Go
+组件 **不是** 每个实例一个 Lua userdata 元表模型；逻辑上仍是 **Go 持有实例 + Lua 闭包渲染**。
 
-### 3.2 生命周期
+### 3.2 生命周期（与实现对应）
 
-| React | 终端 | 实现 |
-|-------|------|------|
-| mount | init() | NewUserdata → 调用组件 init() |
-| render | draw() | Component:render() → 终端 buffer |
-| update | diff() + patch() | 比较 prev/next state，emit delta |
-| unmount | cleanup() | __gc 元方法 或显式 unmount() |
+| 阶段 | 行为 |
+|------|------|
+| 首次渲染 | 创建 `Component`，可选执行 Lua `init`，再 `render` 得到 VNode |
+| 更新 | `SetState` / store 订阅 / 事件标记 `Dirty`；下一帧 `renderComponent` 再次执行 `render` |
+| 卸载 | VNode 树对比后 `ReconcileComponents` 对消失的子组件 `Cleanup`（解绑 Lua ref、effect cleanup） |
 
-### 3.3 Hooks 执行时机
+### 3.3 Hooks：仅在 `render` 中调用
 
-**决策：选项 B（render 中调用）**
+与 React 16.8+ 一致：**所有 Hooks 必须在组件的 `render` 函数体内同步调用**（`hooks.go` + `ResetHookIndex` 每帧重置索引）。
 
-```go
-func (c *Component) Render(vm *lua.State) int {
-    // hooks 在 render 中调用
-    c.mountPhase(vm)  // 首次调用时自动初始化 useState/useEffect
-    // ... 组件逻辑
-    return 1
-}
-```
+### 3.4 `useState`（必须带 key）
 
-**理由**：
-- 实现简单，不需要维护"首次/更新"状态标志
-- 与 React 16.8+ hooks 模式一致
-- go-lua upvalue 在闭包创建时捕获，符合 hooks 语义
-
-### 3.4 状态管理（Hooks）
+状态挂在 `Component.State[string]` 上；Lua API 为：
 
 ```lua
--- useState
-local count, setCount = lumina.useState(0)
-
--- useEffect  
-lumina.useEffect(function()
-  print("Count: " .. count)
-  return function() end  -- cleanup
-end, { count })
-
--- useMemo
-local doubled = lumina.useMemo(function() return count * 2 end, {count})
-
--- useCallback
-local handler = lumina.useCallback(function() ... end, deps)
+local count, setCount = lumina.useState("count", 0)
+setCount(count + 1)
 ```
 
-### 3.5 Counter 组件示例
+第一个参数为 **稳定字符串 key**（同组件多段 `useState` 靠 key 区分槽位）。
+
+### 3.5 最小计数器示例（与实现对齐）
 
 ```lua
 local Counter = lumina.defineComponent({
-  name = "Counter",
-  
-  init = function(props)
-    local count, setCount = lumina.useState(props.initial or 0)
-    return { count = count, setCount = setCount }
-  end,
-  
-  render = function(instance)
-    return {
-      type = "vbox",
-      children = {
-        { type = "text", content = "Count: " .. instance.count },
-        { 
-          type = "button", 
-          label = "+1",
-          onClick = function() instance.setCount(instance.count + 1) end
+    name = "Counter",
+    render = function()
+        local n, setN = lumina.useState("n", 0)
+        return {
+            type = "vbox",
+            children = {
+                { type = "text", content = "Count: " .. tostring(n) },
+                {
+                    type = "box",
+                    id = "inc",
+                    style = { border = "rounded" },
+                    onClick = function() setN(n + 1) end,
+                    children = {
+                        { type = "text", content = " +1 " },
+                    },
+                },
+            },
         }
-      }
-    }
-  end
+    end,
 })
 ```
 
-### 3.6 响应式更新
+（具体可点击节点类型以项目内示例为准，如 `examples/counter.lua`。）
 
-**方案 A：Lua setter → Go dirty flag**
+### 3.6 脏更新路径
 
-```go
-func (c *Component) SetState(L *lua.State) int {
-    key := L.CheckString(1)
-    value := L.GetAny(-1)
-    c.State[key] = value
-    c.Dirty = true
-    c.App.ScheduleUpdate(c)
-    return 0
-}
-```
+`Component.SetState`：写入 `State` → `Dirty.Store(true)` → 沿父链标记根组件脏（子组件需根重渲染才能再次执行 Lua 子树）。
+
+全局 **`createStore` + `useStore`** 在 `dispatch` 时通知订阅的组件 `Dirty`。
 
 ---
 
 ## 4. 渲染引擎
 
-### 4.1 双缓冲 + 差异刷新
+### 4.1 数据流
 
 ```
-组件树 (Lua) → VirtualTerminal (内存 2D Cell) → DiffEngine → 终端
+Lua 返回 VNode 表  →  LuaVNodeToVNode  →  *VNode 树
+        →  computeFlexLayout（整树，字符栅格 Flex 语义）
+        →  VNodeToFrame（全量）或 DiffVNode + ApplyPatches（条件增量）
+        →  Frame.Cells + DirtyRects
+        →  bridgeVNodeEvents（事件目标绑定）
+        →  OutputAdapter.Write（ANSI：整帧或按 DirtyRects 与 prevFrame  cell diff）
 ```
 
-- **避免闪烁**：先画后台缓冲区，完成后一次性显示
-- **内存开销**：终端 ≤ 80x200 = 16,000 cells，可忽略
+### 4.2 帧缓冲（`Frame`）
 
-### 4.2 增量更新粒度
+定义见 `pkg/lumina/output.go`：
 
-**决策：组件级 diffing**
+- `Cells [][]Cell`：与终端同尺寸的字符单元（含颜色、OwnerNode 等）。
+- `DirtyRects`：本帧变更矩形集合，供 ANSI 适配器缩小扫描范围。
+- **无**早期设计稿中的 `Frame.Metadata` 字段；元数据通过其它调试通道（MCP / inspect）获取。
 
-```go
-type DirtyTracker struct {
-    mu    sync.Mutex
-    dirty map[*Component]struct{}  // 组件级脏标记
-}
+`Cell` 含 `Char`、`Foreground`、`Background`、样式位、`OwnerNode` / `OwnerID`（命中测试与 inspector）。
 
-// 状态变化 → 标记组件为 dirty → 只 diff 该组件子树
-func (t *DirtyTracker) MarkDirty(c *Component) {
-    t.mu.Lock()
-    defer t.mu.Unlock()
-    t.dirty[c] = struct{}{}
-}
-```
+### 4.3 增量策略（概览）
 
-**理由**：
-- Flexbox 边界天然与组件边界对齐
-- 局部状态变化场景（TUI 中大多数是单组件交互）
-- VirtualTerminal 按区域刷新比全局刷新更高效
+实现分散在 `app.go`、`vdom_diff.go` 等：
 
-### 4.3 布局系统（Flexbox 映射）
+1. **组件级**：仅 `Dirty` 为真的组件执行 Lua `render`。
+2. **VDOM**：`DiffVNode(old, new)` 产出 `Patch` 列表；无 patch 且无视口滚动等特殊情况时可跳过绘制。
+3. **帧级增量**：在 patch 较少、`lastFrame` 存在且未强制全量条件时，`ApplyPatches` 在**旧 Frame** 上按「受影响的父容器」重画子树，并维护 `DirtyRects`。
+4. **终端输出**：`ANSIAdapter` 在尺寸变化或 `Invalidate` 后走全量写；否则对 dirty 区域与 `prevFrame` 做 cell 级 diff。
 
-```go
-type LayoutNode struct {
-    Direction   Direction   // horizontal | vertical
-    MainAlign  Align       // start | center | end | space-between
-    CrossAlign Align       // start | center | end | stretch
-    Gap        int         // 字符间距
-    Flex       float64     // 弹性系数
-    Children   []LayoutNode
-}
-```
+**限制（有意为之）**：`ApplyPatches` 以**父容器**为单位重画，避免兄弟位移错误；大改动时退回 `VNodeToFrame` 全量。
 
-- 两遍计算：自底向上算尺寸，自顶向下分配空间
-- 支持 `flex: 1` 动态宽度
+### 4.4 布局（`layout.go`）
 
-### 4.4 渲染原语
+- 显式节点类型：`fragment`、`text`、`vbox`、`hbox`、`input`、`textarea`；其它 `type`（如 `box`）走**默认竖直栈**，语义接近 `vbox`。
+- `style`：`flex`、`gap`、`justify`（`start|center|end|space-between|space-around`）、`align`、`overflow=scroll`（与 viewport / 滚动 API 配合）等。
+- **非**完整 CSS Grid/Flexbox；不要按浏览器假设等价。
 
-| 原语 | ANSI 实现 |
-|------|----------|
-| Cell | `\x1b[{y};{x}H{content}\x1b[{attr}m` |
-| Move | `\x1b[{y};{x}H` |
-| Clear | `\x1b[{n}J` |
-| Style | `\x1b[{attrs}m` |
+### 4.5 输出适配器
 
-### 4.5 双输出抽象层
-
-```
-组件树 → VDOM → Layout → Style → Frame → OutputAdapter → 终端
-                                              ↓
-                              ┌───────────────┴───────────────┐
-                              ↓                               ↓
-                        ANSIAdapter                     JSONAdapter
-                              ↓                               ↓
-                      终端写入 (ANSI)                  MCP 传输 (JSON)
-```
-
-**Frame 结构（统一中间表示）**：
-
-```go
-type Frame struct {
-    Cells      [][]Cell  // 虚拟终端 buffer
-    DirtyRects []Rect    // 脏区（优化：不输出全量）
-    Timestamp  int64
-    Metadata   map[string]any  // 组件树快照等
-}
-
-type Cell struct {
-    Char       rune
-    Foreground string  // "#rrggbb" 格式
-    Background string
-    Bold, Dim  bool
-    Underline  bool
-}
-```
-
-**OutputAdapter 接口**：
-
-```go
-type OutputAdapter interface {
-    Write(frame *Frame) error
-    Flush() error
-    Close() error
-    Mode() OutputMode
-}
-
-type OutputMode int
-const (
-    ModeANSI OutputMode = iota
-    ModeJSON
-)
-```
-
-**ANSI 适配器**：
-
-```go
-type ANSIAdapter struct {
-    writer io.Writer
-    buf    bytes.Buffer
-}
-
-func (a *ANSIAdapter) Write(frame *Frame) error {
-    for _, rect := range frame.DirtyRects {
-        for y := rect.Y; y < rect.Y+rect.H; y++ {
-            for x := rect.X; x < rect.X+rect.W; x++ {
-                a.writeCell(x, y, frame.Cells[y][x])
-            }
-        }
-    }
-    return a.writer.Write(a.buf.Bytes())
-}
-```
-
-**JSON 适配器**：
-
-```go
-type JSONAdapter struct {
-    encoder *json.Encoder
-}
-
-type JSONFrame struct {
-    Type      string  `json:"type"`
-    Timestamp int64   `json:"timestamp"`
-    Patches   []Patch `json:"patches,omitempty"`  // diff 模式
-    Cells     [][]Cell `json:"cells,omitempty"`   // 全量模式（调试用）
-}
-
-type Patch struct {
-    Op string `json:"op"`  // "set"
-    X  int    `json:"x"`
-    Y  int    `json:"y"`
-    C  Cell   `json:"c"`
-}
-```
-
-**模式切换**：
-
-```lua
--- 运行时切换
-lumina.setOutputMode("ansi")  -- 人类可读
-lumina.setOutputMode("json")  -- AI 可解析
-
--- 启动时选择（优先级：参数 > 环境变量 > 默认值）
-LUMINA_OUTPUT=ansi  # 或 json
-```
-
-**ANSI 样式码映射**：
-
-| 属性 | ANSI 代码 |
-|------|----------|
-| Bold | 1 |
-| Dim | 2 |
-| Underline | 4 |
-| fg color | 38;2;r;g;b |
-| bg color | 48;2;r;g;b |
+- **`ANSIAdapter`**：`Write` 缓冲整帧输出，隐藏光标、单 `Write` 系统调用减少撕裂。
+- **JSON / MCP**：通过 `setOutputMode` 等与 MCP 帧抓取（如 `getMCPFrame`）配合；详见 `docs/API.md`。
 
 ---
 
-## 5. MCP 协议
+## 5. 输入与事件
 
-### 5.1 协议决策
+- **键盘 / 鼠标 / 定时器**：输入 goroutine 将消息投递到 `App.events`，主循环 `handleEvent` 统一处理（`app.go` + `input.go`）。
+- **合成事件**：例如 `mousemove` 上根据 `Target` 变化合成 `mouseenter` / `mouseleave`（`EventBus`）。
+- **焦点**：全局可聚焦 ID 列表 + `setFocus` / Tab 顺序；另有 `pushFocusScope` / `popFocusScope`。
+- **注意**：`resize` 时会清空 `hoveredID`；若 Lua 侧用 `useState` 维护悬停，需与引擎策略一致，避免出现「尺寸变化后悬停态残留」（见 issue 讨论与后续改进方向）。
 
-**决策：Protobuf**
+---
 
-**理由**：
-- AI Agent 是机器，类型安全 > 人类可读
-- 跨语言代码生成（Go + Lua）
-- 高频更新场景性能重要
-- Schema 防止 API 漂移
+## 6. MCP 与调试面
 
-**调试折中**：调试时用 JSON 序列化 protobuf 消息，但协议本身是 Protobuf。
+### 6.1 当前形态（以仓库为准）
 
-### 5.2 Schema 组织
+- **`cmd/lumina-mcp-http`**：Streamable HTTP 上 **JSON-RPC 2.0** 风格 MCP 工具注册（Go `encoding/json`），用于远程多客户端调试。
+- **Lua 侧**：`lumina.inspect*`、`simulate*`、`diff`、`patch`、`eval` 等挂在模块上，由 MCP 或本进程调试入口调用（见 `inspect_api.go`、`mcp_debug.go` 等）。
+- **`proto/v1/lumina.proto`**：存在历史/扩展 protobuf 定义；**线上 MCP 主路径以 JSON-RPC + 结构化结果为主**，不要把「全链路 Protobuf」写死为当前唯一实现。
 
-```
-mcp/
-├── proto/
-│   ├── v1/
-│   │   ├── lumina.proto      # 核心消息
-│   │   ├── component.proto   # 组件树
-│   │   ├── event.proto       # 输入事件
-│   │   └── render.proto      # 渲染命令
-│   └── buf.yaml
-└── generated/                 # 生成的 Go/Lua 代码
-```
+### 6.2 设计取舍（记录）
 
-### 5.3 核心命令
-
-| 命令 | 用途 |
+| 方向 | 说明 |
 |------|------|
-| `lumina/create` | 创建组件 |
-| `lumina/update` | 更新组件属性 |
-| `lumina/delete` | 删除组件 |
-| `lumina/query` | 查询状态 |
-| `lumina/batch` | 批量操作 |
+| JSON 便于人类与脚本调试 | 与 MCP 生态常见传输一致 |
+| Proto 可选 | 适合未来高性能或强 schema 场景 |
 
-### 5.4 调试命令
+---
 
-| 命令 | 用途 |
+## 7. 模块与 UI 库
+
+- **`require("lumina")`**：`luaLoader` 注册大量 API（Hooks、路由、窗口管理、`lumina.ui` preload 等），权威列表见 **`docs/API.md`** 的 Module index。
+- **`require("lumina.ui")`**：`pkg/lumina/components/ui/init.lua` 聚合的终端版 shadcn 风格组件；单文件为 `require("lumina.ui.button")` 等。
+- **`require("shadcn")` / `require("shadcn.button")`**：兼容别名（`RegisterShadcn`），与 `lumina.ui` 同源文件。
+
+---
+
+## 8. 测试与质量
+
+- **单元 / 集成测试**：`pkg/lumina/*_test.go` 覆盖布局、diff、输入、composition 等。
+- **E2E**：`e2e_full_test.go`、`e2e_showcase_test.go` 等验证 Lua 管线。
+- **Headless 测试辅助**：`lumina.createTestRenderer()`（VDOM 级，非完整 App），见 `lua_accessibility.go`。
+
+---
+
+## 9. 演进与已知边界
+
+### 9.1 已相对成熟的能力
+
+- Flex 布局、滚动视口、overlay、窗口管理、热重载入口、路由全局表、数据 `fetch`/`useQuery`、大量 Hooks、DevTools / Inspector（F12）等（以 git 与 `docs/API.md` 为准）。
+
+### 9.2 仍在演进或简化的点
+
+- 布局语义与浏览器 CSS 不完全等价；复杂排版需按 TUI 约束设计。
+- 增量渲染与悬停状态在极端 resize 下的边界情况可继续收紧。
+- 插件、多进程隔离等大特性：**按需迭代**，本文件不逐条承诺时间表。
+
+### 9.3 历史附录（v0.1 快照）
+
+早期「Phase 1 完成状态」中的部分限制（如「无 Diff Engine」）**已被后续实现超越**；保留旧清单易产生误解，故 **不再逐条复制**。若需考古，请 `git log` / `git show` 查看历史 `DESIGN.md`。
+
+---
+
+## 10. 远期设想（非当前承诺）
+
+以下条目来自原设计文档中的扩展思考，**尚未**作为整体落地保证；实现时以 Issue/PR 为准：
+
+- 更细的分层 `ComponentID`（scope:type:version:instance）与跨作用域隔离。
+- 通过 `providers` 表声明式 Context（当前已有 `createContext` / `useContext` API，形态与旧伪代码不同，见 `docs/API.md`）。
+- 渲染器插件接口标准化（当前以 `OutputAdapter` 实现为主）。
+
+---
+
+## 附录
+
+| 资源 | 路径 |
 |------|------|
-| `lumina/debug/tree` | 组件树结构 |
-| `lumina/debug/inspect` | 组件详情 |
-| `lumina/debug/vm` | Lua VM 状态 |
-| `lumina/debug/patch` | 实时修改 |
-| `lumina/debug/history` | 状态历史 |
-| `lumina/hotreload/reload` | 热重载 |
+| Lua API 参考 | `docs/API.md` |
+| 主运行时入口 | `pkg/lumina/app.go`、`pkg/lumina/lumina.go` |
+| 布局 | `pkg/lumina/layout.go` |
+| VDOM diff / patch | `pkg/lumina/vdom_diff.go` |
+| ANSI 输出 | `pkg/lumina/ansi_adapter.go` |
+| go-lua | `github.com/akzj/go-lua`（见 `go.mod`） |
 
 ---
 
-## 6. go-lua 集成
-
-### 6.1 已验证模式
-
-| 模式 | 证据 |
-|------|------|
-| Userdata + Metatable | example_test.go, iolib.go |
-| SetFuncs 函数注册 | baselib.go |
-| Upvalue 闭包状态 | example_test.go |
-| Coroutine 事件循环 | example_test.go |
-| Registry Ref/Unref | example_test.go |
-
-### 6.2 关键集成点
-
-```go
-// 创建组件 userdata
-L.NewUserdata(0, 0)
-L.SetUserdataValue(-1, &Component{Type: "Button"})
-L.NewMetatable("Component")
-L.SetMetatable(-2)
-
-// 注册 lumina 函数
-L.SetFuncs(map[string]lua.Function{
-    "useState": useStateFn,
-    "useEffect": useEffectFn,
-}, 0)
-```
-
----
-
-## 7. 可持续性设计
-
-### 7.1 版本演进策略
-
-```
-v1.0（基础稳固）:
-├─ 组件模型（Userdata + Metatable）
-├─ 响应式系统（dirty flag + batch）
-├─ 渲染引擎（双缓冲 + diff）
-├─ 基础 hooks（useState, useEffect）
-├─ MCP 核心命令
-├─ Protobuf 协议
-└─ 测试覆盖 >80%
-
-v1.x（增量完善）:
-├─ 更多 hooks（useMemo, useCallback）
-├─ 官方组件库
-└─ 性能优化
-
-v2.0（架构演进）:
-├─ CSS 布局系统（完整）
-├─ 动画系统
-└─ 插件系统（如需要）
-```
-
-### 7.2 API 稳定性
-
-```go
-// API 级别标识
-const (
-    APILevelPublic       = 0  // 稳定版，遵守 semver
-    APILevelInternal     = 1  // 可能有变更
-    APILevelExperimental = 2  // 随时可能变更
-)
-
-// 渐进式弃用策略
-// 1. v1.x: 标记弃用 + 警告日志
-// 2. v2.0: 移除旧 API + 迁移指南
-```
-
-### 7.3 扩展点预留
-
-```go
-// 组件注册表
-type ComponentRegistry interface {
-    Register(name string, factory ComponentFactory)
-    Get(name string) (ComponentFactory, bool)
-}
-
-// Hook 扩展点
-type HookExtension interface {
-    Name() string
-    Execute(ctx *HookContext) error
-}
-
-// 渲染器插件
-type RendererAdapter interface {
-    Init(term Terminal) error
-    Render(frame *Frame) error
-}
-```
-
-### 7.4 React 成功的关键借鉴
-
-| 原则 | Lumina 实现 |
-|------|-------------|
-| 虚拟 DOM | VirtualTerminal 解耦终端 |
-| 不可变数据 | 状态浅拷贝 + deepEqual |
-| 单向数据流 | 事件 → 状态 → 渲染 |
-| Hooks 扩展性 | 自定义 hooks 机制 |
-
----
-
-## 8. 测试策略
-
-```
-┌─────────────────────┐
-│     E2E Tests       │  ← 关键路径验证
-├─────────────────────┤
-│   Integration Tests │  ← Go ↔ Lua 交互
-├─────────────────────┤
-│    Unit Tests       │  ← 独立组件 >80%
-└─────────────────────┘
-```
-
----
-
-## 9. 已决策问题清单
-
-| 决策点 | 决策 | 理由 |
-|--------|------|------|
-| 组件实例 | Go Userdata + Lua Metatable | 类型安全 + 动态性 |
-| hooks 时机 | render 中调用 | 实现简单，与 React 16.8+ 一致 |
-| 响应式更新 | 方案 A（Lua setter → Go dirty flag） | 显式更新，React 风格 |
-| 更新粒度 | 组件级 diffing | Flexbox 边界清晰，局部刷新高效 |
-| MCP 协议 | Protobuf + JSON 调试 | AI 是机器，类型安全 > 可读 |
-| CSS 布局 | v2.0 实现，v1.0 预留接口 | 避免过度设计 |
-
----
-
-## 10. MVP 范围
-
-### Phase 1: 最小可行产品
-
-- [ ] go-lua 集成（复用 VM）
-- [ ] Protobuf 协议定义 + 代码生成
-- [ ] 基础组件：Box, Text, Button
-- [ ] 简单布局：vbox, hbox
-- [ ] MCP 核心命令（create/update/delete）
-- [ ] 组件级 diffing + 双缓冲渲染
-- [ ] hooks：useState, useEffect
-- [ ] ANSI 输出（调试用 JSON 序列化）
-
-### Phase 2: 增强
-
-- [ ] 更多 hooks（useMemo, useCallback）
-- [ ] 热重载
-- [ ] MCP 调试命令（debug/tree, debug/inspect）
-- [ ] 官方组件库
-
-### Phase 3: 完善
-
-- [ ] 完整 CSS 布局系统
-- [ ] 虚拟列表
-- [ ] 性能分析
-- [ ] 插件系统
-
----
-
-## 14. 组件作用域 & 隔离模型
-
-### 14.1 作用域模型
-
-**推荐：模块化作用域（基于 Lua require）**
-
-```lua
--- 推荐模式
-local Button = require("lumina/components/button")
-local Dialog = require("my-dialog")
-
--- 不污染全局命名空间
-```
-
-### 14.2 组件 ID 系统
-
-**分层 ID 格式**：
-```
-{scope}:{type}:{version}:{instance_id}
-Example: "main:Button:1.2.0:abc123"
-```
-
-**Go struct 扩展**：
-```go
-type Component struct {
-    // 已有字段
-    Type   string
-    Props  map[string]interface{}
-    State  map[string]interface{}
-    Dirty  bool
-    
-    // 新增字段
-    ID      ComponentID  // 分层唯一 ID
-    Version string       // 组件版本（热重载用）
-    Scope   string       // "main" | "modal" | "plugin:xyz"
-}
-```
-
-### 14.3 状态隔离
-
-| 级别 | 实现 | 状态 |
-|------|------|------|
-| 实例隔离 | Hooks + upvalues | ✅ 已实现 |
-| 模块隔离 | Lua `require()` | ✅ 自然支持 |
-| 作用域隔离 | `Component.Scope` | 新增 |
-| 进程隔离 | 独立 VM | 未来 |
-
-```lua
--- 每个实例独立状态（已有）
-local Counter = lumina.defineComponent({
-    init = function()
-        local count, setCount = lumina.useState(0)  -- 实例独立
-        return { count = count, setCount = setCount }
-    end
-})
-```
-
-### 14.4 Context 系统（React Context 模式）
-
-```lua
--- Provider
-local ThemeProvider = lumina.defineComponent({
-    providers = { { name = "theme", value = "dark" } }
-})
-
--- Consumer
-local theme = lumina.useContext("theme")
-
--- 嵌套 Provider
-local App = lumina.defineComponent({
-    providers = {
-        { name = "theme", value = "dark" },
-        { name = "locale", value = "zh-CN" }
-    },
-    children = {...}
-})
-```
-
-### 14.5 热重载机制
-
-**原理：实例存活 + 代码重载 + 状态快照**
-
-```
-1. 用户修改 Button.lua
-2. Lumina 重新编译 Lua 源码
-3. 组件实例（Go struct）保持不变
-4. 状态通过快照恢复
-5. 版本不匹配时触发迁移回调
-```
-
-**集成点**：
-- `DirtyTracker` 增加版本跟踪
-- 组件注册表映射 types → factories
-- `lumina/hotreload/reload` 命令使用此系统
-
-### 14.6 状态持久化
-
-```lua
-local counter = lumina.defineComponent({
-    persist = true,  -- 状态持久化
-    init = function()
-        local saved = lumina.loadState("counter") or { count = 0 }
-        return saved
-    end
-})
-```
-
-### 14.7 与现有架构集成
-
-**无需破坏性改动**：
-- VirtualTerminal buffer ❌ 不变
-- Diff Engine ❌ 不变
-- Event delegation ❌ 不变
-- Output adapters ❌ 不变
-
-**仅扩展**：
-- `Component` struct 增加 3 字段
-- `DirtyTracker` 增加版本跟踪
-- 新增 `useContext` hook
-
----
-
-## 附录：相关文档
-
-- go-lua 项目：/home/ubuntu/workspace/go-lua
-- go-lua 设计文档：/home/ubuntu/workspace/go-lua/DESIGN.md
-
----
-
-# Phase 1 完成状态 (v0.1)
-
-## ✅ 已实现功能
-
-| 功能 | 状态 | 文件 |
-|------|------|------|
-| go-lua 集成 | ✅ | `pkg/lumina/lumina.go` |
-| 组件模型 | ✅ | `lumina.go` (defineComponent, hooks) |
-| OutputAdapter | ✅ | `pkg/lumina/output.go` |
-| ANSI 渲染 | ✅ | `pkg/lumina/ansi_adapter.go` |
-| VNode → Frame | ✅ | `pkg/lumina/renderer.go` |
-| Proto 生成 | ✅ | `pkg/lumina/v1/lumina.pb.go` |
-| Counter 示例 | ✅ | `examples/counter.lua` |
-| E2E 测试 | ✅ | `pkg/lumina/e2e_test.go` |
-| CI/CD | ✅ | `.github/workflows/ci.yml` |
-
-## 已知限制
-
-| 限制 | 说明 | 未来方向 |
-|------|------|----------|
-| 无热重载 | 需要手动重启 | Week 5+ |
-| 无 Diff Engine | 全量重绘 | 差分渲染 |
-| 无 Event 系统 | 按钮点击未实现 | 事件委托 |
-| 单 VM | 状态隔离在 VM 内 | 进程隔离 |
-| 固定 terminal size | 80x24 | 动态检测 |
-
-## 项目结构
-
-```
-lumina/
-├── pkg/lumina/
-│   ├── lumina.go           # 核心: Open, render, hooks
-│   ├── lumina_test.go      # 单元测试
-│   ├── e2e_test.go         # E2E 测试
-│   ├── output.go          # OutputAdapter 接口
-│   ├── ansi_adapter.go     # ANSI 终端输出
-│   ├── renderer.go         # VNode → Frame
-│   └── v1/lumina.pb.go     # Proto 生成代码
-├── examples/
-│   └── counter.lua        # Counter 示例
-├── proto/v1/
-│   └── lumina.proto       # Proto 定义
-├── .github/workflows/
-│   └── ci.yml            # CI/CD 流水线
-├── DESIGN.md              # 架构设计
-├── DEVELOPMENT.md         # 开发文档
-└── go.mod
-```
+*文档结束。*
