@@ -413,6 +413,8 @@ func (app *App) handleEvent(event AppEvent) {
 		// F12 toggles DevTools inspector
 		if e.Type == "keydown" && e.Key == "F12" {
 			ToggleInspector()
+			// Use Lua-based DevTools panel
+			CallDevToolsRender(app.L)
 			// Force re-render
 			globalRegistry.mu.RLock()
 			for _, comp := range globalRegistry.components {
@@ -431,6 +433,8 @@ func (app *App) handleEvent(event AppEvent) {
 					if node != nil {
 						if id, ok := node.Props["id"].(string); ok && id != "" {
 							SetInspectorHighlight(id)
+							// Trigger Lua DevTools re-render after highlight change
+							CallDevToolsRender(app.L)
 						}
 					}
 				}
@@ -442,6 +446,8 @@ func (app *App) handleEvent(event AppEvent) {
 					if node != nil {
 						if id, ok := node.Props["id"].(string); ok && id != "" {
 							SetInspectorSelected(id)
+							// Trigger Lua DevTools re-render after selection change
+							CallDevToolsRender(app.L)
 						}
 					}
 				}
@@ -1105,28 +1111,21 @@ compositeAndWrite:
 			RenderHighlight(frame, highlightNode)
 		}
 
-		// Render inspector panel as overlay on right side
-		panelVNode := BuildInspectorVNode(newVNode, w, h)
-		if panelVNode != nil {
-			panelW := globalInspector.panelWidth
-			if panelW > w/2 {
-				panelW = w / 2
-			}
-			panelOverlay := &Overlay{
-				ID:      "devtools-panel",
-				VNode:   panelVNode,
-				X:       w - panelW,
-				Y:       0,
-				W:       panelW,
-				H:       h,
-				ZIndex:  9999,
-				Visible: true,
-			}
+		// Lua DevTools panel renders via overlay system (showOverlay).
+		// Call Lua to rebuild the overlay VNode on each render cycle.
+		CallDevToolsRender(app.L)
+
+		// The overlay is now managed by globalOverlayManager via showOverlay().
+		// Compose it along with any other overlays.
+		dtOverlay := globalOverlayManager.Get("devtools-panel")
+		if dtOverlay != nil {
 			dtCompositor := NewCompositor(w, h)
-			frame = dtCompositor.Compose(frame, []*Overlay{panelOverlay})
+			frame = dtCompositor.Compose(frame, []*Overlay{dtOverlay})
 		}
 	} else if app.lastFrame != nil && needsInspectorRerender.Load() {
-		// Inspector was just hidden - clear its area to remove residual content
+		// Inspector was just hidden — Lua hides the overlay
+		CallDevToolsRender(app.L)
+		// Also clear the inspector area in case overlay cleanup is needed
 		panelW := globalInspector.panelWidth
 		if panelW > w/2 {
 			panelW = w / 2
