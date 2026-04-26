@@ -84,7 +84,6 @@ local StatusBar = lumina.defineComponent({
     name = "StatusBar",
     render = function()
         local state = lumina.useStore(store)
-        local fps = lumina.getFPS and lumina.getFPS() or 0
         local width, height = lumina.getSize()
         local cols = width
         local rows = height - 1
@@ -92,8 +91,8 @@ local StatusBar = lumina.defineComponent({
         return {
             type = "text",
             content = string.format(
-                " %dx%d=%d cells | FPS:%d | Click:%s | Clicked:%d | [c]Clear [q]Quit",
-                cols, rows, cols * rows, fps,
+                " %dx%d=%d cells | Click:%s | Clicked:%d | [c]Clear [q]Quit",
+                cols, rows, cols * rows,
                 state.lastClick or "",
                 state.clickCount or 0),
             style = { foreground = theme.accent, background = theme.bar, bold = true },

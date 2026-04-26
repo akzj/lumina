@@ -91,18 +91,32 @@ func (app *App) renderDirtyChildren(comp *Component, adapter OutputAdapter) {
 	newVNode := comp.LastVNode
 
 	w, h := app.getWidth(), app.getHeight()
+	sizeChanged := (w != app.lastRenderWidth) || (h != app.lastRenderHeight)
 
-	// Always do full layout + frame since subtrees changed
-	frame := VNodeToFrame(newVNode, w, h)
-	app.lastFrame = frame
-	app.lastRenderWidth = w
-	app.lastRenderHeight = h
+	var frame *Frame
+	if sizeChanged || app.lastFrame == nil {
+		// Size changed or no previous frame — must do full layout + paint
+		frame = VNodeToFrame(newVNode, w, h)
+		app.lastFrame = frame
+		app.lastRenderWidth = w
+		app.lastRenderHeight = h
+		// Size change needs full event re-bridging
+		app.bridgeVNodeEvents(newVNode)
+	} else {
+		// INCREMENTAL: size unchanged, reuse existing frame.
+		// Skip computeFlexLayout — layout positions are cached from last full render.
+		// VNode positions (X, Y, W, H) were set by the last computeFlexLayout call
+		// and haven't changed (hover only changes colors, not sizes).
+		// Just repaint all VNodes into the existing frame.
+		frame = app.lastFrame
+		fullClip := Rect{X: 0, Y: 0, W: w, H: h}
+		renderVNode(frame, newVNode, fullClip)
+		frame.MarkDirty()
+		// SKIP bridgeVNodeEvents — handlers still valid from last full render.
+	}
 
 	// Clear scroll dirty flags
 	ClearAllScrollDirty()
-	// SKIP bridgeVNodeEvents — handlers are still valid from last full render.
-	// Cell IDs don't change during hover, so existing EventBus registrations work.
-	// Only do full bridgeVNodeEvents when the root itself re-renders (renderComponent path).
 
 	// Composite overlays
 	overlays := globalOverlayManager.GetVisible()
