@@ -2,6 +2,7 @@ package lumina_test
 
 import (
 	"bytes"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -268,4 +269,26 @@ func TestAllTestsPass(t *testing.T) {
 	if err != nil {
 		t.Fatalf("module loading failed: %v", err)
 	}
+}
+
+func TestE2E_NewDemos(t *testing.T) {
+    demos := []string{
+        "../../examples/color-picker/main.lua",
+        "../../examples/form-builder/main.lua",
+        "../../examples/data-table/main.lua",
+        "../../examples/navigation/main.lua",
+    }
+    for _, demo := range demos {
+        t.Run(filepath.Base(demo), func(t *testing.T) {
+            app := lumina.NewAppWithSize(80, 24)
+            defer app.Close()
+            var buf bytes.Buffer
+            tio := lumina.NewBufferTermIO(80, 24, &buf)
+            err := app.LoadScript(demo, tio)
+            if err != nil {
+                t.Fatalf("LoadScript %s: %v", demo, err)
+            }
+            app.RenderOnce()
+        })
+    }
 }
