@@ -13,12 +13,14 @@ func (app *App) renderAllDirty() {
 		return // will catch on next tick
 	}
 
-	// Fast path: check if any component is dirty before allocating.
-	// This avoids a []Component slice allocation every 16ms when idle.
+	// Only render ROOT components (Parent == nil). Child components are
+	// rendered inline by their parent via luaComponentToVNode. Rendering
+	// children directly causes Lua errors (render expects props arg)
+	// and infinite retry loops (error path didn't MarkClean).
 	hasDirty := false
 	globalRegistry.mu.RLock()
 	for _, comp := range globalRegistry.components {
-		if comp.Dirty.Load() {
+		if comp.Parent == nil && comp.Dirty.Load() {
 			hasDirty = true
 			break
 		}
@@ -28,10 +30,12 @@ func (app *App) renderAllDirty() {
 		return
 	}
 
-	// Collect all components (some may become dirty during iteration)
-	components := make([]*Component, 0, len(globalRegistry.components))
+	// Collect only root components
+	var roots []*Component
 	for _, comp := range globalRegistry.components {
-		components = append(components, comp)
+		if comp.Parent == nil {
+			roots = append(roots, comp)
+		}
 	}
 	globalRegistry.mu.RUnlock()
 
@@ -40,7 +44,7 @@ func (app *App) renderAllDirty() {
 		return
 	}
 
-	for _, comp := range components {
+	for _, comp := range roots {
 		if comp.Dirty.Load() {
 			app.renderComponent(comp, adapter)
 		}
@@ -64,6 +68,7 @@ func (app *App) renderComponent(comp *Component, adapter OutputAdapter) {
 	status := app.L.PCall(0, 1, 0)
 	if status != lua.OK {
 		app.L.Pop(1)
+		comp.MarkClean() // prevent infinite retry on persistent errors
 		return
 	}
 
