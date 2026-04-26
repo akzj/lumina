@@ -169,15 +169,39 @@ func (app *App) walkVNodeForEvents(vnode *VNode) {
 }
 
 // registerBridgedLuaHandler registers a bridged event handler that calls a Lua
-// function by registry reference. The handler posts a LuaCallbackEvent to the
-// App's event channel for safe main-thread execution.
+// function by registry reference. When called from the main thread (inside a
+// batch — e.g. during handleEvent → Emit), the Lua function is invoked
+// synchronously so that state changes are visible before EndBatch renders.
+// When called from another goroutine, it falls back to PostEvent (async).
 func (app *App) registerBridgedLuaHandler(eventType, compID string, luaRef int) {
 	globalEventBus.RegisterBridgedHandler(eventType, compID, func(e *Event) {
-		app.PostEvent(AppEvent{
-			Type:    "lua_callback",
-			Payload: LuaCallbackEvent{RefID: luaRef, Event: e},
-		})
+		if app.IsBatching() {
+			// Already on main thread — call Lua directly (synchronous).
+			// This ensures e.g. mouseleave → setHovered(false) takes effect
+			// before the current batch's EndBatch triggers a render.
+			app.invokeLuaCallback(luaRef, e)
+		} else {
+			// From another goroutine — post async for main-thread execution.
+			app.PostEvent(AppEvent{
+				Type:    "lua_callback",
+				Payload: LuaCallbackEvent{RefID: luaRef, Event: e},
+			})
+		}
 	})
+}
+
+// invokeLuaCallback calls a Lua function by registry reference on the main thread.
+// Must only be called from the main goroutine (inside handleEvent / eventLoop).
+func (app *App) invokeLuaCallback(luaRef int, e *Event) {
+	app.L.RawGetI(lua.RegistryIndex, int64(luaRef))
+	if app.L.IsFunction(-1) {
+		pushEventToLua(app.L, e)
+		if status := app.L.PCall(1, 0, 0); status != lua.OK {
+			app.L.Pop(1) // pop error
+		}
+	} else {
+		app.L.Pop(1) // pop non-function
+	}
 }
 
 // getLuaRef extracts a Lua registry reference from a VNode prop value.

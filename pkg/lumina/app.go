@@ -716,16 +716,7 @@ func (app *App) handleEvent(event AppEvent) {
 		if !ok {
 			return
 		}
-		app.L.RawGetI(lua.RegistryIndex, int64(cb.RefID))
-		if app.L.Type(-1) == lua.TypeFunction {
-			pushEventToLua(app.L, cb.Event)
-			status := app.L.PCall(1, 0, 0)
-			if status != lua.OK {
-				app.L.Pop(1) // pop error
-			}
-		} else {
-			app.L.Pop(1) // pop non-function
-		}
+		app.invokeLuaCallback(cb.RefID, cb.Event)
 		// Re-render deferred to EndBatch()
 	}
 }
