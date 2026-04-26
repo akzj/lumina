@@ -135,7 +135,20 @@ function _devtools_render()
             height = 1,
         },
     })
-    
+
+    -- FPS counter
+    local fps = lumina.getFPS and lumina.getFPS() or 0
+    local fpsColor = fps >= 30 and "#34D399" or (fps >= 15 and "#FCD34D" or "#EF4444")
+    table.insert(children, {
+        type = "text",
+        content = string.format(" FPS: %d", fps),
+        style = {
+            foreground = fpsColor,
+            background = c.bg,
+            height = 1,
+        },
+    })
+
     -- Element tree header
     table.insert(children, {
         type = "text",
