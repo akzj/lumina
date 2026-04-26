@@ -1105,6 +1105,22 @@ compositeAndWrite:
 			dtCompositor := NewCompositor(w, h)
 			frame = dtCompositor.Compose(frame, []*Overlay{panelOverlay})
 		}
+	} else if app.lastFrame != nil && inspectorDirty {
+		// Inspector was just hidden - clear its area to remove residual content
+		panelW := globalInspector.panelWidth
+		if panelW > w/2 {
+			panelW = w / 2
+		}
+		startX := w - panelW
+		if startX < 0 {
+			startX = 0
+		}
+		// Clear cells in the inspector area to force re-render
+		for y := 0; y < h && y < frame.Height; y++ {
+			for x := startX; x < w && x < frame.Width; x++ {
+				frame.Cells[y][x] = Cell{}
+			}
+		}
 	}
 
 	adapter.Write(frame)
