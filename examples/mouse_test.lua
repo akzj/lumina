@@ -129,16 +129,18 @@ local Cell = lumina.defineComponent({
             onMouseEnter = function()
                 setHovered(true)
                 if props.onCellHover then
-                    -- DEBUG: check props.id type
                     local id = props.id
-                    if type(id) ~= "string" then
-                        io.stderr:write("[LUA-DEBUG] props.id type=" .. type(id) .. " tostring=" .. tostring(id) .. "\n")
-                        io.stderr:write("[LUA-DEBUG] props type=" .. type(props) .. "\n")
-                        for k, v in pairs(props) do
-                            io.stderr:write("[LUA-DEBUG]   props." .. tostring(k) .. " = " .. type(v) .. ": " .. tostring(v) .. "\n")
+                    local fn = props.onCellHover
+                    -- ALWAYS print: check if onCellHover is function or table
+                    io.stderr:write(string.format("[LUA-ENTER] id=%s id_type=%s fn_type=%s\n",
+                        tostring(id), type(id), type(fn)))
+                    if type(fn) == "table" then
+                        -- Dump the table contents
+                        for k, v in pairs(fn) do
+                            io.stderr:write(string.format("[LUA-ENTER]   fn.%s = %s: %s\n", tostring(k), type(v), tostring(v)))
                         end
                     end
-                    props.onCellHover(id)
+                    fn(id)
                 end
             end,
             onMouseLeave = function()
