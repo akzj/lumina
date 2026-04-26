@@ -13,13 +13,10 @@ func (app *App) renderAllDirty() {
 		return // will catch on next tick
 	}
 
-	// Only render ROOT components (IsRoot == true). Child components are
-	// rendered inline by their parent via luaComponentToVNode. Rendering
-	// children directly causes Lua errors (render expects props arg)
-	// and infinite retry loops.
+	// Check for any root that needs work (self-dirty OR has dirty children)
 	hasDirty := false
 	for _, comp := range globalRegistry.components {
-		if comp.IsRoot && comp.Dirty.Load() {
+		if comp.IsRoot && (comp.Dirty.Load() || comp.HasDirtyChild.Load()) {
 			hasDirty = true
 			break
 		}
@@ -28,7 +25,15 @@ func (app *App) renderAllDirty() {
 		return
 	}
 
-	// Collect only root components
+	// FPS tracking
+	app.frameCount++
+	if now.Sub(app.fpsLastTime) >= time.Second {
+		app.fps = app.frameCount
+		app.frameCount = 0
+		app.fpsLastTime = now
+	}
+
+	// Collect root components that need work
 	var roots []*Component
 	for _, comp := range globalRegistry.components {
 		if comp.IsRoot {
@@ -41,14 +46,17 @@ func (app *App) renderAllDirty() {
 		return
 	}
 
-	// Pause Lua GC during entire render pass — with 1800+ cells creating
-	// tables/closures, incremental GC during PCall dominates CPU. Batch
-	// collection after render is much more efficient.
+	// Pause Lua GC during entire render pass
 	app.L.SetGCStopped(true)
 
 	for _, comp := range roots {
 		if comp.Dirty.Load() {
+			// Root itself is dirty — full re-render (runs root's Lua PCall)
 			app.renderComponent(comp, adapter)
+		} else if comp.HasDirtyChild.Load() {
+			// Root is clean but has dirty children — partial re-render:
+			// reuse root's VNode tree, only re-render dirty child components.
+			app.renderDirtyChildren(comp, adapter)
 		}
 	}
 
@@ -56,7 +64,180 @@ func (app *App) renderAllDirty() {
 	app.L.SetGCStopped(false)
 }
 
-// renderComponent re-renders a single component on the main thread.
+// renderDirtyChildren handles the case where a root component is NOT self-dirty
+// but has dirty descendants. It reuses the root's cached VNode tree, walks it
+// to re-render only dirty child components in-place, then runs the normal
+// diff/layout/write pipeline. This avoids the root's Lua PCall which would
+// create 1800+ createElement tables for unchanged children.
+func (app *App) renderDirtyChildren(comp *Component, adapter OutputAdapter) {
+	comp.HasDirtyChild.Store(false)
+
+	if comp.LastVNode == nil {
+		// No cached tree — fall back to full render
+		comp.Dirty.Store(true)
+		app.renderComponent(comp, adapter)
+		return
+	}
+
+	// Walk the VNode tree and re-render dirty child components in-place.
+	// This modifies comp.LastVNode's subtrees where children are dirty.
+	changed := reRenderDirtySubtree(app.L, comp.LastVNode)
+	if !changed {
+		return // nothing actually changed
+	}
+
+	// Now run the normal diff/layout/write pipeline with the updated VNode tree.
+	// The tree is the same object (comp.LastVNode) with dirty subtrees replaced.
+	newVNode := comp.LastVNode
+
+	w, h := app.getWidth(), app.getHeight()
+	sizeChanged := (w != app.lastRenderWidth) || (h != app.lastRenderHeight)
+
+	// Always do full layout + frame since subtrees changed
+	frame := VNodeToFrame(newVNode, w, h)
+	app.lastFrame = frame
+	app.lastRenderWidth = w
+	app.lastRenderHeight = h
+
+	// Clear scroll dirty flags
+	ClearAllScrollDirty()
+	// Bridge VNode event handlers to EventBus
+	app.bridgeVNodeEvents(newVNode)
+
+	// Composite overlays
+	overlays := globalOverlayManager.GetVisible()
+	if len(overlays) > 0 {
+		compositor := NewCompositor(w, h)
+		frame = compositor.Compose(frame, overlays)
+	}
+
+	// Composite managed windows
+	windows := globalWindowManager.GetVisible()
+	if len(windows) > 0 {
+		compositor := NewCompositor(w, h)
+		var winOverlays []*Overlay
+		for _, win := range windows {
+			winVNode := BuildWindowVNode(win)
+			winOverlays = append(winOverlays, &Overlay{
+				ID: "window-" + win.ID, VNode: winVNode,
+				X: win.X, Y: win.Y, W: win.W, H: win.H,
+				ZIndex: win.ZIndex, Visible: true,
+			})
+		}
+		frame = compositor.Compose(frame, winOverlays)
+	}
+
+	frame.FocusedID = globalEventBus.GetFocused()
+
+	// DevTools inspector overlay
+	if IsInspectorVisible() && app.lastFrame != nil {
+		var highlightNode *VNode
+		if globalInspector.selectedID != "" {
+			highlightNode = findVNodeByID(newVNode, globalInspector.selectedID)
+		} else if globalInspector.highlightID != "" {
+			highlightNode = findVNodeByID(newVNode, globalInspector.highlightID)
+		}
+		if highlightNode != nil {
+			RenderHighlight(frame, highlightNode)
+		}
+		CallDevToolsRender(app.L)
+		dtOverlay := globalOverlayManager.Get("devtools-panel")
+		if dtOverlay != nil {
+			dtCompositor := NewCompositor(w, h)
+			frame = dtCompositor.Compose(frame, []*Overlay{dtOverlay})
+		}
+	}
+
+	adapter.Write(frame)
+	app.lastRenderTime = time.Now()
+	_ = sizeChanged
+}
+
+// reRenderDirtySubtree walks a VNode tree and re-renders any child component
+// whose Dirty flag is set. Returns true if any subtree was changed.
+func reRenderDirtySubtree(L *lua.State, vnode *VNode) bool {
+	if vnode == nil {
+		return false
+	}
+
+	changed := false
+
+	// If this VNode is backed by a dirty component, re-render it
+	if vnode.ComponentRef != nil && vnode.ComponentRef.Dirty.Load() {
+		comp := vnode.ComponentRef
+		comp.MarkClean()
+		comp.HasDirtyChild.Store(false)
+
+		prevComp := GetCurrentComponent()
+		SetCurrentComponent(comp)
+		comp.ResetHookIndex()
+
+		if comp.PushRenderFn(L) {
+			// Build instance table: state + props (same as luaComponentToVNode)
+			fields := map[string]any{
+				"_instance": comp.ID,
+			}
+			for k, v := range comp.State {
+				fields[k] = v
+			}
+			fields["props"] = comp.Props
+
+			L.NewTableFrom(fields)
+			// Expand function refs from props onto instance table
+			for k, v := range comp.Props {
+				if k != "children" {
+					if ref, ok := v.(LuaFuncRef); ok {
+						L.RawGetI(lua.RegistryIndex, int64(ref.Ref))
+						L.SetField(-2, k)
+					}
+				}
+			}
+
+			status := L.PCall(1, 1, 0)
+			if status == lua.OK {
+				newChild := LuaVNodeToVNode(L, -1)
+				L.Pop(1)
+
+				// Replace VNode content in-place (keep the same pointer so
+				// parent references remain valid)
+				newChild.ComponentRef = comp
+				newChild.ComponentKey = vnode.ComponentKey
+				comp.LastVNode = newChild
+
+				// Copy new VNode data into existing vnode (in-place update)
+				vnode.Type = newChild.Type
+				vnode.Props = newChild.Props
+				vnode.Children = newChild.Children
+				vnode.Content = newChild.Content
+				vnode.Style = newChild.Style
+				vnode.ComponentRef = newChild.ComponentRef
+				vnode.ComponentKey = newChild.ComponentKey
+				changed = true
+			} else {
+				L.Pop(1) // pop error
+			}
+		}
+
+		SetCurrentComponent(prevComp)
+		// Don't recurse into freshly rendered children — they're already up to date
+		return changed
+	}
+
+	// If this component has dirty children, recurse
+	if vnode.ComponentRef != nil && vnode.ComponentRef.HasDirtyChild.Load() {
+		vnode.ComponentRef.HasDirtyChild.Store(false)
+	}
+
+	// Recurse into children
+	for _, child := range vnode.Children {
+		if reRenderDirtySubtree(L, child) {
+			changed = true
+		}
+	}
+
+	return changed
+}
+
 // renderComponent re-renders a single component on the main thread.
 func (app *App) renderComponent(comp *Component, adapter OutputAdapter) {
 	SetCurrentComponent(comp)

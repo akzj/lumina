@@ -301,6 +301,18 @@ func luaGetSize(L *lua.State) int {
 	return 2
 }
 
+// luaGetFPS returns the current frames-per-second count.
+func luaGetFPS(L *lua.State) int {
+	app := GetApp(L)
+	if app != nil {
+		L.PushInteger(int64(app.fps))
+	} else {
+		L.PushInteger(0)
+	}
+	return 1
+}
+
+
 // keyBindings stores key → Lua function ref mappings for lumina.onKey().
 var (
 	keyBindings   = make(map[string]int) // key → Lua registry ref

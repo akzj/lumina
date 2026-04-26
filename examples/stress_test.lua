@@ -13,7 +13,6 @@ local store = lumina.createStore({
         hoverY = -1,
         clickedCells = {},
         lastClick = "",
-        renders = 0,
     },
     actions = {
         setHover = function(state, x, y)
@@ -30,9 +29,6 @@ local store = lumina.createStore({
         end,
         clearAll = function(state)
             state.clickedCells = {}
-        end,
-        incRenders = function(state)
-            state.renders = state.renders + 1
         end,
     },
 })
@@ -91,7 +87,7 @@ local App = lumina.defineComponent({
     name = "StressGrid",
     render = function()
         local state = lumina.useStore(store)
-        store.dispatch("incRenders")
+        local fps = lumina.getFPS and lumina.getFPS() or 0
 
         local width, height = lumina.getSize()
         local cols = width
@@ -104,11 +100,10 @@ local App = lumina.defineComponent({
         children[1] = {
             type = "text",
             content = string.format(
-                " %dx%d=%d cells | Hover:(%d,%d) | Click:%s | Renders:%d | [c]Clear [q]Quit",
-                cols, rows, cellCount,
+                " %dx%d=%d cells | FPS:%d | Hover:(%d,%d) | Click:%s | [c]Clear [q]Quit",
+                cols, rows, cellCount, fps,
                 state.hoverX, state.hoverY,
-                state.lastClick or "",
-                state.renders),
+                state.lastClick or ""),
             style = { foreground = theme.accent, background = theme.bar, bold = true },
         }
 

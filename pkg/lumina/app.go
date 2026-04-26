@@ -45,6 +45,9 @@ type App struct {
 	termIO         TermIO    // terminal I/O abstraction (nil = default local)
 	lastFrame         *Frame    // previous render frame for incremental updates
 	lastRenderTime    time.Time // frame rate limiting
+	fps               int       // frames per second (updated each second)
+	frameCount        int       // frames rendered in current second
+	fpsLastTime       time.Time // start of current FPS measurement window
 	lastMouseMoveTime time.Time // for mousemove throttling
 	lastMouseX        int       // last processed mousemove X
 	lastMouseY        int       // last processed mousemove Y
