@@ -59,6 +59,9 @@ local store = lumina.createStore({
             state.clickedCells = {}
             state.lastClick = ""
         end,
+        setHover = function(state, id)
+            state.lastHover = id
+        end,
     },
 })
 
@@ -183,7 +186,7 @@ local App = lumina.defineComponent({
                     clicked = isClicked,
                     cursorActive = isCursorHere,
                     onCellHover = function(id)
-                        store.dispatch("setState", { lastHover = id })
+                        store.dispatch("setHover", id)
                     end,
                 })
             end
