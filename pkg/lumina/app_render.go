@@ -1,6 +1,8 @@
 package lumina
 
 import (
+	"fmt"
+	"os"
 	"time"
 
 	"github.com/akzj/go-lua/pkg/lua"
@@ -70,6 +72,7 @@ func (app *App) renderAllDirty() {
 // diff/layout/write pipeline. This avoids the root's Lua PCall which would
 // create 1800+ createElement tables for unchanged children.
 func (app *App) renderDirtyChildren(comp *Component, adapter OutputAdapter) {
+	fmt.Fprintf(os.Stderr, "[RENDER] renderDirtyChildren for %s\n", comp.ID)
 	comp.HasDirtyChild.Store(false)
 
 	if comp.LastVNode == nil {
@@ -213,6 +216,7 @@ func reRenderDirtySubtree(L *lua.State, vnode *VNode) bool {
 				vnode.ComponentRef = newChild.ComponentRef
 				vnode.ComponentKey = newChild.ComponentKey
 				changed = true
+				fmt.Fprintf(os.Stderr, "[RENDER] re-rendered %s type=%s\n", comp.ID, comp.Type)
 			} else {
 				L.Pop(1) // pop error
 			}

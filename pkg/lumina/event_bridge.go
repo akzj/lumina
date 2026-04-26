@@ -2,6 +2,7 @@ package lumina
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/akzj/go-lua/pkg/lua"
 )
@@ -193,6 +194,9 @@ func (app *App) registerBridgedLuaHandler(eventType, compID string, luaRef int) 
 // invokeLuaCallback calls a Lua function by registry reference on the main thread.
 // Must only be called from the main goroutine (inside handleEvent / eventLoop).
 func (app *App) invokeLuaCallback(luaRef int, e *Event) {
+	if e.Type == "mouseenter" || e.Type == "mouseleave" {
+		fmt.Fprintf(os.Stderr, "[EVENT] %s target=%s\n", e.Type, e.Target)
+	}
 	app.L.RawGetI(lua.RegistryIndex, int64(luaRef))
 	if app.L.IsFunction(-1) {
 		pushEventToLua(app.L, e)

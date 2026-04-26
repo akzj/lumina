@@ -33,3 +33,4 @@ go.work.sum
 # .vscode/
 
 .backups/
+test_hover
