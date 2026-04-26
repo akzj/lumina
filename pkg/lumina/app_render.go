@@ -44,7 +44,7 @@ func (app *App) renderAllDirty() {
 	// Pause Lua GC during entire render pass — with 1800+ cells creating
 	// tables/closures, incremental GC during PCall dominates CPU. Batch
 	// collection after render is much more efficient.
-	app.L.GC(lua.GCStop)
+	app.L.SetGCStopped(true)
 
 	for _, comp := range roots {
 		if comp.Dirty.Load() {
@@ -52,9 +52,8 @@ func (app *App) renderAllDirty() {
 		}
 	}
 
-	// Resume GC and do one bounded step to avoid unbounded pause
-	app.L.GC(lua.GCRestart)
-	app.L.GC(lua.GCStep, 100)
+	// Resume GC — let the debt-based pacer trigger collection naturally
+	app.L.SetGCStopped(false)
 }
 
 // renderComponent re-renders a single component on the main thread.
