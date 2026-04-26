@@ -3,6 +3,7 @@
 -- ============================================================================
 -- Demonstrates: Window manager — create, close, focus, drag, resize, tile
 -- Run: lumina examples/window-manager-demo/main.lua
+-- Click title bar to drag | Click _, □, X for minimize, maximize, close
 -- ============================================================================
 local lumina = require("lumina")
 
@@ -25,7 +26,7 @@ local function createEditorWindow()
                 children = {
                     { type = "text", content = "  Editor: " .. id, style = { foreground = c.accent, bold = true, background = "#181825" } },
                     { type = "text", content = "  Content: (empty)", style = { foreground = c.fg } },
-                    { type = "text", content = "  [e] new editor  [t] new terminal  [a] tile", style = { foreground = c.muted, dim = true } },
+                    { type = "text", content = "  [e] new editor  [t] new terminal", style = { foreground = c.muted, dim = true } },
                 },
             }
         end,
@@ -57,16 +58,20 @@ end
 
 local App = lumina.defineComponent({
     name = "WindowManagerDemo",
-    render = function(self)
+    render = function()
         local wins = lumina.listWindows()
         return {
             type = "vbox",
             style = { background = c.bg },
             children = {
                 { type = "text", content = "  Window Manager Demo", style = { foreground = c.accent, bold = true, background = "#181825" } },
-                { type = "text", content = "  Windows: " .. windowCount .. "  |  F1 tile grid  F2 tile horiz  F3 tile vert", style = { foreground = c.muted } },
+                { type = "text", content = "  Windows: " .. windowCount .. "  |  Click _, □, X on title bars", style = { foreground = c.muted } },
                 { type = "text", content = "" },
-                { type = "text", content = "  [e] new editor  [t] new terminal  [a] tile  [w] close  [q] quit", style = { foreground = c.fg } },
+                { type = "text", content = "  [e] new editor  [t] new terminal  [q] quit", style = { foreground = c.fg } },
+                { type = "text", content = "  [a] tile grid  [F1] tile horiz  [F2] tile vert", style = { foreground = c.fg } },
+                { type = "text", content = "  [m] max/restore  [n] minimize  [w] close focused", style = { foreground = c.fg } },
+                { type = "text", content = "" },
+                { type = "text", content = "  Active windows: " .. (#wins), style = { foreground = c.success } },
             },
         }
     end,
@@ -88,15 +93,27 @@ lumina.onKey("a", function()
 end)
 
 lumina.onKey("F1", function()
-    lumina.tileWindows("grid")
-end)
-
-lumina.onKey("F2", function()
     lumina.tileWindows("horizontal")
 end)
 
-lumina.onKey("F3", function()
+lumina.onKey("F2", function()
     lumina.tileWindows("vertical")
+end)
+
+-- Focus/maximize/minimize/close on focused window
+lumina.onKey("m", function()
+    local focused = lumina.getFocusedWindow()
+    if focused then lumina.maximizeWindow(focused) end
+end)
+
+lumina.onKey("n", function()
+    local focused = lumina.getFocusedWindow()
+    if focused then lumina.minimizeWindow(focused) end
+end)
+
+lumina.onKey("w", function()
+    local focused = lumina.getFocusedWindow()
+    if focused then lumina.closeWindow(focused) end
 end)
 
 lumina.onKey("q", function()
