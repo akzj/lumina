@@ -167,6 +167,9 @@ func luaLoader(L *lua.State) int {
 		"maximizeWindow":   luaMaximizeWindow,
 		"restoreWindow":    luaRestoreWindow,
 		"tileWindows":      luaTileWindows,
+		"getFocusedWindow": luaGetFocusedWindow,
+		"getWindow":        luaGetWindow,
+		"listWindows":      luaListWindows,
 	}, 0)
 
 	// Register hooks as sub-table on the lumina module

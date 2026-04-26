@@ -486,6 +486,68 @@ func (app *App) handleEvent(event AppEvent) {
 				globalEventBus.SetFocus(e.Target)
 			}
 
+			// Window manager: handle clicks on window chrome (title bar / controls)
+			// and mouse drag/resize operations
+			if win := globalWindowManager.WindowAtPoint(e.X, e.Y); win != nil {
+				localY := e.Y - win.Y
+				localX := e.X - win.X
+
+				switch e.Type {
+				case "mousedown":
+					// Title bar click (row 0)
+					if localY == 0 {
+						// Check which control button was clicked
+						// Button region is right-aligned: [ _ ][ □ ][ X ] = 9 chars
+						if localX >= win.W-9 {
+							// Close button — last 3 chars " X "
+							globalWindowManager.CloseWindow(win.ID)
+							return // consume event, don't emit to bus
+						} else if localX >= win.W-13 {
+							// Maximize button — next 3 chars " □ "
+							if win.Maximized {
+								globalWindowManager.RestoreWindow(win.ID)
+							} else {
+								globalWindowManager.MaximizeWindow(win.ID)
+							}
+							return
+						} else if localX >= win.W-16 {
+							// Minimize button — next 3 chars " _ "
+							globalWindowManager.MinimizeWindow(win.ID)
+							return
+						}
+						// Otherwise: start drag
+						globalWindowManager.StartDrag(win.ID, localX, localY)
+						globalWindowManager.FocusWindow(win.ID)
+						return
+					}
+					// Resize handle (bottom-right corner)
+					if localY == win.H-1 && localX == win.W-1 {
+						globalWindowManager.StartResize(win.ID, e.X, e.Y)
+						return
+					}
+
+				case "mousemove":
+					if globalWindowManager.IsDragging() {
+						globalWindowManager.UpdateDrag(e.X, e.Y)
+						return
+					}
+					if globalWindowManager.IsResizing() {
+						globalWindowManager.UpdateResize(e.X, e.Y)
+						return
+					}
+
+				case "mouseup":
+					if globalWindowManager.IsDragging() {
+						globalWindowManager.StopDrag()
+						return
+					}
+					if globalWindowManager.IsResizing() {
+						globalWindowManager.StopResize()
+						return
+					}
+				}
+			}
+
 			// Drag-and-drop handling
 			switch e.Type {
 			case "mousedown":
