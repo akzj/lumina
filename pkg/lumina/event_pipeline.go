@@ -333,8 +333,11 @@ func stageHover(app *App, ctx *inputPipelineCtx) bool {
 			})
 		}
 
-		// Mark all components dirty to re-render with new hover state
-		markAllComponentsDirty()
+		// NOTE: No markAllComponentsDirty() here.
+		// The bridged mouseenter/mouseleave handlers already mark
+		// affected components dirty via setState/store.dispatch.
+		// Marking ALL components dirty caused O(N) re-renders on
+		// every hover change, leading to 80% CPU on fast mouse movement.
 	}
 
 	return false
