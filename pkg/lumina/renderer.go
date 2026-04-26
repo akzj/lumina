@@ -351,6 +351,13 @@ func luaComponentToVNode(L *lua.State, idx int) *VNode {
 		L.Pop(1) // pop non-table _props
 	}
 
+	// DEBUG: verify stack right before PCall
+	{
+		fnIdx := L.AbsIndex(-2) // function should be here (below instance table)
+		tblIdx := L.AbsIndex(-1) // instance table should be here
+		fmt.Fprintf(os.Stderr, "[PRE-PCALL] comp=%s stack[-2]type=%d stack[-1]type=%d top=%d\n",
+			comp.ID, L.Type(fnIdx), L.Type(tblIdx), L.GetTop())
+	}
 	status := L.PCall(1, 1, 0)
 	// NOTE: Don't restore prevComp yet — child components in render output
 	// need to see 'comp' as their parent for error boundary + tree tracking.
