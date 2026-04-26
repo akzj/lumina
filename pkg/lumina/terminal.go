@@ -7,8 +7,9 @@ import (
 	"os"
 	"os/signal"
 	"strings"
-	"syscall"
 	"unsafe"
+
+	"golang.org/x/sys/unix"
 )
 
 // ColorMode represents the terminal's color capability.
@@ -64,16 +65,16 @@ func DetectColorMode() ColorMode {
 // Terminal handles raw mode and input reading for the terminal.
 type Terminal struct {
 	fd       int
-	origTerm syscall.Termios
+	origTerm unix.Termios
 	rawMode  bool
 	resizeCh chan os.Signal // SIGWINCH channel
-	output   io.Writer     // where to send escape sequences (default: os.Stdout)
+	output   io.Writer      // where to send escape sequences (default: os.Stdout)
 }
 
 // NewTerminal creates a terminal reader for stdin.
 func NewTerminal() (*Terminal, error) {
 	fd := int(os.Stdin.Fd())
-	var orig syscall.Termios
+	var orig unix.Termios
 	if err := tcgetattr(fd, &orig); err != nil {
 		return nil, err
 	}
@@ -83,7 +84,7 @@ func NewTerminal() (*Terminal, error) {
 // NewTerminalWithOutput creates a terminal reader with a custom output writer.
 func NewTerminalWithOutput(w io.Writer) (*Terminal, error) {
 	fd := int(os.Stdin.Fd())
-	var orig syscall.Termios
+	var orig unix.Termios
 	if err := tcgetattr(fd, &orig); err != nil {
 		return nil, err
 	}
@@ -95,24 +96,24 @@ func (t *Terminal) EnableRawMode() error {
 	raw := t.origTerm
 
 	// Disable input processing
-	raw.Iflag &^= syscall.IGNBRK | syscall.BRKINT | syscall.PARMRK |
-		syscall.ISTRIP | syscall.INLCR | syscall.IGNCR |
-		syscall.ICRNL | syscall.IXON
+	raw.Iflag &^= unix.IGNBRK | unix.BRKINT | unix.PARMRK |
+		unix.ISTRIP | unix.INLCR | unix.IGNCR |
+		unix.ICRNL | unix.IXON
 
 	// Disable output processing
-	raw.Oflag &^= syscall.OPOST
+	raw.Oflag &^= unix.OPOST
 
 	// Disable echo, canonical mode, signals, extended input
-	raw.Lflag &^= syscall.ECHO | syscall.ECHONL | syscall.ICANON |
-		syscall.ISIG | syscall.IEXTEN
+	raw.Lflag &^= unix.ECHO | unix.ECHONL | unix.ICANON |
+		unix.ISIG | unix.IEXTEN
 
 	// Set character size to 8 bits
-	raw.Cflag &^= syscall.CSIZE | syscall.PARENB
-	raw.Cflag |= syscall.CS8
+	raw.Cflag &^= unix.CSIZE | unix.PARENB
+	raw.Cflag |= unix.CS8
 
 	// Read returns after 1 byte, no timeout
-	raw.Cc[syscall.VMIN] = 1
-	raw.Cc[syscall.VTIME] = 0
+	raw.Cc[unix.VMIN] = 1
+	raw.Cc[unix.VTIME] = 0
 
 	if err := tcsetattr(t.fd, &raw); err != nil {
 		return err
@@ -156,10 +157,10 @@ func (t *Terminal) GetSize() (width, height int, err error) {
 		Xpixel uint16
 		Ypixel uint16
 	}
-	_, _, errno := syscall.Syscall(
-		syscall.SYS_IOCTL,
+	_, _, errno := unix.Syscall(
+		unix.SYS_IOCTL,
 		uintptr(t.fd),
-		uintptr(syscall.TIOCGWINSZ),
+		uintptr(unix.TIOCGWINSZ),
 		uintptr(unsafe.Pointer(&ws)),
 	)
 	if errno != 0 {
@@ -168,39 +169,11 @@ func (t *Terminal) GetSize() (width, height int, err error) {
 	return int(ws.Col), int(ws.Row), nil
 }
 
-// tcgetattr retrieves terminal attributes via ioctl.
-func tcgetattr(fd int, termios *syscall.Termios) error {
-	_, _, errno := syscall.Syscall(
-		syscall.SYS_IOCTL,
-		uintptr(fd),
-		uintptr(syscall.TCGETS),
-		uintptr(unsafe.Pointer(termios)),
-	)
-	if errno != 0 {
-		return errno
-	}
-	return nil
-}
-
-// tcsetattr sets terminal attributes via ioctl.
-func tcsetattr(fd int, termios *syscall.Termios) error {
-	_, _, errno := syscall.Syscall(
-		syscall.SYS_IOCTL,
-		uintptr(fd),
-		uintptr(syscall.TCSETS),
-		uintptr(unsafe.Pointer(termios)),
-	)
-	if errno != 0 {
-		return errno
-	}
-	return nil
-}
-
 // WatchResize starts a goroutine that calls callback whenever the terminal
 // is resized (SIGWINCH). Call StopResize to stop watching.
 func (t *Terminal) WatchResize(callback func(width, height int)) {
 	t.resizeCh = make(chan os.Signal, 1)
-	signal.Notify(t.resizeCh, syscall.SIGWINCH)
+	signal.Notify(t.resizeCh, unix.SIGWINCH)
 	go func() {
 		for range t.resizeCh {
 			w, h, err := t.GetSize()
