@@ -47,7 +47,11 @@ type Component struct {
 	LastProps map[string]any // props from last successful render (for memo comparison)
 	// Context
 	ContextValues map[int64]any // context ID → value (provided by this component)
-	mu            sync.RWMutex
+	// Prop function refs — Lua registry refs for function-valued props.
+	// Managed per-component to avoid SwapRenderRefs freeing them and
+	// causing registry slot reuse that corrupts renderFn refs.
+	propRefs []int
+	mu       sync.RWMutex
 }
 
 // luaFunctionRef holds a reference to a Lua function on the stack.
@@ -208,6 +212,15 @@ func (c *Component) PushInitFn(L *lua.State) bool {
 	return L.Type(-1) == lua.TypeFunction
 }
 
+// ReleasePropRefs releases all Lua registry refs for function-valued props.
+// Called before updating props (to release old refs) and during Cleanup.
+func (c *Component) ReleasePropRefs(L *lua.State) {
+	for _, ref := range c.propRefs {
+		L.Unref(lua.RegistryIndex, ref)
+	}
+	c.propRefs = nil
+}
+
 // Cleanup removes the component from registry and cleans up references.
 // Runs effect and layout-effect cleanups before releasing Lua refs.
 func (c *Component) Cleanup(L *lua.State) {
@@ -215,6 +228,9 @@ func (c *Component) Cleanup(L *lua.State) {
 	RunEffectCleanups(L, c)
 	// Run layout effect cleanups (useLayoutEffect return functions)
 	RunLayoutEffectCleanups(L, c)
+
+	// Release prop function refs
+	c.ReleasePropRefs(L)
 
 	if c.initFn != nil {
 		L.Unref(lua.RegistryIndex, c.initFn.RefID)

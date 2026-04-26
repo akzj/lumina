@@ -3,7 +3,6 @@ package lumina
 
 import (
 	"fmt"
-	"os"
 	"sort"
 	"time"
 
@@ -218,6 +217,16 @@ func luaComponentToVNode(L *lua.State, idx int) *VNode {
 	}
 	L.Pop(1) // pop _props
 
+	// Collect prop function refs for per-component lifecycle management.
+	// These refs must NOT go through SwapRenderRefs (which frees them globally
+	// and can cause registry slot reuse that corrupts component renderFn refs).
+	var propRefIDs []int
+	for _, v := range props {
+		if ref, ok := v.(LuaFuncRef); ok {
+			propRefIDs = append(propRefIDs, ref.Ref)
+		}
+	}
+
 	// Get optional key from props for reconciliation.
 	// Fall back to props["id"] so each createElement with a unique id
 	// gets its own Component instance (and thus its own useState state).
@@ -290,6 +299,13 @@ func luaComponentToVNode(L *lua.State, idx int) *VNode {
 		}
 	}
 
+	// Release old prop function refs and store new ones on the component.
+	// This ensures prop refs are freed when props change (re-render) or
+	// when the component is cleaned up, instead of going through
+	// SwapRenderRefs which can cause registry slot reuse conflicts.
+	comp.ReleasePropRefs(L)
+	comp.propRefs = propRefIDs
+
 	L.Pop(1) // pop _factory
 
 	// React.memo: skip render if props unchanged
@@ -308,10 +324,6 @@ func luaComponentToVNode(L *lua.State, idx int) *VNode {
 		SetCurrentComponent(prevComp)
 		return NewVNode("box")
 	}
-	// DEBUG: log what function we're about to call
-	fmt.Fprintf(os.Stderr, "[RENDER-CALL] comp=%s factory=%s renderRef=%d fnType=%d\n",
-		comp.ID, comp.Name, comp.RenderRefID(), L.Type(-1))
-
 	// Build instance table: state + props
 	fields := map[string]any{
 		"_instance": comp.ID,
@@ -351,13 +363,6 @@ func luaComponentToVNode(L *lua.State, idx int) *VNode {
 		L.Pop(1) // pop non-table _props
 	}
 
-	// DEBUG: verify stack right before PCall
-	{
-		fnIdx := L.AbsIndex(-2) // function should be here (below instance table)
-		tblIdx := L.AbsIndex(-1) // instance table should be here
-		fmt.Fprintf(os.Stderr, "[PRE-PCALL] comp=%s stack[-2]type=%d stack[-1]type=%d top=%d\n",
-			comp.ID, L.Type(fnIdx), L.Type(tblIdx), L.GetTop())
-	}
 	status := L.PCall(1, 1, 0)
 	// NOTE: Don't restore prevComp yet — child components in render output
 	// need to see 'comp' as their parent for error boundary + tree tracking.
