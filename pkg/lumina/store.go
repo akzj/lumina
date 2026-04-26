@@ -3,6 +3,7 @@ package lumina
 
 import (
 	"fmt"
+	"os"
 	"sync"
 	"sync/atomic"
 
@@ -320,6 +321,12 @@ func storeDispatchFn(store *Store) lua.Function {
 			}
 			store.mu.Unlock()
 		}
+		// DEBUG: track lastHover type after dispatch
+		if actionName == "setHover" || actionName == "clickCell" || actionName == "toggleCell" || actionName == "clearAll" || actionName == "moveCursor" {
+			if lh, ok := store.state["lastHover"]; ok {
+				fmt.Fprintf(os.Stderr, "[DISPATCH %s] lastHover Go-type=%T value=%v\n", actionName, lh, lh)
+			}
+		}
 		L.Pop(1)
 		L.Unref(lua.RegistryIndex, stateRef)
 
@@ -391,6 +398,11 @@ func luaUseStore(L *lua.State) int {
 	}
 
 	// Return current state snapshot
-	L.PushAny(store.GetState())
+	// DEBUG: track lastHover type in useStore
+	st := store.GetState()
+	if lh, ok := st["lastHover"]; ok {
+		fmt.Fprintf(os.Stderr, "[USESTORE] lastHover Go-type=%T value=%v\n", lh, lh)
+	}
+	L.PushAny(st)
 	return 1
 }
