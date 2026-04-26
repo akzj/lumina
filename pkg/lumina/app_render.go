@@ -13,14 +13,14 @@ func (app *App) renderAllDirty() {
 		return // will catch on next tick
 	}
 
-	// Only render ROOT components (Parent == nil). Child components are
+	// Only render ROOT components (IsRoot == true). Child components are
 	// rendered inline by their parent via luaComponentToVNode. Rendering
 	// children directly causes Lua errors (render expects props arg)
-	// and infinite retry loops (error path didn't MarkClean).
+	// and infinite retry loops.
 	hasDirty := false
 	globalRegistry.mu.RLock()
 	for _, comp := range globalRegistry.components {
-		if comp.Parent == nil && comp.Dirty.Load() {
+		if comp.IsRoot && comp.Dirty.Load() {
 			hasDirty = true
 			break
 		}
@@ -33,7 +33,7 @@ func (app *App) renderAllDirty() {
 	// Collect only root components
 	var roots []*Component
 	for _, comp := range globalRegistry.components {
-		if comp.Parent == nil {
+		if comp.IsRoot {
 			roots = append(roots, comp)
 		}
 	}
