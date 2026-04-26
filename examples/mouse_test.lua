@@ -140,6 +140,7 @@ local Cell = lumina.defineComponent({
                             io.stderr:write(string.format("[LUA-ENTER]   fn.%s = %s: %s\n", tostring(k), type(v), tostring(v)))
                         end
                     end
+                    io.stderr:write(string.format("[LUA-CALL-FN] about to call fn(%s) fn=%s\n", tostring(id), tostring(fn)))
                     fn(id)
                 end
             end,
@@ -199,7 +200,14 @@ local App = lumina.defineComponent({
                     onCellHover = function(id)
                         if type(id) ~= "string" then
                             io.stderr:write("[LUA-DEBUG onCellHover] id type=" .. type(id) .. " tostring=" .. tostring(id) .. "\n")
-                            io.stderr:write("[LUA-DEBUG traceback] " .. debug.traceback() .. "\n")
+                            io.stderr:write("[LUA-DEBUG traceback] " .. debug.traceback("", 0) .. "\n")
+                            -- Dump the table if it's a table
+                            if type(id) == "table" then
+                                for k, v in pairs(id) do
+                                    io.stderr:write(string.format("[LUA-DEBUG onCellHover-table] %s = %s (%s)\n", tostring(k), tostring(v), type(v)))
+                                end
+                            end
+                            return  -- don't dispatch with bad data
                         end
                         store.dispatch("setHover", id)
                     end,
