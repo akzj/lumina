@@ -78,36 +78,43 @@ local Cell = lumina.defineComponent({
     end
 })
 
--- App: fullscreen grid
--- Uses store selector to only re-render when clickCount changes
--- (not on every hover, which only affects individual Cell components)
-local App = lumina.defineComponent({
-    name = "StressGrid",
+-- StatusBar: separate component that re-renders on ANY store change
+-- (no selector = always dirty on dispatch). Cheap to render (1 text node).
+local StatusBar = lumina.defineComponent({
+    name = "StatusBar",
     render = function()
-        local state = lumina.useStore(store, function(s)
-            return s.clickCount
-        end)
+        local state = lumina.useStore(store)
         local fps = lumina.getFPS and lumina.getFPS() or 0
-
         local width, height = lumina.getSize()
         local cols = width
-        local rows = height - 1  -- reserve 1 row for status
+        local rows = height - 1
 
-        local cellCount = cols * rows
-        local children = {}
-
-        -- Status bar
-        children[1] = {
+        return {
             type = "text",
             content = string.format(
                 " %dx%d=%d cells | FPS:%d | Click:%s | Clicked:%d | [c]Clear [q]Quit",
-                cols, rows, cellCount, fps,
+                cols, rows, cols * rows, fps,
                 state.lastClick or "",
                 state.clickCount or 0),
             style = { foreground = theme.accent, background = theme.bar, bold = true },
         }
+    end
+})
 
-        -- Grid rows
+-- Grid: uses selector so it only re-renders when clickCount changes
+-- (not on every hover, which only affects individual Cell components)
+local Grid = lumina.defineComponent({
+    name = "Grid",
+    render = function()
+        local state = lumina.useStore(store, function(s)
+            return s.clickCount
+        end)
+
+        local width, height = lumina.getSize()
+        local cols = width
+        local rows = height - 1
+
+        local children = {}
         for y = 0, rows - 1 do
             local rowChildren = {}
             for x = 0, cols - 1 do
@@ -128,6 +135,21 @@ local App = lumina.defineComponent({
             type = "vbox",
             style = { background = theme.bg },
             children = children,
+        }
+    end
+})
+
+-- App: just a vbox with StatusBar + Grid
+local App = lumina.defineComponent({
+    name = "StressApp",
+    render = function()
+        return {
+            type = "vbox",
+            style = { background = theme.bg },
+            children = {
+                lumina.createElement(StatusBar, { key = "status" }),
+                lumina.createElement(Grid, { key = "grid" }),
+            }
         }
     end
 })
