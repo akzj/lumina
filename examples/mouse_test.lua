@@ -199,6 +199,7 @@ local App = lumina.defineComponent({
                     onCellHover = function(id)
                         if type(id) ~= "string" then
                             io.stderr:write("[LUA-DEBUG onCellHover] id type=" .. type(id) .. " tostring=" .. tostring(id) .. "\n")
+                            io.stderr:write("[LUA-DEBUG traceback] " .. debug.traceback() .. "\n")
                         end
                         store.dispatch("setHover", id)
                     end,
