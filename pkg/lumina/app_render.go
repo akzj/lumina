@@ -110,9 +110,14 @@ func (app *App) renderDirtyChildren(comp *Component, adapter OutputAdapter) {
 		return // nothing actually changed
 	}
 
+	// Rebuild VNodeTree — new VNode children from reRenderDirtySubtree need
+	// to be in the Parents map for O(1) hit-test in stageHitTest.
+	newVNode := comp.LastVNode
+	tree := BuildVNodeTree(newVNode)
+	globalEventBus.SetVNodeTree(tree)
+
 	// Now run the normal diff/layout/write pipeline with the updated VNode tree.
 	// The tree is the same object (comp.LastVNode) with dirty subtrees replaced.
-	newVNode := comp.LastVNode
 
 	w, h := app.getWidth(), app.getHeight()
 	sizeChanged := (w != app.lastRenderWidth) || (h != app.lastRenderHeight)
