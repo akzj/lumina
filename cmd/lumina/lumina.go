@@ -3,7 +3,11 @@ package main
 
 import (
 	"fmt"
+	"net/http"
 	"os"
+	"strings"
+
+	_ "net/http/pprof" // registers handlers on DefaultServeMux
 
 	"github.com/akzj/lumina/pkg/lumina"
 )
@@ -24,38 +28,93 @@ Examples:
   lumina init myapp
   lumina dev examples/todo/main.lua
   lumina serve 8080 examples/dashboard/main.lua
+
+Profiling (net/http/pprof on DefaultServeMux):
+  LUMINA_PPROF=:6060 lumina examples/mouse_test.lua
+  lumina -pprof=:6060 examples/mouse_test.lua
+  go run ./cmd/lumina -pprof=:6060 examples/mouse_test.lua
+  curl -sS 'http://127.0.0.1:6060/debug/pprof/heap' -o heap.prof
+  curl -sS 'http://127.0.0.1:6060/debug/pprof/profile?seconds=30' -o cpu.prof
+  # then: go tool pprof http://127.0.0.1:6060/debug/pprof/profile?seconds=30
 `
 
+// extractPprofAndArgs removes -pprof from argv and returns optional listen address
+// from the flag or from LUMINA_PPROF when the flag is absent.
+func extractPprofAndArgs(orig []string) (pprofAddr string, args []string) {
+	args = []string{orig[0]}
+	for i := 1; i < len(orig); i++ {
+		a := orig[i]
+		switch {
+		case strings.HasPrefix(a, "-pprof="):
+			pprofAddr = strings.TrimPrefix(a, "-pprof=")
+		case a == "-pprof" && i+1 < len(orig):
+			i++
+			pprofAddr = orig[i]
+		default:
+			args = append(args, a)
+		}
+	}
+	if env := strings.TrimSpace(os.Getenv("LUMINA_PPROF")); env != "" && pprofAddr == "" {
+		pprofAddr = env
+	}
+	return pprofAddr, args
+}
+
+// startPprof listens for Go's pprof HTTP endpoints (cpu, heap, goroutine, etc.).
+// addr may be ":6060", "6060", or "127.0.0.1:6060".
+func startPprof(addr string) {
+	addr = strings.TrimSpace(addr)
+	if addr == "" {
+		return
+	}
+	if strings.HasPrefix(addr, ":") {
+		addr = "127.0.0.1" + addr
+	} else if !strings.Contains(addr, ":") {
+		addr = "127.0.0.1:" + addr
+	}
+	go func() {
+		fmt.Fprintf(os.Stderr, "lumina: pprof listening on http://%s/debug/pprof/\n", addr)
+		if err := http.ListenAndServe(addr, nil); err != nil {
+			fmt.Fprintf(os.Stderr, "lumina: pprof server: %v\n", err)
+		}
+	}()
+}
+
 func main() {
-	if len(os.Args) < 2 {
+	pprofAddr, cmdArgs := extractPprofAndArgs(os.Args)
+	if pprofAddr != "" {
+		startPprof(pprofAddr)
+	}
+
+	if len(cmdArgs) < 2 {
 		fmt.Print(usage)
 		os.Exit(1)
 	}
 
-	switch os.Args[1] {
+	switch cmdArgs[1] {
 	case "run":
-		if len(os.Args) < 3 {
+		if len(cmdArgs) < 3 {
 			fmt.Println("Usage: lumina run <script.lua>")
 			os.Exit(1)
 		}
-		runScript(os.Args[2])
+		runScript(cmdArgs[2])
 
 	case "dev":
-		runDev(os.Args[2:])
+		runDev(cmdArgs[2:])
 
 	case "serve":
-		if len(os.Args) < 4 {
+		if len(cmdArgs) < 4 {
 			fmt.Println("Usage: lumina serve <port> <script.lua>")
 			os.Exit(1)
 		}
-		serveScript(os.Args[2], os.Args[3])
+		serveScript(cmdArgs[2], cmdArgs[3])
 
 	case "init":
-		if len(os.Args) < 3 {
+		if len(cmdArgs) < 3 {
 			fmt.Println("Usage: lumina init <project-name>")
 			os.Exit(1)
 		}
-		initProject(os.Args[2])
+		initProject(cmdArgs[2])
 
 	case "version", "--version", "-v":
 		printVersion()
@@ -65,7 +124,7 @@ func main() {
 
 	default:
 		// Default: treat first arg as script path
-		runScript(os.Args[1])
+		runScript(cmdArgs[1])
 	}
 }
 
