@@ -40,6 +40,8 @@ type App struct {
 	lastFrame      *Frame    // previous render frame for incremental updates
 	lastRenderTime time.Time // frame rate limiting
 	hoveredID      string    // ID of element currently under mouse cursor
+	lastRenderWidth  int     // previous render width for detecting resize
+	lastRenderHeight int     // previous render height for detecting resize
 }
 
 // getWidth returns the current terminal width (goroutine-safe).
@@ -989,20 +991,22 @@ func (app *App) renderComponent(comp *Component, adapter OutputAdapter) {
 
 	// Diff against previous render to detect no-change case.
 	var frame *Frame
+	sizeChanged := (w != app.lastRenderWidth) || (h != app.lastRenderHeight)
 	if comp.LastVNode != nil {
 		patches := DiffVNode(comp.LastVNode, newVNode)
 		scrollDirty := AnyViewportScrollDirty()
-		if len(patches) == 0 && !scrollDirty {
+		if len(patches) == 0 && !scrollDirty && !sizeChanged {
 			// Nothing changed — skip rendering.
 			comp.MarkClean()
+			ClearAllScrollDirty()
 			return
 		}
 
 		// Incremental rendering: if few patches and we have a previous frame,
 		// re-layout the new tree and apply only changed subtrees via parent
 		// container re-rendering (handles sibling position shifts correctly).
-		// Scroll-dirty forces full re-render since layout positions change.
-		if len(patches) <= 10 && app.lastFrame != nil && !ShouldFullRerender(patches, newVNode) && !scrollDirty {
+		// Scroll-dirty or size-change forces full re-render since layout positions change.
+		if len(patches) <= 10 && app.lastFrame != nil && !ShouldFullRerender(patches, newVNode) && !scrollDirty && !sizeChanged {
 			frame = app.lastFrame
 			// Re-layout the entire new tree (cheap) so positions are correct
 			computeFlexLayout(newVNode, 0, 0, w, h)
@@ -1011,6 +1015,8 @@ func (app *App) renderComponent(comp *Component, adapter OutputAdapter) {
 			ReconcileComponents(app.L, comp.LastVNode, newVNode)
 			comp.LastVNode = newVNode
 			app.lastFrame = frame
+			app.lastRenderWidth = w
+			app.lastRenderHeight = h
 			goto compositeAndWrite
 		}
 	}
@@ -1024,6 +1030,8 @@ func (app *App) renderComponent(comp *Component, adapter OutputAdapter) {
 
 	comp.LastVNode = newVNode
 	app.lastFrame = frame
+	app.lastRenderWidth = w
+	app.lastRenderHeight = h
 
 compositeAndWrite:
 	// Clear scroll dirty flags after re-render (layout applied new scroll positions)
