@@ -37,8 +37,8 @@ import (
 //
 // 仅把 child-b 从 (20,0,20,10) 移到 (20,8,20,10) 后:
 //   - child-a / child-c 不应再次执行 RenderFn（无 DirtyPaint）
-//   - child-b 多执行一次 render
-//   - 旧 B 区域由 parent 等下层补洞；新位置可见 'B'
+//   - child-b 也不应再次 render（position-only move, same W/H → no re-render）
+//   - 旧 B 区域由 parent 等下层补洞；新位置可见 'B'（recompose only）
 //
 // =============================================================================
 
@@ -155,8 +155,10 @@ func TestScenario_ChildMoveUnderCurtain_OtherChildrenNotRerendered(t *testing.T)
 	if renderCount["curtain"] != 1 {
 		t.Errorf("curtain should not re-render: got %d (want 1)", renderCount["curtain"])
 	}
-	if renderCount["parent:b"] != 2 {
-		t.Errorf("moved child-b should render exactly once more: got %d (want 2)", renderCount["parent:b"])
+	// Position-only move (same W, H) should NOT re-render — buffer content
+	// is identical in component-local coordinates, only recompose is needed.
+	if renderCount["parent:b"] != 1 {
+		t.Errorf("moved child-b (position-only) should NOT re-render: got %d (want 1)", renderCount["parent:b"])
 	}
 
 	// --- (5) Composited outcome ---
