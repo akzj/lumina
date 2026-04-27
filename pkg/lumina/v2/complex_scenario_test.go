@@ -7,7 +7,12 @@ import (
 	"github.com/akzj/lumina/pkg/lumina/v2/buffer"
 	"github.com/akzj/lumina/pkg/lumina/v2/event"
 	"github.com/akzj/lumina/pkg/lumina/v2/layout"
+	"github.com/akzj/lumina/pkg/lumina/v2/perf"
 )
+
+// Scenario tests call app.Tracker().Enable() and Tracker.AssertLastFrame after
+// RenderAll / RenderDirty where render counts are deterministic (same hooks as
+// perf_integration_test.go: component render observer → perf.RecordComponent).
 
 // =============================================================================
 // Scenario 1: Desktop With Panels — Simulates a 3-panel IDE layout
@@ -24,6 +29,7 @@ func TestScenario_DesktopWithPanels(t *testing.T) {
 	// │              status bar (z=20)        │
 	// └───────────────────────────────────────┘
 	app, ta := NewTestApp(80, 35)
+	app.Tracker().Enable()
 
 	var clickLog []string
 
@@ -110,6 +116,12 @@ func TestScenario_DesktopWithPanels(t *testing.T) {
 		})
 
 	app.RenderAll()
+	app.Tracker().AssertLastFrame(t,
+		perf.CheckRenders(4),
+		perf.CheckLayouts(4),
+		perf.CheckPaints(4),
+		perf.CheckRenderComponents("editor", "outline", "sidebar", "statusbar"),
+	)
 
 	// --- Verify rendering positions ---
 
@@ -164,6 +176,13 @@ func TestScenario_DesktopWithPanels(t *testing.T) {
 	app.SetState("editor", "cursor", 5)
 	dirtyBefore := app.DirtyRects()
 	app.RenderDirty()
+	app.Tracker().AssertLastFrame(t,
+		perf.CheckRenders(1),
+		perf.CheckRenderComponents("editor"),
+		perf.CheckOcclusionUpdates(1),
+		perf.CheckMetric(perf.ComposeDirty, 1),
+		perf.CheckHandlerDirtySyncs(1),
+	)
 	dirtyAfter := app.DirtyRects()
 	// After SetState+RenderDirty, dirty rects should exist
 	if len(dirtyAfter) == 0 && len(dirtyBefore) == 0 {
@@ -195,6 +214,7 @@ func TestScenario_DesktopWithPanels(t *testing.T) {
 
 func TestScenario_ModalDialogOverContent(t *testing.T) {
 	app, ta := NewTestApp(60, 20)
+	app.Tracker().Enable()
 
 	var clickLog []string
 
@@ -216,6 +236,12 @@ func TestScenario_ModalDialogOverContent(t *testing.T) {
 		})
 
 	app.RenderAll()
+	app.Tracker().AssertLastFrame(t,
+		perf.CheckRenders(1),
+		perf.CheckLayouts(1),
+		perf.CheckPaints(1),
+		perf.CheckRenderComponents("bg"),
+	)
 
 	// Background visible at (0,0)
 	if c := ta.LastScreen.Get(0, 0).Char; c != 'B' {
@@ -259,6 +285,12 @@ func TestScenario_ModalDialogOverContent(t *testing.T) {
 		})
 
 	app.RenderAll()
+	app.Tracker().AssertLastFrame(t,
+		perf.CheckRenders(1),
+		perf.CheckLayouts(1),
+		perf.CheckPaints(1),
+		perf.CheckRenderComponents("dialog"),
+	)
 
 	// Dialog visible at its origin
 	if c := ta.LastScreen.Get(15, 5).Char; c != 'C' {
@@ -305,6 +337,11 @@ func TestScenario_ModalDialogOverContent(t *testing.T) {
 	// --- Close dialog ---
 	app.UnregisterComponent("dialog")
 	app.RenderAll()
+	app.Tracker().AssertLastFrame(t,
+		perf.CheckRenders(0),
+		perf.CheckLayouts(0),
+		perf.CheckPaints(0),
+	)
 
 	// Background fully visible where dialog was
 	if bg := ta.LastScreen.Get(30, 10).Background; bg != "#000000" {
@@ -330,6 +367,12 @@ func TestScenario_ModalDialogOverContent(t *testing.T) {
 			return root
 		})
 	app.RenderAll()
+	app.Tracker().AssertLastFrame(t,
+		perf.CheckRenders(1),
+		perf.CheckLayouts(1),
+		perf.CheckPaints(1),
+		perf.CheckRenderComponents("dialog2"),
+	)
 
 	if c := ta.LastScreen.Get(15, 5).Char; c != 'R' {
 		t.Errorf("reopened dialog: expected 'R' at (15,5), got %q", c)
@@ -342,6 +385,7 @@ func TestScenario_ModalDialogOverContent(t *testing.T) {
 
 func TestScenario_CascadingWindows(t *testing.T) {
 	app, ta := NewTestApp(80, 30)
+	app.Tracker().Enable()
 
 	var clickLog []string
 
@@ -391,6 +435,12 @@ func TestScenario_CascadingWindows(t *testing.T) {
 		})
 
 	app.RenderAll()
+	app.Tracker().AssertLastFrame(t,
+		perf.CheckRenders(3),
+		perf.CheckLayouts(3),
+		perf.CheckPaints(3),
+		perf.CheckRenderComponents("winA", "winB", "winC"),
+	)
 
 	// --- Verify z-order at specific positions ---
 
@@ -432,6 +482,15 @@ func TestScenario_CascadingWindows(t *testing.T) {
 	// --- Move Win B to non-overlapping position ---
 	app.MoveComponent("winB", buffer.Rect{X: 50, Y: 0, W: 30, H: 15})
 	app.RenderDirty()
+	app.Tracker().AssertLastFrame(t,
+		perf.CheckRenders(0),
+		perf.CheckPaints(0),
+		perf.CheckLayouts(1),
+		perf.CheckOcclusionBuilds(1),
+		perf.CheckMetric(perf.ComposeRects, 1),
+		perf.CheckHitTesterRebuilds(1),
+		perf.CheckHandlerFullSyncs(1),
+	)
 
 	// Old Win B position (15,7) should now show Win A's bg (A covers 0..29, 0..14)
 	if bg := ta.LastScreen.Get(15, 7).Background; bg != "#AA0000" {
@@ -450,9 +509,15 @@ func TestScenario_CascadingWindows(t *testing.T) {
 
 func TestScenario_DynamicWindowManager(t *testing.T) {
 	app, ta := NewTestApp(80, 30)
+	app.Tracker().Enable()
 
 	// Start empty
 	app.RenderAll()
+	app.Tracker().AssertLastFrame(t,
+		perf.CheckRenders(0),
+		perf.CheckLayouts(0),
+		perf.CheckPaints(0),
+	)
 
 	// Add 5 windows one by one
 	for i := 0; i < 5; i++ {
@@ -471,6 +536,12 @@ func TestScenario_DynamicWindowManager(t *testing.T) {
 				return root
 			})
 		app.RenderDirty()
+		if i == 0 {
+			app.Tracker().AssertLastFrame(t,
+				perf.CheckRenders(1),
+				perf.CheckRenderComponents("win-0"),
+			)
+		}
 	}
 
 	// Verify win-0 text at (0,0)
@@ -481,10 +552,25 @@ func TestScenario_DynamicWindowManager(t *testing.T) {
 	// Move win-2 to overlap win-0 (win-2 has higher z=20)
 	app.MoveComponent("win-2", buffer.Rect{X: 0, Y: 0, W: 15, H: 10})
 	app.RenderDirty()
+	app.Tracker().AssertLastFrame(t,
+		perf.CheckRenders(0),
+		perf.CheckPaints(0),
+		perf.CheckLayouts(1),
+		perf.CheckOcclusionBuilds(1),
+		perf.CheckMetric(perf.ComposeRects, 1),
+		perf.CheckHitTesterRebuilds(1),
+		perf.CheckHandlerFullSyncs(1),
+	)
 
 	// Remove win-1
 	app.UnregisterComponent("win-1")
 	app.RenderDirty()
+	app.Tracker().AssertLastFrame(t,
+		perf.CheckRenders(0),
+		perf.CheckOcclusionBuilds(1),
+		perf.CheckHitTesterRebuilds(1),
+		perf.CheckHandlerFullSyncs(1),
+	)
 
 	// Add win-5 at highest z-index
 	app.RegisterComponent("win-5", "win", buffer.Rect{X: 30, Y: 10, W: 20, H: 10}, 200,
@@ -498,6 +584,10 @@ func TestScenario_DynamicWindowManager(t *testing.T) {
 			return root
 		})
 	app.RenderDirty()
+	app.Tracker().AssertLastFrame(t,
+		perf.CheckRenders(1),
+		perf.CheckRenderComponents("win-5"),
+	)
 
 	// Verify win-5 renders
 	if c := ta.LastScreen.Get(30, 10).Char; c != 'Z' {
@@ -507,6 +597,12 @@ func TestScenario_DynamicWindowManager(t *testing.T) {
 	// Resize screen
 	app.Resize(120, 40)
 	app.RenderAll()
+	app.Tracker().AssertLastFrame(t,
+		perf.CheckRenders(5),
+		perf.CheckLayouts(5),
+		perf.CheckPaints(5),
+		perf.CheckRenderComponents("win-0", "win-2", "win-3", "win-4", "win-5"),
+	)
 
 	if ta.LastScreen.Width() != 120 || ta.LastScreen.Height() != 40 {
 		t.Errorf("after resize: expected 120x40, got %dx%d", ta.LastScreen.Width(), ta.LastScreen.Height())
@@ -524,6 +620,12 @@ func TestScenario_DynamicWindowManager(t *testing.T) {
 	if comp != nil {
 		t.Error("win-1 should be unregistered")
 	}
+
+	// Cumulative RenderFn invocations: empty frame + 5 new-window frames + move +
+	// unregister + win-5 + resize-all (5 surviving components).
+	if got := app.Tracker().TotalStats().Get(perf.Renders); got != 11 {
+		t.Errorf("total RenderFn calls (perf): got %d, want 11", got)
+	}
 }
 
 // =============================================================================
@@ -532,6 +634,7 @@ func TestScenario_DynamicWindowManager(t *testing.T) {
 
 func TestScenario_StateUpdatesAcrossComponents(t *testing.T) {
 	app, ta := NewTestApp(60, 10)
+	app.Tracker().Enable()
 
 	// Counter display
 	app.RegisterComponent("counter", "counter", buffer.Rect{X: 0, Y: 0, W: 20, H: 5}, 0,
@@ -593,6 +696,12 @@ func TestScenario_StateUpdatesAcrossComponents(t *testing.T) {
 		})
 
 	app.RenderAll()
+	app.Tracker().AssertLastFrame(t,
+		perf.CheckRenders(3),
+		perf.CheckLayouts(3),
+		perf.CheckPaints(3),
+		perf.CheckRenderComponents("counter", "display", "incrementer"),
+	)
 
 	// Initial state: count=0
 	if c := ta.LastScreen.Get(0, 0).Char; c != 'C' {
@@ -606,6 +715,13 @@ func TestScenario_StateUpdatesAcrossComponents(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		app.HandleEvent(&event.Event{Type: "mousedown", X: 20, Y: 0})
 		app.RenderDirty()
+		app.Tracker().AssertLastFrame(t,
+			perf.CheckRenders(2),
+			perf.CheckRenderComponents("counter", "display"),
+			perf.CheckOcclusionUpdates(1),
+			perf.CheckMetric(perf.ComposeDirty, 1),
+			perf.CheckHandlerDirtySyncs(1),
+		)
 	}
 
 	// Counter should show "Count:3" — read exactly 7 chars
@@ -629,6 +745,13 @@ func TestScenario_StateUpdatesAcrossComponents(t *testing.T) {
 	// One more click → count=4, even
 	app.HandleEvent(&event.Event{Type: "mousedown", X: 20, Y: 0})
 	app.RenderDirty()
+	app.Tracker().AssertLastFrame(t,
+		perf.CheckRenders(2),
+		perf.CheckRenderComponents("counter", "display"),
+		perf.CheckOcclusionUpdates(1),
+		perf.CheckMetric(perf.ComposeDirty, 1),
+		perf.CheckHandlerDirtySyncs(1),
+	)
 
 	if c := ta.LastScreen.Get(40, 0).Char; c != 'e' {
 		t.Errorf("after 4 clicks: expected 'e' (from 'even'), got %q", c)
@@ -641,6 +764,7 @@ func TestScenario_StateUpdatesAcrossComponents(t *testing.T) {
 
 func TestScenario_FocusNavigationMultiWindow(t *testing.T) {
 	app, _ := NewTestApp(60, 20)
+	app.Tracker().Enable()
 
 	// 3 windows, each with 2 focusable elements
 	for i := 0; i < 3; i++ {
@@ -671,6 +795,12 @@ func TestScenario_FocusNavigationMultiWindow(t *testing.T) {
 	}
 
 	app.RenderAll()
+	app.Tracker().AssertLastFrame(t,
+		perf.CheckRenders(3),
+		perf.CheckLayouts(3),
+		perf.CheckPaints(3),
+		perf.CheckRenderComponents("win-0", "win-1", "win-2"),
+	)
 
 	// Tab through all 6 focusable elements
 	seen := make(map[string]bool)
@@ -704,6 +834,11 @@ func TestScenario_FocusNavigationMultiWindow(t *testing.T) {
 	// Remove middle window
 	app.UnregisterComponent("win-1")
 	app.RenderAll()
+	app.Tracker().AssertLastFrame(t,
+		perf.CheckRenders(0),
+		perf.CheckLayouts(0),
+		perf.CheckPaints(0),
+	)
 
 	// Tab through remaining elements (should be 4: from win-0 and win-2)
 	seen2 := make(map[string]bool)
@@ -733,6 +868,12 @@ func TestScenario_FocusNavigationMultiWindow(t *testing.T) {
 			return root
 		})
 	app.RenderAll()
+	app.Tracker().AssertLastFrame(t,
+		perf.CheckRenders(1),
+		perf.CheckLayouts(1),
+		perf.CheckPaints(1),
+		perf.CheckRenderComponents("win-3"),
+	)
 
 	// Tab should eventually reach the new focusable
 	foundNew := false
@@ -754,6 +895,7 @@ func TestScenario_FocusNavigationMultiWindow(t *testing.T) {
 
 func TestScenario_HoverAcrossOverlappingWindows(t *testing.T) {
 	app, _ := NewTestApp(40, 10)
+	app.Tracker().Enable()
 
 	enterCount := map[string]int{}
 	leaveCount := map[string]int{}
@@ -795,6 +937,12 @@ func TestScenario_HoverAcrossOverlappingWindows(t *testing.T) {
 		})
 
 	app.RenderAll()
+	app.Tracker().AssertLastFrame(t,
+		perf.CheckRenders(2),
+		perf.CheckLayouts(2),
+		perf.CheckPaints(2),
+		perf.CheckRenderComponents("winA", "winB"),
+	)
 
 	// Move mouse to Win A exclusive area (5,5)
 	app.HandleEvent(&event.Event{Type: "mousemove", X: 5, Y: 5})
@@ -843,6 +991,7 @@ func TestScenario_HoverAcrossOverlappingWindows(t *testing.T) {
 
 func TestScenario_StressTest_ManyWindows(t *testing.T) {
 	app, ta := NewTestApp(100, 50)
+	app.Tracker().Enable()
 
 	clickTargets := make(map[string]bool)
 
@@ -871,6 +1020,11 @@ func TestScenario_StressTest_ManyWindows(t *testing.T) {
 	}
 
 	app.RenderAll()
+	app.Tracker().AssertLastFrame(t,
+		perf.CheckRenders(50),
+		perf.CheckLayouts(50),
+		perf.CheckPaints(50),
+	)
 
 	// Verify screen is not empty
 	nonZero := 0
@@ -904,6 +1058,12 @@ func TestScenario_StressTest_ManyWindows(t *testing.T) {
 		app.UnregisterComponent(fmt.Sprintf("sw-%d", i))
 	}
 	app.RenderDirty()
+	app.Tracker().AssertLastFrame(t,
+		perf.CheckRenders(0),
+		perf.CheckOcclusionBuilds(1),
+		perf.CheckHitTesterRebuilds(1),
+		perf.CheckHandlerFullSyncs(1),
+	)
 
 	// Verify remaining windows still render
 	remainingRendered := false
@@ -929,6 +1089,7 @@ func TestScenario_StressTest_ManyWindows(t *testing.T) {
 
 func TestScenario_ResizeWithActiveContent(t *testing.T) {
 	app, ta := NewTestApp(40, 20)
+	app.Tracker().Enable()
 
 	// 3 components with state
 	for i := 0; i < 3; i++ {
@@ -950,12 +1111,25 @@ func TestScenario_ResizeWithActiveContent(t *testing.T) {
 	}
 
 	app.RenderAll()
+	app.Tracker().AssertLastFrame(t,
+		perf.CheckRenders(3),
+		perf.CheckLayouts(3),
+		perf.CheckPaints(3),
+		perf.CheckRenderComponents("comp-0", "comp-1", "comp-2"),
+	)
 
 	// Set state on each component
 	app.SetState("comp-0", "val", 10)
 	app.SetState("comp-1", "val", 20)
 	app.SetState("comp-2", "val", 30)
 	app.RenderDirty()
+	app.Tracker().AssertLastFrame(t,
+		perf.CheckRenders(3),
+		perf.CheckRenderComponents("comp-0", "comp-1", "comp-2"),
+		perf.CheckOcclusionUpdates(1),
+		perf.CheckMetric(perf.ComposeDirty, 1),
+		perf.CheckHandlerDirtySyncs(1),
+	)
 
 	// Verify state reflected on screen for comp-0
 	// Read exactly len("comp-0:10") = 9 chars (box fills rest with spaces)
@@ -978,6 +1152,12 @@ func TestScenario_ResizeWithActiveContent(t *testing.T) {
 	// Resize smaller
 	app.Resize(30, 15)
 	app.RenderAll()
+	app.Tracker().AssertLastFrame(t,
+		perf.CheckRenders(3),
+		perf.CheckLayouts(3),
+		perf.CheckPaints(3),
+		perf.CheckRenderComponents("comp-0", "comp-1", "comp-2"),
+	)
 
 	if ta.LastScreen.Width() != 30 || ta.LastScreen.Height() != 15 {
 		t.Errorf("after shrink: expected 30x15, got %dx%d", ta.LastScreen.Width(), ta.LastScreen.Height())
@@ -991,6 +1171,12 @@ func TestScenario_ResizeWithActiveContent(t *testing.T) {
 	// Resize larger
 	app.Resize(80, 40)
 	app.RenderAll()
+	app.Tracker().AssertLastFrame(t,
+		perf.CheckRenders(3),
+		perf.CheckLayouts(3),
+		perf.CheckPaints(3),
+		perf.CheckRenderComponents("comp-0", "comp-1", "comp-2"),
+	)
 
 	if ta.LastScreen.Width() != 80 || ta.LastScreen.Height() != 40 {
 		t.Errorf("after grow: expected 80x40, got %dx%d", ta.LastScreen.Width(), ta.LastScreen.Height())
@@ -1017,6 +1203,7 @@ func TestScenario_ResizeWithActiveContent(t *testing.T) {
 
 func TestScenario_RapidMoveAndClick(t *testing.T) {
 	app, _ := NewTestApp(40, 10)
+	app.Tracker().Enable()
 
 	clickCount := 0
 
@@ -1036,6 +1223,12 @@ func TestScenario_RapidMoveAndClick(t *testing.T) {
 		})
 
 	app.RenderAll()
+	app.Tracker().AssertLastFrame(t,
+		perf.CheckRenders(1),
+		perf.CheckLayouts(1),
+		perf.CheckPaints(1),
+		perf.CheckRenderComponents("movable"),
+	)
 
 	// Click at position A — should hit
 	clickCount = 0
@@ -1047,6 +1240,15 @@ func TestScenario_RapidMoveAndClick(t *testing.T) {
 	// Move window to position B
 	app.MoveComponent("movable", buffer.Rect{X: 25, Y: 3, W: 10, H: 5})
 	app.RenderDirty()
+	app.Tracker().AssertLastFrame(t,
+		perf.CheckRenders(0),
+		perf.CheckPaints(0),
+		perf.CheckLayouts(1),
+		perf.CheckOcclusionBuilds(1),
+		perf.CheckMetric(perf.ComposeRects, 1),
+		perf.CheckHitTesterRebuilds(1),
+		perf.CheckHandlerFullSyncs(1),
+	)
 
 	// Click at position B — should hit
 	clickCount = 0
@@ -1067,6 +1269,15 @@ func TestScenario_RapidMoveAndClick(t *testing.T) {
 		x := (i * 3) % 30
 		app.MoveComponent("movable", buffer.Rect{X: x, Y: 0, W: 10, H: 5})
 		app.RenderDirty()
+		app.Tracker().AssertLastFrame(t,
+			perf.CheckRenders(0),
+			perf.CheckPaints(0),
+			perf.CheckLayouts(1),
+			perf.CheckOcclusionBuilds(1),
+			perf.CheckMetric(perf.ComposeRects, 1),
+			perf.CheckHitTesterRebuilds(1),
+			perf.CheckHandlerFullSyncs(1),
+		)
 	}
 
 	// Final position: x = (9*3)%30 = 27
