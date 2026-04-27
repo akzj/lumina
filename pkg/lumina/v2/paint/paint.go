@@ -136,6 +136,8 @@ func (p *painter) paintScrollChildren(buf *buffer.Buffer, node *layout.VNode, ox
 	}
 
 	// Copy visible portion from temp buffer to main buffer.
+	// When a temp cell has content but no background, inherit the background
+	// from the main buffer (which already has the container's background fill).
 	for dy := 0; dy < contentH; dy++ {
 		srcY := scrollY + dy
 		if srcY < 0 || srcY >= totalContentH {
@@ -145,6 +147,10 @@ func (p *painter) paintScrollChildren(buf *buffer.Buffer, node *layout.VNode, ox
 		for dx := 0; dx < contentW; dx++ {
 			cell := tempBuf.Get(dx, srcY)
 			if !cell.Zero() {
+				if cell.Background == "" {
+					existing := buf.Get(contentX+dx, dstY)
+					cell.Background = existing.Background
+				}
 				buf.Set(contentX+dx, dstY, cell)
 			}
 		}
