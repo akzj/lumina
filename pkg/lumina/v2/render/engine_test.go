@@ -782,3 +782,220 @@ func BenchmarkEngine_IdleFrame_WithSubComponents(b *testing.B) {
 		e.RenderDirty()
 	}
 }
+
+func TestHoverLeaveRestoresBackground(t *testing.T) {
+	// Simulates stress_test.lua: 80 Cell components in an hbox row (width=1 each).
+	// Each Cell has its own hover state. Hovering cell 0, then cell 1, then
+	// moving away should restore backgrounds correctly.
+	e, L := newTestEngine(t)
+
+	err := L.DoString(`
+		local theme_bg = "#1E1E2E"
+		local theme_hoverBg = "#313244"
+
+		Cell = lumina.defineComponent("Cell", function(props)
+			local hovered, setHovered = lumina.useState("h", false)
+
+			local bg
+			if hovered then
+				bg = theme_hoverBg
+			else
+				bg = theme_bg
+			end
+
+			return lumina.createElement("box", {
+				style = {width = 1, height = 1, background = bg},
+				onMouseEnter = function() setHovered(true) end,
+				onMouseLeave = function() setHovered(false) end,
+			}, lumina.createElement("text", {
+				style = {foreground = "#FFF"},
+			}, hovered and "H" or "."))
+		end)
+
+		lumina.createComponent({
+			id = "root",
+			name = "Root",
+			render = function(props)
+				local cells = {}
+				for x = 0, 79 do
+					local id = tostring(x)
+					cells[#cells + 1] = lumina.createElement(Cell, {key = id, id = id})
+				end
+				return lumina.createElement("hbox", {
+					id = "row",
+					style = {height = 1},
+				}, table.unpack(cells))
+			end,
+		})
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	e.RenderAll()
+
+	// Verify initial state: first few cells should have theme_bg
+	for x := 0; x < 3; x++ {
+		cell := e.buffer.Get(x, 0)
+		if cell.BG != "#1E1E2E" {
+			t.Errorf("initial: cell(%d,0).BG = %q, want '#1E1E2E'", x, cell.BG)
+		}
+		if cell.Ch != '.' {
+			t.Errorf("initial: cell(%d,0).Ch = %q, want '.'", x, string(cell.Ch))
+		}
+	}
+
+	// Hover cell 0
+	e.HandleMouseMove(0, 0)
+	e.RenderDirty()
+
+	cell0 := e.buffer.Get(0, 0)
+	if cell0.BG != "#313244" {
+		t.Errorf("after hover c0: cell(0,0).BG = %q, want '#313244'", cell0.BG)
+	}
+	if cell0.Ch != 'H' {
+		t.Errorf("after hover c0: cell(0,0).Ch = %q, want 'H'", string(cell0.Ch))
+	}
+
+	// Move hover to cell 1 → cell 0 should restore, cell 1 should highlight
+	e.HandleMouseMove(1, 0)
+	e.RenderDirty()
+
+	cell0After := e.buffer.Get(0, 0)
+	if cell0After.BG != "#1E1E2E" {
+		t.Errorf("after hover c1: cell(0,0).BG = %q, want '#1E1E2E' (restored)", cell0After.BG)
+	}
+	if cell0After.Ch != '.' {
+		t.Errorf("after hover c1: cell(0,0).Ch = %q, want '.' (restored)", string(cell0After.Ch))
+	}
+
+	cell1 := e.buffer.Get(1, 0)
+	if cell1.BG != "#313244" {
+		t.Errorf("after hover c1: cell(1,0).BG = %q, want '#313244'", cell1.BG)
+	}
+	if cell1.Ch != 'H' {
+		t.Errorf("after hover c1: cell(1,0).Ch = %q, want 'H'", string(cell1.Ch))
+	}
+
+	// Move hover away (outside all cells) → cell 1 should restore
+	e.HandleMouseMove(5, 5)
+	e.RenderDirty()
+
+	cell1After := e.buffer.Get(1, 0)
+	if cell1After.BG != "#1E1E2E" {
+		t.Errorf("after hover away: cell(1,0).BG = %q, want '#1E1E2E' (restored)", cell1After.BG)
+	}
+	if cell1After.Ch != '.' {
+		t.Errorf("after hover away: cell(1,0).Ch = %q, want '.' (restored)", string(cell1After.Ch))
+	}
+}
+
+func TestReconcileChildComponents_KeyFallback(t *testing.T) {
+	// Test that reconcileChildComponents uses Key as fallback when ID is empty.
+	// This simulates createElement(Cell, {key = "c0"}) WITHOUT an id prop.
+	e, L := newTestEngine(t)
+
+	err := L.DoString(`
+		Cell = lumina.defineComponent("Cell", function(props)
+			return lumina.createElement("text", {}, "cell")
+		end)
+
+		lumina.createComponent({
+			id = "root",
+			name = "Root",
+			render = function(props)
+				return lumina.createElement("hbox", {id = "row"},
+					lumina.createElement(Cell, {key = "a"}),
+					lumina.createElement(Cell, {key = "b"}),
+					lumina.createElement(Cell, {key = "c"})
+				)
+			end,
+		})
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	e.RenderAll()
+
+	// Should have 3 separate child components (not just 1)
+	root := e.GetComponent("root")
+	if root == nil {
+		t.Fatal("root component nil")
+	}
+	if len(root.Children) != 3 {
+		t.Errorf("expected 3 child components, got %d", len(root.Children))
+		for i, ch := range root.Children {
+			t.Logf("  child %d: ID=%q Type=%q", i, ch.ID, ch.Type)
+		}
+	}
+}
+
+func TestReconcileChildComponents_SurvivesParentRerender(t *testing.T) {
+	// Verify that child components are found (not recreated) when the parent re-renders.
+	// This tests the FindChild/AddChild key consistency fix.
+	e, L := newTestEngine(t)
+
+	err := L.DoString(`
+		Cell = lumina.defineComponent("Cell", function(props)
+			local val, setVal = lumina.useState("v", 0)
+			return lumina.createElement("text", {}, tostring(val))
+		end)
+
+		lumina.createComponent({
+			id = "root",
+			name = "Root",
+			render = function(props)
+				local count, setCount = lumina.useState("n", 0)
+				return lumina.createElement("hbox", {id = "row"},
+					lumina.createElement(Cell, {key = "a", id = "a"}),
+					lumina.createElement(Cell, {key = "b", id = "b"})
+				)
+			end,
+		})
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	e.RenderAll()
+
+	root := e.GetComponent("root")
+	if root == nil {
+		t.Fatal("root component nil")
+	}
+	if len(root.Children) != 2 {
+		t.Fatalf("expected 2 child components, got %d", len(root.Children))
+	}
+
+	// Set state on child "a" to give it unique state
+	childA := e.GetComponent("root:a")
+	if childA == nil {
+		t.Fatal("child component 'root:a' not found")
+	}
+	e.SetState("root:a", "v", int64(42))
+
+	// Force parent re-render
+	root.Dirty = true
+	e.RenderDirty()
+
+	// Child count should still be 2 (not 4 due to duplicates)
+	if len(root.Children) != 2 {
+		t.Errorf("after parent re-render: expected 2 child components, got %d", len(root.Children))
+		for i, ch := range root.Children {
+			t.Logf("  child %d: ID=%q Type=%q", i, ch.ID, ch.Type)
+		}
+	}
+
+	// Child A's state should be preserved (same component, not recreated)
+	childAAfter := e.GetComponent("root:a")
+	if childAAfter == nil {
+		t.Fatal("child 'root:a' not found after parent re-render")
+	}
+	if childAAfter != childA {
+		t.Error("child 'root:a' was recreated (different pointer) — should be reused")
+	}
+	if childAAfter.State["v"] != int64(42) {
+		t.Errorf("child 'root:a' state lost: v=%v, want 42", childAAfter.State["v"])
+	}
+}

@@ -416,21 +416,26 @@ func (e *Engine) reconcileChildComponents(parent *Component, node *Node) {
 	// If this node represents a sub-component, handle it
 	if node.Type == "component" && node.ComponentType != "" {
 		factoryName := node.ComponentType
-		child := parent.FindChild(factoryName, node.ID)
+		// Use ID for lookup; fall back to Key when ID is empty.
+		lookupKey := node.ID
+		if lookupKey == "" {
+			lookupKey = node.Key
+		}
+		child := parent.FindChild(factoryName, lookupKey)
 		if child == nil {
 			// Create new child component
 			renderRef, ok := e.factories[factoryName]
 			if !ok {
 				return
 			}
-			childID := parent.ID + ":" + node.ID
-			if node.ID == "" {
+			childID := parent.ID + ":" + lookupKey
+			if lookupKey == "" {
 				childID = parent.ID + ":" + factoryName
 			}
 			child = NewComponent(childID, factoryName, factoryName)
 			child.RenderFn = renderRef
 			child.Parent = parent
-			parent.AddChild(child)
+			parent.AddChild(child, lookupKey)
 			e.components[childID] = child
 			child.Dirty = true
 		}
