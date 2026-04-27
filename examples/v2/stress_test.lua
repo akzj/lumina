@@ -35,7 +35,7 @@ lumina.createComponent({
     w = COLS, h = ROWS + 1,
     zIndex = 0,
 
-    render = function(state, props)
+    render = function(props)
         local clickedCells, setClickedCells = lumina.useState("clicked", {})
         local clickCount, setClickCount = lumina.useState("clickCount", 0)
         local lastClick, setLastClick = lumina.useState("lastClick", "")
