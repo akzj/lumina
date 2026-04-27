@@ -4,6 +4,9 @@
 package v2
 
 import (
+	"github.com/akzj/go-lua/pkg/lua"
+	"github.com/akzj/lumina/pkg/lumina/v2/animation"
+	"github.com/akzj/lumina/pkg/lumina/v2/bridge"
 	"github.com/akzj/lumina/pkg/lumina/v2/buffer"
 	"github.com/akzj/lumina/pkg/lumina/v2/component"
 	"github.com/akzj/lumina/pkg/lumina/v2/compositor"
@@ -12,6 +15,7 @@ import (
 	"github.com/akzj/lumina/pkg/lumina/v2/output"
 	"github.com/akzj/lumina/pkg/lumina/v2/paint"
 	"github.com/akzj/lumina/pkg/lumina/v2/perf"
+	"github.com/akzj/lumina/pkg/lumina/v2/router"
 )
 
 // App is the composition root — ties all v2 modules together.
@@ -27,6 +31,14 @@ type App struct {
 	// Internal state
 	lastDirtyRects []buffer.Rect
 	layersDirty    bool // true when components added/removed/resized → need OcclusionMap rebuild
+
+	// Runtime (populated by NewAppWithLua / Run)
+	luaState  *lua.State
+	bridge    *bridge.Bridge
+	animMgr   *animation.Manager
+	routerMgr *router.Router
+	quit      chan struct{}
+	running   bool
 }
 
 // trackerRenderObserver bridges component.RenderObserver to perf.Tracker.

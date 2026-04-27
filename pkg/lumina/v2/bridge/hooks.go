@@ -413,6 +413,9 @@ func (b *Bridge) luaUseId(L *lua.State) int {
 func (b *Bridge) luaCreateElement(L *lua.State) int {
 	nodeType := L.CheckString(1)
 
+	// Capture arg count BEFORE pushing result table onto the stack.
+	nArgs := L.GetTop()
+
 	// Create result table.
 	L.NewTable()
 	resultIdx := L.AbsIndex(-1)
@@ -422,7 +425,7 @@ func (b *Bridge) luaCreateElement(L *lua.State) int {
 	L.SetField(resultIdx, "type")
 
 	// Copy props into result table.
-	if L.GetTop() >= 2 && L.IsTable(2) {
+	if nArgs >= 2 && L.IsTable(2) {
 		L.ForEach(2, func(L *lua.State) bool {
 			if L.Type(-2) == lua.TypeString {
 				key, _ := L.ToString(-2)
@@ -434,7 +437,6 @@ func (b *Bridge) luaCreateElement(L *lua.State) int {
 	}
 
 	// Collect vararg children (args 3+) into a children array.
-	nArgs := L.GetTop()
 	if nArgs > 2 {
 		L.CreateTable(nArgs-2, 0)
 		childrenIdx := L.AbsIndex(-1)
