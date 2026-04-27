@@ -72,7 +72,8 @@ type Node struct {
 	OnScroll     LuaRef
 
 	// Component (if this is a component root node)
-	Component *Component // nil for plain elements
+	Component     *Component // nil for plain elements
+	ComponentType string     // factory name for type="component" nodes
 
 	// Scroll state
 	ScrollY int

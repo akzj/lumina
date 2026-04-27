@@ -89,34 +89,24 @@ func (e *Engine) SetState(compID, key string, value any) {
 // RenderDirty renders all dirty components, reconciles, layouts, and paints.
 // This is the main frame function.
 func (e *Engine) RenderDirty() {
-	// 1. Render dirty components (call Lua, reconcile)
-	for _, comp := range e.components {
-		if !comp.Dirty {
-			continue
-		}
-		e.renderComponent(comp)
-	}
+	// 1. Render dirty components in dependency order (parents first)
+	e.renderInOrder()
 
-	// 2. Incremental layout (only LayoutDirty subtrees)
-	for _, comp := range e.components {
-		if comp.RootNode == nil {
-			continue
-		}
-		if comp.IsRoot {
-			if comp.RootNode.LayoutDirty {
-				LayoutFull(comp.RootNode, 0, 0, e.width, e.height)
-			}
+	// 2. Graft child component RootNodes into parent tree
+	e.graftChildComponents()
+
+	// 3. Layout: only the root tree (which now contains grafted children)
+	if e.root != nil && e.root.RootNode != nil {
+		if e.root.RootNode.LayoutDirty {
+			LayoutFull(e.root.RootNode, 0, 0, e.width, e.height)
 		} else {
-			LayoutIncremental(comp.RootNode)
+			LayoutIncremental(e.root.RootNode)
 		}
 	}
 
-	// 3. Incremental paint (only PaintDirty nodes)
-	for _, comp := range e.components {
-		if comp.RootNode == nil {
-			continue
-		}
-		PaintDirty(e.buffer, comp.RootNode)
+	// 4. Paint: only the root tree (grafted children are painted in-tree)
+	if e.root != nil && e.root.RootNode != nil {
+		PaintDirty(e.buffer, e.root.RootNode)
 	}
 }
 
@@ -126,15 +116,13 @@ func (e *Engine) RenderAll() {
 		comp.Dirty = true
 	}
 
-	// Render all components
-	for _, comp := range e.components {
-		if !comp.Dirty {
-			continue
-		}
-		e.renderComponent(comp)
-	}
+	// Render all components in dependency order (parents first)
+	e.renderInOrder()
 
-	// Force full layout + paint on root
+	// Graft child component RootNodes into parent tree
+	e.graftChildComponents()
+
+	// Force full layout + paint on root (which now includes grafted children)
 	if e.root != nil && e.root.RootNode != nil {
 		LayoutFull(e.root.RootNode, 0, 0, e.width, e.height)
 		PaintFull(e.buffer, e.root.RootNode)
@@ -361,8 +349,8 @@ func (e *Engine) reconcileChildComponents(parent *Component, node *Node) {
 	}
 
 	// If this node represents a sub-component, handle it
-	if node.Type == "component" && node.Key != "" {
-		factoryName := node.Key
+	if node.Type == "component" && node.ComponentType != "" {
+		factoryName := node.ComponentType
 		child := parent.FindChild(factoryName, node.ID)
 		if child == nil {
 			// Create new child component
@@ -380,6 +368,9 @@ func (e *Engine) reconcileChildComponents(parent *Component, node *Node) {
 			parent.AddChild(child)
 			e.components[childID] = child
 			child.Dirty = true
+		} else {
+			// Existing child — mark dirty so it re-renders with latest props
+			child.Dirty = true
 		}
 		node.Component = child
 		return
@@ -392,6 +383,57 @@ func (e *Engine) reconcileChildComponents(parent *Component, node *Node) {
 }
 
 // --- Lua API Registration ---
+
+// renderInOrder renders components in dependency order: parents before children.
+// This ensures parent trees have component placeholders before child components render.
+func (e *Engine) renderInOrder() {
+	// Render root first (it creates the component placeholders)
+	if e.root != nil && e.root.Dirty {
+		e.renderComponent(e.root)
+	}
+	// Then render all other dirty components (children)
+	for _, comp := range e.components {
+		if !comp.Dirty || comp.IsRoot {
+			continue
+		}
+		e.renderComponent(comp)
+	}
+}
+
+// graftChildComponents walks the root tree and connects child component
+// RootNodes as children of their placeholder nodes. This allows layout and
+// paint to naturally traverse into sub-components.
+func (e *Engine) graftChildComponents() {
+	if e.root == nil || e.root.RootNode == nil {
+		return
+	}
+	e.graftWalk(e.root.RootNode)
+}
+
+// graftWalk recursively finds component placeholder nodes and grafts the
+// child component's RootNode as the placeholder's child.
+func (e *Engine) graftWalk(node *Node) {
+	if node == nil {
+		return
+	}
+
+	for _, child := range node.Children {
+		if child.Type == "component" && child.Component != nil {
+			comp := child.Component
+			if comp.RootNode != nil {
+				// Graft: set the component's rendered output as child of the placeholder
+				child.Children = []*Node{comp.RootNode}
+				comp.RootNode.Parent = child
+				// Mark for layout since tree structure changed
+				child.LayoutDirty = true
+				child.PaintDirty = true
+			}
+		}
+		// Always recurse (component children may contain nested components)
+		e.graftWalk(child)
+	}
+}
+
 
 // RegisterLuaAPI registers lumina.createElement, lumina.useState,
 // lumina.defineComponent, lumina.createComponent on the Lua global table.

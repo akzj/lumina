@@ -13,12 +13,18 @@ func Reconcile(node *Node, desc Descriptor) bool {
 		changed = true
 	}
 
-	// 2. Update style (check each field that affects paint vs layout)
+	// 2. Update ComponentType (for component placeholder nodes)
+	if desc.ComponentType != node.ComponentType {
+		node.ComponentType = desc.ComponentType
+		changed = true
+	}
+
+	// 3. Update style (check each field that affects paint vs layout)
 	if styleChanged := reconcileStyle(node, desc.Style); styleChanged {
 		changed = true
 	}
 
-	// 3. Update event handlers (just swap refs)
+	// 4. Update event handlers (just swap refs)
 	changed = updateRef(&node.OnClick, desc.OnClick) || changed
 	changed = updateRef(&node.OnMouseEnter, desc.OnMouseEnter) || changed
 	changed = updateRef(&node.OnMouseLeave, desc.OnMouseLeave) || changed
@@ -26,9 +32,11 @@ func Reconcile(node *Node, desc Descriptor) bool {
 	changed = updateRef(&node.OnChange, desc.OnChange) || changed
 	changed = updateRef(&node.OnScroll, desc.OnScroll) || changed
 
-	// 4. Reconcile children
-	if reconcileChildren(node, desc.Children) {
-		changed = true
+	// 5. Reconcile children (skip for component nodes — children are grafted)
+	if node.Type != "component" {
+		if reconcileChildren(node, desc.Children) {
+			changed = true
+		}
 	}
 
 	return changed
@@ -200,6 +208,7 @@ func createNodeFromDesc(desc Descriptor) *Node {
 	node.Key = desc.Key
 	node.Content = desc.Content
 	node.Style = desc.Style
+	node.ComponentType = desc.ComponentType
 	node.OnClick = desc.OnClick
 	node.OnMouseEnter = desc.OnMouseEnter
 	node.OnMouseLeave = desc.OnMouseLeave
