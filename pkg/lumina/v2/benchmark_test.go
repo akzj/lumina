@@ -9,8 +9,20 @@ import (
 	"github.com/akzj/lumina/pkg/lumina/v2/compositor"
 	"github.com/akzj/lumina/pkg/lumina/v2/event"
 	"github.com/akzj/lumina/pkg/lumina/v2/layout"
+	"github.com/akzj/lumina/pkg/lumina/v2/output"
 	"github.com/akzj/lumina/pkg/lumina/v2/paint"
 )
+
+// ─── No-op adapter (zero overhead, measures pure render path) ────────
+
+type nopAdapter struct{}
+
+func (nopAdapter) WriteFull(_ *buffer.Buffer) error                       { return nil }
+func (nopAdapter) WriteDirty(_ *buffer.Buffer, _ []buffer.Rect) error     { return nil }
+func (nopAdapter) Flush() error                                           { return nil }
+func (nopAdapter) Close() error                                           { return nil }
+
+var _ output.Adapter = nopAdapter{}
 
 // ─── Constants ───────────────────────────────────────────────────────
 // 4K resolution with 8×16 font: 3840/8 = 480 cols, 2160/16 = 135 rows = 64,800 cells
@@ -370,6 +382,60 @@ func BenchmarkHandleEvent_MouseMove_HitTest(b *testing.B) {
 			X:    i % screenW,
 			Y:    i % screenH,
 		})
+	}
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// GROUP 3b: Pure Render Path (no-op adapter — no output overhead)
+// ═══════════════════════════════════════════════════════════════════════
+
+func BenchmarkRenderDirty_SingleCellHover_4K_NopAdapter(b *testing.B) {
+	app := NewApp(screenW, screenH, nopAdapter{})
+
+	app.RegisterComponent("bg", "background",
+		buffer.Rect{X: 0, Y: 0, W: screenW, H: screenH}, 0, fullScreenRenderFn)
+	for i := 0; i < 100; i++ {
+		x := (i % 50) * 2
+		y := (i / 50) * 2
+		id := fmt.Sprintf("cell-%d", i)
+		app.RegisterComponent(id, "cell",
+			buffer.Rect{X: x, Y: y, W: 1, H: 1}, 1, cellRenderFn)
+	}
+	app.RenderAll()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		cellID := fmt.Sprintf("cell-%d", i%100)
+		app.SetState(cellID, "hover", true)
+		app.RenderDirty()
+	}
+}
+
+func BenchmarkRenderDirty_DialogContentUpdate_NopAdapter(b *testing.B) {
+	app := NewApp(screenW, screenH, nopAdapter{})
+
+	app.RegisterComponent("bg", "background",
+		buffer.Rect{X: 0, Y: 0, W: screenW, H: screenH}, 0, fullScreenRenderFn)
+	app.RegisterComponent("dlg-0", "dialog",
+		buffer.Rect{X: 100, Y: 30, W: 40, H: 20}, 1, dialogRenderFn)
+	app.RenderAll()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		app.SetState("dlg-0", "content", fmt.Sprintf("Updated content %d", i))
+		app.RenderDirty()
+	}
+}
+
+func BenchmarkRenderAll_FullScreen_1Component_NopAdapter(b *testing.B) {
+	app := NewApp(screenW, screenH, nopAdapter{})
+	app.RegisterComponent("bg", "background",
+		buffer.Rect{X: 0, Y: 0, W: screenW, H: screenH}, 0, fullScreenRenderFn)
+	app.RenderAll()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		app.SetState("bg", "tick", i)
+		app.RenderAll()
 	}
 }
 
