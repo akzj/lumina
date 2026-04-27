@@ -95,11 +95,26 @@ func (e *Engine) HandleMouseMove(x, y int) {
 
 // HandleClick processes a click event at screen coordinates (x, y).
 // Finds the deepest node with an onClick handler (bubbling) and dispatches.
+// Also handles focus: clicking an input/textarea focuses it.
 func (e *Engine) HandleClick(x, y int) {
 	if e.root == nil || e.root.RootNode == nil {
 		return
 	}
 
+	// Hit-test for the deepest node at this position
+	hitNode := HitTest(e.root.RootNode, x, y)
+
+	// Focus management: clicking on input/textarea focuses it
+	if hitNode != nil && (hitNode.Type == "input" || hitNode.Type == "textarea") {
+		old := e.focusedNode
+		e.focusedNode = hitNode
+		if old != nil && old != hitNode {
+			old.PaintDirty = true
+		}
+		hitNode.PaintDirty = true
+	}
+
+	// Dispatch onClick (bubble up from hit node)
 	target := HitTestWithHandler(e.root.RootNode, x, y, "click")
 	if target != nil && target.OnClick != 0 {
 		e.callLuaRef(target.OnClick, x, y)
@@ -107,11 +122,26 @@ func (e *Engine) HandleClick(x, y int) {
 }
 
 // HandleKeyDown processes a key event.
-// Dispatches to the first node with an onKeyDown handler (DFS from root).
+// Priority: Tab → focus cycle, focused input editing, then onKeyDown handler.
 func (e *Engine) HandleKeyDown(key string) {
 	if e.root == nil || e.root.RootNode == nil {
 		return
 	}
+
+	// Tab cycles focus
+	if key == "Tab" {
+		e.FocusNext()
+		return
+	}
+
+	// If an input/textarea is focused, try input handling first
+	if e.focusedNode != nil {
+		if e.HandleInputKeyDown(key) {
+			return // consumed by input system
+		}
+	}
+
+	// Fall through to onKeyDown handler
 	node := e.findKeyHandler(e.root.RootNode)
 	if node != nil && node.OnKeyDown != 0 {
 		e.callLuaRefKey(node.OnKeyDown, key)

@@ -223,6 +223,7 @@ func createNodeFromDesc(desc Descriptor) *Node {
 	node.Key = desc.Key
 	node.Content = desc.Content
 	node.Placeholder = desc.Placeholder
+	node.AutoFocus = desc.AutoFocus
 	node.ScrollY = desc.ScrollY
 	node.Style = desc.Style
 	node.ComponentType = desc.ComponentType

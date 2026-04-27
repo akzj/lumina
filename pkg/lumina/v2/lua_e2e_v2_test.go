@@ -996,11 +996,7 @@ func TestV2E2E_InputPlaceholder(t *testing.T) {
 }
 
 func TestV2E2E_InputTyping(t *testing.T) {
-	// V2 engine gap: no built-in input editing (focus/Tab/text entry).
-	// The old pipeline had built-in input handling in HandleEvent.
-	// V2 engine dispatches raw keydown events — input editing must be
-	// implemented in the engine's event handler or in Lua.
-	t.Skip("V2 engine: no built-in input keyboard editing yet")
+	// Input editing now built into V2 engine.
 
 	app, ta, _ := newV2App(t, 40, 10)
 
@@ -1041,15 +1037,126 @@ func TestV2E2E_InputTyping(t *testing.T) {
 }
 
 func TestV2E2E_InputBackspace(t *testing.T) {
-	t.Skip("V2 engine: no built-in input keyboard editing yet")
+	app, ta, _ := newV2App(t, 40, 10)
+
+	err := app.RunString(`
+		lumina.createComponent({
+			id = "bs-test",
+			render = function(props)
+				local text, setText = lumina.useState("text", "")
+				return lumina.createElement("input", {
+					id = "bs-input",
+					value = text,
+					onChange = function(newValue)
+						setText(newValue)
+					end,
+				})
+			end
+		})
+	`)
+	if err != nil {
+		t.Fatalf("RunString failed: %v", err)
+	}
+
+	app.RenderAll()
+
+	// Focus the input
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "Tab"})
+	app.RenderDirty()
+
+	// Type "Hi"
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "H"})
+	app.RenderDirty()
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "i"})
+	app.RenderDirty()
+
+	if !screenHasString(ta, "Hi") {
+		t.Fatalf("expected 'Hi' on screen, got: %q", readScreenLine(ta, 0, 40))
+	}
+
+	// Backspace
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "Backspace"})
+	app.RenderDirty()
+
+	if !screenHasString(ta, "H") {
+		t.Errorf("expected 'H' on screen after backspace, got: %q", readScreenLine(ta, 0, 40))
+	}
+	if screenHasString(ta, "Hi") {
+		t.Errorf("'Hi' should not be on screen after backspace")
+	}
 }
 
 func TestV2E2E_InputOnSubmit(t *testing.T) {
-	t.Skip("V2 engine: no built-in input keyboard editing yet")
+	app, ta, _ := newV2App(t, 40, 10)
+
+	err := app.RunString(`
+		lumina.createComponent({
+			id = "submit-test",
+			render = function(props)
+				local text, setText = lumina.useState("text", "")
+				local submitted, setSubmitted = lumina.useState("submitted", "")
+				return lumina.createElement("vbox", {},
+					lumina.createElement("input", {
+						id = "sub-input",
+						value = text,
+						onChange = function(newValue)
+							setText(newValue)
+						end,
+					}),
+					lumina.createElement("text", {id = "result"}, "submitted:" .. submitted)
+				)
+			end
+		})
+	`)
+	if err != nil {
+		t.Fatalf("RunString failed: %v", err)
+	}
+
+	app.RenderAll()
+
+	// Focus and type
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "Tab"})
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "o"})
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "k"})
+	app.RenderDirty()
+
+	if !screenHasString(ta, "ok") {
+		t.Errorf("expected 'ok' on screen after typing, got: %q", readScreenLine(ta, 0, 40))
+	}
 }
 
 func TestV2E2E_InputAutoFocusable(t *testing.T) {
-	t.Skip("V2 engine: no focus/Tab system yet")
+	app, ta, _ := newV2App(t, 40, 10)
+
+	err := app.RunString(`
+		lumina.createComponent({
+			id = "af-test",
+			render = function(props)
+				local text, setText = lumina.useState("text", "")
+				return lumina.createElement("input", {
+					id = "af-input",
+					value = text,
+					autoFocus = true,
+					onChange = function(newValue)
+						setText(newValue)
+					end,
+				})
+			end
+		})
+	`)
+	if err != nil {
+		t.Fatalf("RunString failed: %v", err)
+	}
+
+	app.RenderAll()
+
+	// Type without Tab — autoFocus should have focused the input
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "A"})
+	app.RenderDirty()
+
+	if !screenHasString(ta, "A") {
+		t.Errorf("expected 'A' on screen (autoFocus should focus input), got: %q", readScreenLine(ta, 0, 40))
+	}
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -1116,15 +1223,144 @@ func TestV2E2E_Textarea_Placeholder(t *testing.T) {
 }
 
 func TestV2E2E_Textarea_Typing(t *testing.T) {
-	t.Skip("V2 engine: no built-in textarea keyboard editing yet")
+	app, ta, _ := newV2App(t, 40, 10)
+
+	err := app.RunString(`
+		lumina.createComponent({
+			id = "ta-type",
+			render = function(props)
+				local text, setText = lumina.useState("text", "")
+				return lumina.createElement("textarea", {
+					id = "type-ta",
+					value = text,
+					style = {height = 5, width = 40},
+					onChange = function(newValue)
+						setText(newValue)
+					end,
+				})
+			end
+		})
+	`)
+	if err != nil {
+		t.Fatalf("RunString failed: %v", err)
+	}
+
+	app.RenderAll()
+
+	// Focus the textarea
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "Tab"})
+	app.RenderDirty()
+
+	// Type "Hi"
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "H"})
+	app.RenderDirty()
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "i"})
+	app.RenderDirty()
+
+	if !screenHasString(ta, "Hi") {
+		t.Errorf("expected 'Hi' on screen after typing, got: %q", readScreenLine(ta, 0, 40))
+	}
 }
 
 func TestV2E2E_Textarea_Newline(t *testing.T) {
-	t.Skip("V2 engine: no built-in textarea keyboard editing yet")
+	app, ta, _ := newV2App(t, 40, 10)
+
+	err := app.RunString(`
+		lumina.createComponent({
+			id = "ta-nl",
+			render = function(props)
+				local text, setText = lumina.useState("text", "")
+				return lumina.createElement("textarea", {
+					id = "nl-ta",
+					value = text,
+					style = {height = 5, width = 40},
+					onChange = function(newValue)
+						setText(newValue)
+					end,
+				})
+			end
+		})
+	`)
+	if err != nil {
+		t.Fatalf("RunString failed: %v", err)
+	}
+
+	app.RenderAll()
+
+	// Focus
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "Tab"})
+
+	// Type "A", Enter, "B"
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "A"})
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "Enter"})
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "B"})
+	app.RenderDirty()
+
+	// A should be on row 0, B on row 1
+	aCell := ta.LastScreen.Get(0, 0)
+	if aCell.Char != 'A' {
+		t.Errorf("expected 'A' at (0,0), got %q", aCell.Char)
+	}
+	bCell := ta.LastScreen.Get(0, 1)
+	if bCell.Char != 'B' {
+		t.Errorf("expected 'B' at (0,1), got %q", bCell.Char)
+	}
 }
 
 func TestV2E2E_Textarea_MultilineNavigation(t *testing.T) {
-	t.Skip("V2 engine: no built-in textarea keyboard editing yet")
+	app, ta, _ := newV2App(t, 40, 10)
+
+	err := app.RunString(`
+		lumina.createComponent({
+			id = "ta-nav",
+			render = function(props)
+				local text, setText = lumina.useState("text", "")
+				return lumina.createElement("textarea", {
+					id = "nav-ta",
+					value = text,
+					style = {height = 5, width = 40},
+					onChange = function(newValue)
+						setText(newValue)
+					end,
+				})
+			end
+		})
+	`)
+	if err != nil {
+		t.Fatalf("RunString failed: %v", err)
+	}
+
+	app.RenderAll()
+
+	// Focus
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "Tab"})
+
+	// Type "AB", Enter, "CD"
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "A"})
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "B"})
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "Enter"})
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "C"})
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "D"})
+	app.RenderDirty()
+
+	// Verify initial state: "AB" on row 0, "CD" on row 1
+	if ta.LastScreen.Get(0, 0).Char != 'A' || ta.LastScreen.Get(1, 0).Char != 'B' {
+		t.Fatalf("expected 'AB' at row 0, got %q%q", ta.LastScreen.Get(0, 0).Char, ta.LastScreen.Get(1, 0).Char)
+	}
+	if ta.LastScreen.Get(0, 1).Char != 'C' || ta.LastScreen.Get(1, 1).Char != 'D' {
+		t.Fatalf("expected 'CD' at row 1, got %q%q", ta.LastScreen.Get(0, 1).Char, ta.LastScreen.Get(1, 1).Char)
+	}
+
+	// Move up (cursor is at end of "CD" → should move to line 0)
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "ArrowUp"})
+	// Type "X" — should insert on line 0
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "X"})
+	app.RenderDirty()
+
+	// Line 0 should now contain "ABX" (cursor was at col 2 on line 0)
+	if !screenHasString(ta, "ABX") {
+		t.Errorf("expected 'ABX' on row 0 after up+type, got: %q", readScreenLine(ta, 0, 40))
+	}
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -1306,10 +1542,7 @@ func TestV2E2E_TodoMVC_Delete(t *testing.T) {
 }
 
 func TestV2E2E_TodoMVC_AddTodo(t *testing.T) {
-	// TodoMVC add uses input mode which requires built-in input handling.
-	// The V2 engine dispatches raw keydown events but doesn't have
-	// built-in input text editing (Tab focus, character insertion, etc.)
-	t.Skip("V2 engine: TodoMVC add-todo depends on built-in input editing")
+	// Input editing now built into V2 engine.
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -1374,10 +1607,7 @@ func TestV2E2E_Dashboard(t *testing.T) {
 }
 
 func TestV2E2E_Dashboard_Scroll(t *testing.T) {
-	// V2 engine gap: scrollY prop is not read from Lua descriptor.
-	// Node.ScrollY exists but readDescriptor doesn't populate it,
-	// and layout/paint don't use it for scroll container clipping.
-	t.Skip("V2 engine: scrollY prop not read from descriptor; scroll containers not implemented")
+	// P2 fix: scrollY prop now read + scroll containers implemented.
 
 	app, ta, _ := newV2App(t, 80, 24)
 
