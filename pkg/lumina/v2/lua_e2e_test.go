@@ -897,3 +897,235 @@ func TestLuaE2E_TodoMVC_AutoFocus(t *testing.T) {
 		t.Errorf("expected auto-focus on 'todo-root', got %q", id)
 	}
 }
+
+// --- Test: Input renders value on screen ---
+
+func TestLuaE2E_InputRender(t *testing.T) {
+	app, ta, _ := newLuaApp(t, 40, 10)
+
+	err := app.RunString(`
+		lumina.createComponent({
+			id = "input-test",
+			x = 0, y = 0, w = 40, h = 10,
+			render = function(state, props)
+				return lumina.createElement("input", {
+					id = "my-input",
+					value = "Hello World",
+					foreground = "#CDD6F4",
+				})
+			end
+		})
+	`)
+	if err != nil {
+		t.Fatalf("RunString failed: %v", err)
+	}
+
+	app.RenderAll()
+
+	if !screenHasString(ta, "Hello World") {
+		t.Error("expected 'Hello World' on screen from input value")
+	}
+}
+
+// --- Test: Input shows placeholder when empty ---
+
+func TestLuaE2E_InputPlaceholder(t *testing.T) {
+	app, ta, _ := newLuaApp(t, 40, 10)
+
+	err := app.RunString(`
+		lumina.createComponent({
+			id = "input-ph",
+			x = 0, y = 0, w = 40, h = 10,
+			render = function(state, props)
+				return lumina.createElement("input", {
+					id = "ph-input",
+					value = "",
+					placeholder = "Type here",
+				})
+			end
+		})
+	`)
+	if err != nil {
+		t.Fatalf("RunString failed: %v", err)
+	}
+
+	app.RenderAll()
+
+	if !screenHasString(ta, "Type here") {
+		t.Error("expected 'Type here' placeholder on screen")
+	}
+}
+
+// --- Test: Input typing updates screen via onChange ---
+
+func TestLuaE2E_InputTyping(t *testing.T) {
+	app, ta, _ := newLuaApp(t, 40, 10)
+
+	err := app.RunString(`
+		lumina.createComponent({
+			id = "input-type",
+			x = 0, y = 0, w = 40, h = 10,
+			render = function(state, props)
+				local text, setText = lumina.useState("text", "")
+				return lumina.createElement("input", {
+					id = "type-input",
+					value = text,
+					onChange = function(newValue)
+						setText(newValue)
+					end,
+				})
+			end
+		})
+	`)
+	if err != nil {
+		t.Fatalf("RunString failed: %v", err)
+	}
+
+	app.RenderAll()
+
+	// Focus the input (Tab cycles to the first focusable).
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "Tab"})
+	app.RenderDirty()
+
+	// Type "Hi"
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "H"})
+	app.RenderDirty()
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "i"})
+	app.RenderDirty()
+
+	if !screenHasString(ta, "Hi") {
+		t.Errorf("expected 'Hi' on screen after typing, got line: %q", readScreenLine(ta, 0, 40))
+	}
+}
+
+// --- Test: Input backspace removes character ---
+
+func TestLuaE2E_InputBackspace(t *testing.T) {
+	app, ta, _ := newLuaApp(t, 40, 10)
+
+	err := app.RunString(`
+		lumina.createComponent({
+			id = "input-bs",
+			x = 0, y = 0, w = 40, h = 10,
+			render = function(state, props)
+				local text, setText = lumina.useState("text", "ABC")
+				return lumina.createElement("input", {
+					id = "bs-input",
+					value = text,
+					onChange = function(newValue)
+						setText(newValue)
+					end,
+				})
+			end
+		})
+	`)
+	if err != nil {
+		t.Fatalf("RunString failed: %v", err)
+	}
+
+	app.RenderAll()
+
+	// Verify initial value.
+	if !screenHasString(ta, "ABC") {
+		t.Fatal("expected 'ABC' on initial render")
+	}
+
+	// Focus the input.
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "Tab"})
+	app.RenderDirty()
+
+	// Press Backspace (cursor is at end, removes 'C').
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "Backspace"})
+	app.RenderDirty()
+
+	if !screenHasString(ta, "AB") {
+		t.Errorf("expected 'AB' after backspace, got line: %q", readScreenLine(ta, 0, 40))
+	}
+
+	// If "ABC" is still there, backspace didn't work.
+	if screenHasString(ta, "ABC") {
+		t.Error("'ABC' should be gone after backspace")
+	}
+}
+
+// --- Test: Input onSubmit fires on Enter ---
+
+func TestLuaE2E_InputOnSubmit(t *testing.T) {
+	app, ta, _ := newLuaApp(t, 40, 10)
+
+	err := app.RunString(`
+		lumina.createComponent({
+			id = "input-submit",
+			x = 0, y = 0, w = 40, h = 10,
+			render = function(state, props)
+				local text, setText = lumina.useState("text", "hello")
+				local submitted, setSubmitted = lumina.useState("submitted", "none")
+				return lumina.createElement("box", {},
+					lumina.createElement("input", {
+						id = "submit-input",
+						value = text,
+						onChange = function(newValue)
+							setText(newValue)
+						end,
+						onSubmit = function(value)
+							setSubmitted(value)
+						end,
+					}),
+					lumina.createElement("text", {}, "Submitted:" .. submitted)
+				)
+			end
+		})
+	`)
+	if err != nil {
+		t.Fatalf("RunString failed: %v", err)
+	}
+
+	app.RenderAll()
+
+	if !screenHasString(ta, "Submitted:none") {
+		t.Fatal("expected 'Submitted:none' on initial render")
+	}
+
+	// Focus the input.
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "Tab"})
+	app.RenderDirty()
+
+	// Press Enter.
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "Enter"})
+	app.RenderDirty()
+
+	if !screenHasString(ta, "Submitted:hello") {
+		t.Errorf("expected 'Submitted:hello' after Enter, got line: %q", readScreenLine(ta, 0, 40))
+	}
+}
+
+// --- Test: Input auto-focusable (no need for focusable=true in props) ---
+
+func TestLuaE2E_InputAutoFocusable(t *testing.T) {
+	app, _, _ := newLuaApp(t, 40, 10)
+
+	err := app.RunString(`
+		lumina.createComponent({
+			id = "input-af",
+			x = 0, y = 0, w = 40, h = 10,
+			render = function(state, props)
+				return lumina.createElement("input", {
+					id = "af-input",
+					value = "test",
+				})
+			end
+		})
+	`)
+	if err != nil {
+		t.Fatalf("RunString failed: %v", err)
+	}
+
+	app.RenderAll()
+
+	// Tab should focus the input (it's auto-focusable).
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "Tab"})
+
+	if id := app.FocusedID(); id != "af-input" {
+		t.Errorf("expected focus on 'af-input', got %q", id)
+	}
+}
