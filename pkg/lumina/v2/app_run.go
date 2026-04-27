@@ -1,9 +1,13 @@
 package v2
 
 import (
+	"fmt"
 	"log"
+	"path/filepath"
+	"strings"
 	"time"
 
+	"github.com/akzj/go-lua/pkg/lua"
 	"github.com/akzj/lumina/pkg/lumina/v2/animation"
 	"github.com/akzj/lumina/pkg/lumina/v2/bridge"
 	"github.com/akzj/lumina/pkg/lumina/v2/event"
@@ -61,6 +65,8 @@ func (a *App) Run(cfg RunConfig) error {
 	// Load and execute the Lua script. This typically calls
 	// lumina.createComponent() which registers components with the App.
 	if cfg.ScriptPath != "" {
+		// Set up package.path so require() resolves relative to the script.
+		addScriptDirToPackagePath(a.luaState, cfg.ScriptPath)
 		if err := a.luaState.DoFile(cfg.ScriptPath); err != nil {
 			return err
 		}
@@ -79,6 +85,8 @@ func (a *App) RunScript(path string) error {
 	if a.luaState == nil {
 		return nil
 	}
+	// Set up package.path so require() resolves relative to the script.
+	addScriptDirToPackagePath(a.luaState, path)
 	return a.luaState.DoFile(path)
 }
 
@@ -224,6 +232,8 @@ func (a *App) reloadScript(path string) {
 	if a.timerMgr != nil {
 		a.timerMgr.releaseAll(a.luaState)
 	}
+	// Re-set package.path for the reloaded script.
+	addScriptDirToPackagePath(a.luaState, path)
 	if err := a.luaState.DoFile(path); err != nil {
 		// Script error — log but don't crash. Components are gone, so
 		// the screen will be blank until the user fixes the script.
@@ -295,4 +305,18 @@ func (a *App) handleInputEvent(ie InputEvent) {
 		a.Resize(ie.X, ie.Y)
 		a.RenderAll()
 	}
+}
+
+// addScriptDirToPackagePath prepends the script's directory to Lua's package.path
+// so that require("lib.components") resolves to <script_dir>/lib/components.lua.
+func addScriptDirToPackagePath(L *lua.State, scriptPath string) {
+	absPath, err := filepath.Abs(scriptPath)
+	if err != nil {
+		return
+	}
+	dir := filepath.Dir(absPath)
+	// Escape backslashes for Windows paths in Lua string.
+	escaped := strings.ReplaceAll(dir, `\`, `\\`)
+	code := fmt.Sprintf(`package.path = "%s/?.lua;%s/?/init.lua;" .. package.path`, escaped, escaped)
+	_ = L.DoString(code)
 }

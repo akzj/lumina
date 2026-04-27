@@ -1,6 +1,8 @@
 package v2
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/akzj/go-lua/pkg/lua"
@@ -2067,5 +2069,98 @@ func TestLuaE2E_ComponentShowcase_Modal(t *testing.T) {
 
 	if screenHasString(ta, "Example Modal") {
 		t.Error("modal should be hidden after pressing Escape")
+	}
+}
+
+// --- Test: require() resolves local module relative to script directory ---
+
+func TestLuaE2E_RequireLocalModule(t *testing.T) {
+	// Create a temp directory with two Lua files:
+	//   main.lua — requires "mylib" and uses its return value
+	//   mylib.lua — returns a table with a hello() function
+	tmpDir := t.TempDir()
+
+	mainLua := `
+local m = require("mylib")
+lumina.createComponent({
+    id = "req-test",
+    x = 0, y = 0, w = 40, h = 5,
+    render = function(state, props)
+        return lumina.createElement("text", {}, m.hello())
+    end
+})
+`
+	mylibLua := `
+local M = {}
+function M.hello() return "world" end
+return M
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "main.lua"), []byte(mainLua), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir, "mylib.lua"), []byte(mylibLua), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	app, ta, _ := newLuaApp(t, 40, 5)
+
+	err := app.RunScript(filepath.Join(tmpDir, "main.lua"))
+	if err != nil {
+		t.Fatalf("RunScript failed: %v", err)
+	}
+
+	app.RenderAll()
+
+	if !screenHasString(ta, "world") {
+		t.Errorf("expected 'world' on screen from required module, got line: %q", readScreenLine(ta, 0, 40))
+	}
+}
+
+// --- Test: require() resolves subdirectory module (lib.helper pattern) ---
+
+func TestLuaE2E_RequireSubdirectory(t *testing.T) {
+	// Create a temp directory with:
+	//   main.lua — requires "lib.helper"
+	//   lib/helper.lua — returns a table with a greet() function
+	tmpDir := t.TempDir()
+
+	libDir := filepath.Join(tmpDir, "lib")
+	if err := os.MkdirAll(libDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	mainLua := `
+local helper = require("lib.helper")
+lumina.createComponent({
+    id = "subdir-test",
+    x = 0, y = 0, w = 40, h = 5,
+    render = function(state, props)
+        return lumina.createElement("text", {}, helper.greet())
+    end
+})
+`
+	helperLua := `
+local H = {}
+function H.greet() return "hi from subdir" end
+return H
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "main.lua"), []byte(mainLua), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(libDir, "helper.lua"), []byte(helperLua), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	app, ta, _ := newLuaApp(t, 40, 5)
+
+	err := app.RunScript(filepath.Join(tmpDir, "main.lua"))
+	if err != nil {
+		t.Fatalf("RunScript failed: %v", err)
+	}
+
+	app.RenderAll()
+
+	if !screenHasString(ta, "hi from subdir") {
+		t.Errorf("expected 'hi from subdir' on screen from subdirectory module, got line: %q", readScreenLine(ta, 0, 40))
 	}
 }
