@@ -1,14 +1,18 @@
 // Package bridge connects Lua scripts to the Go component system for Lumina v2.
 // It converts Lua tables to VNode trees, wraps Lua render functions as Go
 // RenderFunc, extracts event handlers, and provides Lua-callable hooks
-// (useState, useEffect, useMemo, createElement).
+// (useState, useEffect, useMemo, createElement, useCallback, useRef,
+// useReducer, useId, useLayoutEffect) plus animation and router bindings.
 package bridge
 
 import (
 	"github.com/akzj/go-lua/pkg/lua"
+	"github.com/akzj/lumina/pkg/lumina/v2/animation"
 	"github.com/akzj/lumina/pkg/lumina/v2/component"
 	"github.com/akzj/lumina/pkg/lumina/v2/event"
+	"github.com/akzj/lumina/pkg/lumina/v2/hooks"
 	"github.com/akzj/lumina/pkg/lumina/v2/layout"
+	"github.com/akzj/lumina/pkg/lumina/v2/router"
 )
 
 // Bridge connects Lua scripts to the Go component system.
@@ -22,18 +26,39 @@ type Bridge struct {
 
 	// manager provides SetState for hook-driven re-renders.
 	manager *component.Manager
+
+	// hookContexts stores a HookContext per component ID for proper hook
+	// lifecycle management (call-index validation, cleanup, etc.).
+	hookContexts map[string]*hooks.HookContext
+
+	// animManager manages concurrent animations accessible from Lua.
+	animManager *animation.Manager
+
+	// router provides SPA-style routing accessible from Lua.
+	router *router.Router
 }
 
 // NewBridge creates a new Bridge for the given Lua state.
 func NewBridge(L *lua.State) *Bridge {
 	return &Bridge{
-		L: L,
+		L:            L,
+		hookContexts: make(map[string]*hooks.HookContext),
 	}
 }
 
 // SetManager sets the component manager used by hooks (e.g. useState setter).
 func (b *Bridge) SetManager(m *component.Manager) {
 	b.manager = m
+}
+
+// SetAnimationManager sets the animation manager for Lua animation hooks.
+func (b *Bridge) SetAnimationManager(mgr *animation.Manager) {
+	b.animManager = mgr
+}
+
+// SetRouter sets the router for Lua navigation hooks.
+func (b *Bridge) SetRouter(r *router.Router) {
+	b.router = r
 }
 
 // CurrentComponent returns the component currently being rendered (for hooks).
@@ -44,6 +69,48 @@ func (b *Bridge) CurrentComponent() *component.Component {
 // SetCurrentComponent sets the component being rendered (called by the render loop).
 func (b *Bridge) SetCurrentComponent(c *component.Component) {
 	b.currentComp = c
+}
+
+// GetHookContext returns or creates a HookContext for the given component.
+// The onDirty callback marks the component dirty for re-rendering.
+func (b *Bridge) GetHookContext(comp *component.Component) *hooks.HookContext {
+	id := comp.ID()
+	if hc, ok := b.hookContexts[id]; ok {
+		return hc
+	}
+	onDirty := func() {
+		comp.MarkDirty()
+	}
+	hc := hooks.NewHookContext(id, onDirty)
+	b.hookContexts[id] = hc
+	return hc
+}
+
+// BeginComponentRender should be called before rendering a component.
+// It sets the current component and begins the hook render cycle.
+func (b *Bridge) BeginComponentRender(comp *component.Component) {
+	b.currentComp = comp
+	hc := b.GetHookContext(comp)
+	hc.BeginRender()
+}
+
+// EndComponentRender should be called after rendering a component.
+// It finalizes the hook render cycle and clears the current component.
+func (b *Bridge) EndComponentRender() error {
+	if b.currentComp != nil {
+		hc := b.GetHookContext(b.currentComp)
+		b.currentComp = nil
+		return hc.EndRender()
+	}
+	return nil
+}
+
+// DestroyComponent cleans up hook context when a component is unmounted.
+func (b *Bridge) DestroyComponent(compID string) {
+	if hc, ok := b.hookContexts[compID]; ok {
+		hc.Destroy()
+		delete(b.hookContexts, compID)
+	}
 }
 
 // WrapRenderFn wraps a Lua render function (stored as registry ref) as a Go

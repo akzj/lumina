@@ -2,7 +2,7 @@ package bridge
 
 import (
 	"github.com/akzj/go-lua/pkg/lua"
-	"github.com/akzj/lumina/pkg/lumina/v2/component"
+	"github.com/akzj/lumina/pkg/lumina/v2/hooks"
 )
 
 // RegisterHooks registers Lua-callable hooks on the global "lumina" table:
@@ -10,7 +10,16 @@ import (
 //	lumina.useState(key, initialValue) → value, setter
 //	lumina.useEffect(fn, deps)         → (side-effect registration)
 //	lumina.useMemo(fn, deps)           → cached value
+//	lumina.useCallback(fn, deps)       → cached function
+//	lumina.useRef(initialValue)        → { current = value }
+//	lumina.useReducer(reducer, init)   → state, dispatch
+//	lumina.useId()                     → stable unique ID
+//	lumina.useLayoutEffect(fn, deps)   → (synchronous side-effect)
 //	lumina.createElement(type, props, children...) → VNode table
+//	lumina.useAnimation(config)        → { value, start, stop }
+//	lumina.navigate(path)              → (router navigation)
+//	lumina.back()                      → bool
+//	lumina.useRoute()                  → { path, params }
 func (b *Bridge) RegisterHooks() {
 	L := b.L
 
@@ -22,21 +31,48 @@ func (b *Bridge) RegisterHooks() {
 	}
 	tblIdx := L.AbsIndex(-1)
 
-	// lumina.useState(key, initialValue) → value, setter
+	// Core hooks
 	L.PushFunction(b.luaUseState)
 	L.SetField(tblIdx, "useState")
 
-	// lumina.useEffect(fn, deps)
 	L.PushFunction(b.luaUseEffect)
 	L.SetField(tblIdx, "useEffect")
 
-	// lumina.useMemo(fn, deps)
 	L.PushFunction(b.luaUseMemo)
 	L.SetField(tblIdx, "useMemo")
 
-	// lumina.createElement(type, props, children...)
 	L.PushFunction(b.luaCreateElement)
 	L.SetField(tblIdx, "createElement")
+
+	// New hooks
+	L.PushFunction(b.luaUseCallback)
+	L.SetField(tblIdx, "useCallback")
+
+	L.PushFunction(b.luaUseRef)
+	L.SetField(tblIdx, "useRef")
+
+	L.PushFunction(b.luaUseReducer)
+	L.SetField(tblIdx, "useReducer")
+
+	L.PushFunction(b.luaUseId)
+	L.SetField(tblIdx, "useId")
+
+	L.PushFunction(b.luaUseLayoutEffect)
+	L.SetField(tblIdx, "useLayoutEffect")
+
+	// Animation hooks
+	L.PushFunction(b.luaUseAnimation)
+	L.SetField(tblIdx, "useAnimation")
+
+	// Router hooks
+	L.PushFunction(b.luaNavigate)
+	L.SetField(tblIdx, "navigate")
+
+	L.PushFunction(b.luaBack)
+	L.SetField(tblIdx, "back")
+
+	L.PushFunction(b.luaUseRoute)
+	L.SetField(tblIdx, "useRoute")
 
 	L.SetGlobal("lumina")
 }
@@ -44,8 +80,8 @@ func (b *Bridge) RegisterHooks() {
 // luaUseState implements lumina.useState(key, initialValue).
 // Returns: currentValue, setterFunction
 //
-// The setter function marks the component dirty via the Manager so it
-// gets re-rendered on the next frame.
+// This uses key-based state stored in the component's State map (not
+// call-index based) for Lua ergonomics.
 func (b *Bridge) luaUseState(L *lua.State) int {
 	comp := b.currentComp
 	if comp == nil {
@@ -69,12 +105,10 @@ func (b *Bridge) luaUseState(L *lua.State) int {
 	L.PushAny(comp.State()[key])
 
 	// Push setter function.
-	// Capture comp and key by closure.
 	mgr := b.manager
 	L.PushFunction(func(L *lua.State) int {
 		newValue := L.ToAny(1)
 		comp.SetState(key, newValue)
-		// Also notify manager if available.
 		if mgr != nil {
 			mgr.SetState(comp.ID(), key, newValue)
 		}
@@ -84,21 +118,27 @@ func (b *Bridge) luaUseState(L *lua.State) int {
 	return 2
 }
 
-// EffectHook tracks a useEffect call across renders for a component.
-type EffectHook struct {
-	Deps       []any // dependency values from last run
-	CleanupRef int   // Lua registry ref for cleanup function (0 = none)
-	Ran        bool  // whether the effect has ever run
+// luaUseEffect implements lumina.useEffect(fn, deps).
+// Uses HookContext for proper call-index tracking and dependency comparison.
+func (b *Bridge) luaUseEffect(L *lua.State) int {
+	return b.luaUseEffectInternal(L, false)
 }
 
-// luaUseEffect implements lumina.useEffect(fn, deps).
-// Calls fn when deps change (or on every render if deps is nil).
-// If fn returns a function, that function is called as cleanup before
-// the next effect run.
-func (b *Bridge) luaUseEffect(L *lua.State) int {
+// luaUseLayoutEffect implements lumina.useLayoutEffect(fn, deps).
+// Like useEffect but runs synchronously after render.
+func (b *Bridge) luaUseLayoutEffect(L *lua.State) int {
+	return b.luaUseEffectInternal(L, true)
+}
+
+// luaUseEffectInternal is shared by useEffect and useLayoutEffect.
+func (b *Bridge) luaUseEffectInternal(L *lua.State, isLayout bool) int {
 	comp := b.currentComp
 	if comp == nil {
-		L.PushString("useEffect: no current component")
+		if isLayout {
+			L.PushString("useLayoutEffect: no current component")
+		} else {
+			L.PushString("useEffect: no current component")
+		}
 		L.Error()
 		return 0
 	}
@@ -119,59 +159,49 @@ func (b *Bridge) luaUseEffect(L *lua.State) int {
 		newDeps = luaTableToSlice(L, 2)
 	}
 
-	// Get or create the effect hook for this call index.
-	hook := getEffectHook(comp, b)
-
-	shouldRun := false
-	if !hook.Ran {
-		shouldRun = true
-	} else if !hasDeps {
-		// No deps = run every render.
-		shouldRun = true
+	// Use HookContext for dependency tracking.
+	hc := b.GetHookContext(comp)
+	var eff *hooks.Effect
+	if isLayout {
+		eff = hc.UseLayoutEffect(newDeps, hasDeps)
 	} else {
-		shouldRun = !depsEqual(hook.Deps, newDeps)
+		eff = hc.UseEffect(newDeps, hasDeps)
 	}
 
-	if shouldRun {
+	if eff.IsPending() {
 		// Run cleanup from previous effect.
-		if hook.CleanupRef != 0 {
-			if err := L.CallRef(hook.CleanupRef, 0, 0); err != nil {
-				// Cleanup failed — ignore but release ref.
-			}
-			L.Unref(lua.RegistryIndex, hook.CleanupRef)
-			hook.CleanupRef = 0
-		}
+		eff.RunCleanup()
 
 		// Call the effect function.
 		L.PushValue(1) // push the effect fn
 		if status := L.PCall(0, 1, 0); status != lua.OK {
 			L.Pop(1) // pop error
+			eff.ClearPending()
 			return 0
 		}
 
 		// If effect returned a function, store it as cleanup.
 		if L.Type(-1) == lua.TypeFunction {
-			hook.CleanupRef = L.Ref(lua.RegistryIndex)
+			cleanupRef := L.Ref(lua.RegistryIndex)
+			luaState := b.L
+			eff.SetCleanup(func() {
+				if err := luaState.CallRef(cleanupRef, 0, 0); err != nil {
+					// Cleanup failed — ignore but release ref.
+				}
+				luaState.Unref(lua.RegistryIndex, cleanupRef)
+			})
 		} else {
 			L.Pop(1)
 		}
 
-		hook.Deps = newDeps
-		hook.Ran = true
+		eff.ClearPending()
 	}
 
 	return 0
 }
 
-// MemoHook tracks a useMemo call across renders.
-type MemoHook struct {
-	Deps     []any // dependency values from last computation
-	ValueRef int   // Lua registry ref for cached value (0 = none)
-	HasValue bool
-}
-
 // luaUseMemo implements lumina.useMemo(fn, deps).
-// Returns a cached value, only recomputing when deps change.
+// Uses HookContext for proper call-index tracking and caching.
 func (b *Bridge) luaUseMemo(L *lua.State) int {
 	comp := b.currentComp
 	if comp == nil {
@@ -195,22 +225,13 @@ func (b *Bridge) luaUseMemo(L *lua.State) int {
 		newDeps = luaTableToSlice(L, 2)
 	}
 
-	hook := getMemoHook(comp, b)
+	hc := b.GetHookContext(comp)
+	memo := hc.UseMemo(newDeps, hasDeps)
 
-	shouldRecompute := false
-	if !hook.HasValue {
-		shouldRecompute = true
-	} else if !hasDeps {
-		shouldRecompute = true
-	} else {
-		shouldRecompute = !depsEqual(hook.Deps, newDeps)
-	}
-
-	if shouldRecompute {
-		// Release old cached value.
-		if hook.ValueRef != 0 {
-			L.Unref(lua.RegistryIndex, hook.ValueRef)
-			hook.ValueRef = 0
+	if memo.IsStale() {
+		// Release old cached value if it was a Lua ref.
+		if old, ok := memo.Value().(int); ok && old > 0 {
+			L.Unref(lua.RegistryIndex, old)
 		}
 
 		// Call the factory function.
@@ -221,17 +242,167 @@ func (b *Bridge) luaUseMemo(L *lua.State) int {
 			return 1
 		}
 
-		// Store result as registry ref.
+		// Store result as registry ref so it persists.
 		L.PushValue(-1) // duplicate for Ref
-		hook.ValueRef = L.Ref(lua.RegistryIndex)
-		hook.Deps = newDeps
-		hook.HasValue = true
+		ref := L.Ref(lua.RegistryIndex)
+		memo.Set(ref)
 		// Result is already on stack.
 		return 1
 	}
 
-	// Return cached value.
-	L.RawGetI(lua.RegistryIndex, int64(hook.ValueRef))
+	// Return cached value from registry.
+	ref, ok := memo.Value().(int)
+	if ok && ref > 0 {
+		L.RawGetI(lua.RegistryIndex, int64(ref))
+	} else {
+		L.PushNil()
+	}
+	return 1
+}
+
+// luaUseCallback implements lumina.useCallback(fn, deps).
+// Caches a Lua function reference, only updating when deps change.
+func (b *Bridge) luaUseCallback(L *lua.State) int {
+	comp := b.currentComp
+	if comp == nil {
+		L.PushString("useCallback: no current component")
+		L.Error()
+		return 0
+	}
+
+	L.CheckAny(1)
+	if L.Type(1) != lua.TypeFunction {
+		L.PushString("useCallback: first argument must be a function")
+		L.Error()
+		return 0
+	}
+
+	var deps []any
+	hasDeps := false
+	if L.GetTop() >= 2 && !L.IsNoneOrNil(2) {
+		L.CheckType(2, lua.TypeTable)
+		hasDeps = true
+		deps = luaTableToSlice(L, 2)
+	}
+
+	hc := b.GetHookContext(comp)
+	memo := hc.UseCallback(deps, hasDeps)
+
+	if memo.IsStale() {
+		// Release old cached ref.
+		if old, ok := memo.Value().(int); ok && old > 0 {
+			L.Unref(lua.RegistryIndex, old)
+		}
+		// Cache the callback function as a registry ref.
+		L.PushValue(1)
+		ref := L.Ref(lua.RegistryIndex)
+		memo.Set(ref)
+	}
+
+	// Push cached function from registry.
+	ref, ok := memo.Value().(int)
+	if ok && ref > 0 {
+		L.RawGetI(lua.RegistryIndex, int64(ref))
+	} else {
+		L.PushNil()
+	}
+	return 1
+}
+
+// luaUseRef implements lumina.useRef(initialValue).
+// Returns a table { current = value } that persists across renders.
+// The Lua table is recreated each call, but the underlying Ref is stable.
+func (b *Bridge) luaUseRef(L *lua.State) int {
+	comp := b.currentComp
+	if comp == nil {
+		L.PushString("useRef: no current component")
+		L.Error()
+		return 0
+	}
+
+	var initial any
+	if L.GetTop() >= 1 && !L.IsNoneOrNil(1) {
+		initial = L.ToAny(1)
+	}
+
+	hc := b.GetHookContext(comp)
+	ref := hc.UseRef(initial)
+
+	// Return a table with { current = value }.
+	L.NewTable()
+	tblIdx := L.AbsIndex(-1)
+	L.PushAny(ref.Current)
+	L.SetField(tblIdx, "current")
+	return 1
+}
+
+// luaUseReducer implements lumina.useReducer(reducer, initialState).
+// Returns: currentState, dispatchFunction
+func (b *Bridge) luaUseReducer(L *lua.State) int {
+	comp := b.currentComp
+	if comp == nil {
+		L.PushString("useReducer: no current component")
+		L.Error()
+		return 0
+	}
+
+	L.CheckAny(1)
+	if L.Type(1) != lua.TypeFunction {
+		L.PushString("useReducer: first argument must be a function")
+		L.Error()
+		return 0
+	}
+
+	L.CheckAny(2)
+	initialState := L.ToAny(2)
+
+	// Store the reducer function as a registry ref.
+	L.PushValue(1)
+	reducerRef := L.Ref(lua.RegistryIndex)
+
+	luaState := b.L
+	reducer := hooks.ReducerFunc(func(state any, action any) any {
+		luaState.RawGetI(lua.RegistryIndex, int64(reducerRef))
+		luaState.PushAny(state)
+		luaState.PushAny(action)
+		if status := luaState.PCall(2, 1, 0); status != lua.OK {
+			luaState.Pop(1)
+			return state
+		}
+		result := luaState.ToAny(-1)
+		luaState.Pop(1)
+		return result
+	})
+
+	hc := b.GetHookContext(comp)
+	state, dispatch := hc.UseReducer(reducer, initialState)
+
+	// Push current state.
+	L.PushAny(state)
+
+	// Push dispatch function.
+	L.PushFunction(func(L *lua.State) int {
+		action := L.ToAny(1)
+		dispatch(action)
+		return 0
+	})
+
+	return 2
+}
+
+// luaUseId implements lumina.useId().
+// Returns a stable unique ID string for this hook call position.
+func (b *Bridge) luaUseId(L *lua.State) int {
+	comp := b.currentComp
+	if comp == nil {
+		L.PushString("useId: no current component")
+		L.Error()
+		return 0
+	}
+
+	hc := b.GetHookContext(comp)
+	id := hc.UseId()
+	L.PushString(id)
 	return 1
 }
 
@@ -269,8 +440,6 @@ func (b *Bridge) luaCreateElement(L *lua.State) int {
 		childrenIdx := L.AbsIndex(-1)
 		ci := int64(1)
 		for i := 3; i <= nArgs; i++ {
-			// Note: resultIdx and childrenIdx are on stack, so arg indices shifted.
-			// We need to push the original argument value.
 			L.PushValue(i)
 			L.RawSetI(childrenIdx, ci)
 			ci++
@@ -281,62 +450,17 @@ func (b *Bridge) luaCreateElement(L *lua.State) int {
 	return 1
 }
 
-// --- Hook storage ---
-// Hooks are stored per-component in HookStore() (dedicated map, not Props).
-
-const (
-	effectHooksKey   = "_bridge_effect_hooks"
-	memoHooksKey     = "_bridge_memo_hooks"
-	effectHookIdxKey = "_bridge_effect_idx"
-	memoHookIdxKey   = "_bridge_memo_idx"
-)
+// --- Hook lifecycle (legacy compat) ---
 
 // ResetHookIndices resets hook call indices for a new render pass.
 // Must be called before each component render.
+// This is a compatibility shim — prefer BeginComponentRender.
 func (b *Bridge) ResetHookIndices() {
 	if b.currentComp == nil {
 		return
 	}
-	store := b.currentComp.HookStore()
-	store[effectHookIdxKey] = 0
-	store[memoHookIdxKey] = 0
-}
-
-func getEffectHook(comp *component.Component, b *Bridge) *EffectHook {
-	store := comp.HookStore()
-	hooks, _ := store[effectHooksKey].([]*EffectHook)
-	idxVal, _ := store[effectHookIdxKey].(int)
-	idx := idxVal
-
-	if idx < len(hooks) {
-		store[effectHookIdxKey] = idx + 1
-		return hooks[idx]
-	}
-
-	// Grow.
-	h := &EffectHook{}
-	hooks = append(hooks, h)
-	store[effectHooksKey] = hooks
-	store[effectHookIdxKey] = idx + 1
-	return h
-}
-
-func getMemoHook(comp *component.Component, b *Bridge) *MemoHook {
-	store := comp.HookStore()
-	hooks, _ := store[memoHooksKey].([]*MemoHook)
-	idxVal, _ := store[memoHookIdxKey].(int)
-	idx := idxVal
-
-	if idx < len(hooks) {
-		store[memoHookIdxKey] = idx + 1
-		return hooks[idx]
-	}
-
-	h := &MemoHook{}
-	hooks = append(hooks, h)
-	store[memoHooksKey] = hooks
-	store[memoHookIdxKey] = idx + 1
-	return h
+	hc := b.GetHookContext(b.currentComp)
+	hc.BeginRender()
 }
 
 // --- Utility ---
