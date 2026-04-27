@@ -27,6 +27,9 @@ type Engine struct {
 	// Event state: currently hovered node for enter/leave tracking
 	hoveredNode *Node
 
+	// Focus state: currently focused input/textarea node
+	focusedNode *Node
+
 	// Performance tracking
 	tracker *perf.Tracker
 }
@@ -157,6 +160,9 @@ func (e *Engine) RenderAll() {
 		PaintFull(e.buffer, e.root.RootNode)
 	}
 
+	// Auto-focus first node with autoFocus=true
+	e.FocusAutoFocus()
+
 	// Record paint stats from CellBuffer.
 	if e.tracker != nil {
 		stats := e.buffer.Stats()
@@ -247,6 +253,7 @@ func (e *Engine) readDescriptor(L *lua.State, idx int) Descriptor {
 		}
 	}
 	desc.Placeholder = getStringField(L, absIdx, "placeholder")
+	desc.AutoFocus = getBoolField(L, absIdx, "autoFocus")
 	desc.ScrollY = int(getIntField(L, absIdx, "scrollY"))
 
 	// Read style — check for nested "style" table first, then top-level style fields

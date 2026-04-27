@@ -66,6 +66,10 @@ type Node struct {
 	Style       Style  // visual style
 	PaintDirty  bool   // true → repaint this node
 
+	// Input/textarea state
+	CursorPos int  // cursor position within Content
+	AutoFocus bool // auto-focus on mount
+
 	// Events (persistent references, not re-registered per frame)
 	OnClick      LuaRef
 	OnMouseEnter LuaRef

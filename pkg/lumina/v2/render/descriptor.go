@@ -13,6 +13,7 @@ type Descriptor struct {
 
 	// Input/textarea specific
 	Placeholder string
+	AutoFocus   bool
 
 	// Scroll state
 	ScrollY int
