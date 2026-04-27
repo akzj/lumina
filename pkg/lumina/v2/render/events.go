@@ -63,6 +63,11 @@ func (e *Engine) HandleMouseMove(x, y int) {
 		return
 	}
 
+	// Clear stale hovered pointer if node was removed from tree
+	if e.hoveredNode != nil && e.hoveredNode.Removed {
+		e.hoveredNode = nil
+	}
+
 	target := HitTest(e.root.RootNode, x, y)
 
 	if target == e.hoveredNode {
@@ -73,7 +78,7 @@ func (e *Engine) HandleMouseMove(x, y int) {
 	e.hoveredNode = target
 
 	// Fire onMouseLeave on old node (bubble up to find handler)
-	if old != nil {
+	if old != nil && !old.Removed {
 		for n := old; n != nil; n = n.Parent {
 			if n.OnMouseLeave != 0 {
 				e.callLuaRef(n.OnMouseLeave, x, y)
@@ -101,6 +106,11 @@ func (e *Engine) HandleClick(x, y int) {
 		return
 	}
 
+	// Clear stale focused pointer if node was removed from tree
+	if e.focusedNode != nil && e.focusedNode.Removed {
+		e.focusedNode = nil
+	}
+
 	// Hit-test for the deepest node at this position
 	hitNode := HitTest(e.root.RootNode, x, y)
 
@@ -108,7 +118,7 @@ func (e *Engine) HandleClick(x, y int) {
 	if hitNode != nil && (hitNode.Type == "input" || hitNode.Type == "textarea") {
 		old := e.focusedNode
 		e.focusedNode = hitNode
-		if old != nil && old != hitNode {
+		if old != nil && old != hitNode && !old.Removed {
 			old.PaintDirty = true
 		}
 		hitNode.PaintDirty = true
@@ -126,6 +136,11 @@ func (e *Engine) HandleClick(x, y int) {
 func (e *Engine) HandleKeyDown(key string) {
 	if e.root == nil || e.root.RootNode == nil {
 		return
+	}
+
+	// Clear stale focused pointer if node was removed from tree
+	if e.focusedNode != nil && e.focusedNode.Removed {
+		e.focusedNode = nil
 	}
 
 	// Tab cycles focus
