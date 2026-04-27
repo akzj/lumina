@@ -3,16 +3,15 @@ package component
 import (
 	"strings"
 
-	"github.com/akzj/lumina/pkg/lumina/v2/event"
 	"github.com/akzj/lumina/pkg/lumina/v2/layout"
 )
 
 // ExtractHandlers walks the VNode tree and collects event handlers and
-// focusable VNode IDs into the Component's Handlers and Focusables fields.
+// focusable VNode IDs into the Component's handlers and focusables fields.
 func (c *Component) ExtractHandlers() {
-	c.Handlers = make(map[string]event.HandlerMap)
-	c.Focusables = nil
-	walkExtract(c.VNodeTree, c)
+	c.handlers = make(map[string]HandlerMap)
+	c.focusables = nil
+	walkExtract(c.vnodeTree, c)
 }
 
 // walkExtract recursively walks the VNode tree, extracting event handlers
@@ -22,23 +21,23 @@ func walkExtract(vn *layout.VNode, c *Component) {
 		return
 	}
 	if vn.ID != "" && vn.Props != nil {
-		hm := make(event.HandlerMap)
+		hm := make(HandlerMap)
 		for _, evtName := range []string{
 			"onClick", "onMouseEnter", "onMouseLeave",
 			"onKeyDown", "onMouseDown", "onMouseUp", "onMouseMove",
 		} {
 			if fn, ok := vn.Props[evtName]; ok {
-				if handler, ok := fn.(event.EventHandler); ok {
-					hm[mapEventName(evtName)] = handler
-				}
+				// Store as HandlerFunc (any) — the event package will
+				// type-assert to event.EventHandler when dispatching.
+				hm[mapEventName(evtName)] = fn
 			}
 		}
 		if len(hm) > 0 {
-			c.Handlers[vn.ID] = hm
+			c.handlers[vn.ID] = hm
 		}
 		// Check focusable.
 		if _, ok := vn.Props["focusable"]; ok {
-			c.Focusables = append(c.Focusables, vn.ID)
+			c.focusables = append(c.focusables, vn.ID)
 		}
 	}
 	for _, child := range vn.Children {

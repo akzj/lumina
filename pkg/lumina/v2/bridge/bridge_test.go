@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/akzj/go-lua/pkg/lua"
+	"github.com/akzj/lumina/pkg/lumina/v2/buffer"
 	"github.com/akzj/lumina/pkg/lumina/v2/component"
 	"github.com/akzj/lumina/pkg/lumina/v2/event"
 	"github.com/akzj/lumina/pkg/lumina/v2/layout"
@@ -16,6 +17,12 @@ func newTestBridge(t *testing.T) *Bridge {
 	L := lua.NewState()
 	t.Cleanup(func() { L.Close() })
 	return NewBridge(L)
+}
+
+// newHookTestComponent creates a minimal component for hook tests.
+func newHookTestComponent(id string) *component.Component {
+	nopRender := func(state, props map[string]any) *layout.VNode { return nil }
+	return component.NewComponent(id, id, buffer.Rect{W: 1, H: 1}, 0, nopRender)
 }
 
 // --- LuaTableToVNode tests ---
@@ -444,11 +451,7 @@ func TestBridge_UseState(t *testing.T) {
 	L := b.L
 
 	// Create a component for the hook to operate on.
-	comp := &component.Component{
-		ID:    "test-comp",
-		State: make(map[string]any),
-		Props: make(map[string]any),
-	}
+	comp := newHookTestComponent("test-comp")
 	b.SetCurrentComponent(comp)
 	b.RegisterHooks()
 
@@ -475,10 +478,10 @@ func TestBridge_UseState(t *testing.T) {
 	}
 
 	// Verify state was updated.
-	if comp.State["count"] != int64(42) {
-		t.Errorf("State[count] = %v, want int64(42)", comp.State["count"])
+	if comp.State()["count"] != int64(42) {
+		t.Errorf("State[count] = %v, want int64(42)", comp.State()["count"])
 	}
-	if !comp.DirtyPaint {
+	if !comp.IsDirtyPaint() {
 		t.Error("DirtyPaint should be true after setState")
 	}
 }
@@ -487,11 +490,7 @@ func TestBridge_UseState_Persists(t *testing.T) {
 	b := newTestBridge(t)
 	L := b.L
 
-	comp := &component.Component{
-		ID:    "test-comp",
-		State: make(map[string]any),
-		Props: make(map[string]any),
-	}
+	comp := newHookTestComponent("test-comp")
 	b.SetCurrentComponent(comp)
 	b.RegisterHooks()
 
@@ -502,7 +501,7 @@ func TestBridge_UseState_Persists(t *testing.T) {
 	}
 
 	// Manually set state (simulating setter call).
-	comp.State["x"] = int64(99)
+	comp.SetState("x", int64(99))
 
 	// Second call: should return persisted value, not initial.
 	err = L.DoString(`val2, _ = lumina.useState("x", 10)`)
@@ -522,11 +521,7 @@ func TestBridge_UseEffect(t *testing.T) {
 	b := newTestBridge(t)
 	L := b.L
 
-	comp := &component.Component{
-		ID:    "test-comp",
-		State: make(map[string]any),
-		Props: make(map[string]any),
-	}
+	comp := newHookTestComponent("test-comp")
 	b.SetCurrentComponent(comp)
 	b.ResetHookIndices()
 	b.RegisterHooks()
@@ -607,11 +602,7 @@ func TestBridge_UseMemo(t *testing.T) {
 	b := newTestBridge(t)
 	L := b.L
 
-	comp := &component.Component{
-		ID:    "test-comp",
-		State: make(map[string]any),
-		Props: make(map[string]any),
-	}
+	comp := newHookTestComponent("test-comp")
 	b.SetCurrentComponent(comp)
 	b.ResetHookIndices()
 	b.RegisterHooks()
