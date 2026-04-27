@@ -1,404 +1,355 @@
-# Lumina — React-Style Terminal UI Framework
+# Lumina — 终端 UI 框架
 
-> 一套代码 = 桌面客户端 + Web 在线应用（xterm.js）全部支持
+> Go 渲染引擎 + Lua 声明式 UI = 高性能终端应用
 
-Lumina is a **React-inspired terminal UI framework** built with Go + Lua. Write your UI once in Lua, run it as a native terminal app OR serve it to web browsers via xterm.js + WebSocket.
+Lumina 是一个 **React 风格的终端 UI 框架**。用 Lua 声明 UI 组件，Go 负责渲染、布局和事件处理。
 
-## ✨ Features
+```lua
+lumina.createComponent({
+    id = "hello",
+    render = function(props)
+        local count, setCount = lumina.useState("count", 0)
+        return lumina.createElement("box", {
+            onClick = function() setCount(count + 1) end,
+        },
+            lumina.createElement("text", {foreground = "#89B4FA"}, "Count: " .. count)
+        )
+    end,
+})
+```
 
-### React-Complete API
-- **15+ Hooks**: useState, useEffect, useMemo, useCallback, useRef, useContext, useReducer, useTransition, useDeferredValue, useId, useSyncExternalStore, useLayoutEffect, useImperativeHandle, useDebugValue
-- **Component Model**: defineComponent, createElement, composition, children props
-- **Advanced Patterns**: Suspense + lazy loading, Error Boundaries, React.memo, Portals, forwardRef, Context tree
-- **Concurrent Rendering**: useTransition, useDeferredValue for responsive UIs
-- **Virtual DOM**: Efficient diff/patch rendering cycle
+## ✨ 特性
 
-### Layout & Rendering
-- **Flexbox**: Full flex container with grow/shrink/basis, justify/align, gap, wrap
-- **CSS Grid**: Grid tracks (fixed, fr, auto), column/row span, gap, auto-flow
-- **Overlay System**: z-index stacking, modal backdrop, position absolute/fixed
-- **Animation**: useAnimation with 6 easing functions + presets (fadeIn, slideIn, pulse, etc.)
-- **SubPixel Rendering**: Half-block characters for smooth graphics
-- **Virtual Scrolling**: Efficient rendering of 10,000+ item lists
+### 渲染引擎
+- **持久化节点树** — 组件渲染输出直接 patch 到节点树，无 Virtual DOM 中间层
+- **增量布局** — 只重算 `LayoutDirty` 子树
+- **脏区绘制** — 只重绘 `PaintDirty` 节点
+- **O(k) 复杂度** — k = 实际变化量，与总节点数无关
 
-### 47 shadcn/ui Components
-Button, Badge, Card, Alert, AlertDialog, Label, Separator, Skeleton, Spinner, Avatar, Breadcrumb, Input, InputGroup, InputOTP, Switch, Progress, Accordion, Tabs, Table, Pagination, Toggle, ToggleGroup, Select, NativeSelect, Checkbox, RadioGroup, Slider, Textarea, Dialog, Sheet, Drawer, DropdownMenu, ContextMenu, Popover, Tooltip, Command, Combobox, Menubar, ScrollArea, Carousel, Sonner (Toast), HoverCard, Collapsible, Form, Field, Kbd
+### 组件系统
+- **`createComponent`** — 创建根组件
+- **`defineComponent`** — 定义可复用子组件（工厂模式）
+- **`createElement`** — 创建 UI 元素（JSX 等价物）
+- **`useState`** — 组件状态管理（React 风格 Hook）
 
-### State Management & Data
-- **createStore**: Zustand-like global state management with dispatch/subscribe
-- **useForm**: React Hook Form-like validation (required, email, minLength, maxLength, pattern, min, max, custom)
-- **useFetch / useQuery**: Data fetching with cache + stale-while-revalidate
-- **Drag & Drop**: useDrag / useDrop with type-based acceptance filtering
+### 布局
+- **Flexbox** — `vbox`（垂直）/ `hbox`（水平）
+- **Flex 分配** — `flex` 属性按比例分配空间
+- **对齐** — `justify`（主轴）/ `align`（交叉轴）
+- **间距** — `padding`, `margin`, `gap`
+- **定位** — `relative`, `absolute`, `fixed`
+- **边框** — `single`, `double`, `rounded`
+- **约束** — `minWidth`, `maxWidth`, `minHeight`, `maxHeight`
 
-### Developer Experience
-- **Hot Reload**: File watcher with state preservation
-- **DevTools**: Component tree inspector, props/state viewer (F12 toggle)
-- **Testing Utilities**: TestRenderer, getByText, getByRole, fireEvent
-- **Accessibility**: ARIA attributes, screen reader announcements
-- **i18n**: Multi-language support with addTranslation, setLocale, useTranslation
-- **4 Built-in Themes**: Catppuccin Mocha, Catppuccin Latte, Tokyo Night, Nord
-- **Plugin System**: Extend Lumina with registerPlugin
+### 事件
+- **鼠标** — `onClick`, `onMouseEnter`, `onMouseLeave`, `onScroll`
+- **键盘** — `onKeyDown`
+- **输入** — `onChange`（input/textarea 值变化）
+- **冒泡** — 事件从最深层节点向上冒泡到最近的处理器
 
-### Dual Runtime
-- `lumina run app.lua` — Native terminal application
-- `lumina serve 8080 app.lua` — Web application via xterm.js + WebSocket
+### 输入组件
+- **`input`** — 单行文本输入
+- **`textarea`** — 多行文本输入
+- **焦点** — `Tab` 循环、点击聚焦、`autoFocus`
+- **编辑** — 光标移动、Backspace、字符插入
+
+### 运行时
+- **60fps 事件循环** — 定时渲染脏组件
+- **热加载** — 文件变化自动重载 Lua 脚本
+- **定时器** — `setInterval`, `setTimeout`, `clearInterval`, `clearTimeout`
+- **开发者工具** — F12 切换，显示组件树和性能指标
 
 ---
 
-## 🚀 Quick Start
+## 🚀 快速开始
+
+### 安装
 
 ```bash
-# Install
-go install github.com/akzj/lumina/cmd/lumina@latest
-
-# Run example locally
-lumina run examples/dashboard/main.lua
-
-# Or serve to web browser
-lumina serve 8080 examples/dashboard/main.lua
-# Open http://localhost:8080
+go install github.com/akzj/lumina/cmd/lumina-v2@latest
 ```
+
+### 运行示例
+
+```bash
+# 计数器
+lumina-v2 examples/v2/counter.lua
+
+# Todo MVC
+lumina-v2 examples/v2/todo_mvc.lua
+
+# 压力测试（1840 个独立组件）
+lumina-v2 examples/v2/stress_test.lua
+
+# 系统仪表盘
+lumina-v2 examples/v2/dashboard.lua
+```
+
+### 退出
+
+`Ctrl+C` 或 `Ctrl+Q`
 
 ---
 
-## 📖 Hello World
+## 📖 Lua API 参考
+
+### lumina.createComponent(config)
+
+创建根组件并注册到渲染引擎。
 
 ```lua
-local lumina = require("lumina")
-
-local App = lumina.defineComponent({
-    name = "App",
-    render = function(self)
-        local count, setCount = lumina.useState(0)
-        return {
-            type = "vbox",
-            style = { padding = 1, border = "rounded" },
-            children = {
-                { type = "text", content = "Count: " .. count },
-                lumina.createElement("button", {
-                    label = "Increment",
-                    onClick = function() setCount(count + 1) end,
-                }),
-            }
-        }
+lumina.createComponent({
+    id = "my-app",          -- 必填，唯一标识
+    name = "MyApp",         -- 可选，显示名称
+    render = function(props)
+        -- 返回 createElement 结果
+        return lumina.createElement("box", {}, ...)
     end,
 })
-
-lumina.mount(App)
-lumina.run()
 ```
 
----
+### lumina.defineComponent(name, renderFn)
 
-## 🎨 Dashboard Example
+定义可复用的子组件工厂。返回一个工厂表，可传给 `createElement`。
 
 ```lua
-local lumina = require("lumina")
-local shadcn = require("shadcn")
-
--- Global state
-local store = lumina.createStore({
-    state = { users = 1234, revenue = 56789, orders = 890 },
-    actions = {
-        refresh = function(state)
-            state.users = state.users + math.random(10)
-        end,
-    }
-})
-
--- Theme
-lumina.setTheme("catppuccin-mocha")
-
--- i18n
-lumina.i18n.addTranslation("en", {
-    ["dashboard.users"] = "Users",
-    ["dashboard.revenue"] = "Revenue",
-})
-lumina.i18n.addTranslation("zh", {
-    ["dashboard.users"] = "用户数",
-    ["dashboard.revenue"] = "收入",
-})
-
-local Dashboard = lumina.defineComponent({
-    name = "Dashboard",
-    render = function(self)
-        local state = lumina.useStore(store)
-        local t = lumina.useTranslation()
-        local theme = lumina.useTheme()
-
-        return {
-            type = "grid",
-            style = { columns = "1fr 1fr", gap = 1 },
-            children = {
-                lumina.createElement(shadcn.Card, {
-                    children = {
-                        lumina.createElement(shadcn.CardTitle, {
-                            children = {{ type = "text", content = t("dashboard.users") }}
-                        }),
-                        lumina.createElement(shadcn.CardContent, {
-                            children = {{ type = "text", content = tostring(state.users) }}
-                        }),
-                    }
-                }),
-                lumina.createElement(shadcn.Card, {
-                    children = {
-                        lumina.createElement(shadcn.CardTitle, {
-                            children = {{ type = "text", content = t("dashboard.revenue") }}
-                        }),
-                        lumina.createElement(shadcn.CardContent, {
-                            children = {{ type = "text", content = "$" .. tostring(state.revenue) }}
-                        }),
-                    }
-                }),
-            }
-        }
-    end,
-})
-
-lumina.mount(Dashboard)
-lumina.serve(8080)  -- or lumina.run() for terminal
-```
-
----
-
-## 🏗️ Architecture
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                     Lua Application                      │
-│   Components · Hooks · Store · Router · shadcn UI        │
-├─────────────────────────────────────────────────────────┤
-│                    Lumina Go Engine                       │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌────────────┐ │
-│  │ Renderer │ │  Hooks   │ │  Layout  │ │   Events   │ │
-│  │  (VDOM)  │ │  (15+)   │ │Flex/Grid │ │  Bubbling  │ │
-│  └──────────┘ └──────────┘ └──────────┘ └────────────┘ │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌────────────┐ │
-│  │ Overlay  │ │Animation │ │  Theme   │ │    i18n    │ │
-│  └──────────┘ └──────────┘ └──────────┘ └────────────┘ │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌────────────┐ │
-│  │  Store   │ │  Router  │ │ DevTools │ │  Plugins   │ │
-│  └──────────┘ └──────────┘ └──────────┘ └────────────┘ │
-├─────────────────────────────────────────────────────────┤
-│                     Terminal I/O                          │
-│  ┌─────────────────────┐  ┌────────────────────────────┐│
-│  │   LocalTerminal     │  │  WebTerminal (WebSocket)   ││
-│  │   (stdin/stdout)    │  │  (xterm.js + browser)      ││
-│  └─────────────────────┘  └────────────────────────────┘│
-└─────────────────────────────────────────────────────────┘
-```
-
----
-
-## 📚 API Overview
-
-See [docs/API.md](docs/API.md) for the full API reference.
-
-### Hooks
-
-| Hook | Description |
-|------|-------------|
-| `useState(initial)` | Local state, returns `value, setter` |
-| `useEffect(fn, deps)` | Side effects with dependency tracking |
-| `useMemo(fn, deps)` | Memoized computation |
-| `useCallback(fn, deps)` | Memoized callback |
-| `useRef(initial)` | Mutable ref object |
-| `useContext(ctx)` | Read context value |
-| `useReducer(reducer, init)` | State with reducer pattern |
-| `useTransition()` | Non-urgent state updates |
-| `useDeferredValue(value)` | Deferred value for expensive renders |
-| `useId()` | Stable unique ID |
-| `useSyncExternalStore(sub, snap)` | External store subscription |
-| `useLayoutEffect(fn, deps)` | Synchronous effect after render |
-| `useImperativeHandle(ref, fn)` | Customize ref value |
-| `useDebugValue(value)` | DevTools debug label |
-| `useAnimation(opts)` | Animation with easing |
-
-### Components
-
-```lua
--- Define
-local MyComponent = lumina.defineComponent({
-    name = "MyComponent",
-    render = function(self) return { type = "text", content = "Hello" } end,
-})
-
--- Create element
-lumina.createElement(MyComponent, { prop1 = "value" })
-
--- Special components
-lumina.Suspense       -- Async loading boundary
-lumina.ErrorBoundary  -- Error catching
-lumina.Portal         -- Render outside parent tree
-lumina.Fragment       -- Group without wrapper
-```
-
-### State Management
-
-```lua
-local store = lumina.createStore({
-    state = { count = 0 },
-    actions = {
-        increment = function(state) state.count = state.count + 1 end,
-    }
-})
-
--- In component:
-local state = lumina.useStore(store)
-store.dispatch("increment")
-```
-
-### Router
-
-```lua
-local router = lumina.createRouter()
-router.addRoute("/", HomePage)
-router.addRoute("/users", UsersPage)
-router.addRoute("/users/:id", UserDetailPage)
-router.navigate("/users/42")
-```
-
-### Form Validation
-
-```lua
-local form = lumina.useForm({
-    defaultValues = { email = "", name = "" },
-    rules = {
-        email = {
-            { type = "required", message = "Email is required" },
-            { type = "email", message = "Invalid email" },
-        },
-        name = {
-            { type = "minLength", value = 2, message = "Too short" },
-        },
+local Button = lumina.defineComponent("Button", function(props)
+    local hovered, setHovered = lumina.useState("h", false)
+    return lumina.createElement("box", {
+        style = {background = hovered and "#313244" or "#1E1E2E"},
+        onMouseEnter = function() setHovered(true) end,
+        onMouseLeave = function() setHovered(false) end,
+        onClick = props.onClick,
     },
-    onSubmit = function(values) print("Submitted!") end,
-})
+        lumina.createElement("text", {foreground = "#89B4FA"}, props.label)
+    )
+end)
 
-form.setValue("email", "user@example.com")
-form.handleSubmit()  -- validates then calls onSubmit
+-- 使用子组件
+lumina.createElement(Button, {key = "btn1", label = "Click me", onClick = handler})
 ```
 
-### Theme
+### lumina.createElement(type, props, ...children)
+
+创建 UI 元素描述。
 
 ```lua
-lumina.setTheme("catppuccin-mocha")  -- or "catppuccin-latte", "tokyo-night", "nord"
-local theme = lumina.useTheme()      -- { colors = { primary = "...", ... } }
+-- 基本元素
+lumina.createElement("box", {style = {background = "#1E1E2E"}},
+    lumina.createElement("text", {foreground = "#CDD6F4"}, "Hello")
+)
+
+-- 子组件
+lumina.createElement(MyComponent, {key = "unique-key", someProp = "value"})
 ```
 
-### i18n
+**元素类型**:
+
+| 类型 | 说明 |
+|------|------|
+| `"box"` | 通用容器（默认垂直堆叠） |
+| `"vbox"` | 垂直容器 |
+| `"hbox"` | 水平容器 |
+| `"text"` | 文本节点 |
+| `"input"` | 单行文本输入 |
+| `"textarea"` | 多行文本输入 |
+
+### lumina.useState(key, defaultValue)
+
+在当前组件中声明一个状态变量。返回 `(currentValue, setterFn)`。
 
 ```lua
-lumina.i18n.addTranslation("en", { ["hello"] = "Hello" })
-lumina.i18n.addTranslation("zh", { ["hello"] = "你好" })
-lumina.i18n.setLocale("zh")
-local t = lumina.useTranslation()
-t("hello")  -- "你好"
+local count, setCount = lumina.useState("count", 0)
+-- 更新状态（触发组件重新渲染）
+setCount(count + 1)
 ```
 
-### Layout
+> **注意**: `key` 在组件内必须唯一。相同 key 的多次调用返回同一个状态。
+
+### lumina.quit()
+
+退出应用。
+
+### lumina.setInterval(fn, ms) / lumina.setTimeout(fn, ms)
+
+设置定时器，返回 timer ID。
 
 ```lua
--- Flexbox
-{ type = "flex", style = { direction = "row", justify = "space-between", align = "center", gap = 1 } }
+local id = lumina.setInterval(function()
+    -- 每 1000ms 执行
+end, 1000)
 
--- CSS Grid
-{ type = "grid", style = { columns = "1fr 2fr 1fr", rows = "auto auto", gap = 1 } }
-```
-
-### Drag & Drop
-
-```lua
-local drag = lumina.useDrag({ type = "card", data = { id = 1 } })
-local drop = lumina.useDrop({ accept = { "card" }, onDrop = function(data) print(data.id) end })
-
-drag.start("card-1")
-drop.drop()
+lumina.clearInterval(id)  -- 取消
 ```
 
 ---
 
-## 🧩 Plugin System
+## 🎨 样式系统
+
+样式可以通过 `style` 子表或直接作为 props 传入：
 
 ```lua
-lumina.registerPlugin({
-    name = "my-charts",
-    version = "1.0.0",
-    init = function(app)
-        lumina.defineComponent({ name = "BarChart", ... })
+-- 方式 1: style 子表
+lumina.createElement("box", {
+    style = {width = 40, height = 10, background = "#1E1E2E"},
+})
+
+-- 方式 2: 顶层属性（style 子表优先级更高）
+lumina.createElement("text", {
+    foreground = "#89B4FA",
+    bold = true,
+})
+```
+
+### 尺寸
+
+| 属性 | 说明 |
+|------|------|
+| `width`, `height` | 固定尺寸（0 = 自动） |
+| `minWidth`, `maxWidth` | 宽度约束 |
+| `minHeight`, `maxHeight` | 高度约束 |
+| `flex` | Flex 增长因子（按比例分配剩余空间） |
+
+### 间距
+
+| 属性 | 说明 |
+|------|------|
+| `padding` | 四边内边距（简写） |
+| `paddingTop/Bottom/Left/Right` | 单边内边距（覆盖简写） |
+| `margin` | 四边外边距（简写） |
+| `marginTop/Bottom/Left/Right` | 单边外边距（覆盖简写） |
+| `gap` | 子元素间距 |
+
+### 对齐
+
+| 属性 | 值 | 说明 |
+|------|-----|------|
+| `justify` | `"start"`, `"center"`, `"end"`, `"space-between"`, `"space-around"` | 主轴对齐 |
+| `align` | `"stretch"`, `"start"`, `"center"`, `"end"` | 交叉轴对齐 |
+
+### 视觉
+
+| 属性 | 说明 |
+|------|------|
+| `foreground` / `fg` | 前景色（如 `"#89B4FA"`） |
+| `background` / `bg` | 背景色 |
+| `bold` | 粗体 |
+| `dim` | 暗淡 |
+| `underline` | 下划线 |
+| `border` | 边框样式: `"single"`, `"double"`, `"rounded"` |
+
+### 定位
+
+| 属性 | 说明 |
+|------|------|
+| `position` | `"relative"`, `"absolute"`, `"fixed"` |
+| `top`, `left`, `right`, `bottom` | 偏移量 |
+| `zIndex` | 层叠顺序 |
+
+### 溢出
+
+| 属性 | 说明 |
+|------|------|
+| `overflow` | `"hidden"`, `"scroll"` |
+| `scrollY` | 垂直滚动偏移量（配合 `overflow: "scroll"`） |
+
+---
+
+## 🎯 事件系统
+
+```lua
+lumina.createElement("box", {
+    onClick = function(e)
+        -- e.x, e.y: 鼠标位置
+    end,
+    onMouseEnter = function(e) ... end,
+    onMouseLeave = function(e) ... end,
+    onKeyDown = function(e)
+        -- e.key: 按键名（"a", "Enter", "ArrowUp", ...）
+    end,
+    onScroll = function(e)
+        -- e.delta: 滚动方向（-1=上, 1=下）
+        -- e.key: "up" 或 "down"
+    end,
+    onChange = function(value)
+        -- input/textarea 值变化时触发
     end,
 })
-
-lumina.usePlugin("my-charts")
 ```
+
+事件从最深层节点向上**冒泡**，直到找到对应的处理器。
 
 ---
 
-## 📊 Project Stats
+## 🏗️ 架构概览
 
-- **668+ tests** passing
-- **47 shadcn/ui components**
-- **15+ React hooks** implemented
-- **107 Go source files**
-- **Dual runtime**: terminal + web (xterm.js)
-- **Zero JavaScript build step** — embedded assets via `//go:embed`
+```
+Lua 用户代码
+  ↓ createComponent / defineComponent / createElement / useState
+Engine (Go)
+  ↓ renderInOrder()     — 调用脏组件的 Lua renderFn
+  ↓ readDescriptor()    — Lua 表 → Descriptor
+  ↓ Reconcile()         — Descriptor vs Node 树，就地 patch
+  ↓ graftChildComponents() — 嫁接子组件到父树
+  ↓ LayoutIncremental() — 只重算脏子树
+  ↓ PaintDirty()        — 只重绘脏节点到 CellBuffer
+  ↓ ToBuffer()          — CellBuffer → Buffer
+Output Adapter
+  ↓ WriteDirty(buf, dirtyRects) — 只输出变化区域
+终端
+```
+
+详细架构设计见 [DESIGN.md](DESIGN.md)。
 
 ---
 
-## 📁 Project Structure
+## 🔧 开发指南
+
+### 运行测试
+
+```bash
+# 全部测试
+go test ./pkg/lumina/v2/...
+
+# 渲染引擎测试
+go test ./pkg/lumina/v2/render/...
+
+# 集成测试
+go test ./pkg/lumina/v2/ -run TestE2E
+
+# 压力测试 benchmark
+go test ./pkg/lumina/v2/ -bench BenchmarkStress -benchtime 5s
+```
+
+### 项目结构
 
 ```
-lumina/
-├── cmd/lumina/              # CLI entry point (run/serve)
-├── pkg/lumina/
-│   ├── app.go               # Application lifecycle
-│   ├── renderer.go          # Virtual DOM renderer
-│   ├── vdom.go              # VNode + diff/patch
-│   ├── hooks.go             # All React hooks
-│   ├── component.go         # Component system
-│   ├── store.go             # State management (createStore)
-│   ├── router.go            # Client-side router
-│   ├── flexbox.go           # Flexbox layout engine
-│   ├── grid.go              # CSS Grid layout engine
-│   ├── overlay.go           # Overlay/modal system
-│   ├── animation.go         # Animation engine
-│   ├── theme.go             # Theme system (4 built-in)
-│   ├── i18n.go              # Internationalization
-│   ├── form_validation.go   # Form validation (useForm)
-│   ├── dnd.go               # Drag & drop
-│   ├── suspense.go          # Suspense + lazy loading
-│   ├── concurrent.go        # useTransition, useDeferredValue
-│   ├── accessibility.go     # ARIA attributes
-│   ├── devtools.go          # Component inspector
-│   ├── fetch.go             # useFetch, useQuery
-│   ├── testing_utils.go     # TestRenderer, getByText
-│   ├── virtual_scroll.go    # Virtual scrolling
-│   ├── web_server.go        # HTTP + WebSocket server
-│   ├── web_terminal.go      # Terminal over WebSocket
-│   ├── hot_reload.go        # File watcher + HMR
-│   ├── plugin.go            # Plugin system
-│   ├── lumina.go            # Lua API registration
-│   ├── components/
-│   │   └── shadcn/          # 47 shadcn/ui components (Lua)
-│   │       ├── init.lua
-│   │       ├── button.lua
-│   │       ├── card.lua
-│   │       └── ...
-│   └── web/
-│       ├── index.html        # Embedded web page
-│       └── lumina-client.js   # xterm.js client
-├── examples/
-│   ├── dashboard/            # Admin dashboard
-│   ├── todo/                 # Todo app
-│   ├── file-explorer/        # File browser
-│   ├── chat/                 # Chat application
-│   └── components-showcase/  # Component gallery
-└── docs/
-    └── API.md                # Full API reference
+cmd/lumina-v2/        — CLI 入口
+pkg/lumina/v2/        — 核心框架
+  render/             — 渲染引擎（Engine, Node, Reconciler, Layout, Painter）
+  buffer/             — Buffer 类型
+  output/             — 输出适配器（ANSI, TestAdapter）
+  event/              — 事件类型
+  perf/               — 性能追踪
+  devtools/           — 开发者工具
+  animation/          — 动画系统
+  router/             — 路由
+  hotreload/          — 热加载
+  store/              — 状态管理
+examples/v2/          — 示例应用
+docs/                 — 文档
 ```
+
+### 添加新的元素类型
+
+1. 在 `render/node.go` 中定义类型字符串
+2. 在 `render/layout.go` 的 `computeFlex()` 中添加布局分支
+3. 在 `render/painter.go` 的 `paintNode()` 中添加绘制分支
+4. 在 `render/engine.go` 的 `readDescriptor()` 中读取特有属性
+5. 写测试，运行 `go test ./pkg/lumina/v2/render/...`
 
 ---
 
-## License
+## 📄 许可证
 
 MIT

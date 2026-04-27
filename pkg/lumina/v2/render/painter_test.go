@@ -607,3 +607,114 @@ func TestCellBuffer_Stats_MixedWritesAndClears(t *testing.T) {
 		t.Errorf("DirtyRect: got (%d,%d,%d,%d), want (1,1,6,6)", s.DirtyX, s.DirtyY, s.DirtyW, s.DirtyH)
 	}
 }
+
+func TestPaintDirty_ParentDirtyClearsChildFlags(t *testing.T) {
+	buf := NewCellBuffer(20, 10)
+
+	parent := &Node{
+		Type:       "box",
+		X: 0, Y: 0, W: 20, H: 10,
+		PaintDirty: true,
+		Style:      Style{Background: "#222222", Right: -1, Bottom: -1},
+	}
+	child := &Node{
+		Type:       "text",
+		Content:    "Child",
+		X: 1, Y: 1, W: 10, H: 1,
+		PaintDirty: true,
+		Style:      Style{Foreground: "#FFFFFF", Right: -1, Bottom: -1},
+	}
+	grandchild := &Node{
+		Type:       "text",
+		Content:    "GC",
+		X: 2, Y: 2, W: 5, H: 1,
+		PaintDirty: true,
+		Style:      Style{Foreground: "#AAAAAA", Right: -1, Bottom: -1},
+	}
+	parent.AddChild(child)
+	child.AddChild(grandchild)
+
+	PaintDirty(buf, parent)
+
+	// Parent dirty flag should be cleared
+	if parent.PaintDirty {
+		t.Error("expected parent PaintDirty cleared")
+	}
+	// Child's PaintDirty should also be cleared (painted by parent's paintNode)
+	if child.PaintDirty {
+		t.Error("expected child PaintDirty cleared when parent was dirty")
+	}
+	// Grandchild's PaintDirty should also be cleared
+	if grandchild.PaintDirty {
+		t.Error("expected grandchild PaintDirty cleared when parent was dirty")
+	}
+}
+
+func TestPaintText_CJKWideChars(t *testing.T) {
+	buf := NewCellBuffer(20, 5)
+	node := &Node{
+		Type:    "text",
+		Content: "你好",
+		X: 0, Y: 0, W: 10, H: 1,
+		Style: Style{Foreground: "#FFFFFF", Right: -1, Bottom: -1},
+	}
+
+	PaintFull(buf, node)
+
+	// '你' should be at (0,0) and occupy 2 columns
+	c := buf.Get(0, 0)
+	if c.Ch != '你' {
+		t.Errorf("at (0,0): expected '你', got %q", c.Ch)
+	}
+	// (1,0) should be the padding cell (Wide=true)
+	c = buf.Get(1, 0)
+	if !c.Wide {
+		t.Error("at (1,0): expected Wide=true for padding cell")
+	}
+
+	// '好' should be at (2,0)
+	c = buf.Get(2, 0)
+	if c.Ch != '好' {
+		t.Errorf("at (2,0): expected '好', got %q", c.Ch)
+	}
+	// (3,0) should be the padding cell
+	c = buf.Get(3, 0)
+	if !c.Wide {
+		t.Error("at (3,0): expected Wide=true for padding cell")
+	}
+
+	// (4,0) should be empty
+	c = buf.Get(4, 0)
+	if c.Ch != 0 {
+		t.Errorf("at (4,0): expected empty, got %q", c.Ch)
+	}
+}
+
+func TestPaintText_MixedASCIIAndCJK(t *testing.T) {
+	buf := NewCellBuffer(20, 5)
+	node := &Node{
+		Type:    "text",
+		Content: "A你B",
+		X: 0, Y: 0, W: 10, H: 1,
+		Style: Style{Foreground: "#FFFFFF", Right: -1, Bottom: -1},
+	}
+
+	PaintFull(buf, node)
+
+	// 'A' at (0,0) — 1 column
+	if c := buf.Get(0, 0); c.Ch != 'A' {
+		t.Errorf("at (0,0): expected 'A', got %q", c.Ch)
+	}
+	// '你' at (1,0) — 2 columns
+	if c := buf.Get(1, 0); c.Ch != '你' {
+		t.Errorf("at (1,0): expected '你', got %q", c.Ch)
+	}
+	// padding at (2,0)
+	if c := buf.Get(2, 0); !c.Wide {
+		t.Error("at (2,0): expected Wide=true")
+	}
+	// 'B' at (3,0)
+	if c := buf.Get(3, 0); c.Ch != 'B' {
+		t.Errorf("at (3,0): expected 'B', got %q", c.Ch)
+	}
+}
