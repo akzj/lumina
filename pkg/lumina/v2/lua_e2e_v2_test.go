@@ -1648,3 +1648,61 @@ return H
 		t.Errorf("expected 'hi from subdir' on screen from subdirectory module, got line: %q", readScreenLine(ta, 0, 40))
 	}
 }
+
+// TestV2E2E_ChildRemovalClearsGhost verifies that when a child node is removed,
+// its pixels are cleared from the screen (no "ghost" artifacts remain).
+func TestV2E2E_ChildRemovalClearsGhost(t *testing.T) {
+	app, ta, _ := newV2App(t, 40, 10)
+
+	err := app.RunString(`
+		lumina.createComponent({
+			id = "ghost-test",
+			render = function(props)
+				local showC, setShowC = lumina.useState("showC", true)
+
+				local children = {
+					lumina.createElement("text", {id = "a"}, "AAAA"),
+					lumina.createElement("text", {id = "b"}, "BBBB"),
+				}
+				if showC then
+					children[#children + 1] = lumina.createElement("text", {id = "c"}, "CCCC")
+				end
+
+				return lumina.createElement("vbox", {
+					id = "container",
+					style = {width = 40, height = 10},
+					onClick = function()
+						setShowC(false)
+					end,
+				}, table.unpack(children))
+			end,
+		})
+	`)
+	if err != nil {
+		t.Fatalf("RunScript failed: %v", err)
+	}
+
+	// Initial render: all 3 children visible
+	app.RenderAll()
+
+	if !screenHasString(ta, "CCCC") {
+		t.Fatal("expected 'CCCC' on screen initially")
+	}
+
+	// Click to remove child C
+	app.HandleEvent(&event.Event{Type: "click", X: 5, Y: 0})
+	app.RenderDirty()
+
+	// After removal, AAAA and BBBB should still be visible
+	if !screenHasString(ta, "AAAA") {
+		t.Error("expected 'AAAA' still on screen after removal")
+	}
+	if !screenHasString(ta, "BBBB") {
+		t.Error("expected 'BBBB' still on screen after removal")
+	}
+
+	// CCCC should be GONE — no ghost pixels
+	if screenHasString(ta, "CCCC") {
+		t.Error("ghost pixel bug: 'CCCC' still visible after child removal")
+	}
+}
