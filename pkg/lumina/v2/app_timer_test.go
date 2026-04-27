@@ -323,7 +323,7 @@ func TestLuaE2E_TimerCallbackError(t *testing.T) {
 	L := lua.NewState()
 	t.Cleanup(func() { L.Close() })
 	ta := output.NewTestAdapter()
-	app = NewAppWithLua(L, 40, 10, ta)
+	app = NewApp(L, 40, 10, ta)
 
 	err := app.RunString(`
 		_error_after_count = 0

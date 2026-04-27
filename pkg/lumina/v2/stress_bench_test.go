@@ -134,7 +134,7 @@ func newStressApp(tb testing.TB) (*App, *output.TestAdapter, *lua.State) {
 	L := lua.NewState()
 	tb.Cleanup(func() { L.Close() })
 	ta := output.NewTestAdapter()
-	app := NewAppWithLua(L, stressCols, stressRows+1, ta)
+	app := NewApp(L, stressCols, stressRows+1, ta)
 	if err := app.RunString(stressLuaScript); err != nil {
 		tb.Fatalf("RunString failed: %v", err)
 	}
@@ -146,7 +146,7 @@ func newStressAppNop(tb testing.TB) (*App, *lua.State) {
 	tb.Helper()
 	L := lua.NewState()
 	tb.Cleanup(func() { L.Close() })
-	app := NewAppWithLua(L, stressCols, stressRows+1, nopAdapter{})
+	app := NewApp(L, stressCols, stressRows+1, nopAdapter{})
 	if err := app.RunString(stressLuaScript); err != nil {
 		tb.Fatalf("RunString failed: %v", err)
 	}
@@ -242,7 +242,7 @@ func newStressAppV2(tb testing.TB) (*App, *output.TestAdapter, *lua.State) {
 	L := lua.NewState()
 	tb.Cleanup(func() { L.Close() })
 	ta := output.NewTestAdapter()
-	app := NewAppWithEngine(L, stressCols, stressRows+1, ta)
+	app := NewApp(L, stressCols, stressRows+1, ta)
 	if err := app.RunString(stressLuaScriptV2); err != nil {
 		tb.Fatalf("RunString failed: %v", err)
 	}
@@ -254,7 +254,7 @@ func newStressAppV2Nop(tb testing.TB) (*App, *lua.State) {
 	tb.Helper()
 	L := lua.NewState()
 	tb.Cleanup(func() { L.Close() })
-	app := NewAppWithEngine(L, stressCols, stressRows+1, nopAdapter{})
+	app := NewApp(L, stressCols, stressRows+1, nopAdapter{})
 	if err := app.RunString(stressLuaScriptV2); err != nil {
 		tb.Fatalf("RunString failed: %v", err)
 	}
@@ -558,7 +558,7 @@ func TestStressPerfV2_ActualScript(t *testing.T) {
 	L := lua.NewState()
 	t.Cleanup(func() { L.Close() })
 	ta := output.NewTestAdapter()
-	app := NewAppWithEngine(L, stressCols, stressRows+1, ta)
+	app := NewApp(L, stressCols, stressRows+1, ta)
 
 	err := app.RunScript("../../../examples/v2/stress_test.lua")
 	if err != nil {

@@ -225,6 +225,11 @@ func (a *App) Resize(w, h int) {
 	a.engine.Resize(w, h)
 }
 
+// SetState updates a component's state (marks it dirty for re-render).
+func (a *App) SetState(compID string, key string, value any) {
+	a.engine.SetState(compID, key, value)
+}
+
 // tickDevTools is called every frame tick from the event loop.
 func (a *App) tickDevTools() {
 	a.tickDevToolsV2()
