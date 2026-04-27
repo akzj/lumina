@@ -760,7 +760,7 @@ func TestIntegration_Reconcile_ChildStatePreserved(t *testing.T) {
 	app.manager.Reconcile(parent, children)
 
 	// Set state on child-a
-	childAID := parent.ID + ":child-a"
+	childAID := parent.ID() + ":child-a"
 	app.SetState(childAID, "counter", 42)
 
 	// Reconcile again with same keys — child state should be preserved
@@ -770,8 +770,8 @@ func TestIntegration_Reconcile_ChildStatePreserved(t *testing.T) {
 	if childA == nil {
 		t.Fatal("child-a should still exist after reconcile")
 	}
-	if childA.State["counter"] != 42 {
-		t.Errorf("expected child-a state[counter]=42, got %v", childA.State["counter"])
+	if childA.State()["counter"] != 42 {
+		t.Errorf("expected child-a state[counter]=42, got %v", childA.State()["counter"])
 	}
 
 	_ = childRenderCount
@@ -1104,8 +1104,8 @@ func TestIntegration_CrossModule_BufferResizeOnMove(t *testing.T) {
 	if comp == nil {
 		t.Fatal("component not found")
 	}
-	if comp.Buffer.Width() != 20 || comp.Buffer.Height() != 10 {
-		t.Errorf("expected buffer 20x10, got %dx%d", comp.Buffer.Width(), comp.Buffer.Height())
+	if comp.Buffer().Width() != 20 || comp.Buffer().Height() != 10 {
+		t.Errorf("expected buffer 20x10, got %dx%d", comp.Buffer().Width(), comp.Buffer().Height())
 	}
 }
 

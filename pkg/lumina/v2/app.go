@@ -50,21 +50,7 @@ func NewTestApp(w, h int) (*App, *output.TestAdapter) {
 // RegisterComponent registers a component with the app.
 // Creates buffer, sets initial rect, registers with manager.
 func (a *App) RegisterComponent(id, name string, rect buffer.Rect, zIndex int, renderFn component.RenderFunc) *component.Component {
-	comp := &component.Component{
-		ID:         id,
-		Name:       name,
-		Buffer:     buffer.New(rect.W, rect.H),
-		Rect:       rect,
-		PrevRect:   rect,
-		ZIndex:     zIndex,
-		DirtyPaint: true,
-		State:      make(map[string]any),
-		Props:      make(map[string]any),
-		RenderFn:   renderFn,
-		Children:   nil,
-		ChildMap:   make(map[string]*component.Component),
-		Handlers:   make(map[string]event.HandlerMap),
-	}
+	comp := component.NewComponent(id, name, rect, zIndex, renderFn)
 	a.manager.Register(comp)
 	a.layersDirty = true
 	return comp
@@ -130,8 +116,8 @@ func (a *App) RenderDirty() {
 			// Rect changed → recompose old + new rects.
 			var rects []buffer.Rect
 			for _, comp := range rectChanged {
-				rects = append(rects, comp.PrevRect)
-				rects = append(rects, comp.Rect)
+				rects = append(rects, comp.PrevRect())
+				rects = append(rects, comp.Rect())
 			}
 			allDirtyRects = append(allDirtyRects, a.compositor.ComposeRects(rects)...)
 		}
@@ -199,15 +185,7 @@ func (a *App) MoveComponent(id string, newRect buffer.Rect) {
 	if comp == nil {
 		return
 	}
-	comp.PrevRect = comp.Rect
-	comp.Rect = newRect
-	comp.RectChanged = true
-	comp.DirtyPaint = true
-
-	// Resize buffer if dimensions changed.
-	if newRect.W != comp.Buffer.Width() || newRect.H != comp.Buffer.Height() {
-		comp.Buffer = buffer.New(newRect.W, newRect.H)
-	}
+	comp.Move(newRect)
 }
 
 // Resize resizes the screen.
@@ -218,27 +196,61 @@ func (a *App) Resize(w, h int) {
 	a.layersDirty = true
 	// Mark all components dirty so next render repaints everything.
 	for _, comp := range a.manager.GetAll() {
-		comp.DirtyPaint = true
+		comp.MarkDirty()
 	}
 }
 
 // --- internal helpers ---
 
+// compToLayer converts a component to a compositor layer.
+func compToLayer(comp *component.Component) *compositor.Layer {
+	return &compositor.Layer{
+		ID:     comp.ID(),
+		Buffer: comp.Buffer(),
+		Rect:   comp.Rect(),
+		ZIndex: comp.ZIndex(),
+	}
+}
+
+// compToComponentLayer converts a component to an event.ComponentLayer.
+func compToComponentLayer(comp *component.Component) *event.ComponentLayer {
+	return &event.ComponentLayer{
+		Layer:     compToLayer(comp),
+		VNodeTree: comp.VNodeTree(),
+	}
+}
+
 // buildLayers extracts compositor layers from all registered components.
 func (a *App) buildLayers() []*compositor.Layer {
-	compLayers := a.manager.AllLayers()
-	layers := make([]*compositor.Layer, len(compLayers))
-	for i, cl := range compLayers {
-		layers[i] = cl.Layer
+	all := a.manager.GetAll()
+	layers := make([]*compositor.Layer, len(all))
+	for i, comp := range all {
+		layers[i] = compToLayer(comp)
 	}
 	return layers
 }
 
 // rebuildHitTester rebuilds the VNode hit tester from current component layers.
 func (a *App) rebuildHitTester() {
-	compLayers := a.manager.AllLayers()
+	all := a.manager.GetAll()
+	compLayers := make([]*event.ComponentLayer, len(all))
+	for i, comp := range all {
+		compLayers[i] = compToComponentLayer(comp)
+	}
 	ht := event.NewVNodeHitTester(compLayers, a.compositor.OcclusionMap())
 	a.dispatcher.SetHitTester(ht)
+}
+
+// convertHandlerMap converts component.HandlerMap (any values) to event.HandlerMap
+// by type-asserting each handler to event.EventHandler.
+func convertHandlerMap(chm component.HandlerMap) event.HandlerMap {
+	ehm := make(event.HandlerMap, len(chm))
+	for evtType, handler := range chm {
+		if h, ok := handler.(event.EventHandler); ok {
+			ehm[evtType] = h
+		}
+	}
+	return ehm
 }
 
 // syncHandlers syncs event handlers and focusables from all components
@@ -248,28 +260,26 @@ func (a *App) syncHandlers() {
 	a.dispatcher.ClearAllHandlers()
 	a.dispatcher.ClearAllFocusables()
 
-	compLayers := a.manager.AllLayers()
+	all := a.manager.GetAll()
 
 	// Build parent map and register handlers.
 	parentMap := make(map[string]string)
-	for _, cl := range compLayers {
-		if cl.VNodeTree != nil {
-			buildParentMap(cl.VNodeTree, "", parentMap)
+	for _, comp := range all {
+		if comp.VNodeTree() != nil {
+			buildParentMap(comp.VNodeTree(), "", parentMap)
 		}
 	}
 	a.dispatcher.SetParentMap(parentMap)
 
 	// Register all handlers from all components.
-	// First, collect all component objects via manager.
-	for _, cl := range compLayers {
-		comp := a.manager.Get(cl.Layer.ID)
-		if comp == nil {
-			continue
+	for _, comp := range all {
+		for vnodeID, chm := range comp.Handlers() {
+			ehm := convertHandlerMap(chm)
+			if len(ehm) > 0 {
+				a.dispatcher.RegisterHandlers(vnodeID, ehm)
+			}
 		}
-		for vnodeID, hm := range comp.Handlers {
-			a.dispatcher.RegisterHandlers(vnodeID, hm)
-		}
-		for i, fID := range comp.Focusables {
+		for i, fID := range comp.Focusables() {
 			a.dispatcher.RegisterFocusable(fID, i)
 		}
 	}
@@ -285,17 +295,20 @@ func (a *App) syncDirtyHandlers(dirtyComps []*component.Component) {
 		// re-register from the component's extracted handler map.
 		// Since ExtractHandlers was called during RenderDirty, comp.Handlers
 		// is already up-to-date.
-		for vnodeID, hm := range comp.Handlers {
-			a.dispatcher.RegisterHandlers(vnodeID, hm)
+		for vnodeID, chm := range comp.Handlers() {
+			ehm := convertHandlerMap(chm)
+			if len(ehm) > 0 {
+				a.dispatcher.RegisterHandlers(vnodeID, ehm)
+			}
 		}
 		// Re-register focusables.
-		for i, fID := range comp.Focusables {
+		for i, fID := range comp.Focusables() {
 			a.dispatcher.RegisterFocusable(fID, i)
 		}
 		// Rebuild parent map for this component's VNode tree.
-		if comp.VNodeTree != nil {
+		if comp.VNodeTree() != nil {
 			parentMap := make(map[string]string)
-			buildParentMap(comp.VNodeTree, "", parentMap)
+			buildParentMap(comp.VNodeTree(), "", parentMap)
 			// Merge into dispatcher's parent map.
 			a.dispatcher.MergeParentMap(parentMap)
 		}
@@ -323,12 +336,7 @@ func buildParentMap(vn *layout.VNode, parentID string, m map[string]string) {
 func (a *App) getDirtyLayers(dirtyComps []*component.Component) []*compositor.Layer {
 	var layers []*compositor.Layer
 	for _, comp := range dirtyComps {
-		layers = append(layers, &compositor.Layer{
-			ID:     comp.ID,
-			Buffer: comp.Buffer,
-			Rect:   comp.Rect,
-			ZIndex: comp.ZIndex,
-		})
+		layers = append(layers, compToLayer(comp))
 	}
 	return layers
 }

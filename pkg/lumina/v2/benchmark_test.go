@@ -609,25 +609,14 @@ func BenchmarkBuffer_Blit_Dialog(b *testing.B) {
 func BenchmarkManager_RenderDirty_1Component(b *testing.B) {
 	p := paint.NewPainter()
 	mgr := component.NewManager(p)
-	comp := &component.Component{
-		ID:         "bg",
-		Name:       "background",
-		Buffer:     buffer.New(screenW, screenH),
-		Rect:       buffer.Rect{X: 0, Y: 0, W: screenW, H: screenH},
-		ZIndex:     0,
-		DirtyPaint: true,
-		State:      make(map[string]any),
-		Props:      make(map[string]any),
-		RenderFn:   fullScreenRenderFn,
-		ChildMap:   make(map[string]*component.Component),
-		Handlers:   make(map[string]event.HandlerMap),
-	}
+	comp := component.NewComponent("bg", "background",
+		buffer.Rect{X: 0, Y: 0, W: screenW, H: screenH}, 0, fullScreenRenderFn)
 	mgr.Register(comp)
 	mgr.RenderDirty() // warm up
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		comp.DirtyPaint = true
+		comp.MarkDirty()
 		mgr.RenderDirty()
 	}
 }
@@ -637,19 +626,8 @@ func BenchmarkManager_RenderDirty_100CellComponents(b *testing.B) {
 	mgr := component.NewManager(p)
 	comps := make([]*component.Component, 100)
 	for i := 0; i < 100; i++ {
-		comp := &component.Component{
-			ID:         fmt.Sprintf("cell-%d", i),
-			Name:       "cell",
-			Buffer:     buffer.New(1, 1),
-			Rect:       buffer.Rect{X: i % screenW, Y: i / screenW, W: 1, H: 1},
-			ZIndex:     0,
-			DirtyPaint: true,
-			State:      make(map[string]any),
-			Props:      make(map[string]any),
-			RenderFn:   cellRenderFn,
-			ChildMap:   make(map[string]*component.Component),
-			Handlers:   make(map[string]event.HandlerMap),
-		}
+		comp := component.NewComponent(fmt.Sprintf("cell-%d", i), "cell",
+			buffer.Rect{X: i % screenW, Y: i / screenW, W: 1, H: 1}, 0, cellRenderFn)
 		mgr.Register(comp)
 		comps[i] = comp
 	}
@@ -658,7 +636,7 @@ func BenchmarkManager_RenderDirty_100CellComponents(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		// Mark just 1 cell dirty (hover scenario)
-		comps[i%100].DirtyPaint = true
+		comps[i%100].MarkDirty()
 		mgr.RenderDirty()
 	}
 }

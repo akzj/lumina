@@ -61,23 +61,22 @@ func (b *Bridge) luaUseState(L *lua.State) int {
 	}
 
 	// Initialize state on first call.
-	if _, exists := comp.State[key]; !exists {
-		comp.State[key] = initial
+	if _, exists := comp.State()[key]; !exists {
+		comp.SetState(key, initial)
 	}
 
 	// Push current value.
-	L.PushAny(comp.State[key])
+	L.PushAny(comp.State()[key])
 
 	// Push setter function.
 	// Capture comp and key by closure.
 	mgr := b.manager
 	L.PushFunction(func(L *lua.State) int {
 		newValue := L.ToAny(1)
-		comp.State[key] = newValue
-		comp.DirtyPaint = true
+		comp.SetState(key, newValue)
 		// Also notify manager if available.
 		if mgr != nil {
-			mgr.SetState(comp.ID, key, newValue)
+			mgr.SetState(comp.ID(), key, newValue)
 		}
 		return 0
 	})
@@ -283,14 +282,13 @@ func (b *Bridge) luaCreateElement(L *lua.State) int {
 }
 
 // --- Hook storage ---
-// Hooks are stored per-component in Props["_effectHooks"] and Props["_memoHooks"].
-// This is a simple approach that doesn't require modifying the Component struct.
+// Hooks are stored per-component in HookStore() (dedicated map, not Props).
 
 const (
-	effectHooksKey    = "_bridge_effect_hooks"
-	memoHooksKey      = "_bridge_memo_hooks"
-	effectHookIdxKey  = "_bridge_effect_idx"
-	memoHookIdxKey    = "_bridge_memo_idx"
+	effectHooksKey   = "_bridge_effect_hooks"
+	memoHooksKey     = "_bridge_memo_hooks"
+	effectHookIdxKey = "_bridge_effect_idx"
+	memoHookIdxKey   = "_bridge_memo_idx"
 )
 
 // ResetHookIndices resets hook call indices for a new render pass.
@@ -299,42 +297,45 @@ func (b *Bridge) ResetHookIndices() {
 	if b.currentComp == nil {
 		return
 	}
-	b.currentComp.Props[effectHookIdxKey] = 0
-	b.currentComp.Props[memoHookIdxKey] = 0
+	store := b.currentComp.HookStore()
+	store[effectHookIdxKey] = 0
+	store[memoHookIdxKey] = 0
 }
 
 func getEffectHook(comp *component.Component, b *Bridge) *EffectHook {
-	hooks, _ := comp.Props[effectHooksKey].([]*EffectHook)
-	idxVal, _ := comp.Props[effectHookIdxKey].(int)
+	store := comp.HookStore()
+	hooks, _ := store[effectHooksKey].([]*EffectHook)
+	idxVal, _ := store[effectHookIdxKey].(int)
 	idx := idxVal
 
 	if idx < len(hooks) {
-		comp.Props[effectHookIdxKey] = idx + 1
+		store[effectHookIdxKey] = idx + 1
 		return hooks[idx]
 	}
 
 	// Grow.
 	h := &EffectHook{}
 	hooks = append(hooks, h)
-	comp.Props[effectHooksKey] = hooks
-	comp.Props[effectHookIdxKey] = idx + 1
+	store[effectHooksKey] = hooks
+	store[effectHookIdxKey] = idx + 1
 	return h
 }
 
 func getMemoHook(comp *component.Component, b *Bridge) *MemoHook {
-	hooks, _ := comp.Props[memoHooksKey].([]*MemoHook)
-	idxVal, _ := comp.Props[memoHookIdxKey].(int)
+	store := comp.HookStore()
+	hooks, _ := store[memoHooksKey].([]*MemoHook)
+	idxVal, _ := store[memoHookIdxKey].(int)
 	idx := idxVal
 
 	if idx < len(hooks) {
-		comp.Props[memoHookIdxKey] = idx + 1
+		store[memoHookIdxKey] = idx + 1
 		return hooks[idx]
 	}
 
 	h := &MemoHook{}
 	hooks = append(hooks, h)
-	comp.Props[memoHooksKey] = hooks
-	comp.Props[memoHookIdxKey] = idx + 1
+	store[memoHooksKey] = hooks
+	store[memoHookIdxKey] = idx + 1
 	return h
 }
 
