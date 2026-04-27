@@ -76,6 +76,16 @@ func (b *Bridge) RegisterHooks() {
 	L.PushFunction(b.luaUseRoute)
 	L.SetField(tblIdx, "useRoute")
 
+	// Theme hooks
+	L.PushFunction(b.luaDefineTheme)
+	L.SetField(tblIdx, "defineTheme")
+
+	L.PushFunction(b.luaSetTheme)
+	L.SetField(tblIdx, "setTheme")
+
+	L.PushFunction(b.luaUseTheme)
+	L.SetField(tblIdx, "useTheme")
+
 	L.SetGlobal("lumina")
 }
 

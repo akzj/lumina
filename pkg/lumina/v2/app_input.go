@@ -21,9 +21,10 @@ func (a *App) handleInputKeyDown(e *event.Event) bool {
 
 	// Find the focused VNode across all components.
 	vnode, comp := a.findVNode(focusedID)
-	if vnode == nil || vnode.Type != "input" {
+	if vnode == nil || (vnode.Type != "input" && vnode.Type != "textarea") {
 		return false
 	}
+	isTextarea := vnode.Type == "textarea"
 
 	// Tab and Shift+Tab should still cycle focus, not be captured by input.
 	if e.Key == "Tab" || e.Key == "Shift+Tab" {
@@ -69,15 +70,41 @@ func (a *App) handleInputKeyDown(e *event.Event) bool {
 		if cursorPos < len(runes) {
 			cursorPos++
 		}
+	case key == "ArrowUp" && isTextarea:
+		cursorPos = textareaCursorUp(runes, cursorPos)
+	case key == "ArrowDown" && isTextarea:
+		cursorPos = textareaCursorDown(runes, cursorPos)
 	case key == "Home":
-		cursorPos = 0
+		if isTextarea {
+			cursorPos = textareaLineStart(runes, cursorPos)
+		} else {
+			cursorPos = 0
+		}
 	case key == "End":
-		cursorPos = len(runes)
+		if isTextarea {
+			cursorPos = textareaLineEnd(runes, cursorPos)
+		} else {
+			cursorPos = len(runes)
+		}
 	case key == "Enter":
-		a.callInputLuaCallback(vnode, "onSubmit", value)
-		return true
+		if isTextarea {
+			// Insert newline character.
+			newRunes := make([]rune, len(runes)+1)
+			copy(newRunes, runes[:cursorPos])
+			newRunes[cursorPos] = '\n'
+			copy(newRunes[cursorPos+1:], runes[cursorPos:])
+			runes = newRunes
+			cursorPos++
+			changed = true
+		} else {
+			a.callInputLuaCallback(vnode, "onSubmit", value)
+			return true
+		}
 	case key == "Escape":
-		// Blur the input on Escape.
+		if isTextarea {
+			a.callInputLuaCallback(vnode, "onSubmit", string(runes))
+		}
+		// Blur on Escape.
 		a.dispatcher.SetFocus("")
 		return true
 	case isPrintableKey(key):
@@ -221,7 +248,7 @@ func injectInputPropsWalk(vn *layout.VNode, focusedID string, comp *component.Co
 	if vn == nil {
 		return
 	}
-	if vn.Type == "input" && vn.ID != "" {
+	if (vn.Type == "input" || vn.Type == "textarea") && vn.ID != "" {
 		isFocused := vn.ID == focusedID
 		vn.Props["focused"] = isFocused
 		if isFocused {
@@ -255,4 +282,86 @@ func inputToLuaRef(val any) (int, bool) {
 		}
 	}
 	return 0, false
+}
+
+// --- Textarea cursor navigation helpers ---
+
+// textareaLineStart returns the rune offset of the start of the current line.
+func textareaLineStart(runes []rune, cursorPos int) int {
+	for i := cursorPos - 1; i >= 0; i-- {
+		if runes[i] == '\n' {
+			return i + 1
+		}
+	}
+	return 0
+}
+
+// textareaLineEnd returns the rune offset of the end of the current line
+// (position just before the next '\n' or at end of text).
+func textareaLineEnd(runes []rune, cursorPos int) int {
+	for i := cursorPos; i < len(runes); i++ {
+		if runes[i] == '\n' {
+			return i
+		}
+	}
+	return len(runes)
+}
+
+// textareaCursorUp moves the cursor up one line, preserving column position.
+func textareaCursorUp(runes []rune, cursorPos int) int {
+	// Find current line start and column
+	lineStart := textareaLineStart(runes, cursorPos)
+	col := cursorPos - lineStart
+
+	if lineStart == 0 {
+		// Already on first line — go to start
+		return 0
+	}
+
+	// Previous line ends at lineStart-1 (the '\n')
+	prevLineEnd := lineStart - 1
+	prevLineStart := 0
+	for i := prevLineEnd - 1; i >= 0; i-- {
+		if runes[i] == '\n' {
+			prevLineStart = i + 1
+			break
+		}
+	}
+
+	prevLineLen := prevLineEnd - prevLineStart
+	if col > prevLineLen {
+		col = prevLineLen
+	}
+	return prevLineStart + col
+}
+
+// textareaCursorDown moves the cursor down one line, preserving column position.
+func textareaCursorDown(runes []rune, cursorPos int) int {
+	// Find current line start and column
+	lineStart := textareaLineStart(runes, cursorPos)
+	col := cursorPos - lineStart
+
+	// Find end of current line
+	lineEnd := textareaLineEnd(runes, cursorPos)
+
+	if lineEnd >= len(runes) {
+		// Already on last line — go to end
+		return len(runes)
+	}
+
+	// Next line starts at lineEnd+1 (after the '\n')
+	nextLineStart := lineEnd + 1
+	nextLineEnd := len(runes)
+	for i := nextLineStart; i < len(runes); i++ {
+		if runes[i] == '\n' {
+			nextLineEnd = i
+			break
+		}
+	}
+
+	nextLineLen := nextLineEnd - nextLineStart
+	if col > nextLineLen {
+		col = nextLineLen
+	}
+	return nextLineStart + col
 }
