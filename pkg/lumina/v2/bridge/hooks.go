@@ -439,35 +439,42 @@ func (b *Bridge) luaCreateElement(L *lua.State) int {
 	}
 
 	// Collect vararg children (args 3+).
-	// String children become the "content" field (concatenated).
-	// Table children (VNodes) go into the "children" array.
+	// - If ONLY string children (no tables): set as "content" field (concatenated).
+	// - If ANY table children: ALL args go into "children" array (strings will be
+	//   wrapped as text VNodes by LuaTableToVNode defense-in-depth).
+	// - This matches React semantics: createElement("text", {}, "hi") → content,
+	//   createElement("box", {}, "hi", child) → mixed children.
 	if nArgs > 2 {
-		var contentParts []string
-		var tableIndices []int
-
+		hasTable := false
 		for i := 3; i <= nArgs; i++ {
-			switch L.Type(i) {
-			case lua.TypeString:
-				s, _ := L.ToString(i)
-				contentParts = append(contentParts, s)
-			case lua.TypeTable:
-				tableIndices = append(tableIndices, i)
+			if L.Type(i) == lua.TypeTable {
+				hasTable = true
+				break
 			}
 		}
 
-		// Set content if any string children found.
-		if len(contentParts) > 0 {
-			L.PushString(strings.Join(contentParts, ""))
-			L.SetField(resultIdx, "content")
-		}
-
-		// Set children array if any table children found.
-		if len(tableIndices) > 0 {
-			L.CreateTable(len(tableIndices), 0)
+		if !hasTable {
+			// Only string/non-table children → set as content.
+			var contentParts []string
+			for i := 3; i <= nArgs; i++ {
+				if L.Type(i) == lua.TypeString {
+					s, _ := L.ToString(i)
+					contentParts = append(contentParts, s)
+				}
+			}
+			if len(contentParts) > 0 {
+				L.PushString(strings.Join(contentParts, ""))
+				L.SetField(resultIdx, "content")
+			}
+		} else {
+			// Mixed or all-table children → put everything in children array.
+			L.CreateTable(nArgs-2, 0)
 			childrenIdx := L.AbsIndex(-1)
-			for ci, stackIdx := range tableIndices {
-				L.PushValue(stackIdx)
-				L.RawSetI(childrenIdx, int64(ci+1))
+			ci := int64(1)
+			for i := 3; i <= nArgs; i++ {
+				L.PushValue(i)
+				L.RawSetI(childrenIdx, ci)
+				ci++
 			}
 			L.SetField(resultIdx, "children")
 		}

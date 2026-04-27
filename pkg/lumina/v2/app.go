@@ -336,16 +336,38 @@ func (a *App) rebuildHitTester() {
 	a.dispatcher.SetHitTester(ht)
 }
 
-// convertHandlerMap converts component.HandlerMap (any values) to event.HandlerMap
-// by type-asserting each handler to event.EventHandler.
-func convertHandlerMap(chm component.HandlerMap) event.HandlerMap {
+// convertHandlerMap converts component.HandlerMap (any values) to event.HandlerMap.
+// Handles both Go event.EventHandler values and Lua registry refs (int).
+// When a bridge is available, Lua refs are wrapped via bridge.WrapLuaHandler.
+func (a *App) convertHandlerMap(chm component.HandlerMap) event.HandlerMap {
 	ehm := make(event.HandlerMap, len(chm))
 	for evtType, handler := range chm {
 		if h, ok := handler.(event.EventHandler); ok {
 			ehm[evtType] = h
+		} else if a.bridge != nil {
+			// Lua handlers are stored as int registry refs by LuaTableToVNode.
+			if ref, ok := toLuaRef(handler); ok {
+				ehm[evtType] = a.bridge.WrapLuaHandler(ref)
+			}
 		}
 	}
 	return ehm
+}
+
+// toLuaRef extracts a Lua registry reference from a handler value.
+// Lua handlers are stored as int (from L.Ref) by LuaTableToVNode.
+func toLuaRef(val any) (int, bool) {
+	switch v := val.(type) {
+	case int:
+		if v > 0 {
+			return v, true
+		}
+	case int64:
+		if v > 0 {
+			return int(v), true
+		}
+	}
+	return 0, false
 }
 
 // syncHandlers syncs event handlers and focusables from all components
@@ -369,7 +391,7 @@ func (a *App) syncHandlers() {
 	// Register all handlers from all components.
 	for _, comp := range all {
 		for vnodeID, chm := range comp.Handlers() {
-			ehm := convertHandlerMap(chm)
+			ehm := a.convertHandlerMap(chm)
 			if len(ehm) > 0 {
 				a.dispatcher.RegisterHandlers(vnodeID, ehm)
 			}
@@ -391,7 +413,7 @@ func (a *App) syncDirtyHandlers(dirtyComps []*component.Component) {
 		// Since ExtractHandlers was called during RenderDirty, comp.Handlers
 		// is already up-to-date.
 		for vnodeID, chm := range comp.Handlers() {
-			ehm := convertHandlerMap(chm)
+			ehm := a.convertHandlerMap(chm)
 			if len(ehm) > 0 {
 				a.dispatcher.RegisterHandlers(vnodeID, ehm)
 			}

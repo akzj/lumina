@@ -25,7 +25,7 @@ func (b *Bridge) walkExtract(vn *layout.VNode, result map[string]event.HandlerMa
 				continue
 			}
 			evtName := mapPropToEvent(propName)
-			hm[evtName] = b.wrapLuaHandler(ref)
+			hm[evtName] = b.WrapLuaHandler(ref)
 		}
 		if len(hm) > 0 {
 			result[vn.ID] = hm
@@ -36,10 +36,11 @@ func (b *Bridge) walkExtract(vn *layout.VNode, result map[string]event.HandlerMa
 	}
 }
 
-// wrapLuaHandler wraps a Lua registry ref as an event.EventHandler.
+// WrapLuaHandler wraps a Lua registry ref as an event.EventHandler.
 // When the handler is called, it pushes the Lua function and event data,
-// then calls PCall(1, 0, 0).
-func (b *Bridge) wrapLuaHandler(ref int) event.EventHandler {
+// then calls PCall(1, 0, 0). Exported so App can wrap Lua handler refs
+// during handler synchronization.
+func (b *Bridge) WrapLuaHandler(ref int) event.EventHandler {
 	return func(e *event.Event) {
 		L := b.L
 		L.RawGetI(lua.RegistryIndex, int64(ref))
