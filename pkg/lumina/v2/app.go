@@ -11,6 +11,7 @@ import (
 	"github.com/akzj/lumina/pkg/lumina/v2/layout"
 	"github.com/akzj/lumina/pkg/lumina/v2/output"
 	"github.com/akzj/lumina/pkg/lumina/v2/paint"
+	"github.com/akzj/lumina/pkg/lumina/v2/perf"
 )
 
 // App is the composition root — ties all v2 modules together.
@@ -21,22 +22,53 @@ type App struct {
 	compositor *compositor.Compositor
 	dispatcher *event.Dispatcher
 	adapter    output.Adapter
+	tracker    *perf.Tracker
 
 	// Internal state
 	lastDirtyRects []buffer.Rect
 	layersDirty    bool // true when components added/removed/resized → need OcclusionMap rebuild
 }
 
+// trackerRenderObserver bridges component.RenderObserver to perf.Tracker.
+type trackerRenderObserver struct {
+	tracker *perf.Tracker
+}
+
+func (o *trackerRenderObserver) OnRender(compID string) {
+	o.tracker.RecordComponent(compID)
+}
+func (o *trackerRenderObserver) OnLayout(_ string) {
+	o.tracker.Record(perf.Layouts, 1)
+}
+func (o *trackerRenderObserver) OnPaint(_ string) {
+	o.tracker.Record(perf.Paints, 1)
+}
+
+// trackerEventObserver bridges event.EventObserver to perf.Tracker.
+type trackerEventObserver struct {
+	tracker *perf.Tracker
+}
+
+func (o *trackerEventObserver) OnEvent(eventType string, dispatched bool) {
+	o.tracker.RecordEvent(eventType, dispatched)
+}
+
 // NewApp creates a new App with the given screen dimensions and output adapter.
 func NewApp(w, h int, adapter output.Adapter) *App {
 	painter := paint.NewPainter()
+	t := perf.NewTracker(60)
+	mgr := component.NewManager(painter)
+	mgr.SetRenderObserver(&trackerRenderObserver{tracker: t})
+	disp := event.NewDispatcher()
+	disp.SetEventObserver(&trackerEventObserver{tracker: t})
 	return &App{
 		width:      w,
 		height:     h,
-		manager:    component.NewManager(painter),
+		manager:    mgr,
 		compositor: compositor.NewCompositor(w, h),
-		dispatcher: event.NewDispatcher(),
+		dispatcher: disp,
 		adapter:    adapter,
+		tracker:    t,
 	}
 }
 
@@ -47,12 +79,18 @@ func NewTestApp(w, h int) (*App, *output.TestAdapter) {
 	return app, ta
 }
 
+// Tracker returns the performance tracker. Call Enable() to start recording.
+func (a *App) Tracker() *perf.Tracker {
+	return a.tracker
+}
+
 // RegisterComponent registers a component with the app.
 // Creates buffer, sets initial rect, registers with manager.
 func (a *App) RegisterComponent(id, name string, rect buffer.Rect, zIndex int, renderFn component.RenderFunc) *component.Component {
 	comp := component.NewComponent(id, name, rect, zIndex, renderFn)
 	a.manager.Register(comp)
 	a.layersDirty = true
+	a.tracker.Record(perf.ComponentsRegistered, 1)
 	return comp
 }
 
@@ -60,40 +98,54 @@ func (a *App) RegisterComponent(id, name string, rect buffer.Rect, zIndex int, r
 func (a *App) UnregisterComponent(id string) {
 	a.manager.Unregister(id)
 	a.layersDirty = true
+	a.tracker.Record(perf.ComponentsUnregistered, 1)
 }
 
 // SetState updates a component's state (marks it dirty).
 func (a *App) SetState(compID string, key string, value any) {
 	a.manager.SetState(compID, key, value)
+	a.tracker.Record(perf.StateSets, 1)
 }
 
 // RenderAll renders all components and composes the full screen.
 func (a *App) RenderAll() {
+	a.tracker.BeginFrame()
+
 	// Render all dirty components (they should already be marked dirty on register).
 	a.manager.RenderDirty()
 
 	// Build layers and set on compositor.
 	layers := a.buildLayers()
 	a.compositor.SetLayers(layers)
+	a.tracker.Record(perf.OcclusionBuilds, 1)
 
 	// Compose full screen.
 	screen := a.compositor.ComposeAll()
+	a.tracker.Record(perf.ComposeFull, 1)
 
 	// Rebuild hit tester and sync handlers/focusables for event dispatch.
 	a.rebuildHitTester()
+	a.tracker.Record(perf.HitTesterRebuilds, 1)
 	a.syncHandlers()
+	a.tracker.Record(perf.HandlerFullSyncs, 1)
 
 	// Output.
 	_ = a.adapter.WriteFull(screen)
+	a.tracker.Record(perf.WriteFullCalls, 1)
 	_ = a.adapter.Flush()
+	a.tracker.Record(perf.FlushCalls, 1)
 
 	a.lastDirtyRects = nil
 	a.layersDirty = false
 	a.manager.ClearDirty()
+
+	a.tracker.EndFrame()
 }
 
 // RenderDirty renders only dirty components and composes changed regions.
 func (a *App) RenderDirty() {
+	a.tracker.BeginFrame()
+
 	// 1. Capture dirty lists BEFORE rendering (RenderDirty clears DirtyPaint).
 	paintDirty := a.manager.GetDirtyPaint()
 	rectChanged := a.manager.GetRectChanged()
@@ -111,6 +163,7 @@ func (a *App) RenderDirty() {
 	if needsRebuild {
 		layers := a.buildLayers()
 		a.compositor.SetLayers(layers)
+		a.tracker.Record(perf.OcclusionBuilds, 1)
 
 		if len(rectChanged) > 0 {
 			// Rect changed → recompose old + new rects.
@@ -120,6 +173,7 @@ func (a *App) RenderDirty() {
 				rects = append(rects, comp.Rect())
 			}
 			allDirtyRects = append(allDirtyRects, a.compositor.ComposeRects(rects)...)
+			a.tracker.Record(perf.ComposeRects, 1)
 		}
 
 		// Re-layout VNode trees for components that moved but weren't
@@ -131,12 +185,15 @@ func (a *App) RenderDirty() {
 			if comp.VNodeTree() != nil && !comp.IsDirtyPaint() {
 				r := comp.Rect()
 				layout.ComputeLayout(comp.VNodeTree(), r.X, r.Y, r.W, r.H)
+				a.tracker.Record(perf.Layouts, 1)
 			}
 		}
 
 		// Rebuild hit tester + sync handlers after structural change.
 		a.rebuildHitTester()
+		a.tracker.Record(perf.HitTesterRebuilds, 1)
 		a.syncHandlers()
+		a.tracker.Record(perf.HandlerFullSyncs, 1)
 		a.layersDirty = false
 	}
 
@@ -149,7 +206,9 @@ func (a *App) RenderDirty() {
 			// (e.g., text grew from "9" to "10"), affecting which cells
 			// are non-zero (opaque) vs zero (transparent).
 			a.compositor.UpdateDirtyRegions(dirtyLayers)
+			a.tracker.Record(perf.OcclusionUpdates, 1)
 			rects := a.compositor.ComposeDirty(dirtyLayers)
+			a.tracker.Record(perf.ComposeDirty, 1)
 			allDirtyRects = append(allDirtyRects, rects...)
 		}
 	}
@@ -159,16 +218,22 @@ func (a *App) RenderDirty() {
 	//    Only sync the dirty components — much cheaper than full syncHandlers.
 	if !needsRebuild && len(paintDirty) > 0 {
 		a.syncDirtyHandlers(paintDirty)
+		a.tracker.Record(perf.HandlerDirtySyncs, 1)
 	}
 
 	// 6. Output.
 	if len(allDirtyRects) > 0 {
+		a.tracker.Record(perf.DirtyRectsOut, len(allDirtyRects))
 		_ = a.adapter.WriteDirty(a.compositor.Screen(), allDirtyRects)
+		a.tracker.Record(perf.WriteDirtyCalls, 1)
 		_ = a.adapter.Flush()
+		a.tracker.Record(perf.FlushCalls, 1)
 	}
 
 	a.lastDirtyRects = allDirtyRects
 	a.manager.ClearDirty()
+
+	a.tracker.EndFrame()
 }
 
 // HandleEvent dispatches an input event through the event system.
@@ -197,7 +262,13 @@ func (a *App) MoveComponent(id string, newRect buffer.Rect) {
 	if comp == nil {
 		return
 	}
+	oldRect := comp.Rect()
 	comp.Move(newRect)
+	if newRect.W != oldRect.W || newRect.H != oldRect.H {
+		a.tracker.Record(perf.MovesWithResize, 1)
+	} else {
+		a.tracker.Record(perf.MovesPositionOnly, 1)
+	}
 }
 
 // Resize resizes the screen.
