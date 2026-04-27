@@ -130,7 +130,27 @@ func paintText(buf *CellBuffer, node *Node) {
 }
 
 func paintInput(buf *CellBuffer, node *Node) {
-	// Similar to paintText but with cursor support (future)
+	if node.Content == "" && node.Placeholder != "" {
+		// Render placeholder with dim style
+		fg := node.Style.Foreground
+		if fg == "" {
+			fg = "#585B70" // dim gray default
+		}
+		x := node.X
+		y := node.Y
+		for _, ch := range node.Placeholder {
+			if x < node.X+node.W && y < node.Y+node.H {
+				bg := node.Style.Background
+				if bg == "" {
+					existing := buf.Get(x, y)
+					bg = existing.BG
+				}
+				buf.Set(x, y, Cell{Ch: ch, FG: fg, BG: bg, Dim: true})
+				x++
+			}
+		}
+		return
+	}
 	paintText(buf, node)
 }
 

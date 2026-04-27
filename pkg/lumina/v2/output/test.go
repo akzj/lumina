@@ -7,9 +7,11 @@ import (
 // TestAdapter captures rendered output for test assertions.
 // It is exported so tests outside this package can use it.
 type TestAdapter struct {
-	LastScreen *buffer.Buffer
-	DirtyRects []buffer.Rect
-	WriteCount int
+	LastScreen      *buffer.Buffer
+	DirtyRects      []buffer.Rect
+	WriteCount      int
+	FullWrites      int // count of WriteFull calls since last Reset
+	DirtyWrites     int // count of WriteDirty calls since last Reset
 }
 
 // NewTestAdapter creates a new test adapter.
@@ -22,6 +24,7 @@ func (t *TestAdapter) WriteFull(screen *buffer.Buffer) error {
 	t.LastScreen = cloneBuffer(screen)
 	t.DirtyRects = nil
 	t.WriteCount++
+	t.FullWrites++
 	return nil
 }
 
@@ -31,6 +34,7 @@ func (t *TestAdapter) WriteDirty(screen *buffer.Buffer, dirtyRects []buffer.Rect
 	t.DirtyRects = make([]buffer.Rect, len(dirtyRects))
 	copy(t.DirtyRects, dirtyRects)
 	t.WriteCount++
+	t.DirtyWrites++
 	return nil
 }
 
@@ -39,6 +43,25 @@ func (t *TestAdapter) Flush() error { return nil }
 
 // Close is a no-op for test adapter.
 func (t *TestAdapter) Close() error { return nil }
+
+// Reset clears all captured state.
+func (t *TestAdapter) Reset() {
+	t.LastScreen = nil
+	t.DirtyRects = nil
+	t.WriteCount = 0
+	t.FullWrites = 0
+	t.DirtyWrites = 0
+}
+
+// FullWriteCount returns the number of WriteFull calls since last Reset.
+func (t *TestAdapter) FullWriteCount() int {
+	return t.FullWrites
+}
+
+// DirtyWriteCount returns the number of WriteDirty calls since last Reset.
+func (t *TestAdapter) DirtyWriteCount() int {
+	return t.DirtyWrites
+}
 
 // cloneBuffer creates a deep copy of a buffer.
 func cloneBuffer(src *buffer.Buffer) *buffer.Buffer {
