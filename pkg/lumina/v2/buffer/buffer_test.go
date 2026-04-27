@@ -299,3 +299,15 @@ func TestRect_Union(t *testing.T) {
 		t.Errorf("Empty union with b = %+v, want %+v", got, b)
 	}
 }
+
+func TestRect_Translated(t *testing.T) {
+	r := Rect{X: 0, Y: 0, W: 4, H: 10}
+	got := r.Translated(6, 0)
+	want := Rect{X: 6, Y: 0, W: 4, H: 10}
+	if got != want {
+		t.Errorf("Translated(6,0) = %+v, want %+v", got, want)
+	}
+	if r.X != 0 || r.Y != 0 {
+		t.Errorf("Translated must not mutate receiver, got r=%+v", r)
+	}
+}

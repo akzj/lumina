@@ -288,6 +288,81 @@ func TestCompositor_ComposeRects_WindowMove(t *testing.T) {
 	}
 }
 
+// TestCompositor_ThreeLayers_BottomMoves_PartialOverlap exercises a 3-layer stack
+// where rectangles do not fully cover the screen. When the bottom layer moves,
+// cells it used to own may become unowned or change owner; ComposeDirty alone
+// cannot repair exposed pixels — ComposeRects (or ComposeAll) over the union of
+// affected screen regions is required.
+func TestCompositor_ThreeLayers_BottomMoves_PartialOverlap(t *testing.T) {
+	// 10×10 screen. A: left band z=0. B: top band z=1 (overlaps A in NW). C: patch z=2.
+	bufA := filledBuffer(4, 10, 'A', "#ff0000")
+	layerA := &Layer{ID: "a", Buffer: bufA, Rect: buffer.Rect{X: 0, Y: 0, W: 4, H: 10}, ZIndex: 0}
+
+	bufB := filledBuffer(10, 4, 'B', "#00ff00")
+	layerB := &Layer{ID: "b", Buffer: bufB, Rect: buffer.Rect{X: 0, Y: 0, W: 10, H: 4}, ZIndex: 1}
+
+	bufC := filledBuffer(2, 2, 'C', "#0000ff")
+	layerC := &Layer{ID: "c", Buffer: bufC, Rect: buffer.Rect{X: 5, Y: 5, W: 2, H: 2}, ZIndex: 2}
+
+	comp := NewCompositor(10, 10)
+	comp.SetLayers([]*Layer{layerA, layerB, layerC})
+	comp.ComposeAll()
+
+	// (0,0): B over A. (2,5): only A (B is y<4; C is patch at (5,5)).
+	if c := comp.Screen().Get(0, 0); c.Char != 'B' {
+		t.Fatalf("(0,0) initial: want 'B', got %q", c.Char)
+	}
+	if c := comp.Screen().Get(2, 5); c.Char != 'A' {
+		t.Fatalf("(2,5) initial: want 'A' (A-only column), got %q", c.Char)
+	}
+	if c := comp.Screen().Get(6, 3); c.Char != 'B' {
+		t.Fatalf("(6,3) initial: want 'B' (top band), got %q", c.Char)
+	}
+	if c := comp.Screen().Get(6, 5); c.Char != 'C' {
+		t.Fatalf("(6,5) initial: want 'C' (C patch), got %q", c.Char)
+	}
+	// (7,5): outside A's initial x∈[0,3]; outside B and C — empty.
+	if c := comp.Screen().Get(7, 5); c.Char != 0 {
+		t.Fatalf("(7,5) initial: want empty, got %q", c.Char)
+	}
+
+	oldRect := layerA.Rect
+	layerA.Rect = oldRect.Translated(6, 0)
+	comp.SetLayers([]*Layer{layerA, layerB, layerC})
+
+	// Incremental path that only blits the moved layer: leaves (2,5) stale
+	// because no layer owns it anymore but ComposeDirty does not clear unowned cells.
+	layerA.DirtyRect = nil
+	comp.ComposeDirty([]*Layer{layerA})
+	if c := comp.Screen().Get(2, 5); c.Char != 'A' {
+		t.Fatalf("(2,5) after ComposeDirty only: want stale 'A' to show the bug, got %q", c.Char)
+	}
+
+	// Full repair: recompose old and new footprint of the bottom layer.
+	comp.ComposeRects([]buffer.Rect{oldRect, layerA.Rect})
+
+	if c := comp.Screen().Get(2, 5); c.Char != 0 {
+		t.Errorf("(2,5) after ComposeRects: want cleared cell (no owner), got %q", c.Char)
+	}
+	if c := comp.Screen().Get(6, 3); c.Char != 'B' {
+		t.Errorf("(6,3) after move: want 'B' (B still above A in overlap), got %q", c.Char)
+	}
+	if c := comp.Screen().Get(7, 5); c.Char != 'A' {
+		t.Errorf("(7,5) after move: want 'A' (moved band), got %q", c.Char)
+	}
+	if c := comp.Screen().Get(6, 5); c.Char != 'C' {
+		t.Errorf("(6,5) after move: want 'C' (C still wins over A), got %q", c.Char)
+	}
+
+	om := comp.OcclusionMap()
+	if id := om.Owner(2, 5); id != "" {
+		t.Errorf("Owner(2,5) after rebuild: want no owner, got %q", id)
+	}
+	if id := om.Owner(7, 5); id != "a" {
+		t.Errorf("Owner(7,5): want 'a', got %q", id)
+	}
+}
+
 func TestCompositor_ManyLayers(t *testing.T) {
 	layers := make([]*Layer, 100)
 	for i := 0; i < 100; i++ {
