@@ -298,6 +298,11 @@ func (d *Dispatcher) FocusPrev() {
 	d.SetFocus(d.focusables[prev].vnodeID)
 }
 
+// HasFocusables returns true if there are any focusable VNodes registered.
+func (d *Dispatcher) HasFocusables() bool {
+	return len(d.focusables) > 0
+}
+
 // isFocusable checks if a VNode is in the focusable list.
 func (d *Dispatcher) isFocusable(vnodeID string) bool {
 	for _, f := range d.focusables {
