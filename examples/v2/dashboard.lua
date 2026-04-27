@@ -120,16 +120,30 @@ lumina.createComponent({
         --     setNetPct(math.random(10, 60))
         -- end, 2000)
 
+        -- Scroll step (matches framework's scrollStep = 3)
+        local scrollStep = 3
+
         -- Keyboard handler
         local function handleKey(e)
             if e.key == "q" then
                 lumina.quit()
             elseif e.key == "j" or e.key == "ArrowDown" then
-                setScrollY(scrollY + 1)
+                setScrollY(scrollY + scrollStep)
             elseif e.key == "k" or e.key == "ArrowUp" then
-                if scrollY > 0 then
-                    setScrollY(scrollY - 1)
-                end
+                local newY = scrollY - scrollStep
+                if newY < 0 then newY = 0 end
+                setScrollY(newY)
+            end
+        end
+
+        -- Mouse wheel scroll handler (receives scroll events from framework)
+        local function handleScroll(e)
+            if e.key == "down" then
+                setScrollY(scrollY + scrollStep)
+            elseif e.key == "up" then
+                local newY = scrollY - scrollStep
+                if newY < 0 then newY = 0 end
+                setScrollY(newY)
             end
         end
 
@@ -238,6 +252,17 @@ lumina.createComponent({
             }, line)
         end
 
+        -- Build the scroll container via raw table (children are dynamic).
+        -- The onScroll handler is attached so mouse wheel events update scrollY.
+        local logScrollContainer = {
+            type = "vbox",
+            id = "log-scroll",
+            scrollY = scrollY,
+            onScroll = handleScroll,
+            style = {overflow = "scroll", flex = 1, background = theme.bg},
+            children = logChildren,
+        }
+
         local activityPanel = lumina.createElement("vbox", {
             id = "activity-panel",
             style = {flex = 1, background = theme.bg},
@@ -249,13 +274,7 @@ lumina.createComponent({
             lumina.createElement("text", {
                 foreground = theme.border,
             }, " " .. string.rep("─", 34)),
-            {
-                type = "vbox",
-                id = "log-scroll",
-                scrollY = scrollY,
-                style = {overflow = "scroll", flex = 1, background = theme.bg},
-                children = logChildren,
-            }
+            logScrollContainer
         )
 
         -- ═══════════════════════════════════════════
