@@ -71,6 +71,12 @@ func (b *Bridge) LuaTableToVNode(idx int) *layout.VNode {
 			if L.IsTable(-1) {
 				child := b.LuaTableToVNode(-1)
 				vn.AddChild(child)
+			} else if L.IsString(-1) {
+				// String child → create a text VNode (defense-in-depth).
+				s, _ := L.ToString(-1)
+				textVN := layout.NewVNode("text")
+				textVN.Content = s
+				vn.AddChild(textVN)
 			}
 			L.Pop(1)
 		}

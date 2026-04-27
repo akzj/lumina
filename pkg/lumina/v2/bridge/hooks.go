@@ -1,6 +1,8 @@
 package bridge
 
 import (
+	"strings"
+
 	"github.com/akzj/go-lua/pkg/lua"
 	"github.com/akzj/lumina/pkg/lumina/v2/hooks"
 )
@@ -436,17 +438,39 @@ func (b *Bridge) luaCreateElement(L *lua.State) int {
 		})
 	}
 
-	// Collect vararg children (args 3+) into a children array.
+	// Collect vararg children (args 3+).
+	// String children become the "content" field (concatenated).
+	// Table children (VNodes) go into the "children" array.
 	if nArgs > 2 {
-		L.CreateTable(nArgs-2, 0)
-		childrenIdx := L.AbsIndex(-1)
-		ci := int64(1)
+		var contentParts []string
+		var tableIndices []int
+
 		for i := 3; i <= nArgs; i++ {
-			L.PushValue(i)
-			L.RawSetI(childrenIdx, ci)
-			ci++
+			switch L.Type(i) {
+			case lua.TypeString:
+				s, _ := L.ToString(i)
+				contentParts = append(contentParts, s)
+			case lua.TypeTable:
+				tableIndices = append(tableIndices, i)
+			}
 		}
-		L.SetField(resultIdx, "children")
+
+		// Set content if any string children found.
+		if len(contentParts) > 0 {
+			L.PushString(strings.Join(contentParts, ""))
+			L.SetField(resultIdx, "content")
+		}
+
+		// Set children array if any table children found.
+		if len(tableIndices) > 0 {
+			L.CreateTable(len(tableIndices), 0)
+			childrenIdx := L.AbsIndex(-1)
+			for ci, stackIdx := range tableIndices {
+				L.PushValue(stackIdx)
+				L.RawSetI(childrenIdx, int64(ci+1))
+			}
+			L.SetField(resultIdx, "children")
+		}
 	}
 
 	return 1
