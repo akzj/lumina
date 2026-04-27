@@ -1,6 +1,7 @@
 package v2
 
 import (
+	"os"
 	"testing"
 	"time"
 
@@ -556,4 +557,235 @@ func TestStop_Idempotent(t *testing.T) {
 	app.Stop()
 	app.Stop()
 	app.Stop()
+}
+
+// --- Hot Reload tests ---
+
+func TestApp_HotReload_ReloadsScript(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+	ta := output.NewTestAdapter()
+
+	app := NewAppWithLua(L, 40, 10, ta)
+
+	// Create a temp Lua script.
+	dir := t.TempDir()
+	scriptPath := dir + "/app.lua"
+	writeFile(t, scriptPath, `
+		lumina.createComponent({
+			id = "comp1",
+			x = 0, y = 0, w = 20, h = 3,
+			render = function(state, props)
+				return lumina.createElement("text", {id = "t1", content = "version1"})
+			end
+		})
+	`)
+
+	// Load and render.
+	if err := app.RunScript(scriptPath); err != nil {
+		t.Fatalf("RunScript failed: %v", err)
+	}
+	app.RenderAll()
+
+	comp := app.manager.Get("comp1")
+	if comp == nil {
+		t.Fatal("comp1 not registered after initial load")
+	}
+
+	// Rewrite the script with different content.
+	writeFile(t, scriptPath, `
+		lumina.createComponent({
+			id = "comp1",
+			x = 0, y = 0, w = 20, h = 3,
+			render = function(state, props)
+				return lumina.createElement("text", {id = "t1", content = "version2"})
+			end
+		})
+	`)
+
+	// Trigger hot reload.
+	app.reloadScript(scriptPath)
+
+	// Verify component still exists after reload.
+	comp = app.manager.Get("comp1")
+	if comp == nil {
+		t.Fatal("comp1 not registered after reload")
+	}
+
+	// Verify the new render function is used by checking VNode content.
+	vn := comp.VNodeTree()
+	if vn == nil {
+		t.Fatal("VNodeTree is nil after reload")
+	}
+	if vn.Content != "version2" {
+		t.Errorf("expected content 'version2', got %q", vn.Content)
+	}
+}
+
+func TestApp_HotReload_PreservesState(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+	ta := output.NewTestAdapter()
+
+	app := NewAppWithLua(L, 40, 10, ta)
+
+	dir := t.TempDir()
+	scriptPath := dir + "/counter.lua"
+	writeFile(t, scriptPath, `
+		lumina.createComponent({
+			id = "counter",
+			x = 0, y = 0, w = 20, h = 3,
+			render = function(state, props)
+				local count, setCount = lumina.useState("count", 0)
+				return lumina.createElement("text", {
+					id = "display",
+					content = "count=" .. tostring(count)
+				})
+			end
+		})
+	`)
+
+	if err := app.RunScript(scriptPath); err != nil {
+		t.Fatalf("RunScript failed: %v", err)
+	}
+	app.RenderAll()
+
+	// Set state to count=5.
+	app.SetState("counter", "count", int64(5))
+	app.RenderDirty()
+
+	// Verify state was set.
+	comp := app.manager.Get("counter")
+	if comp == nil {
+		t.Fatal("counter not registered")
+	}
+	if comp.State()["count"] != int64(5) {
+		t.Fatalf("expected count=5, got %v", comp.State()["count"])
+	}
+
+	// Rewrite script (same structure, different render detail).
+	writeFile(t, scriptPath, `
+		lumina.createComponent({
+			id = "counter",
+			x = 0, y = 0, w = 20, h = 3,
+			render = function(state, props)
+				local count, setCount = lumina.useState("count", 0)
+				return lumina.createElement("text", {
+					id = "display",
+					content = "v2:count=" .. tostring(count)
+				})
+			end
+		})
+	`)
+
+	// Hot reload.
+	app.reloadScript(scriptPath)
+
+	// Verify state was preserved.
+	comp = app.manager.Get("counter")
+	if comp == nil {
+		t.Fatal("counter not registered after reload")
+	}
+	if comp.State()["count"] != int64(5) {
+		t.Fatalf("expected count=5 after reload, got %v", comp.State()["count"])
+	}
+
+	// Verify new render function is used (content should start with "v2:").
+	vn := comp.VNodeTree()
+	if vn == nil {
+		t.Fatal("VNodeTree is nil after reload")
+	}
+	if vn.Content != "v2:count=5" {
+		t.Errorf("expected content 'v2:count=5', got %q", vn.Content)
+	}
+}
+
+func TestApp_HotReload_ScriptError_DoesNotCrash(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+	ta := output.NewTestAdapter()
+
+	app := NewAppWithLua(L, 40, 10, ta)
+
+	dir := t.TempDir()
+	scriptPath := dir + "/app.lua"
+	writeFile(t, scriptPath, `
+		lumina.createComponent({
+			id = "comp1",
+			x = 0, y = 0, w = 20, h = 3,
+			render = function(state, props)
+				return lumina.createElement("text", {id = "t1", content = "good"})
+			end
+		})
+	`)
+
+	if err := app.RunScript(scriptPath); err != nil {
+		t.Fatalf("RunScript failed: %v", err)
+	}
+	app.RenderAll()
+
+	// Write a script with syntax error.
+	writeFile(t, scriptPath, `
+		this is not valid lua!!!
+	`)
+
+	// reloadScript should not panic.
+	app.reloadScript(scriptPath)
+
+	// After a failed reload, components are gone (unregistered before re-exec).
+	// This is expected — the user fixes the script and it reloads again.
+}
+
+func TestApp_HotReload_DevToolsPreserved(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+	ta := output.NewTestAdapter()
+
+	app := NewAppWithLua(L, 40, 20, ta)
+
+	dir := t.TempDir()
+	scriptPath := dir + "/app.lua"
+	writeFile(t, scriptPath, `
+		lumina.createComponent({
+			id = "mycomp",
+			x = 0, y = 0, w = 20, h = 5,
+			render = function(state, props)
+				return lumina.createElement("box", {id = "root"})
+			end
+		})
+	`)
+
+	if err := app.RunScript(scriptPath); err != nil {
+		t.Fatalf("RunScript failed: %v", err)
+	}
+	app.RenderAll()
+
+	// Open devtools.
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "F12"})
+
+	// Verify devtools component exists.
+	if app.manager.Get("__devtools") == nil {
+		t.Fatal("devtools not registered after F12")
+	}
+
+	// Reload.
+	app.reloadScript(scriptPath)
+
+	// Devtools should still be registered.
+	if app.manager.Get("__devtools") == nil {
+		t.Fatal("devtools was removed during hot reload")
+	}
+
+	// App component should also exist.
+	if app.manager.Get("mycomp") == nil {
+		t.Fatal("mycomp not registered after reload")
+	}
+}
+
+// writeFile is a test helper that writes content to a file.
+func writeFile(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatalf("writeFile(%s): %v", path, err)
+	}
 }
