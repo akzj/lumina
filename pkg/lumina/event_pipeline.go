@@ -1,6 +1,8 @@
 package lumina
 
 import (
+	"fmt"
+	"os"
 	"time"
 )
 
@@ -199,6 +201,18 @@ func stageHitTest(app *App, ctx *inputPipelineCtx) bool {
 		}
 	}
 
+	// DEBUG: log hit-test results for clicks and sampled mousemoves
+	if e.Type == "mousedown" || (e.Type == "mousemove" && e.X%20 == 0) {
+		ownerID := ""
+		if targetNode != nil {
+			if id, ok := targetNode.Props["id"].(string); ok {
+				ownerID = id
+			}
+		}
+		fmt.Fprintf(os.Stderr, "[HIT] type=%s x=%d y=%d ownerID=%q target=%q hoveredID=%q\n",
+			e.Type, e.X, e.Y, ownerID, e.Target, app.hoveredID)
+	}
+
 	return false
 }
 
@@ -337,6 +351,7 @@ func stageHover(app *App, ctx *inputPipelineCtx) bool {
 
 	newHoverID := e.Target
 	if newHoverID != app.hoveredID {
+		fmt.Fprintf(os.Stderr, "[HOVER] old=%q new=%q\n", app.hoveredID, newHoverID)
 		oldHoverID := app.hoveredID
 		app.hoveredID = newHoverID
 
