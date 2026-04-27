@@ -11,6 +11,8 @@ import (
 
 // Render produces the VNode tree for the DevTools panel.
 // Signature matches component.RenderFunc.
+// It reads from p.perfSnap (frozen before this render) so the devtools'
+// own render/layout/paint does not pollute the displayed numbers.
 func (p *Panel) Render(state map[string]any, props map[string]any) *layout.VNode {
 	runtime.ReadMemStats(&p.GoMemStats)
 
@@ -65,10 +67,17 @@ func (p *Panel) renderTabBar() *layout.VNode {
 	perfTab.Content = " Perf "
 	bar.AddChild(perfTab)
 
-	// Close hint
+	// FPS badge + close hint
 	hint := layout.NewVNode("text")
 	hint.Style.Foreground = "#6C7086"
-	hint.Content = "  [F12 close] [1 Elements] [2 Perf]"
+	fpsColor := "#A6E3A1" // green
+	if p.perfSnap.FPS > 0 && p.perfSnap.FPS < 30 {
+		fpsColor = "#F38BA8" // red for low FPS
+	} else if p.perfSnap.FPS > 0 && p.perfSnap.FPS < 50 {
+		fpsColor = "#F9E2AF" // yellow for medium FPS
+	}
+	_ = fpsColor // color is informational; text nodes don't support inline color
+	hint.Content = fmt.Sprintf("  %d FPS  [F12 close] [1 Elements] [2 Perf]", p.perfSnap.FPS)
 	bar.AddChild(hint)
 
 	return bar
@@ -136,17 +145,23 @@ func (p *Panel) renderPerf() *layout.VNode {
 	box := layout.NewVNode("box")
 	box.ID = "__devtools_perf"
 
-	// Section: Frame Stats
+	// Use snapshot data (frozen before this render cycle)
+	last := p.perfSnap.Last
+	total := p.perfSnap.Total
+	fps := p.perfSnap.FPS
+
+	// Section: FPS + Frame Stats
 	title := layout.NewVNode("text")
 	title.Style.Foreground = "#F9E2AF"
 	title.Style.Bold = true
 	title.Content = "── Frame Stats ──"
 	box.AddChild(title)
 
-	last := p.tracker.LastFrame()
-	total := p.tracker.TotalStats()
-
 	lines := []struct{ label, value string }{
+		{"FPS", fmt.Sprintf("%d", fps)},
+		{"Frame Duration", fmt.Sprintf("%v", last.Duration)},
+		{"Max Frame", fmt.Sprintf("%v", total.MaxFrameDuration)},
+		{"Total Frames", fmt.Sprintf("%d", total.Frames)},
 		{"Renders", fmt.Sprintf("%d (total: %d)", last.Get(perf.Renders), total.Get(perf.Renders))},
 		{"Layouts", fmt.Sprintf("%d (total: %d)", last.Get(perf.Layouts), total.Get(perf.Layouts))},
 		{"Paints", fmt.Sprintf("%d (total: %d)", last.Get(perf.Paints), total.Get(perf.Paints))},
@@ -155,8 +170,6 @@ func (p *Panel) renderPerf() *layout.VNode {
 		{"DirtyRects", fmt.Sprintf("%d", last.Get(perf.DirtyRectsOut))},
 		{"Events Hit", fmt.Sprintf("%d", last.Get(perf.EventsDispatched))},
 		{"Events Missed", fmt.Sprintf("%d", last.Get(perf.EventsMissed))},
-		{"Frame Duration", fmt.Sprintf("%v", last.Duration)},
-		{"Total Frames", fmt.Sprintf("%d", total.Frames)},
 	}
 
 	for _, l := range lines {
