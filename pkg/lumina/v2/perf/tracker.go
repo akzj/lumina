@@ -48,6 +48,8 @@ const (
 type Tracker struct {
 	enabled  bool
 	current  FrameStats
+	pending  FrameStats // accumulates inter-frame records (between EndFrame and BeginFrame)
+	inFrame  bool       // true between BeginFrame/EndFrame
 	history  []FrameStats
 	histPos  int
 	histSize int
@@ -76,15 +78,30 @@ func (t *Tracker) Disable() { t.enabled = false }
 // Enabled returns whether the tracker is recording.
 func (t *Tracker) Enabled() bool { return t.enabled }
 
-// BeginFrame starts a new frame. Resets per-frame counters.
+// BeginFrame starts a new frame. Merges any inter-frame records (from
+// SetState, MoveComponent, etc. called between EndFrame and BeginFrame)
+// into the new frame, then resets per-frame counters.
 func (t *Tracker) BeginFrame() {
 	if !t.enabled {
 		return
 	}
+	// Start with pending inter-frame counters.
 	t.current = FrameStats{
-		StartTime:    time.Now(),
-		EventsByType: make(map[string]int),
+		StartTime:        time.Now(),
+		EventsByType:     make(map[string]int),
+		RenderComponents: append([]string(nil), t.pending.RenderComponents...),
 	}
+	// Merge pending counters.
+	for i := 0; i < int(metricCount); i++ {
+		t.current.Counters[i] = t.pending.Counters[i]
+	}
+	// Merge pending events.
+	for k, v := range t.pending.EventsByType {
+		t.current.EventsByType[k] += v
+	}
+	// Reset pending.
+	t.pending = FrameStats{}
+	t.inFrame = true
 }
 
 // EndFrame finalizes the current frame, records to history, accumulates totals.
@@ -92,6 +109,7 @@ func (t *Tracker) EndFrame() {
 	if !t.enabled {
 		return
 	}
+	t.inFrame = false
 	t.current.Duration = time.Since(t.current.StartTime)
 
 	// Save to history ring buffer.
@@ -115,11 +133,17 @@ func (t *Tracker) EndFrame() {
 }
 
 // Record increments a counter by delta.
+// If called between frames (outside BeginFrame/EndFrame), the record is
+// accumulated into a pending buffer and merged into the next BeginFrame.
 func (t *Tracker) Record(m Metric, delta int) {
 	if !t.enabled {
 		return
 	}
-	t.current.Counters[m] += delta
+	if t.inFrame {
+		t.current.Counters[m] += delta
+	} else {
+		t.pending.Counters[m] += delta
+	}
 }
 
 // RecordComponent records a render for a specific component.
@@ -127,8 +151,13 @@ func (t *Tracker) RecordComponent(compID string) {
 	if !t.enabled {
 		return
 	}
-	t.current.Counters[Renders]++
-	t.current.RenderComponents = append(t.current.RenderComponents, compID)
+	if t.inFrame {
+		t.current.Counters[Renders]++
+		t.current.RenderComponents = append(t.current.RenderComponents, compID)
+	} else {
+		t.pending.Counters[Renders]++
+		t.pending.RenderComponents = append(t.pending.RenderComponents, compID)
+	}
 }
 
 // RecordEvent records an event by type.
@@ -136,14 +165,26 @@ func (t *Tracker) RecordEvent(eventType string, dispatched bool) {
 	if !t.enabled {
 		return
 	}
-	if t.current.EventsByType == nil {
-		t.current.EventsByType = make(map[string]int)
-	}
-	t.current.EventsByType[eventType]++
-	if dispatched {
-		t.current.Counters[EventsDispatched]++
+	if t.inFrame {
+		if t.current.EventsByType == nil {
+			t.current.EventsByType = make(map[string]int)
+		}
+		t.current.EventsByType[eventType]++
+		if dispatched {
+			t.current.Counters[EventsDispatched]++
+		} else {
+			t.current.Counters[EventsMissed]++
+		}
 	} else {
-		t.current.Counters[EventsMissed]++
+		if t.pending.EventsByType == nil {
+			t.pending.EventsByType = make(map[string]int)
+		}
+		t.pending.EventsByType[eventType]++
+		if dispatched {
+			t.pending.Counters[EventsDispatched]++
+		} else {
+			t.pending.Counters[EventsMissed]++
+		}
 	}
 }
 
