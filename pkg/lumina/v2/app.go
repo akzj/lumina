@@ -24,6 +24,7 @@ type App struct {
 
 	// Internal state
 	lastDirtyRects []buffer.Rect
+	layersDirty    bool // true when components added/removed/resized → need OcclusionMap rebuild
 }
 
 // NewApp creates a new App with the given screen dimensions and output adapter.
@@ -65,12 +66,14 @@ func (a *App) RegisterComponent(id, name string, rect buffer.Rect, zIndex int, r
 		Handlers:   make(map[string]event.HandlerMap),
 	}
 	a.manager.Register(comp)
+	a.layersDirty = true
 	return comp
 }
 
 // UnregisterComponent removes a component.
 func (a *App) UnregisterComponent(id string) {
 	a.manager.Unregister(id)
+	a.layersDirty = true
 }
 
 // SetState updates a component's state (marks it dirty).
@@ -99,6 +102,7 @@ func (a *App) RenderAll() {
 	_ = a.adapter.Flush()
 
 	a.lastDirtyRects = nil
+	a.layersDirty = false
 	a.manager.ClearDirty()
 }
 
@@ -113,32 +117,50 @@ func (a *App) RenderDirty() {
 
 	var allDirtyRects []buffer.Rect
 
-	// 3. Always rebuild layers + occlusion map so compositor has fresh buffers.
-	layers := a.buildLayers()
-	a.compositor.SetLayers(layers)
+	// 3. Only rebuild layers + occlusion map when structure changed
+	//    (component added/removed/moved/resized). For paint-only dirty,
+	//    the existing occlusion map and hit tester are still valid.
+	needsRebuild := len(rectChanged) > 0 || a.layersDirty
 
-	if len(rectChanged) > 0 {
-		// Rect changed → recompose old + new rects.
-		var rects []buffer.Rect
-		for _, comp := range rectChanged {
-			rects = append(rects, comp.PrevRect)
-			rects = append(rects, comp.Rect)
+	if needsRebuild {
+		layers := a.buildLayers()
+		a.compositor.SetLayers(layers)
+
+		if len(rectChanged) > 0 {
+			// Rect changed → recompose old + new rects.
+			var rects []buffer.Rect
+			for _, comp := range rectChanged {
+				rects = append(rects, comp.PrevRect)
+				rects = append(rects, comp.Rect)
+			}
+			allDirtyRects = append(allDirtyRects, a.compositor.ComposeRects(rects)...)
 		}
-		allDirtyRects = append(allDirtyRects, a.compositor.ComposeRects(rects)...)
+
+		// Rebuild hit tester + sync handlers after structural change.
+		a.rebuildHitTester()
+		a.syncHandlers()
+		a.layersDirty = false
 	}
 
-	// 4. Compose dirty layers (paint changes).
+	// 4. Compose dirty layers (paint changes) — always needed.
 	if len(paintDirty) > 0 {
 		dirtyLayers := a.getDirtyLayers(paintDirty)
 		if len(dirtyLayers) > 0 {
+			// Update OcclusionMap incrementally for dirty regions only.
+			// This is needed because cell content may have changed
+			// (e.g., text grew from "9" to "10"), affecting which cells
+			// are non-zero (opaque) vs zero (transparent).
+			a.compositor.UpdateDirtyRegions(dirtyLayers)
 			rects := a.compositor.ComposeDirty(dirtyLayers)
 			allDirtyRects = append(allDirtyRects, rects...)
 		}
 	}
 
-	// 5. Rebuild hit tester + sync handlers.
-	a.rebuildHitTester()
-	a.syncHandlers()
+	// 5. Sync handlers when components were re-rendered (VNodeTree may have
+	//    changed handlers/focusables), even without structural change.
+	if !needsRebuild && len(paintDirty) > 0 {
+		a.syncHandlers()
+	}
 
 	// 6. Output.
 	if len(allDirtyRects) > 0 {
@@ -192,6 +214,7 @@ func (a *App) Resize(w, h int) {
 	a.width = w
 	a.height = h
 	a.compositor = compositor.NewCompositor(w, h)
+	a.layersDirty = true
 	// Mark all components dirty so next render repaints everything.
 	for _, comp := range a.manager.GetAll() {
 		comp.DirtyPaint = true
