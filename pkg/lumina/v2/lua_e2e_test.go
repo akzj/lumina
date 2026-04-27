@@ -1372,6 +1372,52 @@ func TestLuaE2E_Dashboard_AutoFocus(t *testing.T) {
 	}
 }
 
+// --- Test: Dashboard mouse scroll (onScroll event) ---
+
+func TestLuaE2E_Dashboard_MouseScroll(t *testing.T) {
+	app, ta, _ := newLuaApp(t, 80, 24)
+
+	err := app.RunScript("../../../examples/v2/dashboard.lua")
+	if err != nil {
+		t.Fatalf("RunScript failed: %v", err)
+	}
+
+	app.RenderAll()
+
+	// First entry visible initially.
+	if !screenHasString(ta, "Server started") {
+		t.Fatal("expected 'Server started' visible initially")
+	}
+
+	// A late entry should NOT be visible before scrolling.
+	if screenHasString(ta, "Daily report") {
+		t.Fatal("'Daily report' should not be visible before scrolling")
+	}
+
+	// Send mouse wheel scroll events on the activity log area (right half).
+	// The activity log is on the right side (x=40+), rows 3-20.
+	for i := 0; i < 10; i++ {
+		app.HandleEvent(&event.Event{Type: "scroll", X: 60, Y: 10, Key: "down"})
+		app.RenderDirty()
+	}
+
+	// After scrolling down, late entries should appear.
+	if !screenHasString(ta, "Daily report") {
+		t.Error("expected 'Daily report' visible after mouse scroll down")
+	}
+
+	// Scroll back up.
+	for i := 0; i < 10; i++ {
+		app.HandleEvent(&event.Event{Type: "scroll", X: 60, Y: 10, Key: "up"})
+		app.RenderDirty()
+	}
+
+	// First entry should be visible again.
+	if !screenHasString(ta, "Server started") {
+		t.Error("expected 'Server started' visible after mouse scroll up")
+	}
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // Component Library E2E Tests
 // ═══════════════════════════════════════════════════════════════════
