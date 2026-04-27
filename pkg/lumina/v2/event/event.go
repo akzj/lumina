@@ -326,6 +326,15 @@ func (d *Dispatcher) HasFocusables() bool {
 	return len(d.focusables) > 0
 }
 
+// GetFocusableIDs returns the IDs of all registered focusable VNodes, sorted by tabIndex.
+func (d *Dispatcher) GetFocusableIDs() []string {
+	ids := make([]string, len(d.focusables))
+	for i, f := range d.focusables {
+		ids[i] = f.vnodeID
+	}
+	return ids
+}
+
 // isFocusable checks if a VNode is in the focusable list.
 func (d *Dispatcher) isFocusable(vnodeID string) bool {
 	for _, f := range d.focusables {

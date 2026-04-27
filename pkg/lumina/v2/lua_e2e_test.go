@@ -1371,3 +1371,607 @@ func TestLuaE2E_Dashboard_AutoFocus(t *testing.T) {
 		t.Errorf("expected auto-focus on 'dashboard-root', got %q", id)
 	}
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// Component Library E2E Tests
+// ═══════════════════════════════════════════════════════════════════
+
+// --- Test: ProgressBar renders bar characters and percentage ---
+
+func TestLuaE2E_ProgressBar(t *testing.T) {
+	app, ta, _ := newLuaApp(t, 60, 5)
+
+	err := app.RunString(`
+		local function ProgressBar(props)
+			local value = math.max(0, math.min(100, props.value or 0))
+			local width = props.width or 20
+			local color = props.color or "#A6E3A1"
+			local label = props.label or ""
+
+			local filled = math.floor(value / 100 * width)
+			local empty = width - filled
+			local bar = string.rep("█", filled) .. string.rep("░", empty)
+			local pct = string.format("%3d%%", value)
+
+			local pctColor = "#A6E3A1"
+			if value > 80 then pctColor = "#F38BA8"
+			elseif value > 60 then pctColor = "#F9E2AF"
+			end
+
+			local children = {}
+			if label ~= "" then
+				children[#children + 1] = lumina.createElement("text", {
+					foreground = "#CDD6F4",
+				}, label)
+			end
+			children[#children + 1] = lumina.createElement("text", {
+				foreground = color,
+			}, bar)
+			children[#children + 1] = lumina.createElement("text", {
+				foreground = pctColor,
+			}, pct)
+
+			return lumina.createElement("hbox", {
+				style = {gap = 1},
+			}, table.unpack(children))
+		end
+
+		lumina.createComponent({
+			id = "pb-test",
+			x = 0, y = 0, w = 60, h = 5,
+			render = function(state, props)
+				return lumina.createElement("vbox", {},
+					ProgressBar({label = "CPU ", value = 50, width = 10}),
+					ProgressBar({value = 100, width = 10}),
+					ProgressBar({value = 0, width = 10})
+				)
+			end,
+		})
+	`)
+	if err != nil {
+		t.Fatalf("RunString failed: %v", err)
+	}
+
+	app.RenderAll()
+
+	if ta.LastScreen == nil {
+		t.Fatal("LastScreen is nil")
+	}
+
+	// Row 0: "CPU " label + bar + " 50%"
+	if !screenHasString(ta, "CPU") {
+		t.Error("expected 'CPU' label on screen")
+	}
+	if !screenHasString(ta, "50%") {
+		t.Error("expected '50%' on screen")
+	}
+
+	// Row 1: 100% bar should have filled characters
+	if !screenHasString(ta, "100%") {
+		t.Error("expected '100%' on screen")
+	}
+
+	// Row 2: 0% bar should have empty characters
+	if !screenHasString(ta, "0%") {
+		t.Error("expected '0%' on screen for 0-value bar")
+	}
+
+	// Verify bar characters exist (█ and ░)
+	if !screenHasChar(ta, '█') {
+		t.Error("expected filled bar character '█' on screen")
+	}
+	if !screenHasChar(ta, '░') {
+		t.Error("expected empty bar character '░' on screen")
+	}
+}
+
+// --- Test: Table renders headers and data rows ---
+
+func TestLuaE2E_Table(t *testing.T) {
+	app, ta, _ := newLuaApp(t, 60, 10)
+
+	err := app.RunString(`
+		local function DataTable(props)
+			local headers = props.headers or {}
+			local rows = props.rows or {}
+			local selectedRow = props.selectedRow or -1
+			local colWidths = props.colWidths
+
+			if not colWidths then
+				colWidths = {}
+				for i, h in ipairs(headers) do
+					colWidths[i] = #tostring(h) + 2
+				end
+				for _, row in ipairs(rows) do
+					for i, cell in ipairs(row) do
+						local w = #tostring(cell) + 2
+						if w > (colWidths[i] or 0) then colWidths[i] = w end
+					end
+				end
+			end
+
+			local totalWidth = 0
+			for _, w in ipairs(colWidths) do totalWidth = totalWidth + w end
+
+			local children = {}
+
+			local headerCells = {}
+			for i, h in ipairs(headers) do
+				local text = tostring(h)
+				local cw = colWidths[i] or #text
+				local padded = text .. string.rep(" ", math.max(0, cw - #text))
+				headerCells[#headerCells + 1] = lumina.createElement("text", {
+					foreground = "#89B4FA", bold = true,
+				}, padded)
+			end
+			children[#children + 1] = lumina.createElement("hbox", {},
+				table.unpack(headerCells))
+
+			children[#children + 1] = lumina.createElement("text", {
+				foreground = "#585B70",
+			}, string.rep("─", totalWidth))
+
+			for ri, row in ipairs(rows) do
+				local rowCells = {}
+				local isSelected = (ri == selectedRow)
+				for i, cell in ipairs(row) do
+					local text = tostring(cell)
+					local cw = colWidths[i] or #text
+					local padded = text .. string.rep(" ", math.max(0, cw - #text))
+					local fg = isSelected and "#1E1E2E" or "#CDD6F4"
+					local cellProps = {foreground = fg}
+					if isSelected then cellProps.background = "#89B4FA" end
+					rowCells[#rowCells + 1] = lumina.createElement("text",
+						cellProps, padded)
+				end
+				children[#children + 1] = lumina.createElement("hbox", {},
+					table.unpack(rowCells))
+			end
+
+			local outerProps = {}
+			if props.style then outerProps.style = props.style end
+			return lumina.createElement("vbox", outerProps, table.unpack(children))
+		end
+
+		lumina.createComponent({
+			id = "table-test",
+			x = 0, y = 0, w = 60, h = 10,
+			render = function(state, props)
+				return DataTable({
+					headers = {"Name", "Role", "Status"},
+					rows = {
+						{"Alice", "Admin", "Active"},
+						{"Bob", "Dev", "Away"},
+					},
+					selectedRow = 1,
+				})
+			end,
+		})
+	`)
+	if err != nil {
+		t.Fatalf("RunString failed: %v", err)
+	}
+
+	app.RenderAll()
+
+	if ta.LastScreen == nil {
+		t.Fatal("LastScreen is nil")
+	}
+
+	// Verify headers
+	if !screenHasString(ta, "Name") {
+		t.Error("expected 'Name' header on screen")
+	}
+	if !screenHasString(ta, "Role") {
+		t.Error("expected 'Role' header on screen")
+	}
+	if !screenHasString(ta, "Status") {
+		t.Error("expected 'Status' header on screen")
+	}
+
+	// Verify separator
+	if !screenHasChar(ta, '─') {
+		t.Error("expected separator character '─' on screen")
+	}
+
+	// Verify data rows
+	if !screenHasString(ta, "Alice") {
+		t.Error("expected 'Alice' on screen")
+	}
+	if !screenHasString(ta, "Bob") {
+		t.Error("expected 'Bob' on screen")
+	}
+	if !screenHasString(ta, "Admin") {
+		t.Error("expected 'Admin' on screen")
+	}
+}
+
+// --- Test: Tabs renders tab buttons and active content ---
+
+func TestLuaE2E_Tabs(t *testing.T) {
+	app, ta, _ := newLuaApp(t, 60, 10)
+
+	err := app.RunString(`
+		local function Tabs(props)
+			local tabs = props.tabs or {}
+			local activeTab = props.activeTab or 1
+			local separatorLen = props.separatorLen or 40
+
+			local tabButtons = {}
+			for i, tab in ipairs(tabs) do
+				local isActive = (i == activeTab)
+				tabButtons[#tabButtons + 1] = lumina.createElement("text", {
+					foreground = isActive and "#1E1E2E" or "#CDD6F4",
+					background = isActive and "#89B4FA" or "#313244",
+					bold = isActive,
+				}, " " .. tab.label .. " ")
+			end
+
+			local children = {}
+			children[#children + 1] = lumina.createElement("hbox", {
+				style = {gap = 1},
+			}, table.unpack(tabButtons))
+			children[#children + 1] = lumina.createElement("text", {
+				foreground = "#585B70",
+			}, string.rep("─", separatorLen))
+
+			if tabs[activeTab] and tabs[activeTab].content then
+				children[#children + 1] = tabs[activeTab].content
+			end
+
+			local outerProps = {}
+			if props.style then outerProps.style = props.style end
+			return lumina.createElement("vbox", outerProps, table.unpack(children))
+		end
+
+		lumina.createComponent({
+			id = "tabs-test",
+			x = 0, y = 0, w = 60, h = 10,
+			render = function(state, props)
+				local activeTab, setActiveTab = lumina.useState("activeTab", 2)
+
+				return Tabs({
+					activeTab = activeTab,
+					separatorLen = 50,
+					tabs = {
+						{label = "First", content = lumina.createElement("text", {}, "Content A")},
+						{label = "Second", content = lumina.createElement("text", {}, "Content B")},
+						{label = "Third", content = lumina.createElement("text", {}, "Content C")},
+					},
+				})
+			end,
+		})
+	`)
+	if err != nil {
+		t.Fatalf("RunString failed: %v", err)
+	}
+
+	app.RenderAll()
+
+	if ta.LastScreen == nil {
+		t.Fatal("LastScreen is nil")
+	}
+
+	// Verify tab labels appear
+	if !screenHasString(ta, "First") {
+		t.Error("expected 'First' tab label on screen")
+	}
+	if !screenHasString(ta, "Second") {
+		t.Error("expected 'Second' tab label on screen")
+	}
+	if !screenHasString(ta, "Third") {
+		t.Error("expected 'Third' tab label on screen")
+	}
+
+	// Active tab is 2 → "Content B" should be visible
+	if !screenHasString(ta, "Content B") {
+		t.Error("expected 'Content B' (active tab content) on screen")
+	}
+
+	// Switch to tab 1 and verify content changes
+	app.SetState("tabs-test", "activeTab", int64(1))
+	app.RenderDirty()
+
+	if !screenHasString(ta, "Content A") {
+		t.Error("expected 'Content A' after switching to tab 1")
+	}
+}
+
+// --- Test: Select renders options with highlighted selection ---
+
+func TestLuaE2E_Select(t *testing.T) {
+	app, ta, _ := newLuaApp(t, 40, 10)
+
+	err := app.RunString(`
+		local function Select(props)
+			local options = props.options or {}
+			local selected = props.selected or 1
+			local label = props.label or ""
+
+			local children = {}
+			if label ~= "" then
+				children[#children + 1] = lumina.createElement("text", {
+					foreground = "#89B4FA", bold = true,
+				}, label)
+			end
+
+			for i, opt in ipairs(options) do
+				local isSelected = (i == selected)
+				local prefix = isSelected and "▸ " or "  "
+				local fg = isSelected and "#A6E3A1" or "#CDD6F4"
+				local cellProps = {foreground = fg, bold = isSelected}
+				if isSelected then cellProps.background = "#313244" end
+				children[#children + 1] = lumina.createElement("text",
+					cellProps, prefix .. opt)
+			end
+
+			local outerProps = {}
+			if props.style then outerProps.style = props.style end
+			return lumina.createElement("vbox", outerProps, table.unpack(children))
+		end
+
+		lumina.createComponent({
+			id = "select-test",
+			x = 0, y = 0, w = 40, h = 10,
+			render = function(state, props)
+				local sel, setSel = lumina.useState("sel", 2)
+
+				return Select({
+					label = "Choose:",
+					options = {"Alpha", "Beta", "Gamma"},
+					selected = sel,
+				})
+			end,
+		})
+	`)
+	if err != nil {
+		t.Fatalf("RunString failed: %v", err)
+	}
+
+	app.RenderAll()
+
+	if ta.LastScreen == nil {
+		t.Fatal("LastScreen is nil")
+	}
+
+	// Verify label
+	if !screenHasString(ta, "Choose:") {
+		t.Error("expected 'Choose:' label on screen")
+	}
+
+	// Verify all options appear
+	if !screenHasString(ta, "Alpha") {
+		t.Error("expected 'Alpha' on screen")
+	}
+	if !screenHasString(ta, "Beta") {
+		t.Error("expected 'Beta' on screen")
+	}
+	if !screenHasString(ta, "Gamma") {
+		t.Error("expected 'Gamma' on screen")
+	}
+
+	// Verify selection indicator on "Beta" (selected = 2)
+	if !screenHasString(ta, "▸ Beta") {
+		t.Error("expected '▸ Beta' (selected indicator) on screen")
+	}
+
+	// Non-selected items should have space prefix
+	if !screenHasString(ta, "  Alpha") {
+		t.Error("expected '  Alpha' (non-selected prefix) on screen")
+	}
+
+	// Change selection to 3 and verify
+	app.SetState("select-test", "sel", int64(3))
+	app.RenderDirty()
+
+	if !screenHasString(ta, "▸ Gamma") {
+		t.Error("expected '▸ Gamma' after changing selection to 3")
+	}
+}
+
+// --- Test: Modal visible/hidden toggle ---
+
+func TestLuaE2E_Modal(t *testing.T) {
+	app, ta, _ := newLuaApp(t, 60, 15)
+
+	err := app.RunString(`
+		local function Modal(props)
+			if not props.visible then
+				return lumina.createElement("text", {}, "")
+			end
+
+			local w = props.width or 40
+			local title = props.title or "Dialog"
+
+			return lumina.createElement("box", {
+				style = {
+					border = "rounded",
+					background = "#1E1E2E",
+					padding = 1,
+				},
+			},
+				lumina.createElement("text", {
+					foreground = "#89B4FA", bold = true,
+				}, title),
+				lumina.createElement("text", {
+					foreground = "#585B70",
+				}, string.rep("─", math.max(0, w - 4))),
+				props.children or lumina.createElement("text", {}, ""),
+				lumina.createElement("text", {}, ""),
+				lumina.createElement("text", {
+					foreground = "#6C7086",
+				}, "[Esc] Close")
+			)
+		end
+
+		lumina.createComponent({
+			id = "modal-test",
+			x = 0, y = 0, w = 60, h = 15,
+			render = function(state, props)
+				local show, setShow = lumina.useState("show", false)
+
+				return lumina.createElement("vbox", {},
+					lumina.createElement("text", {}, "Background Content"),
+					Modal({
+						visible = show,
+						title = "Test Modal",
+						width = 40,
+						children = lumina.createElement("text", {
+							foreground = "#CDD6F4",
+						}, "Modal body text"),
+					})
+				)
+			end,
+		})
+	`)
+	if err != nil {
+		t.Fatalf("RunString failed: %v", err)
+	}
+
+	// Initial render: modal hidden
+	app.RenderAll()
+
+	if !screenHasString(ta, "Background Content") {
+		t.Error("expected 'Background Content' on screen")
+	}
+	if screenHasString(ta, "Test Modal") {
+		t.Error("modal title should NOT be visible when hidden")
+	}
+
+	// Show modal
+	app.SetState("modal-test", "show", true)
+	app.RenderDirty()
+
+	if !screenHasString(ta, "Test Modal") {
+		t.Error("expected 'Test Modal' title when modal is visible")
+	}
+	if !screenHasString(ta, "Modal body text") {
+		t.Error("expected 'Modal body text' when modal is visible")
+	}
+	if !screenHasString(ta, "[Esc] Close") {
+		t.Error("expected '[Esc] Close' hint when modal is visible")
+	}
+
+	// Hide modal again — use RenderAll because RenderDirty does not clear
+	// regions that are no longer occupied by VNodes (expected behavior).
+	app.SetState("modal-test", "show", false)
+	app.RenderAll()
+
+	if screenHasString(ta, "Test Modal") {
+		t.Error("modal title should NOT be visible after hiding")
+	}
+}
+
+// --- Test: Component Showcase loads and renders without error ---
+
+func TestLuaE2E_ComponentShowcase(t *testing.T) {
+	app, ta, _ := newLuaApp(t, 80, 24)
+
+	err := app.RunScript("../../../examples/v2/components_showcase.lua")
+	if err != nil {
+		t.Fatalf("RunScript failed: %v", err)
+	}
+
+	app.RenderAll()
+
+	if ta.LastScreen == nil {
+		t.Fatal("LastScreen is nil")
+	}
+
+	// Verify the header renders
+	if !screenHasString(ta, "Component Library Showcase") {
+		t.Error("expected showcase title on screen")
+	}
+
+	// Verify tab labels are visible
+	if !screenHasString(ta, "Progress") {
+		t.Error("expected 'Progress' tab label")
+	}
+	if !screenHasString(ta, "Table") {
+		t.Error("expected 'Table' tab label")
+	}
+	if !screenHasString(ta, "Select") {
+		t.Error("expected 'Select' tab label")
+	}
+
+	// Default tab is 1 (Progress) — verify progress bar content
+	if !screenHasChar(ta, '█') {
+		t.Error("expected filled bar character on Progress tab")
+	}
+
+	// Verify footer
+	if !screenHasString(ta, "Quit") {
+		t.Error("expected 'Quit' in footer")
+	}
+}
+
+// --- Test: Component Showcase tab switching via keyboard ---
+
+func TestLuaE2E_ComponentShowcase_TabSwitch(t *testing.T) {
+	app, ta, _ := newLuaApp(t, 80, 24)
+
+	err := app.RunScript("../../../examples/v2/components_showcase.lua")
+	if err != nil {
+		t.Fatalf("RunScript failed: %v", err)
+	}
+
+	app.RenderAll()
+
+	// Switch to tab 2 (Table)
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "2"})
+	app.RenderDirty()
+
+	// Table tab should show headers
+	if !screenHasString(ta, "Name") {
+		t.Error("expected 'Name' header on Table tab")
+	}
+	if !screenHasString(ta, "Alice") {
+		t.Error("expected 'Alice' data on Table tab")
+	}
+
+	// Switch to tab 3 (Select)
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "3"})
+	app.RenderDirty()
+
+	// Select tab should show theme options
+	if !screenHasString(ta, "Theme:") {
+		t.Error("expected 'Theme:' label on Select tab")
+	}
+	if !screenHasString(ta, "Dark Mode") {
+		t.Error("expected 'Dark Mode' option on Select tab")
+	}
+}
+
+// --- Test: Component Showcase modal toggle ---
+
+func TestLuaE2E_ComponentShowcase_Modal(t *testing.T) {
+	app, ta, _ := newLuaApp(t, 80, 24)
+
+	err := app.RunScript("../../../examples/v2/components_showcase.lua")
+	if err != nil {
+		t.Fatalf("RunScript failed: %v", err)
+	}
+
+	app.RenderAll()
+
+	// Modal should not be visible initially
+	if screenHasString(ta, "Example Modal") {
+		t.Error("modal should NOT be visible initially")
+	}
+
+	// Press 'm' to show modal
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "m"})
+	app.RenderDirty()
+
+	if !screenHasString(ta, "Example Modal") {
+		t.Error("expected 'Example Modal' after pressing 'm'")
+	}
+
+	// Press Escape to close modal
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "Escape"})
+	app.RenderDirty()
+
+	if screenHasString(ta, "Example Modal") {
+		t.Error("modal should be hidden after pressing Escape")
+	}
+}
