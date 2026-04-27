@@ -1129,3 +1129,116 @@ func TestLuaE2E_InputAutoFocusable(t *testing.T) {
 		t.Errorf("expected focus on 'af-input', got %q", id)
 	}
 }
+
+// --- Test: TodoMVC Chinese/Unicode input ---
+
+func TestLuaE2E_TodoMVC_ChineseInput(t *testing.T) {
+	app, ta, _ := newLuaApp(t, 80, 24)
+
+	err := app.RunScript("../../../examples/v2/todo_mvc.lua")
+	if err != nil {
+		t.Fatalf("RunScript failed: %v", err)
+	}
+
+	app.RenderAll()
+
+	// Enter input mode by pressing "a".
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "a"})
+	app.RenderDirty()
+
+	// Type Chinese characters: "你好"
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "你"})
+	app.RenderDirty()
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "好"})
+	app.RenderDirty()
+
+	// Verify both Chinese characters appear on screen (in the input bar).
+	// Note: CJK wide characters occupy 2 cells each with a zero-padding cell,
+	// so screenHasString can't match them consecutively. Use screenHasChar.
+	if !screenHasChar(ta, '你') {
+		t.Error("Chinese character '你' not found on screen after typing")
+	}
+	if !screenHasChar(ta, '好') {
+		t.Error("Chinese character '好' not found on screen after typing")
+	}
+
+	// Test backspace removes one Chinese character (not just last byte).
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "Backspace"})
+	app.RenderDirty()
+
+	// "你" should remain, "好" should be gone.
+	if !screenHasChar(ta, '你') {
+		t.Error("'你' should still be on screen after one backspace")
+	}
+	if screenHasChar(ta, '好') {
+		t.Error("'好' should be removed after one backspace")
+	}
+
+	// Submit with Enter — "你" becomes a new todo item.
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "Enter"})
+	app.RenderDirty()
+
+	// "你" should appear in the todo list with a "[ ]" checkbox.
+	if !screenHasChar(ta, '你') {
+		t.Error("Chinese todo '你' not found in todo list after submit")
+	}
+	// Header should show 6 items.
+	if !screenHasString(ta, "6 items") {
+		t.Error("expected '6 items' in header after adding Chinese todo")
+	}
+}
+
+// --- Test: Input component Chinese/Unicode typing ---
+
+func TestLuaE2E_InputChineseTyping(t *testing.T) {
+	app, ta, _ := newLuaApp(t, 40, 5)
+
+	err := app.RunString(`
+		lumina.createComponent({
+			id = "cjk-test",
+			x = 0, y = 0, w = 40, h = 5,
+			render = function(state, props)
+				local text, setText = lumina.useState("text", "")
+				return lumina.createElement("input", {
+					id = "cjk-input",
+					value = text,
+					onChange = function(newValue) setText(newValue) end,
+				})
+			end
+		})
+	`)
+	if err != nil {
+		t.Fatalf("RunString failed: %v", err)
+	}
+
+	app.RenderAll()
+
+	// Focus the input.
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "Tab"})
+	app.RenderDirty()
+
+	// Type Chinese characters: "中文"
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "中"})
+	app.RenderDirty()
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "文"})
+	app.RenderDirty()
+
+	// Verify "中文" appears on screen.
+	if !screenHasChar(ta, '中') {
+		t.Error("Chinese character '中' not found on screen")
+	}
+	if !screenHasChar(ta, '文') {
+		t.Error("Chinese character '文' not found on screen")
+	}
+
+	// Backspace should remove '文' (last character).
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "Backspace"})
+	app.RenderDirty()
+
+	if !screenHasChar(ta, '中') {
+		t.Error("'中' should remain after one backspace")
+	}
+	if screenHasChar(ta, '文') {
+		t.Error("'文' should be removed after backspace")
+	}
+}

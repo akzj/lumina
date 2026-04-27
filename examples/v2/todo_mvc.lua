@@ -84,10 +84,15 @@ lumina.createComponent({
                     end
                 elseif e.key == "Backspace" then
                     if #inputText > 0 then
-                        setInputText(string.sub(inputText, 1, -2))
+                        local bytePos = utf8.offset(inputText, -1)
+                        if bytePos then
+                            setInputText(string.sub(inputText, 1, bytePos - 1))
+                        else
+                            setInputText("")
+                        end
                     end
-                elseif #e.key == 1 then
-                    -- Single printable character
+                elseif utf8.len(e.key) == 1 then
+                    -- Single printable character (supports Unicode/CJK)
                     setInputText(inputText .. e.key)
                 end
             else
