@@ -21,6 +21,9 @@ type Engine struct {
 
 	// Factory registry: name → Lua registry ref for render function
 	factories map[string]int64 // factory name → renderFn Lua ref
+
+	// Event state: currently hovered node for enter/leave tracking
+	hoveredNode *Node
 }
 
 // NewEngine creates a new render engine.
