@@ -240,6 +240,13 @@ func (e *Engine) readDescriptor(L *lua.State, idx int) Descriptor {
 	desc.ID = getStringField(L, absIdx, "id")
 	desc.Key = getStringField(L, absIdx, "key")
 	desc.Content = getStringField(L, absIdx, "content")
+	// For input/textarea, also check "value" field
+	if desc.Content == "" {
+		if v := getStringField(L, absIdx, "value"); v != "" {
+			desc.Content = v
+		}
+	}
+	desc.Placeholder = getStringField(L, absIdx, "placeholder")
 
 	// Read style — check for nested "style" table first, then top-level style fields
 	L.GetField(absIdx, "style")

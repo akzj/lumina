@@ -940,8 +940,7 @@ func TestV2E2E_CounterScript(t *testing.T) {
 
 func TestV2E2E_InputRender(t *testing.T) {
 	// V2 engine gap: readDescriptor reads "content" not "value" for input elements.
-	// The input's value prop is not mapped to Node.Content.
-	t.Skip("V2 engine: input 'value' prop not mapped to Node.Content in readDescriptor")
+	// P1a fix: input value prop now mapped to Node.Content in readDescriptor.
 
 	app, ta, _ := newV2App(t, 40, 10)
 
@@ -1060,7 +1059,7 @@ func TestV2E2E_InputAutoFocusable(t *testing.T) {
 
 func TestV2E2E_Textarea_Render(t *testing.T) {
 	// V2 engine gap: readDescriptor reads "content" not "value" for textarea elements.
-	t.Skip("V2 engine: textarea 'value' prop not mapped to Node.Content in readDescriptor")
+	// P1a fix: textarea value prop now mapped to Node.Content in readDescriptor.
 
 	app, ta, _ := newV2App(t, 40, 10)
 
