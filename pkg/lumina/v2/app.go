@@ -192,6 +192,10 @@ func (a *App) Resize(w, h int) {
 	a.width = w
 	a.height = h
 	a.compositor = compositor.NewCompositor(w, h)
+	// Mark all components dirty so next render repaints everything.
+	for _, comp := range a.manager.GetAll() {
+		comp.DirtyPaint = true
+	}
 }
 
 // --- internal helpers ---
@@ -216,6 +220,10 @@ func (a *App) rebuildHitTester() {
 // syncHandlers syncs event handlers and focusables from all components
 // into the dispatcher.
 func (a *App) syncHandlers() {
+	// Clear stale handlers and focusables from previous render cycle.
+	a.dispatcher.ClearAllHandlers()
+	a.dispatcher.ClearAllFocusables()
+
 	compLayers := a.manager.AllLayers()
 
 	// Build parent map and register handlers.
