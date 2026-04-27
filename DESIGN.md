@@ -1,265 +1,458 @@
-# Lumina 架构设计文档 v0.3
+# Lumina 架构设计文档
 
-> **版本**: v0.3（与仓库主分支实现对齐）  
-> **状态**: 持续演进  
-> **日期**: 2026-04-26  
-> **核心理念**: Go 运行时 + Lua 声明式 UI；真实 TUI（布局、事件、差分输出），面向人机协作与 MCP 调试。
-
-**配套文档**: API 细节以 [`docs/API.md`](docs/API.md) 为准（与 `pkg/lumina/lumina.go` 中 `luaLoader` 同步）。
+> **版本**: v2.0  
+> **核心理念**: Go 渲染引擎 + Lua 声明式 UI；持久化节点树、增量布局、脏区绘制  
+> **一句话**: Lua 描述 UI → Go 协调/布局/绘制 → 终端输出
 
 ---
 
-## 1. 项目定位
+## 1. 设计目标
 
-**Lumina** = 终端上的类 React 体验：Lua 描述 VDOM，Go 负责布局、栅格、输入与输出。
-
-| 维度 | 说明 |
-|------|------|
-| 目标 | 高效开发终端 UI；支持本机运行与 WebSocket/xterm 同源体验 |
-| 核心技术栈 | **Go**（运行时、渲染、I/O）+ **Lua**（`github.com/akzj/go-lua`）+ **可选 MCP**（JSON-RPC HTTP 等） |
-| 输出 | **ANSI** 终端栅格为主；可切换 **JSON** 等模式供机器消费 |
-| 类比 | Web 的 React（组件、Hooks、VDOM），但布局为 **字符栅格 Flex**，非浏览器 CSS 全量 |
+| 目标 | 实现方式 |
+|------|----------|
+| **O(k) 渲染** | 只重新渲染脏组件、只重算脏布局、只重绘脏节点（k = 变化量） |
+| **正确性** | 协调器保证节点树与 Lua 描述一致；脏标记保证不遗漏重绘 |
+| **可测试性** | `TestAdapter` + 无终端运行；所有渲染逻辑纯函数 |
+| **简洁** | 无 Virtual DOM 中间层；Lua 表 → Descriptor → 直接 patch Node 树 |
 
 ---
 
 ## 2. 核心架构
 
 ```
-┌────────────────────────────────────────────────────────────────────┐
-│                         Lumina 运行时                               │
-├────────────────────────────────────────────────────────────────────┤
-│  ┌──────────────┐     JSON-RPC / 工具      ┌───────────────────┐   │
-│  │ MCP / 调试   │◄────────────────────────►│  lumina.inspect   │   │
-│  │ 客户端       │                            │  simulate* 等     │   │
-│  └──────────────┘                            └─────────┬─────────┘   │
-│                                                         │            │
-│  ┌─────────────────────────────────────────────────────▼────────┐   │
-│  │ App（单线程事件循环）                                            │   │
-│  │  ticker / SIGWINCH → renderAllDirty → renderComponent(Lua)     │   │
-│  │  input → handleEvent（键盘、鼠标、resize…）                      │   │
-│  └───────────────┬────────────────────────────────────────────────┘   │
-│                  │                                                    │
-│         ┌────────▼────────┐         ┌─────────────────────────┐     │
-│         │ Component 注册表 │◄───────►│ go-lua State            │     │
-│         │ + Hook 状态      │  PCall  │ defineComponent / hooks │     │
-│         └────────┬────────┘         └─────────────────────────┘     │
-│                  │                                                    │
-│         ┌────────▼────────────────────────────────────────────────┐   │
-│         │ 渲染管线（Go）                                            │   │
-│         │ Lua VNode 表 → VNode 树 → computeFlexLayout               │   │
-│         │ → VNodeToFrame 或 DiffVNode + ApplyPatches（增量）        │   │
-│         │ → Frame（Cells + DirtyRects）→ OutputAdapter.Write        │   │
-│         └──────────────────────────────────────────────────────────┘   │
-└────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│                     Lua 用户代码                         │
+│  createComponent / defineComponent / createElement       │
+│  useState / onKeyDown / onClick / ...                    │
+└──────────────────────┬──────────────────────────────────┘
+                       │ Lua 表（Descriptor）
+                       ▼
+┌─────────────────────────────────────────────────────────┐
+│                    Engine (Go)                           │
+│                                                         │
+│  ┌─────────┐  ┌────────────┐  ┌────────┐  ┌─────────┐  │
+│  │ Render  │→│ Reconcile  │→│ Layout │→│  Paint  │  │
+│  │ (Lua→   │  │ (Diff+Patch│  │(Flex   │  │(Dirty   │  │
+│  │  Desc)  │  │  Node Tree)│  │ incr.) │  │ cells)  │  │
+│  └─────────┘  └────────────┘  └────────┘  └────┬────┘  │
+│                                                 │       │
+│                                          CellBuffer     │
+└─────────────────────────────────────────────┬───────────┘
+                                              │ ToBuffer()
+                                              ▼
+┌─────────────────────────────────────────────────────────┐
+│                  Output Adapter                          │
+│            WriteDirty(buf, dirtyRects)                   │
+│            ANSI / TestAdapter / ...                      │
+└─────────────────────────────────────────────────────────┘
 ```
-
-**要点**:
-
-- **单 VM、单线程**：组件渲染与 Lua 调用在同一条逻辑线程上（避免在回调里并发动 VM）。
-- **根组件**通过 `lumina.mount` 注册；`lumina.run()` 进入终端 raw 模式 + 事件循环。
-- **全局注册表**保存 `Component` 指针；子组件在渲染树展开时挂载/通过 `ReconcileComponents` 清理。
 
 ---
 
-## 3. 组件模型
+## 3. 渲染流程（一帧）
 
-### 3.1 三层分工
+`Engine.RenderDirty()` 是每帧的核心函数，流程如下：
 
-| 层 | 实现 | 职责 |
-|---|------|------|
-| Go `*Component` | `pkg/lumina/component.go` | 唯一 ID、`Props`、`State` map、Hook 槽位、脏标记、父子链 |
-| Lua 工厂表 | `defineComponent` 生成 | `init`、`render` 等函数引用在 Registry |
-| VNode 树 | Lua 返回 plain table | `type` / `style` / `children` / `props` / 事件字段；由 Go 转为 `*VNode` |
+```
+1. ResetStats()           — 重置 CellBuffer 统计
+2. renderInOrder()        — 渲染所有 Dirty 组件（父→子顺序）
+   ├─ 调用 Lua renderFn(props)
+   ├─ readDescriptor()    — Lua 表 → Descriptor 结构体
+   ├─ Reconcile()         — Descriptor vs Node 树，就地 patch
+   └─ reconcileChildComponents() — 发现/创建子组件
+3. graftChildComponents() — 将子组件 RootNode 嫁接到父树
+4. 提前退出检查           — 无渲染 + 无脏节点 → 跳过布局/绘制
+5. Layout
+   ├─ LayoutFull()        — 根节点 LayoutDirty → 全量布局
+   └─ LayoutIncremental() — 否则只走脏子树
+6. PaintDirty()           — 只重绘 PaintDirty 节点到 CellBuffer
+7. 记录统计               — 写入/清除的 cell 数、脏区面积
+```
 
-组件 **不是** 每个实例一个 Lua userdata 元表模型；逻辑上仍是 **Go 持有实例 + Lua 闭包渲染**。
+### 完整帧（初始挂载）
 
-### 3.2 生命周期（与实现对应）
+`Engine.RenderAll()` 用于首次渲染：
 
-| 阶段 | 行为 |
-|------|------|
-| 首次渲染 | 创建 `Component`，可选执行 Lua `init`，再 `render` 得到 VNode |
-| 更新 | `SetState` / store 订阅 / 事件标记 `Dirty`；下一帧 `renderComponent` 再次执行 `render` |
-| 卸载 | VNode 树对比后 `ReconcileComponents` 对消失的子组件 `Cleanup`（解绑 Lua ref、effect cleanup） |
+```
+1. 标记所有组件 Dirty
+2. renderInOrder()        — 渲染所有组件
+3. graftChildComponents() — 嫁接子组件
+4. LayoutFull()           — 全量布局
+5. PaintFull()            — 清空 buffer + 全量绘制
+6. FocusAutoFocus()       — 自动聚焦 autoFocus 节点
+```
 
-### 3.3 Hooks：仅在 `render` 中调用
+---
 
-与 React 16.8+ 一致：**所有 Hooks 必须在组件的 `render` 函数体内同步调用**（`hooks.go` + `ResetHookIndex` 每帧重置索引）。
+## 4. 组件系统
 
-### 3.4 `useState`（必须带 key）
+### Component 结构
 
-状态挂在 `Component.State[string]` 上；Lua API 为：
+```go
+type Component struct {
+    ID       string              // 唯一标识（如 "todo-app"）
+    Type     string              // 工厂名（如 "Cell"）
+    State    map[string]any      // 组件状态（useState 管理）
+    Props    map[string]any      // 父组件传入的属性
+    RenderFn LuaRef              // Lua 渲染函数的注册表引用
+    RootNode *Node               // 渲染输出的节点子树
+    Dirty    bool                // true → 需要重新渲染
+    Parent   *Component          // 父组件
+    Children []*Component        // 子组件列表
+    ChildMap map[string]*Component // type:key → 子组件（快速查找）
+}
+```
+
+### 组件生命周期
+
+```
+创建: createComponent/defineComponent → 注册到 Engine
+  ↓
+首次渲染: Dirty=true → renderComponent() → 创建 RootNode
+  ↓
+状态更新: useState setter → SetState() → Dirty=true
+  ↓
+增量渲染: RenderDirty() → 只渲染 Dirty 组件 → Reconcile 更新 RootNode
+```
+
+### useState 工作原理
 
 ```lua
 local count, setCount = lumina.useState("count", 0)
-setCount(count + 1)
 ```
 
-第一个参数为 **稳定字符串 key**（同组件多段 `useState` 靠 key 区分槽位）。
-
-### 3.5 最小计数器示例（与实现对齐）
-
-```lua
-local Counter = lumina.defineComponent({
-    name = "Counter",
-    render = function()
-        local n, setN = lumina.useState("n", 0)
-        return {
-            type = "vbox",
-            children = {
-                { type = "text", content = "Count: " .. tostring(n) },
-                {
-                    type = "box",
-                    id = "inc",
-                    style = { border = "rounded" },
-                    onClick = function() setN(n + 1) end,
-                    children = {
-                        { type = "text", content = " +1 " },
-                    },
-                },
-            },
-        }
-    end,
-})
-```
-
-（具体可点击节点类型以项目内示例为准，如 `examples/counter.lua`。）
-
-### 3.6 脏更新路径
-
-`Component.SetState`：写入 `State` → `Dirty.Store(true)` → 沿父链标记根组件脏（子组件需根重渲染才能再次执行 Lua 子树）。
-
-全局 **`createStore` + `useStore`** 在 `dispatch` 时通知订阅的组件 `Dirty`。
+1. `useState("count", 0)` → 查找当前组件的 `State["count"]`
+2. 不存在 → 初始化为 `0`
+3. 返回 `(当前值, setter函数)`
+4. `setCount(1)` → `Component.SetState("count", 1)` → `Dirty = true`
+5. 下一帧 `RenderDirty()` 重新调用 renderFn
 
 ---
 
-## 4. 渲染引擎
+## 5. 树结构
 
-### 4.1 数据流
+### Node 树
+
+```go
+type Node struct {
+    Type     string   // "box", "vbox", "hbox", "text", "input", "textarea", "component"
+    ID       string   // 用于协调匹配
+    Key      string   // 用于列表协调
+    Children []*Node
+    Parent   *Node
+    
+    // 布局（缓存）
+    X, Y, W, H  int
+    LayoutDirty  bool
+    
+    // 绘制
+    Content     string
+    Style       Style
+    PaintDirty  bool
+    
+    // 事件处理器（Lua 注册表引用）
+    OnClick, OnMouseEnter, OnMouseLeave LuaRef
+    OnKeyDown, OnChange, OnScroll       LuaRef
+    
+    // 组件关联
+    Component     *Component  // 组件根节点指向所属组件
+    ComponentType string      // type="component" 节点的工厂名
+}
+```
+
+### 嫁接机制 (Graft)
+
+子组件的 `RootNode` 需要嫁接到父组件的节点树中：
 
 ```
-Lua 返回 VNode 表  →  LuaVNodeToVNode  →  *VNode 树
-        →  computeFlexLayout（整树，字符栅格 Flex 语义）
-        →  VNodeToFrame（全量）或 DiffVNode + ApplyPatches（条件增量）
-        →  Frame.Cells + DirtyRects
-        →  bridgeVNodeEvents（事件目标绑定）
-        →  OutputAdapter.Write（ANSI：整帧或按 DirtyRects 与 prevFrame  cell diff）
+父组件 RootNode:
+  box
+  ├── text "Header"
+  ├── component (type="Cell", key="0,0")    ← 占位节点
+  │   └── [Cell 组件的 RootNode]            ← 嫁接到这里
+  └── component (type="Cell", key="0,1")
+      └── [Cell 组件的 RootNode]
 ```
 
-### 4.2 帧缓冲（`Frame`）
-
-定义见 `pkg/lumina/output.go`：
-
-- `Cells [][]Cell`：与终端同尺寸的字符单元（含颜色、OwnerNode 等）。
-- `DirtyRects`：本帧变更矩形集合，供 ANSI 适配器缩小扫描范围。
-- **无**早期设计稿中的 `Frame.Metadata` 字段；元数据通过其它调试通道（MCP / inspect）获取。
-
-`Cell` 含 `Char`、`Foreground`、`Background`、样式位、`OwnerNode` / `OwnerID`（命中测试与 inspector）。
-
-### 4.3 增量策略（概览）
-
-实现分散在 `app.go`、`vdom_diff.go` 等：
-
-1. **组件级**：仅 `Dirty` 为真的组件执行 Lua `render`。
-2. **VDOM**：`DiffVNode(old, new)` 产出 `Patch` 列表；无 patch 且无视口滚动等特殊情况时可跳过绘制。
-3. **帧级增量**：在 patch 较少、`lastFrame` 存在且未强制全量条件时，`ApplyPatches` 在**旧 Frame** 上按「受影响的父容器」重画子树，并维护 `DirtyRects`。
-4. **终端输出**：`ANSIAdapter` 在尺寸变化或 `Invalidate` 后走全量写；否则对 dirty 区域与 `prevFrame` 做 cell 级 diff。
-
-**限制（有意为之）**：`ApplyPatches` 以**父容器**为单位重画，避免兄弟位移错误；大改动时退回 `VNodeToFrame` 全量。
-
-### 4.4 布局（`layout.go`）
-
-- 显式节点类型：`fragment`、`text`、`vbox`、`hbox`、`input`、`textarea`；其它 `type`（如 `box`）走**默认竖直栈**，语义接近 `vbox`。
-- `style`：`flex`、`gap`、`justify`（`start|center|end|space-between|space-around`）、`align`、`overflow=scroll`（与 viewport / 滚动 API 配合）等。
-- **非**完整 CSS Grid/Flexbox；不要按浏览器假设等价。
-
-### 4.5 输出适配器
-
-- **`ANSIAdapter`**：`Write` 缓冲整帧输出，隐藏光标、单 `Write` 系统调用减少撕裂。
-- **JSON / MCP**：通过 `setOutputMode` 等与 MCP 帧抓取（如 `getMCPFrame`）配合；详见 `docs/API.md`。
+**流程**:
+1. 父组件渲染 → 产生 `type="component"` 占位节点
+2. `reconcileChildComponents()` → 为占位节点创建/查找子组件
+3. 子组件渲染 → 产生自己的 `RootNode`
+4. `graftChildComponents()` → 将 `RootNode` 设为占位节点的子节点
+5. 布局/绘制自然穿透到子组件
 
 ---
 
-## 5. 输入与事件
+## 6. 协调算法 (Reconciliation)
 
-- **键盘 / 鼠标 / 定时器**：输入 goroutine 将消息投递到 `App.events`，主循环 `handleEvent` 统一处理（`app.go` + `input.go`）。
-- **合成事件**：例如 `mousemove` 上根据 `Target` 变化合成 `mouseenter` / `mouseleave`（`EventBus`）。
-- **焦点**：全局可聚焦 ID 列表 + `setFocus` / Tab 顺序；另有 `pushFocusScope` / `popFocusScope`。
-- **注意**：`resize` 时会清空 `hoveredID`；若 Lua 侧用 `useState` 维护悬停，需与引擎策略一致，避免出现「尺寸变化后悬停态残留」（见 issue 讨论与后续改进方向）。
+`Reconcile(node *Node, desc Descriptor) bool`
+
+**原则**: 就地修改，最小化脏标记。
+
+```
+1. 比较 Content → 不同 → 更新 + PaintDirty
+2. 比较 Style → 不同 → 分析变化类型：
+   ├─ 布局属性变化（width/height/flex/padding/margin/...） → LayoutDirty
+   └─ 仅视觉属性变化（foreground/background/bold/...） → PaintDirty
+3. 更新事件处理器引用
+4. 协调子节点:
+   ├─ 快速路径: 长度相同 + key 全匹配 → 逐个 Reconcile
+   └─ 慢速路径: 按 type:key 建立映射 → 匹配复用/新建/删除
+```
+
+### 子节点协调
+
+```
+旧: [A, B, C]    新: [A, C, D]
+  ↓ 按 type:key 匹配
+  A → 复用，Reconcile
+  C → 复用，Reconcile
+  D → 新建
+  B → 删除（parent.PaintDirty = true，清除残影）
+```
 
 ---
 
-## 6. MCP 与调试面
+## 7. 布局系统
 
-### 6.1 当前形态（以仓库为准）
+### Flex 布局
 
-- **`cmd/lumina-mcp-http`**：Streamable HTTP 上 **JSON-RPC 2.0** 风格 MCP 工具注册（Go `encoding/json`），用于远程多客户端调试。
-- **Lua 侧**：`lumina.inspect*`、`simulate*`、`diff`、`patch`、`eval` 等挂在模块上，由 MCP 或本进程调试入口调用（见 `inspect_api.go`、`mcp_debug.go` 等）。
-- **`proto/v1/lumina.proto`**：存在历史/扩展 protobuf 定义；**线上 MCP 主路径以 JSON-RPC + 结构化结果为主**，不要把「全链路 Protobuf」写死为当前唯一实现。
+支持两种容器方向：
+- **vbox** — 垂直堆叠（默认）
+- **hbox** — 水平排列
 
-### 6.2 设计取舍（记录）
+```
+┌── vbox ──────────────┐    ┌── hbox ──────────────┐
+│ ┌──────────────────┐ │    │ ┌─────┐┌─────┐┌────┐│
+│ │   child 1        │ │    │ │  1  ││  2  ││ 3  ││
+│ ├──────────────────┤ │    │ │     ││     ││    ││
+│ │   child 2        │ │    │ └─────┘└─────┘└────┘│
+│ ├──────────────────┤ │    └──────────────────────┘
+│ │   child 3        │ │
+│ └──────────────────┘ │
+└──────────────────────┘
+```
 
-| 方向 | 说明 |
+### 尺寸计算
+
+```
+固定尺寸:  width/height > 0 → 使用固定值（受 min/max 约束）
+Flex 分配: flex > 0 → 按比例分配剩余空间
+隐式规则:  text/input/textarea → 固定 1 行高
+           容器无 flex 无 height → 隐式 flex=1
+```
+
+### 对齐
+
+- **justify** (主轴): `start`, `center`, `end`, `space-between`, `space-around`
+- **align** (交叉轴): `stretch`(默认), `start`, `center`, `end`
+
+### 定位
+
+- `position: "relative"` — 相对偏移（不脱离文档流）
+- `position: "absolute"` — 相对父内容区定位
+- `position: "fixed"` — 相对屏幕定位
+
+### 增量布局
+
+```
+LayoutIncremental(root):
+  遍历树 → 遇到 LayoutDirty 节点 → 用缓存的 (X,Y,W,H) 重算子树
+  非脏节点 → 跳过（保留缓存布局）
+```
+
+**脏传播**: `MarkLayoutDirty()` 向上传播到最近的固定尺寸祖先。
+
+---
+
+## 8. 绘制系统
+
+### CellBuffer
+
+```go
+type CellBuffer struct {
+    cells  []Cell    // 扁平数组: cells[y*width + x]
+    width  int
+    height int
+    // 每帧统计
+    writeCount, clearCount int
+    dirtyMinX, dirtyMinY, dirtyMaxX, dirtyMaxY int  // 脏区包围盒
+}
+
+type Cell struct {
+    Ch        rune
+    FG, BG    string   // 颜色字符串如 "#FF0000"
+    Bold, Dim, Underline bool
+    Wide      bool     // CJK 宽字符右半部
+}
+```
+
+### 脏区绘制
+
+```
+PaintDirty(buf, root):
+  遍历树:
+    PaintDirty=true → ClearRect(旧区域) + paintNode(完整子树) + 清除标记
+    PaintDirty=false → 递归检查子节点
+```
+
+**关键**: 父节点重绘时，先清空自己的区域，再绘制自己和所有子节点。这保证了：
+- 子节点被删除时不留残影
+- 节点移动时旧位置被清理
+
+### 绘制优先级
+
+```
+box/vbox/hbox:
+  1. 填充背景色
+  2. 绘制边框
+  3. 递归绘制子节点
+
+text:
+  1. 填充背景色（如果有）
+  2. 逐字符写入（无背景色时继承父背景）
+
+input/textarea:
+  - 有内容 → 同 text
+  - 无内容 → 绘制 placeholder（dim 样式）
+```
+
+---
+
+## 9. 事件系统
+
+### 事件分发流程
+
+```
+终端输入 → App.HandleEvent()
+  ├─ click     → Engine.HandleClick(x, y)
+  │              ├─ HitTest → 找到最深层节点
+  │              ├─ 焦点管理（input/textarea）
+  │              └─ 向上冒泡找 onClick handler → callLuaRef
+  │
+  ├─ mousemove → Engine.HandleMouseMove(x, y)
+  │              ├─ HitTest → 找到当前节点
+  │              ├─ 与上次 hoveredNode 比较
+  │              ├─ 不同 → 触发 onMouseLeave(旧) + onMouseEnter(新)
+  │              └─ 相同 → 无操作
+  │
+  ├─ keydown   → Engine.HandleKeyDown(key)
+  │              ├─ Tab → FocusNext()
+  │              ├─ 有焦点 input → HandleInputKeyDown()
+  │              └─ 否则 → DFS 找 onKeyDown handler
+  │
+  └─ scroll    → Engine.HandleScroll(x, y, delta)
+                 └─ HitTest + 冒泡找 onScroll handler
+```
+
+### HitTest
+
+```go
+func HitTest(root *Node, x, y int) *Node {
+    // 点不在节点范围内 → nil
+    // 逆序检查子节点（后绘制的在上层）
+    // 子节点命中 → 返回子节点
+    // 无子节点命中 → 返回自身
+}
+```
+
+### 事件冒泡
+
+点击/滚动事件从最深层节点向上冒泡，直到找到对应的事件处理器。
+
+---
+
+## 10. 输入系统
+
+### 焦点管理
+
+- `Tab` → 循环聚焦下一个 input/textarea
+- 点击 input/textarea → 聚焦
+- `autoFocus=true` → 初始渲染后自动聚焦
+
+### 文本编辑
+
+| 按键 | input | textarea |
+|------|-------|----------|
+| 字符 | 在光标处插入 | 在光标处插入 |
+| Backspace | 删除光标前字符 | 删除光标前字符 |
+| Enter | 触发 onChange | 插入换行 |
+| ←/→ | 移动光标 | 移动光标 |
+| ↑/↓ | — | 上下移动行 |
+
+编辑后自动调用 `onChange` 回调并标记所属组件 Dirty。
+
+---
+
+## 11. 性能策略
+
+### O(k) 渲染
+
+| 阶段 | 优化 |
 |------|------|
-| JSON 便于人类与脚本调试 | 与 MCP 生态常见传输一致 |
-| Proto 可选 | 适合未来高性能或强 schema 场景 |
+| 渲染 | 只调用 Dirty 组件的 Lua renderFn |
+| 协调 | 快速路径：子节点数量+key 不变 → 逐个 patch |
+| 布局 | 只重算 LayoutDirty 子树 |
+| 绘制 | 只重绘 PaintDirty 节点 |
+| 输出 | 只输出 DirtyRect 区域 |
+
+### 空闲检测
+
+```
+rendered == 0 && !hasAnyDirty(root)
+  → 跳过布局和绘制
+  → 记录 0 cells painted
+```
+
+### GC 控制
+
+渲染期间暂停 Lua GC，渲染后执行一步增量 GC：
+```go
+L.SetGCStopped(true)
+// ... 渲染 ...
+L.SetGCStopped(false)
+L.GCStepAPI()
+```
+
+### 状态变化检测
+
+`SetState` 使用 `reflect.DeepEqual` 避免无变化时标记 Dirty：
+```go
+func (c *Component) SetState(key string, value any) {
+    if reflect.DeepEqual(c.State[key], value) {
+        return // 无变化，不标记 Dirty
+    }
+    c.State[key] = value
+    c.Dirty = true
+}
+```
 
 ---
 
-## 7. 模块与 UI 库
+## 12. 模块结构
 
-- **`require("lumina")`**：`luaLoader` 注册大量 API（Hooks、路由、窗口管理、`lumina.ui` preload 等），权威列表见 **`docs/API.md`** 的 Module index。
-- **`require("lumina.ui")`**：`pkg/lumina/components/ui/init.lua` 聚合的终端版 shadcn 风格组件；单文件为 `require("lumina.ui.button")` 等。
-- **`require("shadcn")` / `require("shadcn.button")`**：兼容别名（`RegisterShadcn`），与 `lumina.ui` 同源文件。
-
----
-
-## 8. 测试与质量
-
-- **单元 / 集成测试**：`pkg/lumina/*_test.go` 覆盖布局、diff、输入、composition 等。
-- **E2E**：`e2e_full_test.go`、`e2e_showcase_test.go` 等验证 Lua 管线。
-- **Headless 测试辅助**：`lumina.createTestRenderer()`（VDOM 级，非完整 App），见 `lua_accessibility.go`。
-
----
-
-## 9. 演进与已知边界
-
-### 9.1 已相对成熟的能力
-
-- Flex 布局、滚动视口、overlay、窗口管理、热重载入口、路由全局表、数据 `fetch`/`useQuery`、大量 Hooks、DevTools / Inspector（F12）等（以 git 与 `docs/API.md` 为准）。
-
-### 9.2 仍在演进或简化的点
-
-- 布局语义与浏览器 CSS 不完全等价；复杂排版需按 TUI 约束设计。
-- 增量渲染与悬停状态在极端 resize 下的边界情况可继续收紧。
-- 插件、多进程隔离等大特性：**按需迭代**，本文件不逐条承诺时间表。
-
-### 9.3 历史附录（v0.1 快照）
-
-早期「Phase 1 完成状态」中的部分限制（如「无 Diff Engine」）**已被后续实现超越**；保留旧清单易产生误解，故 **不再逐条复制**。若需考古，请 `git log` / `git show` 查看历史 `DESIGN.md`。
-
----
-
-## 10. 远期设想（非当前承诺）
-
-以下条目来自原设计文档中的扩展思考，**尚未**作为整体落地保证；实现时以 Issue/PR 为准：
-
-- 更细的分层 `ComponentID`（scope:type:version:instance）与跨作用域隔离。
-- 通过 `providers` 表声明式 Context（当前已有 `createContext` / `useContext` API，形态与旧伪代码不同，见 `docs/API.md`）。
-- 渲染器插件接口标准化（当前以 `OutputAdapter` 实现为主）。
-
----
-
-## 附录
-
-| 资源 | 路径 |
-|------|------|
-| Lua API 参考 | `docs/API.md` |
-| 主运行时入口 | `pkg/lumina/app.go`、`pkg/lumina/lumina.go` |
-| 布局 | `pkg/lumina/layout.go` |
-| VDOM diff / patch | `pkg/lumina/vdom_diff.go` |
-| ANSI 输出 | `pkg/lumina/ansi_adapter.go` |
-| go-lua | `github.com/akzj/go-lua`（见 `go.mod`） |
-
----
-
-*文档结束。*
+```
+pkg/lumina/v2/
+├── render/           — 核心渲染引擎
+│   ├── engine.go     — Engine 主体 + Lua API 注册
+│   ├── node.go       — Node, Component, Style, Descriptor 类型
+│   ├── reconciler.go — 协调算法
+│   ├── layout.go     — Flex 布局（vbox/hbox）
+│   ├── painter.go    — 绘制（full/dirty/clipped）
+│   ├── cellbuffer.go — CellBuffer 2D 网格
+│   ├── events.go     — HitTest + 事件分发
+│   └── input.go      — 输入编辑 + 焦点管理
+├── app.go            — App 组合根（集成所有模块）
+├── app_run.go        — 事件循环 + 热加载
+├── app_lua.go        — App 级 Lua API（quit, timer）
+├── app_timer.go      — setInterval/setTimeout 管理
+├── buffer/           — 通用 Buffer 类型（输出适配器接口）
+├── output/           — 输出适配器（ANSI, TestAdapter）
+├── event/            — 事件类型定义
+├── perf/             — 性能追踪器
+├── devtools/         — 开发者工具面板
+├── animation/        — 动画管理器
+├── router/           — 路由
+├── hotreload/        — 文件监控热加载
+└── store/            — 状态管理
+```

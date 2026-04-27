@@ -23,6 +23,15 @@ func clearPaintDirty(node *Node) {
 	}
 }
 
+// clearPaintDirtyBelow clears PaintDirty on all descendants (not the node itself).
+func clearPaintDirtyBelow(node *Node) {
+	for _, child := range node.Children {
+		child.PaintDirty = false
+		clearPaintDirtyBelow(child)
+	}
+}
+
+
 // PaintDirty paints only PaintDirty nodes into the buffer.
 // Does NOT clear the buffer — only overwrites dirty regions.
 // Clears PaintDirty flags after painting.
@@ -43,7 +52,8 @@ func paintDirtyWalk(buf *CellBuffer, node *Node) {
 		buf.ClearRect(node.X, node.Y, node.W, node.H)
 		paintNode(buf, node)
 		node.PaintDirty = false
-		// Don't recurse into children — paintNode already painted them
+		// Clear all descendants' PaintDirty flags — paintNode already painted them
+		clearPaintDirtyBelow(node)
 		return
 	}
 
@@ -199,7 +209,8 @@ func paintTextClipped(buf *CellBuffer, node *Node, clipX1, clipY1, clipX2, clipY
 			x = node.X
 			continue
 		}
-		if x < node.X+node.W && y < node.Y+node.H {
+		w := runeWidth(ch)
+		if x+w-1 < node.X+node.W && y < node.Y+node.H {
 			if y >= clipY1 && y < clipY2 && x >= clipX1 && x < clipX2 {
 				bg := node.Style.Background
 				if bg == "" {
@@ -207,8 +218,11 @@ func paintTextClipped(buf *CellBuffer, node *Node, clipX1, clipY1, clipX2, clipY
 					bg = existing.BG
 				}
 				buf.SetChar(x, y, ch, fg, bg, bold)
+				if w == 2 && x+1 >= clipX1 && x+1 < clipX2 {
+					buf.Set(x+1, y, Cell{Wide: true, BG: bg})
+				}
 			}
-			x++
+			x += w
 		}
 	}
 }
@@ -235,7 +249,8 @@ func paintText(buf *CellBuffer, node *Node) {
 			x = node.X
 			continue
 		}
-		if x < node.X+node.W && y < node.Y+node.H {
+		w := runeWidth(ch)
+		if x+w-1 < node.X+node.W && y < node.Y+node.H {
 			bg := node.Style.Background
 			if bg == "" {
 				// Inherit background from existing cell (parent painted it)
@@ -243,7 +258,13 @@ func paintText(buf *CellBuffer, node *Node) {
 				bg = existing.BG
 			}
 			buf.SetChar(x, y, ch, fg, bg, bold)
-			x++
+			if w == 2 {
+				// Set padding cell for wide character
+				if x+1 < node.X+node.W {
+					buf.Set(x+1, y, Cell{Wide: true, BG: bg})
+				}
+			}
+			x += w
 		}
 	}
 }
@@ -258,14 +279,20 @@ func paintInput(buf *CellBuffer, node *Node) {
 		x := node.X
 		y := node.Y
 		for _, ch := range node.Placeholder {
-			if x < node.X+node.W && y < node.Y+node.H {
+			w := runeWidth(ch)
+			if x+w-1 < node.X+node.W && y < node.Y+node.H {
 				bg := node.Style.Background
 				if bg == "" {
 					existing := buf.Get(x, y)
 					bg = existing.BG
 				}
 				buf.Set(x, y, Cell{Ch: ch, FG: fg, BG: bg, Dim: true})
-				x++
+				if w == 2 {
+					if x+1 < node.X+node.W {
+						buf.Set(x+1, y, Cell{Wide: true, BG: bg})
+					}
+				}
+				x += w
 			}
 		}
 		return
