@@ -156,10 +156,19 @@ type ChildDescriptor struct {
 	RenderFn RenderFunc
 }
 
+// RenderObserver is notified when components are rendered.
+// Used by the perf tracker without creating a dependency from component → perf.
+type RenderObserver interface {
+	OnRender(compID string)
+	OnLayout(compID string)
+	OnPaint(compID string)
+}
+
 // Manager manages the component tree.
 type Manager struct {
-	components map[string]*Component
-	painter    paint.Painter
+	components     map[string]*Component
+	painter        paint.Painter
+	renderObserver RenderObserver
 }
 
 // NewManager creates a new component Manager with the given painter.
@@ -168,6 +177,11 @@ func NewManager(painter paint.Painter) *Manager {
 		components: make(map[string]*Component),
 		painter:    painter,
 	}
+}
+
+// SetRenderObserver sets a render observer for performance tracking.
+func (m *Manager) SetRenderObserver(obs RenderObserver) {
+	m.renderObserver = obs
 }
 
 // Register adds a component to the manager.
@@ -246,14 +260,23 @@ func (m *Manager) ClearDirty() {
 // paints into the component buffer, and extracts event handlers.
 func (m *Manager) RenderDirty() {
 	for _, comp := range m.GetDirtyPaint() {
+		if m.renderObserver != nil {
+			m.renderObserver.OnRender(comp.id)
+		}
 		comp.vnodeTree = comp.renderFn(comp.state, comp.props)
 		if comp.vnodeTree == nil {
 			comp.dirtyPaint = false
 			continue // skip layout/paint for nil render result
 		}
 		layout.ComputeLayout(comp.vnodeTree, comp.rect.X, comp.rect.Y, comp.rect.W, comp.rect.H)
+		if m.renderObserver != nil {
+			m.renderObserver.OnLayout(comp.id)
+		}
 		comp.buf.Clear()
 		m.painter.Paint(comp.buf, comp.vnodeTree, comp.rect.X, comp.rect.Y)
+		if m.renderObserver != nil {
+			m.renderObserver.OnPaint(comp.id)
+		}
 		comp.ExtractHandlers()
 		comp.dirtyPaint = false
 	}
