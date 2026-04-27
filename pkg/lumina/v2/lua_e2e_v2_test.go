@@ -197,9 +197,7 @@ func TestV2E2E_TextForegroundColor(t *testing.T) {
 }
 
 func TestV2E2E_TextInheritsParentBackground(t *testing.T) {
-	// V2 engine gap: text children don't inherit parent box background during paint.
-	// The old pipeline did this in the compositor layer; V2 needs it in the paint phase.
-	t.Skip("V2 engine: text children don't inherit parent box background yet")
+	// P3 fix: text children now inherit parent box background from CellBuffer.
 
 	app, ta, _ := newV2App(t, 40, 10)
 
