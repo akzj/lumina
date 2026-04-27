@@ -141,6 +141,14 @@ func (b *Bridge) WrapRenderFn(luaFuncRef int) component.RenderFunc {
 	return func(state map[string]any, props map[string]any) *layout.VNode {
 		L := b.L
 
+		// Stop GC during render to avoid ~75% overhead from GC sweeps
+		// on the many closures and tables created by Lua render functions.
+		L.SetGCStopped(true)
+		defer func() {
+			L.SetGCStopped(false)
+			L.GCStepAPI() // run one incremental step after render
+		}()
+
 		// Push function from registry.
 		L.RawGetI(lua.RegistryIndex, int64(luaFuncRef))
 		if !L.IsFunction(-1) {

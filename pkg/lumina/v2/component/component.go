@@ -61,14 +61,31 @@ func mapEventName(propName string) string {
 	return strings.ToLower(name)
 }
 
+// stateEqual compares two any values for equality. For comparable types
+// (string, int, float64, bool, nil) it uses ==. For uncomparable types
+// (slices, maps) it returns false — a new value always triggers re-render.
+func stateEqual(a, b any) bool {
+	// Fast path: both nil.
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	// Use a recover guard: == panics on uncomparable types like []interface{}.
+	defer func() { recover() }()
+	return a == b
+}
+
 // shallowEqual compares two maps by key count and value identity (==).
+// Uses stateEqual to safely handle uncomparable value types.
 func shallowEqual(a, b map[string]any) bool {
 	if len(a) != len(b) {
 		return false
 	}
 	for k, va := range a {
 		vb, ok := b[k]
-		if !ok || va != vb {
+		if !ok || !stateEqual(va, vb) {
 			return false
 		}
 	}

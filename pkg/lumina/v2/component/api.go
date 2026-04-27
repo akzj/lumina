@@ -127,7 +127,13 @@ func (c *Component) HookStore() map[string]any { return c.hookStore }
 func (c *Component) MarkDirty() { c.dirtyPaint = true }
 
 // SetState sets a single state key and marks the component dirty.
+// If the new value is identical to the old value, the write and dirty-mark
+// are skipped — this avoids unnecessary re-renders when, e.g., hovering
+// within the same cell repeatedly sets the same state.
 func (c *Component) SetState(key string, value any) {
+	if stateEqual(c.state[key], value) {
+		return // no change, skip dirty marking
+	}
 	c.state[key] = value
 	c.dirtyPaint = true
 }
@@ -228,10 +234,14 @@ func (m *Manager) GetAll() []*Component {
 }
 
 // SetState sets a single state key on a component and marks it dirty.
+// Skips the write if the value is unchanged (see Component.SetState).
 func (m *Manager) SetState(compID string, key string, value any) {
 	comp := m.components[compID]
 	if comp == nil {
 		return
+	}
+	if stateEqual(comp.state[key], value) {
+		return // no change
 	}
 	comp.state[key] = value
 	comp.dirtyPaint = true

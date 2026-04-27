@@ -62,6 +62,12 @@ func (a *App) Run(cfg RunConfig) error {
 		return a.eventLoop(cfg)
 	}
 
+	// Tune Lua GC for UI workloads: less frequent collections, smaller steps.
+	// Default pause=100 triggers GC too aggressively for render-heavy workloads
+	// where many short-lived tables/closures are created each frame.
+	a.luaState.SetGCParam("pause", 200)
+	a.luaState.SetGCParam("stepmul", 100)
+
 	// Load and execute the Lua script. This typically calls
 	// lumina.createComponent() which registers components with the App.
 	if cfg.ScriptPath != "" {
