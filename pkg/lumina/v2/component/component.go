@@ -35,8 +35,10 @@ func walkExtract(vn *layout.VNode, c *Component) {
 		if len(hm) > 0 {
 			c.handlers[vn.ID] = hm
 		}
-		// Check focusable.
+		// Check focusable. Input and textarea are auto-focusable.
 		if _, ok := vn.Props["focusable"]; ok {
+			c.focusables = append(c.focusables, vn.ID)
+		} else if vn.ID != "" && (vn.Type == "input" || vn.Type == "textarea") {
 			c.focusables = append(c.focusables, vn.ID)
 		}
 	}
