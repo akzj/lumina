@@ -179,6 +179,13 @@ func (p *painter) paintText(buf *buffer.Buffer, node *layout.VNode, ox, oy int) 
 		px := startX + col
 		py := startY + row
 		cell.Char = ch
+
+		// Inherit parent's background if text has no explicit background
+		if style.Background == "" {
+			existing := buf.Get(px, py)
+			cell.Background = existing.Background
+		}
+
 		buf.Set(px, py, cell)
 
 		// For wide chars, place a zero-char padding cell in the next column
