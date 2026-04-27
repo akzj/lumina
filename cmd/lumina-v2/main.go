@@ -15,8 +15,9 @@ import (
 )
 
 func main() {
-	// Parse simple flags: --web :8080
+	// Parse simple flags: --web :8080, --watch
 	var webAddr string
+	var watchMode bool
 	var scriptPath string
 	var args []string
 
@@ -26,26 +27,28 @@ func main() {
 			i++ // skip value
 		} else if strings.HasPrefix(os.Args[i], "--web=") {
 			webAddr = strings.TrimPrefix(os.Args[i], "--web=")
+		} else if os.Args[i] == "--watch" {
+			watchMode = true
 		} else {
 			args = append(args, os.Args[i])
 		}
 	}
 
 	if len(args) < 1 {
-		fmt.Println("Usage: lumina-v2 [--web :8080] <script.lua>")
+		fmt.Println("Usage: lumina-v2 [--web :8080] [--watch] <script.lua>")
 		os.Exit(1)
 	}
 	scriptPath = args[0]
 
 	if webAddr != "" {
-		runWeb(webAddr, scriptPath)
+		runWeb(webAddr, scriptPath, watchMode)
 	} else {
-		runTerminal(scriptPath)
+		runTerminal(scriptPath, watchMode)
 	}
 }
 
 // runWeb starts the WebSocket server mode — renders to browser instead of terminal.
-func runWeb(addr string, scriptPath string) {
+func runWeb(addr string, scriptPath string, watch bool) {
 	const defaultW, defaultH = 80, 24
 
 	// 1. Create Lua state.
@@ -95,6 +98,7 @@ func runWeb(addr string, scriptPath string) {
 	if err := app.Run(v2.RunConfig{
 		ScriptPath: scriptPath,
 		Events:     appEvents,
+		Watch:      watch,
 	}); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
@@ -102,7 +106,7 @@ func runWeb(addr string, scriptPath string) {
 }
 
 // runTerminal runs in standard TUI terminal mode (existing behavior).
-func runTerminal(scriptPath string) {
+func runTerminal(scriptPath string, watch bool) {
 	// 1. Create terminal.
 	term, err := terminal.New()
 	if err != nil {
@@ -174,6 +178,7 @@ func runTerminal(scriptPath string) {
 	if err := app.Run(v2.RunConfig{
 		ScriptPath: scriptPath,
 		Events:     appEvents,
+		Watch:      watch,
 	}); err != nil {
 		// Terminal is restored by deferred RestoreMode before os.Exit.
 		term.RestoreMode()
