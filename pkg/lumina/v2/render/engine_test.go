@@ -451,6 +451,79 @@ func TestEngine_Reconcile_ChildAddRemove(t *testing.T) {
 	}
 }
 
+func TestEngine_ComponentCleanup_RemovedFromMap(t *testing.T) {
+	// Bug #3: Child components should be removed from e.components when
+	// the parent stops rendering them.
+	e, L := newTestEngine(t)
+
+	err := L.DoString(`
+		Cell = lumina.defineComponent("Cell", function(props)
+			return lumina.createElement("text", {}, "cell")
+		end)
+
+		show_cells = true
+		lumina.createComponent({
+			id = "root",
+			name = "Root",
+			render = function(props)
+				if show_cells then
+					return lumina.createElement("hbox", {id = "row"},
+						lumina.createElement(Cell, {key = "a", id = "a"}),
+						lumina.createElement(Cell, {key = "b", id = "b"})
+					)
+				else
+					return lumina.createElement("hbox", {id = "row"})
+				end
+			end,
+		})
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	e.RenderAll()
+
+	// Should have root + 2 child components = 3 total
+	allComps := e.AllComponents()
+	if len(allComps) != 3 {
+		t.Fatalf("initial: expected 3 components, got %d", len(allComps))
+	}
+
+	// Verify child components exist
+	if e.GetComponent("root:a") == nil {
+		t.Fatal("child 'root:a' not found")
+	}
+	if e.GetComponent("root:b") == nil {
+		t.Fatal("child 'root:b' not found")
+	}
+
+	// Toggle off — remove all child components
+	err = L.DoString(`show_cells = false`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.GetComponent("root").Dirty = true
+	e.RenderDirty()
+
+	// Should have only root component = 1 total
+	allComps = e.AllComponents()
+	if len(allComps) != 1 {
+		t.Errorf("after removal: expected 1 component, got %d", len(allComps))
+		for id := range allComps {
+			t.Logf("  remaining: %s", id)
+		}
+	}
+
+	// Child components should be gone
+	if e.GetComponent("root:a") != nil {
+		t.Error("child 'root:a' should have been removed")
+	}
+	if e.GetComponent("root:b") != nil {
+		t.Error("child 'root:b' should have been removed")
+	}
+}
+
+
 func TestEngine_TopLevelStyleFields(t *testing.T) {
 	e, L := newTestEngine(t)
 
