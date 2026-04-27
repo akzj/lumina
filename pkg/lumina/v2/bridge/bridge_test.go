@@ -1,14 +1,17 @@
 package bridge
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/akzj/go-lua/pkg/lua"
+	"github.com/akzj/lumina/pkg/lumina/v2/animation"
 	"github.com/akzj/lumina/pkg/lumina/v2/buffer"
 	"github.com/akzj/lumina/pkg/lumina/v2/component"
 	"github.com/akzj/lumina/pkg/lumina/v2/event"
 	"github.com/akzj/lumina/pkg/lumina/v2/layout"
 	"github.com/akzj/lumina/pkg/lumina/v2/paint"
+	"github.com/akzj/lumina/pkg/lumina/v2/router"
 )
 
 // newTestBridge creates a Bridge with a fresh Lua state for testing.
@@ -433,13 +436,22 @@ func TestBridge_RegisterHooks(t *testing.T) {
 
 	b.RegisterHooks()
 
-	// Check that lumina.useState exists.
+	// Check that all lumina hooks exist.
 	err := L.DoString(`
 		assert(type(lumina) == "table", "lumina should be a table")
 		assert(type(lumina.useState) == "function", "useState should be a function")
 		assert(type(lumina.useEffect) == "function", "useEffect should be a function")
 		assert(type(lumina.useMemo) == "function", "useMemo should be a function")
 		assert(type(lumina.createElement) == "function", "createElement should be a function")
+		assert(type(lumina.useCallback) == "function", "useCallback should be a function")
+		assert(type(lumina.useRef) == "function", "useRef should be a function")
+		assert(type(lumina.useReducer) == "function", "useReducer should be a function")
+		assert(type(lumina.useId) == "function", "useId should be a function")
+		assert(type(lumina.useLayoutEffect) == "function", "useLayoutEffect should be a function")
+		assert(type(lumina.useAnimation) == "function", "useAnimation should be a function")
+		assert(type(lumina.navigate) == "function", "navigate should be a function")
+		assert(type(lumina.back) == "function", "back should be a function")
+		assert(type(lumina.useRoute) == "function", "useRoute should be a function")
 	`)
 	if err != nil {
 		t.Fatal(err)
@@ -904,5 +916,635 @@ func TestMapPropToEvent(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("mapPropToEvent(%q) = %q, want %q", tt.prop, got, tt.want)
 		}
+	}
+}
+
+// --- New Hook Tests ---
+
+// newHookTestBridge creates a bridge with component + HookContext ready.
+func newHookTestBridge(t *testing.T) (*Bridge, *component.Component) {
+	t.Helper()
+	L := lua.NewState()
+	t.Cleanup(func() { L.Close() })
+	b := NewBridge(L)
+	comp := newHookTestComponent("hook-test-comp")
+	b.SetCurrentComponent(comp)
+	b.RegisterHooks()
+	// Initialize HookContext via BeginComponentRender.
+	b.BeginComponentRender(comp)
+	return b, comp
+}
+
+func TestBridge_UseCallback(t *testing.T) {
+	b, comp := newHookTestBridge(t)
+	L := b.L
+
+	// First call: cache a callback.
+	err := L.DoString(`
+		compute_count = 0
+		cb = lumina.useCallback(function()
+			compute_count = compute_count + 1
+		end, {1})
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// cb should be a function.
+	L.GetGlobal("cb")
+	if !L.IsFunction(-1) {
+		t.Error("useCallback should return a function")
+	}
+	L.Pop(1)
+
+	// Call the callback.
+	err = L.DoString(`cb()`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	L.GetGlobal("compute_count")
+	count := L.ToAny(-1)
+	L.Pop(1)
+	if count != int64(1) {
+		t.Errorf("compute_count = %v, want 1", count)
+	}
+
+	// End + begin new render with same deps — should return cached.
+	b.EndComponentRender()
+	b.BeginComponentRender(comp)
+
+	err = L.DoString(`
+		cb2 = lumina.useCallback(function()
+			compute_count = compute_count + 100
+		end, {1})
+		cb2()
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	L.GetGlobal("compute_count")
+	count = L.ToAny(-1)
+	L.Pop(1)
+	// Same deps → cached function → increment by 1, not 100.
+	if count != int64(2) {
+		t.Errorf("compute_count = %v, want 2 (cached function)", count)
+	}
+}
+
+func TestBridge_UseCallback_Caching(t *testing.T) {
+	b, comp := newHookTestBridge(t)
+	L := b.L
+
+	// First render: cache a callback.
+	err := L.DoString(`
+		call_count = 0
+		cb1 = lumina.useCallback(function()
+			call_count = call_count + 1
+		end, {1})
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	b.EndComponentRender()
+
+	// Second render, same deps: should return same cached function.
+	b.BeginComponentRender(comp)
+	err = L.DoString(`
+		cb2 = lumina.useCallback(function()
+			call_count = call_count + 100
+		end, {1})
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Call cb2 — if cached, it should increment by 1 (old fn), not 100.
+	err = L.DoString(`cb2()`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	L.GetGlobal("call_count")
+	count := L.ToAny(-1)
+	L.Pop(1)
+	if count != int64(1) {
+		t.Errorf("call_count = %v, want 1 (cached function should be used)", count)
+	}
+
+	b.EndComponentRender()
+
+	// Third render, different deps: should use new function.
+	b.BeginComponentRender(comp)
+	err = L.DoString(`
+		cb3 = lumina.useCallback(function()
+			call_count = call_count + 100
+		end, {2})
+		cb3()
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	L.GetGlobal("call_count")
+	count = L.ToAny(-1)
+	L.Pop(1)
+	if count != int64(101) {
+		t.Errorf("call_count = %v, want 101 (new function after deps change)", count)
+	}
+}
+
+func TestBridge_UseRef(t *testing.T) {
+	b, comp := newHookTestBridge(t)
+	L := b.L
+
+	err := L.DoString(`
+		ref = lumina.useRef(42)
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Check that ref.current == 42.
+	L.GetGlobal("ref")
+	if !L.IsTable(-1) {
+		t.Fatal("useRef should return a table")
+	}
+	L.GetField(-1, "current")
+	val := L.ToAny(-1)
+	L.Pop(2)
+	if val != int64(42) {
+		t.Errorf("ref.current = %v, want 42", val)
+	}
+
+	b.EndComponentRender()
+
+	// Second render: ref should persist.
+	b.BeginComponentRender(comp)
+	err = L.DoString(`
+		ref2 = lumina.useRef(99)
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Should still be 42 (initial value persists).
+	L.GetGlobal("ref2")
+	L.GetField(-1, "current")
+	val = L.ToAny(-1)
+	L.Pop(2)
+	if val != int64(42) {
+		t.Errorf("ref2.current = %v, want 42 (should persist)", val)
+	}
+}
+
+func TestBridge_UseReducer(t *testing.T) {
+	b, _ := newHookTestBridge(t)
+	L := b.L
+
+	err := L.DoString(`
+		state, dispatch = lumina.useReducer(function(state, action)
+			if action == "increment" then
+				return state + 1
+			elseif action == "decrement" then
+				return state - 1
+			end
+			return state
+		end, 0)
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Check initial state.
+	L.GetGlobal("state")
+	state := L.ToAny(-1)
+	L.Pop(1)
+	if state != int64(0) {
+		t.Errorf("initial state = %v, want 0", state)
+	}
+
+	// Dispatch increment.
+	err = L.DoString(`dispatch("increment")`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Dispatch again.
+	err = L.DoString(`dispatch("increment")`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Note: useReducer state is in the HookContext, not visible until next render.
+	// After dispatching, the component should be dirty.
+}
+
+func TestBridge_UseId(t *testing.T) {
+	b, comp := newHookTestBridge(t)
+	L := b.L
+
+	err := L.DoString(`id1 = lumina.useId()`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	L.GetGlobal("id1")
+	id1, _ := L.ToString(-1)
+	L.Pop(1)
+
+	if id1 == "" {
+		t.Error("useId should return a non-empty string")
+	}
+	if !strings.Contains(id1, "hook-test-comp") {
+		t.Errorf("useId = %q, should contain component ID", id1)
+	}
+
+	b.EndComponentRender()
+
+	// Second render: same position should return same ID.
+	b.BeginComponentRender(comp)
+	err = L.DoString(`id2 = lumina.useId()`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	L.GetGlobal("id2")
+	id2, _ := L.ToString(-1)
+	L.Pop(1)
+
+	if id1 != id2 {
+		t.Errorf("useId not stable: first=%q, second=%q", id1, id2)
+	}
+}
+
+func TestBridge_UseLayoutEffect(t *testing.T) {
+	b, comp := newHookTestBridge(t)
+	L := b.L
+
+	err := L.DoString(`
+		layout_effect_ran = 0
+		layout_cleanup_ran = 0
+		lumina.useLayoutEffect(function()
+			layout_effect_ran = layout_effect_ran + 1
+			return function()
+				layout_cleanup_ran = layout_cleanup_ran + 1
+			end
+		end, {1})
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	L.GetGlobal("layout_effect_ran")
+	ran := L.ToAny(-1)
+	L.Pop(1)
+	if ran != int64(1) {
+		t.Errorf("layout_effect_ran = %v, want 1", ran)
+	}
+
+	b.EndComponentRender()
+
+	// Same deps — should NOT run.
+	b.BeginComponentRender(comp)
+	err = L.DoString(`
+		lumina.useLayoutEffect(function()
+			layout_effect_ran = layout_effect_ran + 1
+			return function()
+				layout_cleanup_ran = layout_cleanup_ran + 1
+			end
+		end, {1})
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	L.GetGlobal("layout_effect_ran")
+	ran = L.ToAny(-1)
+	L.Pop(1)
+	if ran != int64(1) {
+		t.Errorf("layout_effect_ran = %v after same deps, want 1", ran)
+	}
+
+	b.EndComponentRender()
+
+	// Changed deps — should run and call cleanup.
+	b.BeginComponentRender(comp)
+	err = L.DoString(`
+		lumina.useLayoutEffect(function()
+			layout_effect_ran = layout_effect_ran + 1
+			return function()
+				layout_cleanup_ran = layout_cleanup_ran + 1
+			end
+		end, {2})
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	L.GetGlobal("layout_effect_ran")
+	ran = L.ToAny(-1)
+	L.Pop(1)
+	if ran != int64(2) {
+		t.Errorf("layout_effect_ran = %v after changed deps, want 2", ran)
+	}
+
+	L.GetGlobal("layout_cleanup_ran")
+	cleanup := L.ToAny(-1)
+	L.Pop(1)
+	if cleanup != int64(1) {
+		t.Errorf("layout_cleanup_ran = %v, want 1", cleanup)
+	}
+}
+
+// --- Animation Hook Tests ---
+
+func TestBridge_UseAnimation(t *testing.T) {
+	b, _ := newHookTestBridge(t)
+	L := b.L
+
+	mgr := animation.NewManager()
+	b.SetAnimationManager(mgr)
+	// Re-register hooks so animation hook picks up the manager.
+	b.RegisterHooks()
+
+	err := L.DoString(`
+		anim = lumina.useAnimation({
+			id = "fade",
+			from = 0,
+			to = 1,
+			duration = 500,
+			easing = "linear"
+		})
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Check returned table has value, start, stop.
+	L.GetGlobal("anim")
+	if !L.IsTable(-1) {
+		t.Fatal("useAnimation should return a table")
+	}
+
+	L.GetField(-1, "value")
+	val := L.ToAny(-1)
+	L.Pop(1)
+	// Initial value should be 0 (from).
+	if v, ok := val.(float64); !ok || v != 0 {
+		t.Errorf("anim.value = %v, want 0.0", val)
+	}
+
+	L.GetField(-1, "start")
+	if !L.IsFunction(-1) {
+		t.Error("anim.start should be a function")
+	}
+	L.Pop(1)
+
+	L.GetField(-1, "stop")
+	if !L.IsFunction(-1) {
+		t.Error("anim.stop should be a function")
+	}
+	L.Pop(1)
+	L.Pop(1) // pop anim table
+
+	// Call start.
+	err = L.DoString(`anim.start()`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Animation should now be running.
+	if mgr.Count() != 1 {
+		t.Errorf("animation count = %d, want 1", mgr.Count())
+	}
+
+	// Call stop.
+	err = L.DoString(`anim.stop()`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if mgr.Count() != 0 {
+		t.Errorf("animation count after stop = %d, want 0", mgr.Count())
+	}
+}
+
+func TestBridge_UseAnimation_NoManager(t *testing.T) {
+	b := newTestBridge(t)
+	L := b.L
+
+	comp := newHookTestComponent("anim-test")
+	b.SetCurrentComponent(comp)
+	b.RegisterHooks()
+
+	// Should error when no animation manager is set.
+	err := L.DoString(`
+		local ok, err = pcall(function()
+			lumina.useAnimation({ id = "test", from = 0, to = 1, duration = 100 })
+		end)
+		anim_error = not ok
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	L.GetGlobal("anim_error")
+	hasError := L.ToBoolean(-1)
+	L.Pop(1)
+	if !hasError {
+		t.Error("useAnimation without manager should error")
+	}
+}
+
+// --- Router Hook Tests ---
+
+func TestBridge_Navigate(t *testing.T) {
+	b, _ := newHookTestBridge(t)
+	L := b.L
+
+	r := router.New()
+	r.AddRoute("/users/:id")
+	b.SetRouter(r)
+	b.RegisterHooks()
+
+	err := L.DoString(`lumina.navigate("/users/42")`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if r.CurrentPath() != "/users/42" {
+		t.Errorf("CurrentPath = %q, want %q", r.CurrentPath(), "/users/42")
+	}
+
+	params := r.Params()
+	if params["id"] != "42" {
+		t.Errorf("Params[id] = %q, want %q", params["id"], "42")
+	}
+}
+
+func TestBridge_Back(t *testing.T) {
+	b, _ := newHookTestBridge(t)
+	L := b.L
+
+	r := router.New()
+	r.AddRoute("/")
+	r.AddRoute("/about")
+	b.SetRouter(r)
+	b.RegisterHooks()
+
+	// Navigate to /about, then back.
+	err := L.DoString(`
+		lumina.navigate("/about")
+		result = lumina.back()
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	L.GetGlobal("result")
+	result := L.ToBoolean(-1)
+	L.Pop(1)
+	if !result {
+		t.Error("back() should return true when history exists")
+	}
+
+	if r.CurrentPath() != "/" {
+		t.Errorf("CurrentPath after back = %q, want %q", r.CurrentPath(), "/")
+	}
+
+	// Back again with empty history.
+	err = L.DoString(`result2 = lumina.back()`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	L.GetGlobal("result2")
+	result2 := L.ToBoolean(-1)
+	L.Pop(1)
+	if result2 {
+		t.Error("back() should return false when history is empty")
+	}
+}
+
+func TestBridge_UseRoute(t *testing.T) {
+	b, _ := newHookTestBridge(t)
+	L := b.L
+
+	r := router.New()
+	r.AddRoute("/users/:id")
+	b.SetRouter(r)
+	b.RegisterHooks()
+
+	r.Navigate("/users/99")
+
+	err := L.DoString(`
+		route = lumina.useRoute()
+		route_path = route.path
+		route_id = route.params.id
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	L.GetGlobal("route_path")
+	path, _ := L.ToString(-1)
+	L.Pop(1)
+	if path != "/users/99" {
+		t.Errorf("route.path = %q, want %q", path, "/users/99")
+	}
+
+	L.GetGlobal("route_id")
+	id, _ := L.ToString(-1)
+	L.Pop(1)
+	if id != "99" {
+		t.Errorf("route.params.id = %q, want %q", id, "99")
+	}
+}
+
+func TestBridge_UseRoute_NoRouter(t *testing.T) {
+	b, _ := newHookTestBridge(t)
+	L := b.L
+
+	// No router set — should return default.
+	err := L.DoString(`
+		route = lumina.useRoute()
+		route_path = route.path
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	L.GetGlobal("route_path")
+	path, _ := L.ToString(-1)
+	L.Pop(1)
+	if path != "/" {
+		t.Errorf("default route.path = %q, want %q", path, "/")
+	}
+}
+
+func TestBridge_Navigate_NoRouter(t *testing.T) {
+	b, _ := newHookTestBridge(t)
+	L := b.L
+
+	// Navigate without router should error.
+	err := L.DoString(`
+		local ok, _ = pcall(function()
+			lumina.navigate("/test")
+		end)
+		nav_error = not ok
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	L.GetGlobal("nav_error")
+	hasError := L.ToBoolean(-1)
+	L.Pop(1)
+	if !hasError {
+		t.Error("navigate without router should error")
+	}
+}
+
+// --- HookContext Lifecycle Tests ---
+
+func TestBridge_BeginEndComponentRender(t *testing.T) {
+	b := newTestBridge(t)
+	comp := newHookTestComponent("lifecycle-comp")
+
+	b.BeginComponentRender(comp)
+
+	if b.CurrentComponent() != comp {
+		t.Error("CurrentComponent should be set after BeginComponentRender")
+	}
+
+	err := b.EndComponentRender()
+	if err != nil {
+		t.Errorf("EndComponentRender error: %v", err)
+	}
+
+	if b.CurrentComponent() != nil {
+		t.Error("CurrentComponent should be nil after EndComponentRender")
+	}
+}
+
+func TestBridge_DestroyComponent(t *testing.T) {
+	b := newTestBridge(t)
+	comp := newHookTestComponent("destroy-comp")
+
+	// Create a hook context.
+	b.BeginComponentRender(comp)
+	_ = b.GetHookContext(comp)
+	b.EndComponentRender()
+
+	// Verify context exists.
+	if _, ok := b.hookContexts["destroy-comp"]; !ok {
+		t.Error("hookContext should exist before destroy")
+	}
+
+	b.DestroyComponent("destroy-comp")
+
+	if _, ok := b.hookContexts["destroy-comp"]; ok {
+		t.Error("hookContext should be removed after DestroyComponent")
 	}
 }
