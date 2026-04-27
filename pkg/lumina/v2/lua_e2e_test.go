@@ -654,3 +654,246 @@ func TestLuaE2E_TextForegroundColor(t *testing.T) {
 		t.Error("expected bold=true at (0,0)")
 	}
 }
+
+// --- Test: TodoMVC script loads and renders ---
+
+func TestLuaE2E_TodoMVC_Render(t *testing.T) {
+	app, ta, _ := newLuaApp(t, 80, 24)
+
+	err := app.RunScript("../../../examples/v2/todo_mvc.lua")
+	if err != nil {
+		t.Fatalf("RunScript failed: %v", err)
+	}
+
+	app.RenderAll()
+
+	if ta.LastScreen == nil {
+		t.Fatal("LastScreen is nil")
+	}
+
+	// Verify title is on screen.
+	if !screenHasString(ta, "Todo MVC") {
+		t.Error("expected 'Todo MVC' title on screen")
+	}
+
+	// Verify first todo is visible.
+	if !screenHasString(ta, "Learn Lumina v2") {
+		t.Error("expected 'Learn Lumina v2' on screen")
+	}
+
+	// Verify footer help text.
+	if !screenHasString(ta, "[j/k] Navigate") {
+		t.Error("expected '[j/k] Navigate' help text on screen")
+	}
+
+	// Verify the first todo is selected (has "> " prefix).
+	if !screenHasString(ta, "> [x] Learn Lumina v2") {
+		t.Error("expected '> [x] Learn Lumina v2' (selected first item)")
+	}
+}
+
+// --- Test: TodoMVC keyboard navigation (j/k) ---
+
+func TestLuaE2E_TodoMVC_Navigation(t *testing.T) {
+	app, ta, _ := newLuaApp(t, 80, 24)
+
+	err := app.RunScript("../../../examples/v2/todo_mvc.lua")
+	if err != nil {
+		t.Fatalf("RunScript failed: %v", err)
+	}
+
+	app.RenderAll()
+
+	// Initially, first item is selected (has "> " prefix).
+	if !screenHasString(ta, "> [x] Learn Lumina v2") {
+		t.Fatal("expected first item selected initially")
+	}
+
+	// Press "j" to move down.
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "j"})
+	app.RenderDirty()
+
+	// Now second item should be selected.
+	if !screenHasString(ta, "> [ ] Build a TUI app") {
+		t.Error("expected second item selected after 'j'")
+	}
+
+	// Press "k" to move back up.
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "k"})
+	app.RenderDirty()
+
+	// Back to first item.
+	if !screenHasString(ta, "> [x] Learn Lumina v2") {
+		t.Error("expected first item selected after 'k'")
+	}
+}
+
+// --- Test: TodoMVC toggle done ---
+
+func TestLuaE2E_TodoMVC_Toggle(t *testing.T) {
+	app, ta, _ := newLuaApp(t, 80, 24)
+
+	err := app.RunScript("../../../examples/v2/todo_mvc.lua")
+	if err != nil {
+		t.Fatalf("RunScript failed: %v", err)
+	}
+
+	app.RenderAll()
+
+	// First item starts as done: "[x]"
+	if !screenHasString(ta, "> [x] Learn Lumina v2") {
+		t.Fatal("expected first item done initially")
+	}
+
+	// Press Space to toggle.
+	app.HandleEvent(&event.Event{Type: "keydown", Key: " "})
+	app.RenderDirty()
+
+	// Should now be undone: "[ ]"
+	if !screenHasString(ta, "> [ ] Learn Lumina v2") {
+		t.Error("expected first item toggled to undone after Space")
+	}
+
+	// Press Space again to toggle back.
+	app.HandleEvent(&event.Event{Type: "keydown", Key: " "})
+	app.RenderDirty()
+
+	if !screenHasString(ta, "> [x] Learn Lumina v2") {
+		t.Error("expected first item toggled back to done after 2nd Space")
+	}
+}
+
+// --- Test: TodoMVC filter cycling ---
+
+func TestLuaE2E_TodoMVC_Filter(t *testing.T) {
+	app, ta, _ := newLuaApp(t, 80, 24)
+
+	err := app.RunScript("../../../examples/v2/todo_mvc.lua")
+	if err != nil {
+		t.Fatalf("RunScript failed: %v", err)
+	}
+
+	app.RenderAll()
+
+	// Initially "all" filter is active — all 5 todos visible.
+	if !screenHasString(ta, "Deploy to production") {
+		t.Fatal("expected all todos visible initially")
+	}
+
+	// Press "f" to switch to "active" filter.
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "f"})
+	app.RenderDirty()
+
+	// "Learn Lumina v2" is done, so it should NOT be visible in active filter.
+	if screenHasString(ta, "Learn Lumina v2") {
+		t.Error("done todo should be hidden in 'active' filter")
+	}
+	// Active todos should still be visible.
+	if !screenHasString(ta, "Build a TUI app") {
+		t.Error("expected active todo visible in 'active' filter")
+	}
+
+	// Press "f" again → "completed" filter.
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "f"})
+	app.RenderDirty()
+
+	// Only completed todo should be visible.
+	if !screenHasString(ta, "Learn Lumina v2") {
+		t.Error("expected completed todo visible in 'completed' filter")
+	}
+	if screenHasString(ta, "Build a TUI app") {
+		t.Error("active todo should be hidden in 'completed' filter")
+	}
+}
+
+// --- Test: TodoMVC add todo ---
+
+func TestLuaE2E_TodoMVC_AddTodo(t *testing.T) {
+	app, ta, _ := newLuaApp(t, 80, 24)
+
+	err := app.RunScript("../../../examples/v2/todo_mvc.lua")
+	if err != nil {
+		t.Fatalf("RunScript failed: %v", err)
+	}
+
+	app.RenderAll()
+
+	// Press "a" to enter input mode.
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "a"})
+	app.RenderDirty()
+
+	// Type "New task".
+	for _, ch := range "New task" {
+		app.HandleEvent(&event.Event{Type: "keydown", Key: string(ch)})
+		app.RenderDirty()
+	}
+
+	// Should see input text on screen.
+	if !screenHasString(ta, "New task") {
+		t.Error("expected 'New task' visible in input bar")
+	}
+
+	// Press Enter to submit.
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "Enter"})
+	app.RenderDirty()
+
+	// New todo should appear in the list.
+	if !screenHasString(ta, "New task") {
+		t.Error("expected 'New task' in todo list after Enter")
+	}
+
+	// Should show 6 items now in header.
+	if !screenHasString(ta, "6 items") {
+		t.Error("expected '6 items' in header after adding todo")
+	}
+}
+
+// --- Test: TodoMVC delete todo ---
+
+func TestLuaE2E_TodoMVC_Delete(t *testing.T) {
+	app, ta, _ := newLuaApp(t, 80, 24)
+
+	err := app.RunScript("../../../examples/v2/todo_mvc.lua")
+	if err != nil {
+		t.Fatalf("RunScript failed: %v", err)
+	}
+
+	app.RenderAll()
+
+	// Verify first item exists.
+	if !screenHasString(ta, "Learn Lumina v2") {
+		t.Fatal("expected 'Learn Lumina v2' initially")
+	}
+
+	// Press "d" to delete the selected (first) item.
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "d"})
+	app.RenderDirty()
+
+	// First item should be gone.
+	if screenHasString(ta, "Learn Lumina v2") {
+		t.Error("expected 'Learn Lumina v2' removed after delete")
+	}
+
+	// Should show 4 items now.
+	if !screenHasString(ta, "4 items") {
+		t.Error("expected '4 items' in header after delete")
+	}
+}
+
+// --- Test: TodoMVC auto-focus (keyboard works without Tab) ---
+
+func TestLuaE2E_TodoMVC_AutoFocus(t *testing.T) {
+	app, _, _ := newLuaApp(t, 80, 24)
+
+	err := app.RunScript("../../../examples/v2/todo_mvc.lua")
+	if err != nil {
+		t.Fatalf("RunScript failed: %v", err)
+	}
+
+	app.RenderAll()
+
+	// After RenderAll, the focusable VNode "todo-root" should be auto-focused.
+	if id := app.FocusedID(); id != "todo-root" {
+		t.Errorf("expected auto-focus on 'todo-root', got %q", id)
+	}
+}

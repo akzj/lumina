@@ -108,6 +108,19 @@ func (b *Bridge) LuaTableToVNode(idx int) *layout.VNode {
 	}
 	L.Pop(1) // pop children
 
+	// Input-specific: copy "value" prop to Content, auto-set focusable.
+	if nodeType == "input" || nodeType == "textarea" {
+		if val, ok := vn.Props["value"]; ok {
+			if s, ok := val.(string); ok {
+				vn.Content = s
+			}
+		}
+		// Auto-set focusable so the input can receive keyboard events.
+		if _, ok := vn.Props["focusable"]; !ok {
+			vn.Props["focusable"] = true
+		}
+	}
+
 	return vn
 }
 
