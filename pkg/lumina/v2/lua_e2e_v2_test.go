@@ -1412,9 +1412,7 @@ func TestV2E2E_Dashboard_Scroll(t *testing.T) {
 }
 
 func TestV2E2E_Dashboard_MouseScroll(t *testing.T) {
-	// V2 engine gap: scroll containers not implemented (scrollY prop not read).
-	// Also: V2 callLuaRefScroll passes {delta=N} but Lua expects {key="down"/"up"}.
-	t.Skip("V2 engine: scroll containers not implemented; scroll event format mismatch")
+	// P2 fix: scroll event now includes key field + scroll container support.
 
 	app, ta, _ := newV2App(t, 80, 24)
 
