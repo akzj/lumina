@@ -197,10 +197,16 @@ func (c *Component) FindChild(typeName, key string) *Component {
 	return c.ChildMap[mapKey]
 }
 
-// AddChild adds a child component.
-func (c *Component) AddChild(child *Component) {
+// AddChild adds a child component with an explicit lookup key for the ChildMap.
+// The lookupKey should match what FindChild will use (typically node.ID or node.Key).
+func (c *Component) AddChild(child *Component, lookupKey ...string) {
 	child.Parent = c
 	c.Children = append(c.Children, child)
-	mapKey := child.Type + ":" + child.ID
+	var mapKey string
+	if len(lookupKey) > 0 && lookupKey[0] != "" {
+		mapKey = child.Type + ":" + lookupKey[0]
+	} else {
+		mapKey = child.Type
+	}
 	c.ChildMap[mapKey] = child
 }
