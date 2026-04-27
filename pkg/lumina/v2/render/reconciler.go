@@ -152,6 +152,7 @@ func reconcileChildren(parent *Node, descs []Descriptor) bool {
 		if !usedOld[i] {
 			child.Parent = nil
 			changed = true
+			parent.PaintDirty = true // Force parent repaint to clear ghost pixels
 			// TODO: cleanup Lua refs for removed nodes
 		}
 	}
