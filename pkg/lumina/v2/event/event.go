@@ -72,6 +72,11 @@ func (d *Dispatcher) SetHitTester(ht HitTester) {
 	d.hitTester = ht
 }
 
+// SetEventObserver sets an event observer for performance tracking.
+func (d *Dispatcher) SetEventObserver(obs EventObserver) {
+	d.eventObserver = obs
+}
+
 // RegisterHandlers registers event handlers for a VNode.
 func (d *Dispatcher) RegisterHandlers(vnodeID string, handlers HandlerMap) {
 	d.handlers[vnodeID] = handlers
@@ -137,6 +142,11 @@ func (d *Dispatcher) dispatchMouse(e *Event) {
 	}
 	e.Target = targetID
 
+	// Notify observer.
+	if d.eventObserver != nil {
+		d.eventObserver.OnEvent(e.Type, targetID != "")
+	}
+
 	// Hover tracking on mousemove.
 	if e.Type == "mousemove" {
 		if targetID != d.hoveredID {
@@ -183,6 +193,11 @@ func (d *Dispatcher) dispatchMouse(e *Event) {
 }
 
 func (d *Dispatcher) dispatchKey(e *Event) {
+	// Notify observer.
+	if d.eventObserver != nil {
+		d.eventObserver.OnEvent(e.Type, d.focusedID != "")
+	}
+
 	if e.Type == "keydown" {
 		if e.Key == "Tab" {
 			d.FocusNext()

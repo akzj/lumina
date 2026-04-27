@@ -49,12 +49,19 @@ type focusEntry struct {
 	tabIndex int
 }
 
+// EventObserver is notified when events are dispatched.
+// Used by the perf tracker without creating a dependency from event → perf.
+type EventObserver interface {
+	OnEvent(eventType string, dispatched bool)
+}
+
 // Dispatcher dispatches events to handlers.
 type Dispatcher struct {
-	hitTester  HitTester
-	handlers   map[string]HandlerMap // vnodeID → HandlerMap
-	hoveredID  string
-	focusedID  string
-	focusables []focusEntry          // sorted by tabIndex
-	parentMap  map[string]string     // vnodeID → parentVNodeID (for bubbling)
+	hitTester     HitTester
+	handlers      map[string]HandlerMap // vnodeID → HandlerMap
+	hoveredID     string
+	focusedID     string
+	focusables    []focusEntry          // sorted by tabIndex
+	parentMap     map[string]string     // vnodeID → parentVNodeID (for bubbling)
+	eventObserver EventObserver
 }
