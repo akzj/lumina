@@ -1053,15 +1053,14 @@ func TestPaint_Textarea_WithBackground(t *testing.T) {
 }
 
 func TestPaint_Textarea_CursorAtEndOfLine(t *testing.T) {
-	// Cursor at end of first line (position 5, just before '\n').
-	// Text: "Hello\nWorld" → H=0,e=1,l=2,l=3,o=4,\n=5
-	// cursorPos=5 → line 1, col 0 (the '\n' at pos 5 means line 1 starts)
-	// Actually: offset 5 is the '\n' itself. After splitting:
-	// line 0 = "Hello" (5 chars), offset 5 = line 1, col 0
+	// Cursor at end of first line (position 5 = after "Hello", before '\n').
+	// Text: "Hello\nWorld" → H=0,e=1,l=2,l=3,o=4 | \n=5 | W=6,...
+	// cursorPos=5 → end of line 0, col 5 (past the last char on line 0).
+	// The cursor block should appear at column 5 on row 0.
 	node := layout.NewVNode("textarea")
 	node.Content = "Hello\nWorld"
 	node.Props["focused"] = true
-	node.Props["cursorPos"] = 5 // right after "Hello", at start of line 1
+	node.Props["cursorPos"] = 5 // end of "Hello"
 	node.Style.Foreground = "#CDD6F4"
 	node.Style.Background = "#313244"
 	node.X, node.Y, node.W, node.H = 0, 0, 20, 3
@@ -1070,14 +1069,34 @@ func TestPaint_Textarea_CursorAtEndOfLine(t *testing.T) {
 	p := NewPainter()
 	p.Paint(buf, node, 0, 0)
 
-	// cursorPos 5 means we've consumed H(0),e(1),l(2),l(3),o(4),\n(5)
-	// That's line=1, col=0 → cursor on 'W'
-	cursorCell := buf.Get(0, 1)
-	if cursorCell.Char != 'W' {
-		t.Errorf("cursor cell char=%q, want 'W'", cursorCell.Char)
+	// cursorPos 5: offsetToLineCol counts H,e,l,l,o → line=0, col=5
+	// col=5 >= len("Hello")=5 → cursor at end of line 0
+	cursorCell := buf.Get(5, 0)
+	if cursorCell.Char != ' ' {
+		t.Errorf("cursor cell char=%q, want ' '", cursorCell.Char)
 	}
 	if cursorCell.Background != "#585B70" {
 		t.Errorf("cursor cell bg=%q, want #585B70", cursorCell.Background)
+	}
+
+	// Also verify cursorPos=6 puts cursor on 'W' (start of line 1)
+	node2 := layout.NewVNode("textarea")
+	node2.Content = "Hello\nWorld"
+	node2.Props["focused"] = true
+	node2.Props["cursorPos"] = 6 // after '\n', on 'W'
+	node2.Style.Foreground = "#CDD6F4"
+	node2.Style.Background = "#313244"
+	node2.X, node2.Y, node2.W, node2.H = 0, 0, 20, 3
+
+	buf2 := buffer.New(20, 3)
+	p.Paint(buf2, node2, 0, 0)
+
+	cursorCell2 := buf2.Get(0, 1)
+	if cursorCell2.Char != 'W' {
+		t.Errorf("cursor on 'W' char=%q, want 'W'", cursorCell2.Char)
+	}
+	if cursorCell2.Background != "#585B70" {
+		t.Errorf("cursor on 'W' bg=%q, want #585B70", cursorCell2.Background)
 	}
 }
 
