@@ -1,6 +1,8 @@
 package lumina
 
 import (
+	"fmt"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -132,6 +134,7 @@ func BuildVNodeTree(root *VNode) *VNodeTree {
 		ByID:    make(map[string]*VNode),
 	}
 	buildVNodeTreeRecursive(tree, root, nil)
+	fmt.Fprintf(os.Stderr, "[TREE] BuildVNodeTree: %d parents, %d byID\n", len(tree.Parents), len(tree.ByID))
 	return tree
 }
 
