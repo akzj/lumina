@@ -535,3 +535,241 @@ func TestPaint_InputEmpty_NoCursor(t *testing.T) {
 		}
 	}
 }
+
+// --- Scroll container paint tests ---
+
+func TestPaint_ScrollContainer_Clips(t *testing.T) {
+	// A scroll container of height 3 with 5 text children (each 1 row).
+	// Only the first 3 should be visible (scrollY=0).
+	container := layout.NewVNode("vbox")
+	container.Style.Overflow = "scroll"
+	container.X, container.Y, container.W, container.H = 0, 0, 11, 3 // 10 content + 1 scrollbar
+
+	// Create 5 children, each 1 row tall, at positions 0-4.
+	for i := 0; i < 5; i++ {
+		child := layout.NewVNode("text")
+		child.Content = string(rune('A' + i)) // A, B, C, D, E
+		child.X, child.Y, child.W, child.H = 0, i, 10, 1
+		container.AddChild(child)
+	}
+
+	buf := buffer.New(11, 3)
+	p := NewPainter()
+	p.Paint(buf, container, 0, 0)
+
+	// Visible: A(row0), B(row1), C(row2)
+	assertChar(t, buf, 0, 0, 'A')
+	assertChar(t, buf, 0, 1, 'B')
+	assertChar(t, buf, 0, 2, 'C')
+}
+
+func TestPaint_ScrollContainer_Offset(t *testing.T) {
+	// Same container but scrollY=2 → shows C, D, E.
+	container := layout.NewVNode("vbox")
+	container.Style.Overflow = "scroll"
+	container.ScrollY = 2
+	container.X, container.Y, container.W, container.H = 0, 0, 11, 3
+
+	for i := 0; i < 5; i++ {
+		child := layout.NewVNode("text")
+		child.Content = string(rune('A' + i))
+		child.X, child.Y, child.W, child.H = 0, i, 10, 1
+		container.AddChild(child)
+	}
+
+	buf := buffer.New(11, 3)
+	p := NewPainter()
+	p.Paint(buf, container, 0, 0)
+
+	// Visible: C(row0), D(row1), E(row2)
+	assertChar(t, buf, 0, 0, 'C')
+	assertChar(t, buf, 0, 1, 'D')
+	assertChar(t, buf, 0, 2, 'E')
+}
+
+func TestPaint_ScrollContainer_WithBorder(t *testing.T) {
+	// Scroll container with border: 12w x 5h, border=single.
+	// Content area = 10w x 3h (minus 2 for border, minus 1 for scrollbar = 9w).
+	container := layout.NewVNode("vbox")
+	container.Style.Overflow = "scroll"
+	container.Style.Border = "single"
+	container.X, container.Y, container.W, container.H = 0, 0, 12, 5
+
+	// 6 children at absolute positions inside border.
+	for i := 0; i < 6; i++ {
+		child := layout.NewVNode("text")
+		child.Content = string(rune('A' + i))
+		child.X, child.Y, child.W, child.H = 1, 1+i, 9, 1 // inside border
+		container.AddChild(child)
+	}
+
+	buf := buffer.New(12, 5)
+	p := NewPainter()
+	p.Paint(buf, container, 0, 0)
+
+	// Border should be present.
+	assertChar(t, buf, 0, 0, '┌')
+	assertChar(t, buf, 11, 0, '┐')
+
+	// Inside border, content area starts at (1,1), visible height=3.
+	// Visible: A(row1), B(row2), C(row3)
+	assertChar(t, buf, 1, 1, 'A')
+	assertChar(t, buf, 1, 2, 'B')
+	assertChar(t, buf, 1, 3, 'C')
+}
+
+func TestPaint_Scrollbar_Position(t *testing.T) {
+	// Container: 11w x 4h, 8 children → scrollbar should appear.
+	container := layout.NewVNode("vbox")
+	container.Style.Overflow = "scroll"
+	container.X, container.Y, container.W, container.H = 0, 0, 11, 4
+
+	for i := 0; i < 8; i++ {
+		child := layout.NewVNode("text")
+		child.Content = string(rune('A' + i))
+		child.X, child.Y, child.W, child.H = 0, i, 10, 1
+		container.AddChild(child)
+	}
+
+	buf := buffer.New(11, 4)
+	p := NewPainter()
+	p.Paint(buf, container, 0, 0)
+
+	// Scrollbar is in column 10 (contentW=10, scrollbar at x=10).
+	// With scrollY=0, thumb should be at the top.
+	// Thumb height = viewH * viewH / totalH = 4*4/8 = 2
+	// Thumb at y=0.
+	scrollbarX := 10
+	thumbCell := buf.Get(scrollbarX, 0)
+	if thumbCell.Char != '█' {
+		t.Errorf("scrollbar thumb at (10,0) char=%q, want '█'", thumbCell.Char)
+	}
+	thumbCell2 := buf.Get(scrollbarX, 1)
+	if thumbCell2.Char != '█' {
+		t.Errorf("scrollbar thumb at (10,1) char=%q, want '█'", thumbCell2.Char)
+	}
+	// Track below thumb.
+	trackCell := buf.Get(scrollbarX, 2)
+	if trackCell.Char != ' ' {
+		t.Errorf("scrollbar track at (10,2) char=%q, want ' '", trackCell.Char)
+	}
+}
+
+func TestPaint_Scrollbar_ContentFits(t *testing.T) {
+	// When content fits (2 children, 4 rows), scrollbar track should still show
+	// but no thumb needed (content <= viewH).
+	container := layout.NewVNode("vbox")
+	container.Style.Overflow = "scroll"
+	container.X, container.Y, container.W, container.H = 0, 0, 11, 4
+
+	for i := 0; i < 2; i++ {
+		child := layout.NewVNode("text")
+		child.Content = string(rune('A' + i))
+		child.X, child.Y, child.W, child.H = 0, i, 10, 1
+		container.AddChild(child)
+	}
+
+	buf := buffer.New(11, 4)
+	p := NewPainter()
+	p.Paint(buf, container, 0, 0)
+
+	// Content fits → scrollbar track with no thumb (all spaces).
+	scrollbarX := 10
+	for dy := 0; dy < 4; dy++ {
+		cell := buf.Get(scrollbarX, dy)
+		if cell.Char != ' ' {
+			t.Errorf("scrollbar at (%d,%d) char=%q, want ' ' (content fits)", scrollbarX, dy, cell.Char)
+		}
+	}
+}
+
+func TestPaint_ScrollContainer_ScrollYClamped(t *testing.T) {
+	// scrollY larger than max → should be clamped, show last rows.
+	container := layout.NewVNode("vbox")
+	container.Style.Overflow = "scroll"
+	container.ScrollY = 100 // way beyond content
+	container.X, container.Y, container.W, container.H = 0, 0, 11, 3
+
+	for i := 0; i < 5; i++ {
+		child := layout.NewVNode("text")
+		child.Content = string(rune('A' + i))
+		child.X, child.Y, child.W, child.H = 0, i, 10, 1
+		container.AddChild(child)
+	}
+
+	buf := buffer.New(11, 3)
+	p := NewPainter()
+	p.Paint(buf, container, 0, 0)
+
+	// maxScroll = 5-3 = 2, so clamped to scrollY=2 → shows C, D, E.
+	assertChar(t, buf, 0, 0, 'C')
+	assertChar(t, buf, 0, 1, 'D')
+	assertChar(t, buf, 0, 2, 'E')
+}
+
+func TestPaint_ScrollContainer_WithBackground(t *testing.T) {
+	// Scroll container with background → background fills entire container.
+	container := layout.NewVNode("vbox")
+	container.Style.Overflow = "scroll"
+	container.Style.Background = "#FF0000"
+	container.X, container.Y, container.W, container.H = 0, 0, 11, 3
+
+	child := layout.NewVNode("text")
+	child.Content = "Hi"
+	child.X, child.Y, child.W, child.H = 0, 0, 10, 1
+	container.AddChild(child)
+
+	buf := buffer.New(11, 3)
+	p := NewPainter()
+	p.Paint(buf, container, 0, 0)
+
+	// Background should fill the whole container (including scrollbar area).
+	for y := 0; y < 3; y++ {
+		for x := 0; x < 10; x++ {
+			c := buf.Get(x, y)
+			if c.Background != "#FF0000" {
+				t.Errorf("cell(%d,%d) bg=%q, want #FF0000", x, y, c.Background)
+			}
+		}
+	}
+
+	// Text should be visible.
+	assertChar(t, buf, 0, 0, 'H')
+	assertChar(t, buf, 1, 0, 'i')
+}
+
+func TestPaint_ScrollContainer_Scrollbar_BottomPosition(t *testing.T) {
+	// When scrolled to bottom, thumb should be at the bottom.
+	container := layout.NewVNode("vbox")
+	container.Style.Overflow = "scroll"
+	container.ScrollY = 4 // maxScroll = 8-4 = 4
+	container.X, container.Y, container.W, container.H = 0, 0, 11, 4
+
+	for i := 0; i < 8; i++ {
+		child := layout.NewVNode("text")
+		child.Content = string(rune('A' + i))
+		child.X, child.Y, child.W, child.H = 0, i, 10, 1
+		container.AddChild(child)
+	}
+
+	buf := buffer.New(11, 4)
+	p := NewPainter()
+	p.Paint(buf, container, 0, 0)
+
+	// Thumb height = 4*4/8 = 2.
+	// scrollY=4, scrollRange=4, trackRange=4-2=2.
+	// thumbY = 4*2/4 = 2 → thumb at rows 2,3.
+	scrollbarX := 10
+	trackCell := buf.Get(scrollbarX, 0)
+	if trackCell.Char != ' ' {
+		t.Errorf("scrollbar track at (10,0) char=%q, want ' '", trackCell.Char)
+	}
+	thumbCell := buf.Get(scrollbarX, 2)
+	if thumbCell.Char != '█' {
+		t.Errorf("scrollbar thumb at (10,2) char=%q, want '█'", thumbCell.Char)
+	}
+	thumbCell2 := buf.Get(scrollbarX, 3)
+	if thumbCell2.Char != '█' {
+		t.Errorf("scrollbar thumb at (10,3) char=%q, want '█'", thumbCell2.Char)
+	}
+}
