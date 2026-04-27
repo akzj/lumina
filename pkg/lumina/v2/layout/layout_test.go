@@ -175,6 +175,70 @@ func TestLayout_Padding(t *testing.T) {
 	}
 }
 
+// --- Test: Padding / margin shorthand ---
+
+func TestLayout_PaddingShorthand(t *testing.T) {
+	s := defaultStyle()
+	s.Padding = 1
+
+	root := makeNode("vbox", s,
+		makeNode("box", withFlex(1)),
+	)
+	ComputeLayout(root, 0, 0, 20, 10)
+
+	child := root.Children[0]
+	if child.X != 1 || child.Y != 1 || child.W != 18 || child.H != 8 {
+		t.Errorf("padding shorthand child layout = (%d,%d) %dx%d, want (1,1) 18x8",
+			child.X, child.Y, child.W, child.H)
+	}
+}
+
+func TestLayout_MarginShorthand(t *testing.T) {
+	childStyle := defaultStyle()
+	childStyle.Flex = 1
+	childStyle.Margin = 2
+
+	root := makeNode("vbox", defaultStyle(),
+		makeNode("box", childStyle),
+	)
+	ComputeLayout(root, 0, 0, 80, 24)
+
+	child := root.Children[0]
+	if child.X != 2 || child.Y != 2 || child.W != 76 || child.H != 20 {
+		t.Errorf("margin shorthand child layout = (%d,%d) %dx%d, want (2,2) 76x20",
+			child.X, child.Y, child.W, child.H)
+	}
+}
+
+func TestLayout_PaddingShorthandDoesNotOverrideLonghands(t *testing.T) {
+	s := defaultStyle()
+	s.Padding = 2
+	s.PaddingTop = 1
+	s.PaddingLeft = 3
+
+	root := makeNode("vbox", s,
+		makeNode("box", withFlex(1)),
+	)
+	ComputeLayout(root, 0, 0, 80, 24)
+
+	child := root.Children[0]
+	// content: x = 3+1 border? no border. x = PaddingLeft = 3
+	if child.X != 3 {
+		t.Errorf("child.X = %d, want 3 (explicit paddingLeft)", child.X)
+	}
+	if child.Y != 1 {
+		t.Errorf("child.Y = %d, want 1 (explicit paddingTop)", child.Y)
+	}
+	// W = 80 - 3 - 2(right from shorthand) = 75
+	if child.W != 75 {
+		t.Errorf("child.W = %d, want 75", child.W)
+	}
+	// H = 24 - 1 - 2 = 21
+	if child.H != 21 {
+		t.Errorf("child.H = %d, want 21", child.H)
+	}
+}
+
 // --- Test: Gap ---
 
 func TestLayout_Gap(t *testing.T) {

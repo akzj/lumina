@@ -76,6 +76,9 @@ func (v *VNode) AddChild(child *VNode) {
 // ComputeLayout computes absolute positions for the VNode tree.
 // The root is positioned at (x, y) with available size (w, h).
 // All descendant positions are set as absolute screen coordinates.
+// Padding and Margin shorthand fields are expanded into per-side values first
+// (non-zero longhands are left unchanged).
 func ComputeLayout(root *VNode, x, y, w, h int) {
+	normalizeSpacingInTree(root)
 	computeFlexLayout(root, x, y, w, h)
 }

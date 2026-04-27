@@ -77,6 +77,51 @@ func runeWidth(r rune) int {
 	return 1
 }
 
+// resolveStyleSpacing copies s and expands Padding / Margin shorthand into
+// per-side fields when shorthand > 0 and that side is still 0 (longhands win).
+func resolveStyleSpacing(s Style) Style {
+	out := s
+	if s.Padding > 0 {
+		if out.PaddingTop == 0 {
+			out.PaddingTop = s.Padding
+		}
+		if out.PaddingBottom == 0 {
+			out.PaddingBottom = s.Padding
+		}
+		if out.PaddingLeft == 0 {
+			out.PaddingLeft = s.Padding
+		}
+		if out.PaddingRight == 0 {
+			out.PaddingRight = s.Padding
+		}
+	}
+	if s.Margin > 0 {
+		if out.MarginTop == 0 {
+			out.MarginTop = s.Margin
+		}
+		if out.MarginBottom == 0 {
+			out.MarginBottom = s.Margin
+		}
+		if out.MarginLeft == 0 {
+			out.MarginLeft = s.Margin
+		}
+		if out.MarginRight == 0 {
+			out.MarginRight = s.Margin
+		}
+	}
+	return out
+}
+
+func normalizeSpacingInTree(v *VNode) {
+	if v == nil {
+		return
+	}
+	v.Style = resolveStyleSpacing(v.Style)
+	for _, c := range v.Children {
+		normalizeSpacingInTree(c)
+	}
+}
+
 // hasBorder returns true if the style specifies a visible border.
 func hasBorder(s Style) bool {
 	return s.Border == "single" || s.Border == "double" || s.Border == "rounded"
