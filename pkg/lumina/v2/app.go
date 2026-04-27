@@ -159,6 +159,9 @@ func (a *App) RenderAll() {
 	a.syncHandlers()
 	a.tracker.Record(perf.HandlerFullSyncs, 1)
 
+	// Auto-focus first focusable if nothing is focused yet.
+	a.autoFocusIfNeeded()
+
 	// Output.
 	_ = a.adapter.WriteFull(screen)
 	a.tracker.Record(perf.WriteFullCalls, 1)
@@ -251,6 +254,9 @@ func (a *App) RenderDirty() {
 		a.tracker.Record(perf.HandlerDirtySyncs, 1)
 	}
 
+	// Auto-focus first focusable if nothing is focused yet.
+	a.autoFocusIfNeeded()
+
 	// 6. Output.
 	if len(allDirtyRects) > 0 {
 		a.tracker.Record(perf.DirtyRectsOut, len(allDirtyRects))
@@ -268,6 +274,7 @@ func (a *App) RenderDirty() {
 
 // HandleEvent dispatches an input event through the event system.
 // F12 and DevTools tab-switching keys are intercepted before normal dispatch.
+// Input VNodes get built-in keyboard handling (text editing, cursor movement).
 func (a *App) HandleEvent(e *event.Event) {
 	if e.Type == "keydown" {
 		if e.Key == "F12" {
@@ -286,6 +293,11 @@ func (a *App) HandleEvent(e *event.Event) {
 				a.refreshDevTools()
 				return
 			}
+		}
+		// Built-in input handling: if focused VNode is type="input",
+		// handle text editing before normal dispatch.
+		if a.handleInputKeyDown(e) {
+			return
 		}
 	}
 	a.dispatcher.Dispatch(e)
@@ -412,6 +424,15 @@ func (a *App) updateDevToolsComponentInfo() {
 		})
 	}
 	a.devtools.UpdateComponents(infos)
+}
+
+// autoFocusIfNeeded focuses the first focusable VNode if nothing is currently
+// focused. This ensures keyboard-driven components work immediately after
+// their first render without requiring a manual Tab press.
+func (a *App) autoFocusIfNeeded() {
+	if a.dispatcher.FocusedID() == "" && a.dispatcher.HasFocusables() {
+		a.dispatcher.FocusNext()
+	}
 }
 
 // --- internal helpers ---

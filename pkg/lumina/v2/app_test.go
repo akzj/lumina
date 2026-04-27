@@ -231,26 +231,26 @@ func TestScenario_TabNavigation(t *testing.T) {
 
 	app.RenderAll()
 
-	// Tab should cycle through focusables
-	app.HandleEvent(&event.Event{Type: "keydown", Key: "Tab"})
+	// Auto-focus should have focused the first focusable ("email").
 	if id := app.FocusedID(); id != "email" {
-		t.Errorf("after 1st tab: expected 'email', got %q", id)
+		t.Errorf("after RenderAll: expected auto-focus 'email', got %q", id)
 	}
 
+	// Tab should cycle through focusables
 	app.HandleEvent(&event.Event{Type: "keydown", Key: "Tab"})
 	if id := app.FocusedID(); id != "password" {
-		t.Errorf("after 2nd tab: expected 'password', got %q", id)
+		t.Errorf("after 1st tab: expected 'password', got %q", id)
 	}
 
 	app.HandleEvent(&event.Event{Type: "keydown", Key: "Tab"})
 	if id := app.FocusedID(); id != "ok" {
-		t.Errorf("after 3rd tab: expected 'ok', got %q", id)
+		t.Errorf("after 2nd tab: expected 'ok', got %q", id)
 	}
 
 	// Wrap around
 	app.HandleEvent(&event.Event{Type: "keydown", Key: "Tab"})
 	if id := app.FocusedID(); id != "email" {
-		t.Errorf("after 4th tab: expected 'email' (wrap), got %q", id)
+		t.Errorf("after 3rd tab: expected 'email' (wrap), got %q", id)
 	}
 }
 
