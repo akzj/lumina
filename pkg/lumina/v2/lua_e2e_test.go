@@ -562,3 +562,54 @@ func TestLuaE2E_CounterWithClick(t *testing.T) {
 		t.Errorf("expected 'Count: 3' after 3rd click, got line: %q", readScreenLine(ta, 0, 40))
 	}
 }
+
+// --- Test 14: Text inherits parent box background ---
+
+func TestLuaE2E_TextInheritsParentBackground(t *testing.T) {
+	app, _, _ := newLuaApp(t, 40, 10)
+
+	err := app.RunString(`
+		lumina.createComponent({
+			id = "bg-test",
+			x = 0, y = 0, w = 40, h = 10,
+			render = function(state, props)
+				return lumina.createElement("box", {
+					style = {background = "#1E1E2E"},
+				},
+					lumina.createElement("text", {}, "Hello")
+				)
+			end
+		})
+	`)
+	if err != nil {
+		t.Fatalf("RunString failed: %v", err)
+	}
+
+	app.RenderAll()
+	screen := app.Screen()
+
+	if screen == nil {
+		t.Fatal("Screen is nil")
+	}
+
+	// Text cell at (0,0) should have 'H' with background "#1E1E2E" (inherited from box)
+	textCell := screen.Get(0, 0)
+	if textCell.Char != 'H' {
+		t.Errorf("expected 'H' at (0,0), got %q", textCell.Char)
+	}
+	if textCell.Background != "#1E1E2E" {
+		t.Errorf("text cell background: got %q, want '#1E1E2E' (should inherit from parent box)", textCell.Background)
+	}
+
+	// Empty cell at (10, 5) should also have background "#1E1E2E" (box fill)
+	emptyCell := screen.Get(10, 5)
+	if emptyCell.Background != "#1E1E2E" {
+		t.Errorf("empty cell background: got %q, want '#1E1E2E'", emptyCell.Background)
+	}
+
+	// Both should be the same background
+	if textCell.Background != emptyCell.Background {
+		t.Errorf("text bg %q != empty bg %q — text should inherit parent background",
+			textCell.Background, emptyCell.Background)
+	}
+}

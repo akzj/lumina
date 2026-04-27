@@ -312,6 +312,46 @@ func TestPaint_WideChar(t *testing.T) {
 	}
 }
 
+func TestPaint_TextInheritsContainerBackground(t *testing.T) {
+	// Box with background "#FF0000" + text child without explicit background.
+	// Text cells should inherit the box's background.
+	box := layout.NewVNode("box")
+	box.Style.Background = "#FF0000"
+	box.X, box.Y, box.W, box.H = 0, 0, 10, 5
+
+	txt := layout.NewVNode("text")
+	txt.Content = "AB"
+	txt.X, txt.Y, txt.W, txt.H = 0, 0, 10, 1
+	box.AddChild(txt)
+
+	buf := buffer.New(10, 5)
+	p := NewPainter()
+	p.Paint(buf, box, 0, 0)
+
+	// Text cells should have the box's background
+	cellA := buf.Get(0, 0)
+	if cellA.Char != 'A' {
+		t.Errorf("expected 'A' at (0,0), got %q", cellA.Char)
+	}
+	if cellA.Background != "#FF0000" {
+		t.Errorf("text cell bg: got %q, want '#FF0000' (should inherit from parent box)", cellA.Background)
+	}
+
+	cellB := buf.Get(1, 0)
+	if cellB.Char != 'B' {
+		t.Errorf("expected 'B' at (1,0), got %q", cellB.Char)
+	}
+	if cellB.Background != "#FF0000" {
+		t.Errorf("text cell bg: got %q, want '#FF0000'", cellB.Background)
+	}
+
+	// Empty cell in box area should also have background
+	cellEmpty := buf.Get(5, 3)
+	if cellEmpty.Background != "#FF0000" {
+		t.Errorf("empty cell bg: got %q, want '#FF0000'", cellEmpty.Background)
+	}
+}
+
 func assertChar(t *testing.T, buf *buffer.Buffer, x, y int, want rune) {
 	t.Helper()
 	c := buf.Get(x, y)
