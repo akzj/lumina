@@ -207,7 +207,7 @@ func (h *HookContext) useEffectInternal(deps []any, hasDeps bool, isLayout bool)
 		eff := &Effect{
 			deps:    deps,
 			pending: true,
-			ran:     false,
+			ran:     true, // mark as ran on first creation
 			layout:  isLayout,
 		}
 		h.hooks = append(h.hooks, hookSlot{kind: hookKind(kind), effect: eff})
@@ -215,9 +215,7 @@ func (h *HookContext) useEffectInternal(deps []any, hasDeps bool, isLayout bool)
 	}
 
 	eff := h.hooks[idx].effect
-	if !eff.ran {
-		eff.pending = true
-	} else if !hasDeps {
+	if !hasDeps {
 		// No deps → run every render.
 		eff.pending = true
 	} else {
@@ -227,7 +225,6 @@ func (h *HookContext) useEffectInternal(deps []any, hasDeps bool, isLayout bool)
 	if eff.pending {
 		eff.deps = deps
 	}
-	eff.ran = true
 	return eff
 }
 
