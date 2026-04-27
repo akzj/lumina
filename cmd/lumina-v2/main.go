@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/akzj/go-lua/pkg/lua"
 	v2 "github.com/akzj/lumina/pkg/lumina/v2"
@@ -14,12 +15,94 @@ import (
 )
 
 func main() {
-	if len(os.Args) < 2 {
-		fmt.Println("Usage: lumina-v2 <script.lua>")
+	// Parse simple flags: --web :8080
+	var webAddr string
+	var scriptPath string
+	var args []string
+
+	for i := 1; i < len(os.Args); i++ {
+		if os.Args[i] == "--web" && i+1 < len(os.Args) {
+			webAddr = os.Args[i+1]
+			i++ // skip value
+		} else if strings.HasPrefix(os.Args[i], "--web=") {
+			webAddr = strings.TrimPrefix(os.Args[i], "--web=")
+		} else {
+			args = append(args, os.Args[i])
+		}
+	}
+
+	if len(args) < 1 {
+		fmt.Println("Usage: lumina-v2 [--web :8080] <script.lua>")
 		os.Exit(1)
 	}
-	scriptPath := os.Args[1]
+	scriptPath = args[0]
 
+	if webAddr != "" {
+		runWeb(webAddr, scriptPath)
+	} else {
+		runTerminal(scriptPath)
+	}
+}
+
+// runWeb starts the WebSocket server mode — renders to browser instead of terminal.
+func runWeb(addr string, scriptPath string) {
+	const defaultW, defaultH = 80, 24
+
+	// 1. Create Lua state.
+	L := lua.NewState()
+	defer L.Close()
+
+	addScriptDirToPackagePath(L, scriptPath)
+
+	// 2. Create WebSocket adapter.
+	wsEvents := make(chan output.WSEvent, 64)
+	wsAdapter := output.NewWSAdapter(addr, defaultW, defaultH, wsEvents)
+
+	if err := wsAdapter.Start(); err != nil {
+		fmt.Fprintf(os.Stderr, "websocket server: %v\n", err)
+		os.Exit(1)
+	}
+	defer wsAdapter.Close()
+
+	listenAddr := wsAdapter.Addr()
+	fmt.Fprintf(os.Stderr, "Lumina v2 web mode — open http://%s in your browser\n", listenAddr)
+
+	// 3. Create App.
+	app := v2.NewAppWithLua(L, defaultW, defaultH, wsAdapter)
+
+	// 4. Bridge WSEvent → v2.InputEvent.
+	appEvents := make(chan v2.InputEvent, 64)
+	go func() {
+		for we := range wsEvents {
+			appEvents <- v2.InputEvent{
+				Type:   we.Type,
+				Key:    we.Key,
+				Char:   we.Char,
+				X:      we.X,
+				Y:      we.Y,
+				Button: we.Button,
+				Modifiers: v2.InputModifiers{
+					Ctrl:  we.Ctrl,
+					Alt:   we.Alt,
+					Shift: we.Shift,
+				},
+			}
+		}
+		close(appEvents)
+	}()
+
+	// 5. Run the app event loop.
+	if err := app.Run(v2.RunConfig{
+		ScriptPath: scriptPath,
+		Events:     appEvents,
+	}); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+// runTerminal runs in standard TUI terminal mode (existing behavior).
+func runTerminal(scriptPath string) {
 	// 1. Create terminal.
 	term, err := terminal.New()
 	if err != nil {
