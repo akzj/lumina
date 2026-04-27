@@ -9,6 +9,7 @@ import (
 	"github.com/akzj/lumina/pkg/lumina/v2/buffer"
 	"github.com/akzj/lumina/pkg/lumina/v2/layout"
 	"github.com/akzj/lumina/pkg/lumina/v2/output"
+	"github.com/akzj/lumina/pkg/lumina/v2/render"
 	"github.com/akzj/lumina/pkg/lumina/v2/router"
 )
 
@@ -42,6 +43,26 @@ func NewAppWithLua(L *lua.State, w, h int, adapter output.Adapter) *App {
 
 	return app
 }
+
+// NewAppWithEngine creates an App using the new V2 render engine.
+// This uses the persistent RenderNode tree with incremental reconcile/layout/paint.
+func NewAppWithEngine(L *lua.State, w, h int, adapter output.Adapter) *App {
+	app := NewApp(w, h, adapter)
+
+	app.luaState = L
+	app.animMgr = animation.NewManager()
+	app.routerMgr = router.New()
+	app.timerMgr = newTimerManager()
+	app.quit = make(chan struct{})
+
+	// Create the new render engine.
+	eng := render.NewEngine(L, w, h)
+	eng.RegisterLuaAPI()
+	app.engine = eng
+
+	return app
+}
+
 
 // registerAppLuaAPIs registers app-level functions on the "lumina" global
 // table: createComponent, removeComponent, quit.

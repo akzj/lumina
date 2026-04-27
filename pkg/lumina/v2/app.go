@@ -18,6 +18,7 @@ import (
 	"github.com/akzj/lumina/pkg/lumina/v2/output"
 	"github.com/akzj/lumina/pkg/lumina/v2/paint"
 	"github.com/akzj/lumina/pkg/lumina/v2/perf"
+	"github.com/akzj/lumina/pkg/lumina/v2/render"
 	"github.com/akzj/lumina/pkg/lumina/v2/router"
 )
 
@@ -46,6 +47,9 @@ type App struct {
 	timerMgr  *timerManager
 	quit      chan struct{}
 	running   bool
+
+	// New render engine (optional). When non-nil, uses the new pipeline.
+	engine *render.Engine
 }
 
 // trackerRenderObserver bridges component.RenderObserver to perf.Tracker.
@@ -143,6 +147,10 @@ func (a *App) SetState(compID string, key string, value any) {
 
 // RenderAll renders all components and composes the full screen.
 func (a *App) RenderAll() {
+	if a.engine != nil {
+		a.renderAllV2()
+		return
+	}
 	a.tracker.BeginFrame()
 
 	// Render all dirty components (they should already be marked dirty on register).
@@ -181,6 +189,10 @@ func (a *App) RenderAll() {
 
 // RenderDirty renders only dirty components and composes changed regions.
 func (a *App) RenderDirty() {
+	if a.engine != nil {
+		a.renderDirtyV2()
+		return
+	}
 	a.tracker.BeginFrame()
 
 	// 1. Capture dirty lists BEFORE rendering (RenderDirty clears DirtyPaint).
@@ -276,11 +288,61 @@ func (a *App) RenderDirty() {
 	a.tracker.EndFrame()
 }
 
+// renderAllV2 uses the new render engine for full render.
+func (a *App) renderAllV2() {
+	a.tracker.BeginFrame()
+
+	a.engine.RenderAll()
+
+	screen := a.engine.ToBuffer()
+	_ = a.adapter.WriteFull(screen)
+	_ = a.adapter.Flush()
+
+	a.tracker.EndFrame()
+}
+
+// renderDirtyV2 uses the new render engine for incremental render.
+func (a *App) renderDirtyV2() {
+	a.tracker.BeginFrame()
+
+	a.engine.RenderDirty()
+
+	screen := a.engine.ToBuffer()
+	dirtyRect := a.engine.DirtyRect()
+	_ = a.adapter.WriteDirty(screen, []buffer.Rect{dirtyRect})
+	_ = a.adapter.Flush()
+
+	a.tracker.EndFrame()
+}
+
+// handleEventV2 dispatches events through the new render engine.
+func (a *App) handleEventV2(e *event.Event) {
+	switch e.Type {
+	case "click", "mousedown":
+		a.engine.HandleClick(e.X, e.Y)
+	case "mousemove":
+		a.engine.HandleMouseMove(e.X, e.Y)
+	case "keydown":
+		a.engine.HandleKeyDown(e.Key)
+	case "scroll":
+		// Scroll direction is in e.Key ("up"/"down"), convert to delta
+		delta := 1
+		if e.Key == "up" {
+			delta = -1
+		}
+		a.engine.HandleScroll(e.X, e.Y, delta)
+	}
+}
+
 // HandleEvent dispatches an input event through the event system.
 // F12 and DevTools tab-switching keys are intercepted before normal dispatch.
 // Input VNodes get built-in keyboard handling (text editing, cursor movement).
 // Scroll events get built-in scroll container handling (mouse wheel scrolling).
 func (a *App) HandleEvent(e *event.Event) {
+	if a.engine != nil {
+		a.handleEventV2(e)
+		return
+	}
 	if e.Type == "keydown" {
 		if e.Key == "F12" {
 			a.toggleDevTools()
@@ -348,6 +410,10 @@ func (a *App) MoveComponent(id string, newRect buffer.Rect) {
 func (a *App) Resize(w, h int) {
 	a.width = w
 	a.height = h
+	if a.engine != nil {
+		a.engine.Resize(w, h)
+		return
+	}
 	a.compositor = compositor.NewCompositor(w, h)
 	a.layersDirty = true
 	// Mark all components dirty so next render repaints everything.
@@ -357,6 +423,11 @@ func (a *App) Resize(w, h int) {
 }
 
 // DevTools returns the DevTools panel (for testing/inspection).
+// Engine returns the new render engine (nil if using old pipeline).
+func (a *App) Engine() *render.Engine {
+	return a.engine
+}
+
 func (a *App) DevTools() *devtools.Panel {
 	return a.devtools
 }
