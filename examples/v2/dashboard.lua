@@ -123,27 +123,37 @@ lumina.createComponent({
         -- Scroll step (matches framework's scrollStep = 3)
         local scrollStep = 3
 
+        -- Max scroll: total log entries minus visible rows in the scroll area.
+        -- Layout: 24 total - 1 header - 1 footer - 2 log title/separator = 20 visible rows.
+        -- The scroll container also loses 1 column for the scrollbar.
+        local visibleLogRows = 20
+        local maxScroll = #activityLog - visibleLogRows
+        if maxScroll < 0 then maxScroll = 0 end
+
+        -- Clamp helper: ensures scrollY stays in [0, maxScroll]
+        local function clampedScroll(newY)
+            if newY < 0 then newY = 0 end
+            if newY > maxScroll then newY = maxScroll end
+            return newY
+        end
+
         -- Keyboard handler
         local function handleKey(e)
             if e.key == "q" then
                 lumina.quit()
             elseif e.key == "j" or e.key == "ArrowDown" then
-                setScrollY(scrollY + scrollStep)
+                setScrollY(clampedScroll(scrollY + scrollStep))
             elseif e.key == "k" or e.key == "ArrowUp" then
-                local newY = scrollY - scrollStep
-                if newY < 0 then newY = 0 end
-                setScrollY(newY)
+                setScrollY(clampedScroll(scrollY - scrollStep))
             end
         end
 
         -- Mouse wheel scroll handler (receives scroll events from framework)
         local function handleScroll(e)
             if e.key == "down" then
-                setScrollY(scrollY + scrollStep)
+                setScrollY(clampedScroll(scrollY + scrollStep))
             elseif e.key == "up" then
-                local newY = scrollY - scrollStep
-                if newY < 0 then newY = 0 end
-                setScrollY(newY)
+                setScrollY(clampedScroll(scrollY - scrollStep))
             end
         end
 
