@@ -8,13 +8,13 @@ import (
 	"github.com/akzj/lumina/pkg/lumina/v2/output"
 )
 
-// newEngineApp creates a NewAppWithEngine with a fresh Lua state and TestAdapter.
+// newEngineApp creates a NewApp with a fresh Lua state and TestAdapter.
 func newEngineApp(t *testing.T, w, h int) (*App, *output.TestAdapter, *lua.State) {
 	t.Helper()
 	L := lua.NewState()
 	t.Cleanup(func() { L.Close() })
 	ta := output.NewTestAdapter()
-	app := NewAppWithEngine(L, w, h, ta)
+	app := NewApp(L, w, h, ta)
 	return app, ta, L
 }
 
@@ -252,15 +252,6 @@ func TestAppV2Engine_MultipleClicks(t *testing.T) {
 	textNode := comp.RootNode.Children[0]
 	if textNode.Content != "5" {
 		t.Errorf("expected '5' after 5 clicks, got %q", textNode.Content)
-	}
-}
-
-func TestAppV2Engine_ExistingPipelineUnaffected(t *testing.T) {
-	// Verify that NewAppWithLua still uses the old pipeline (engine is nil).
-	app, _, _ := newLuaApp(t, 40, 10)
-
-	if app.Engine() != nil {
-		t.Error("NewAppWithLua should not set engine")
 	}
 }
 

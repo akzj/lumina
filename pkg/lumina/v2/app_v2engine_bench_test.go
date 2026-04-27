@@ -13,7 +13,7 @@ func BenchmarkAppV2Engine_HoverCycle(b *testing.B) {
 	defer L.Close()
 
 	ta := output.NewTestAdapter()
-	app := NewAppWithEngine(L, 80, 24, ta)
+	app := NewApp(L, 80, 24, ta)
 
 	// Grid with hover tracking via useState
 	err := app.RunString(`
@@ -64,7 +64,7 @@ func BenchmarkAppV2Engine_SimpleRenderDirty(b *testing.B) {
 	defer L.Close()
 
 	ta := output.NewTestAdapter()
-	app := NewAppWithEngine(L, 80, 24, ta)
+	app := NewApp(L, 80, 24, ta)
 
 	err := app.RunString(`
 		lumina.createComponent({

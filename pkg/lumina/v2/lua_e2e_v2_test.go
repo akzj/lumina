@@ -10,14 +10,14 @@ import (
 	"github.com/akzj/lumina/pkg/lumina/v2/output"
 )
 
-// newV2App creates a NewAppWithEngine with a fresh Lua state and TestAdapter.
+// newV2App creates a NewApp with a fresh Lua state and TestAdapter.
 // This uses the new V2 render engine (persistent RenderNode tree).
 func newV2App(t *testing.T, w, h int) (*App, *output.TestAdapter, *lua.State) {
 	t.Helper()
 	L := lua.NewState()
 	t.Cleanup(func() { L.Close() })
 	ta := output.NewTestAdapter()
-	app := NewAppWithEngine(L, w, h, ta)
+	app := NewApp(L, w, h, ta)
 	return app, ta, L
 }
 
