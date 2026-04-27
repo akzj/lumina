@@ -203,6 +203,45 @@ func toIntProp(v any) int {
 	return 0
 }
 
+// injectInputProps walks the VNode tree of a component and sets "focused"
+// and "cursorPos" props on input VNodes based on the dispatcher's focus state
+// and the component's state. Called as a PostRenderHook after renderFn+layout
+// but before paint.
+func (a *App) injectInputProps(comp *component.Component) {
+	focusedID := a.dispatcher.FocusedID()
+	if comp.VNodeTree() == nil {
+		return
+	}
+	injectInputPropsWalk(comp.VNodeTree(), focusedID, comp)
+}
+
+// injectInputPropsWalk recursively walks the VNode tree and injects
+// focused/cursorPos props on input VNodes.
+func injectInputPropsWalk(vn *layout.VNode, focusedID string, comp *component.Component) {
+	if vn == nil {
+		return
+	}
+	if vn.Type == "input" && vn.ID != "" {
+		isFocused := vn.ID == focusedID
+		vn.Props["focused"] = isFocused
+		if isFocused {
+			// Read cursor position from component state.
+			if cp, ok := comp.State()["__inputCursor_"+vn.ID]; ok {
+				vn.Props["cursorPos"] = cp
+			}
+			// Read value override from component state (set by handleInputKeyDown).
+			if val, ok := comp.State()["__inputValue_"+vn.ID]; ok {
+				if s, ok := val.(string); ok {
+					vn.Content = s
+				}
+			}
+		}
+	}
+	for _, child := range vn.Children {
+		injectInputPropsWalk(child, focusedID, comp)
+	}
+}
+
 // inputToLuaRef extracts a Lua registry reference from a handler value.
 func inputToLuaRef(val any) (int, bool) {
 	switch v := val.(type) {

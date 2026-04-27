@@ -90,7 +90,7 @@ func NewApp(w, h int, adapter output.Adapter) *App {
 	mgr.SetRenderObserver(&trackerRenderObserver{tracker: t})
 	disp := event.NewDispatcher()
 	disp.SetEventObserver(&trackerEventObserver{tracker: t})
-	return &App{
+	a := &App{
 		width:      w,
 		height:     h,
 		manager:    mgr,
@@ -100,6 +100,9 @@ func NewApp(w, h int, adapter output.Adapter) *App {
 		tracker:    t,
 		devtools:   devtools.NewPanel(t),
 	}
+	// Set post-render hook to inject focused/cursorPos into input VNodes.
+	mgr.SetPostRenderHook(a.injectInputProps)
+	return a
 }
 
 // NewTestApp creates an App with a TestAdapter for testing.
