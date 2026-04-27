@@ -63,10 +63,13 @@ func TestScenario_ChildMoveUnderCurtain_OtherChildrenNotRerendered(t *testing.T)
 			Key: "a", Name: "childA", Props: nil,
 			RenderFn: func(state, props map[string]any) *layout.VNode {
 				renderCount["parent:a"]++
-				// Root is text so glyph lands at buffer (0,0) — predictable compositing.
+				ch := "A"
+				if g, ok := state["glyph"].(string); ok && g != "" {
+					ch = g
+				}
 				t := layout.NewVNode("text")
 				t.ID = "a-t"
-				t.Content = "A"
+				t.Content = ch
 				return t
 			},
 		},
@@ -180,5 +183,131 @@ func TestScenario_ChildMoveUnderCurtain_OtherChildrenNotRerendered(t *testing.T)
 	// Curtain band still present over A at y=5.
 	if bg := ta.LastScreen.Get(10, 5).Background; bg != "#606060" {
 		t.Errorf("(10,5) curtain bg want #606060, got %q", bg)
+	}
+
+	// --- (6) Mark only child-a dirty: one RenderDirty → exactly one extra parent:a render ---
+	app.SetState("parent:a", "glyph", "X")
+	app.RenderDirty()
+
+	if renderCount["parent:a"] != 2 {
+		t.Fatalf("parent:a renders: want 2 (initial + one dirty pass), got %d", renderCount["parent:a"])
+	}
+	if renderCount["parent:b"] != 2 || renderCount["parent:c"] != 1 {
+		t.Errorf("siblings should not re-render: b=%d (want 2) c=%d (want 1)",
+			renderCount["parent:b"], renderCount["parent:c"])
+	}
+	if renderCount["parent"] != 1 || renderCount["curtain"] != 1 {
+		t.Errorf("parent/curtain should not re-render: parent=%d curtain=%d (want 1 each)",
+			renderCount["parent"], renderCount["curtain"])
+	}
+	if ch := ta.LastScreen.Get(0, 0).Char; ch != 'X' {
+		t.Errorf("(0,0) want updated glyph 'X', got %q", ch)
+	}
+	if ch := ta.LastScreen.Get(20, 8).Char; ch != 'B' {
+		t.Errorf("(20,8) want 'B' unchanged, got %q", ch)
+	}
+	if ch := ta.LastScreen.Get(40, 0).Char; ch != 'C' {
+		t.Errorf("(40,0) want 'C' unchanged, got %q", ch)
+	}
+	if bg := ta.LastScreen.Get(10, 5).Background; bg != "#606060" {
+		t.Errorf("(10,5) curtain bg want #606060, got %q", bg)
+	}
+
+	app.RenderDirty()
+	if renderCount["parent:a"] != 2 {
+		t.Errorf("no-op RenderDirty: parent:a render count should stay 2, got %d", renderCount["parent:a"])
+	}
+}
+
+// TestScenario_ParentA_NestedReconcile_NoSiblingRerender checks that Reconcile
+// on parent:a to add a nested child component does not mark siblings (parent:b)
+// or the root parent dirty — only the new subtree renders once.
+func TestScenario_ParentA_NestedReconcile_NoSiblingRerender(t *testing.T) {
+	const W, H = 40, 12
+
+	app, ta := NewTestApp(W, H)
+
+	renderCount := map[string]int{}
+
+	parent := app.RegisterComponent("parent", "parent", buffer.Rect{X: 0, Y: 0, W: W, H: H}, 0,
+		func(state, props map[string]any) *layout.VNode {
+			renderCount["parent"]++
+			root := layout.NewVNode("box")
+			root.ID = "parent-root"
+			root.Style.Background = "#101010"
+			return root
+		})
+
+	top := []component.ChildDescriptor{
+		{
+			Key: "a", Name: "childA", Props: nil,
+			RenderFn: func(state, props map[string]any) *layout.VNode {
+				renderCount["parent:a"]++
+				tn := layout.NewVNode("text")
+				tn.ID = "a-t"
+				tn.Content = "A"
+				return tn
+			},
+		},
+		{
+			Key: "b", Name: "childB", Props: nil,
+			RenderFn: func(state, props map[string]any) *layout.VNode {
+				renderCount["parent:b"]++
+				tn := layout.NewVNode("text")
+				tn.ID = "b-t"
+				tn.Content = "B"
+				return tn
+			},
+		},
+	}
+
+	app.manager.Reconcile(parent, top)
+	app.MoveComponent("parent:a", buffer.Rect{X: 0, Y: 0, W: 20, H: 10})
+	app.MoveComponent("parent:b", buffer.Rect{X: 20, Y: 0, W: 20, H: 10})
+	app.RenderAll()
+
+	if renderCount["parent"] != 1 || renderCount["parent:a"] != 1 || renderCount["parent:b"] != 1 {
+		t.Fatalf("baseline renders want parent=1 a=1 b=1, got parent=%d a=%d b=%d",
+			renderCount["parent"], renderCount["parent:a"], renderCount["parent:b"])
+	}
+
+	childA := app.manager.Get("parent:a")
+	if childA == nil {
+		t.Fatal("parent:a not found")
+	}
+
+	app.manager.Reconcile(childA, []component.ChildDescriptor{
+		{
+			Key: "sub", Name: "nestedUnderA", Props: nil,
+			RenderFn: func(state, props map[string]any) *layout.VNode {
+				renderCount["parent:a:sub"]++
+				tn := layout.NewVNode("text")
+				tn.ID = "sub-t"
+				tn.Content = "D"
+				return tn
+			},
+		},
+	})
+
+	// New layer + rect change → compositor rebuild; no need to touch sibling buffers.
+	app.MoveComponent("parent:a:sub", buffer.Rect{X: 3, Y: 2, W: 1, H: 1})
+	app.RenderDirty()
+
+	if renderCount["parent:a:sub"] != 1 {
+		t.Fatalf("nested parent:a:sub renders want 1, got %d", renderCount["parent:a:sub"])
+	}
+	if renderCount["parent:a"] != 1 || renderCount["parent:b"] != 1 || renderCount["parent"] != 1 {
+		t.Errorf("sibling/root must not re-render: a=%d b=%d parent=%d (want 1 each)",
+			renderCount["parent:a"], renderCount["parent:b"], renderCount["parent"])
+	}
+
+	if ch := ta.LastScreen.Get(0, 0).Char; ch != 'A' {
+		t.Errorf("(0,0) want 'A', got %q", ch)
+	}
+	if ch := ta.LastScreen.Get(20, 0).Char; ch != 'B' {
+		t.Errorf("(20,0) want 'B', got %q", ch)
+	}
+	if ch := ta.LastScreen.Get(3, 2).Char; ch != 'D' {
+		t.Errorf("(3,2) nested want 'D', got %q", ch)
 	}
 }
