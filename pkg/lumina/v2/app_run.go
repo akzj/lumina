@@ -9,7 +9,6 @@ import (
 
 	"github.com/akzj/go-lua/pkg/lua"
 	"github.com/akzj/lumina/pkg/lumina/v2/animation"
-	"github.com/akzj/lumina/pkg/lumina/v2/bridge"
 	"github.com/akzj/lumina/pkg/lumina/v2/event"
 	"github.com/akzj/lumina/pkg/lumina/v2/hotreload"
 	"github.com/akzj/lumina/pkg/lumina/v2/router"
@@ -54,8 +53,6 @@ type RunConfig struct {
 // Run starts the application event loop. It loads the Lua script (if configured),
 // performs an initial full render, then enters the event loop. Returns when
 // Stop() is called or the event channel is closed.
-//
-// Requires NewAppWithLua to have been called (luaState must be set).
 func (a *App) Run(cfg RunConfig) error {
 	if a.luaState == nil {
 		// Non-Lua mode: just run the event loop without script loading.
@@ -63,15 +60,11 @@ func (a *App) Run(cfg RunConfig) error {
 	}
 
 	// Tune Lua GC for UI workloads: less frequent collections, smaller steps.
-	// Default pause=100 triggers GC too aggressively for render-heavy workloads
-	// where many short-lived tables/closures are created each frame.
 	a.luaState.SetGCParam("pause", 200)
 	a.luaState.SetGCParam("stepmul", 100)
 
-	// Load and execute the Lua script. This typically calls
-	// lumina.createComponent() which registers components with the App.
+	// Load and execute the Lua script.
 	if cfg.ScriptPath != "" {
-		// Set up package.path so require() resolves relative to the script.
 		addScriptDirToPackagePath(a.luaState, cfg.ScriptPath)
 		if err := a.luaState.DoFile(cfg.ScriptPath); err != nil {
 			return err
@@ -91,7 +84,6 @@ func (a *App) RunScript(path string) error {
 	if a.luaState == nil {
 		return nil
 	}
-	// Set up package.path so require() resolves relative to the script.
 	addScriptDirToPackagePath(a.luaState, path)
 	return a.luaState.DoFile(path)
 }
@@ -120,11 +112,6 @@ func (a *App) Stop() {
 // IsRunning returns true if the event loop is active.
 func (a *App) IsRunning() bool {
 	return a.running
-}
-
-// Bridge returns the bridge (for advanced usage / testing).
-func (a *App) Bridge() *bridge.Bridge {
-	return a.bridge
 }
 
 // AnimationManager returns the animation manager (for testing).
@@ -193,7 +180,7 @@ func (a *App) eventLoop(cfg RunConfig) error {
 			if a.animMgr != nil && a.animMgr.IsRunning() {
 				nowMs := time.Now().UnixMilli()
 				completed := a.animMgr.Tick(nowMs)
-				_ = completed // animation completion callbacks are handled by the animation system
+				_ = completed
 			}
 
 			// Fire due timers (setInterval/setTimeout callbacks).
@@ -208,61 +195,21 @@ func (a *App) eventLoop(cfg RunConfig) error {
 	}
 }
 
-// reloadScript performs a hot reload: snapshots component state, re-executes
-// the Lua script, restores state, and re-renders.
+// reloadScript performs a hot reload: re-executes the Lua script and re-renders.
 func (a *App) reloadScript(path string) {
-	// 1. Snapshot all component states (excluding devtools).
-	snapshots := make(map[string]hotreload.StateSnapshot)
-	for _, comp := range a.manager.GetAll() {
-		if comp.ID() == "__devtools" {
-			continue
-		}
-		snapshots[comp.ID()] = hotreload.Snapshot(comp)
-	}
-
-	// 2. Unregister all non-devtools components and destroy bridge state.
-	for _, comp := range a.manager.GetAll() {
-		if comp.ID() == "__devtools" {
-			continue
-		}
-		a.UnregisterComponent(comp.ID())
-		if a.bridge != nil {
-			a.bridge.DestroyComponent(comp.ID())
-		}
-	}
-
-	// 3. Reset bridge state (hook contexts, refs), clear timers, and re-execute script.
-	if a.bridge != nil {
-		a.bridge.Reset()
-	}
+	// Reset timers.
 	if a.timerMgr != nil {
 		a.timerMgr.releaseAll(a.luaState)
 	}
+
 	// Re-set package.path for the reloaded script.
 	addScriptDirToPackagePath(a.luaState, path)
 	if err := a.luaState.DoFile(path); err != nil {
-		// Script error — log but don't crash. Components are gone, so
-		// the screen will be blank until the user fixes the script.
 		log.Printf("[hotreload] error reloading %s: %v", path, err)
 		return
 	}
 
-	// 4. Restore state to matching components (by ID).
-	for _, comp := range a.manager.GetAll() {
-		if comp.ID() == "__devtools" {
-			continue
-		}
-		if snap, ok := snapshots[comp.ID()]; ok {
-			for k, v := range snap.State {
-				comp.SetState(k, v)
-			}
-			for k, v := range snap.HookStore {
-				comp.HookStore()[k] = v
-			}
-		}
-	}
-
-	// 5. Full re-render.
+	// Full re-render.
 	a.RenderAll()
 
 	log.Printf("[hotreload] reloaded %s", path)

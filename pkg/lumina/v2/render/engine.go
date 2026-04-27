@@ -62,6 +62,9 @@ func (e *Engine) GetComponent(id string) *Component { return e.components[id] }
 
 // CurrentComponent returns the component currently being rendered (for hooks).
 func (e *Engine) CurrentComponent() *Component { return e.currentComp }
+// AllComponents returns all registered components.
+func (e *Engine) AllComponents() map[string]*Component { return e.components }
+
 
 // Resize updates the engine dimensions and buffer.
 func (e *Engine) Resize(width, height int) {
@@ -113,7 +116,17 @@ func (e *Engine) RenderDirty() {
 	// 2. Graft child component RootNodes into parent tree
 	e.graftChildComponents()
 
-	// 3. Layout: only the root tree (which now contains grafted children)
+	// 3. Early exit: if nothing rendered and no dirty nodes, skip layout/paint
+	if rendered == 0 && e.root != nil && e.root.RootNode != nil && !hasAnyDirty(e.root.RootNode) {
+		if e.tracker != nil {
+			e.tracker.Record(perf.V2PaintCells, 0)
+			e.tracker.Record(perf.V2PaintClearCells, 0)
+			e.tracker.Record(perf.V2DirtyRectArea, 0)
+		}
+		return
+	}
+
+	// 4. Layout: only the root tree (which now contains grafted children)
 	if e.root != nil && e.root.RootNode != nil {
 		if e.root.RootNode.LayoutDirty {
 			LayoutFull(e.root.RootNode, 0, 0, e.width, e.height)
@@ -122,12 +135,12 @@ func (e *Engine) RenderDirty() {
 		}
 	}
 
-	// 4. Paint: only the root tree (grafted children are painted in-tree)
+	// 5. Paint: only the root tree (grafted children are painted in-tree)
 	if e.root != nil && e.root.RootNode != nil {
 		PaintDirty(e.buffer, e.root.RootNode)
 	}
 
-	// 5. Record paint stats from CellBuffer.
+	// 6. Record paint stats from CellBuffer.
 	if e.tracker != nil {
 		stats := e.buffer.Stats()
 		e.tracker.Record(perf.V2PaintCells, stats.WriteCount)
@@ -456,6 +469,22 @@ func (e *Engine) renderInOrder() int {
 	return count
 }
 
+// hasAnyDirty returns true if any node in the tree has LayoutDirty or PaintDirty set.
+func hasAnyDirty(node *Node) bool {
+	if node == nil {
+		return false
+	}
+	if node.LayoutDirty || node.PaintDirty {
+		return true
+	}
+	for _, child := range node.Children {
+		if hasAnyDirty(child) {
+			return true
+		}
+	}
+	return false
+}
+
 // graftChildComponents walks the root tree and connects child component
 // RootNodes as children of their placeholder nodes. This allows layout and
 // paint to naturally traverse into sub-components.
@@ -468,6 +497,7 @@ func (e *Engine) graftChildComponents() {
 
 // graftWalk recursively finds component placeholder nodes and grafts the
 // child component's RootNode as the placeholder's child.
+// Only marks dirty when the graft actually changes (new or different RootNode).
 func (e *Engine) graftWalk(node *Node) {
 	if node == nil {
 		return
@@ -477,12 +507,14 @@ func (e *Engine) graftWalk(node *Node) {
 		if child.Type == "component" && child.Component != nil {
 			comp := child.Component
 			if comp.RootNode != nil {
-				// Graft: set the component's rendered output as child of the placeholder
-				child.Children = []*Node{comp.RootNode}
-				comp.RootNode.Parent = child
-				// Mark for layout since tree structure changed
-				child.LayoutDirty = true
-				child.PaintDirty = true
+				// Only mark dirty if the grafted child actually changed
+				alreadyGrafted := len(child.Children) == 1 && child.Children[0] == comp.RootNode
+				if !alreadyGrafted {
+					child.Children = []*Node{comp.RootNode}
+					comp.RootNode.Parent = child
+					child.LayoutDirty = true
+					child.PaintDirty = true
+				}
 			}
 		}
 		// Always recurse (component children may contain nested components)
