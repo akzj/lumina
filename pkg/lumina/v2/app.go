@@ -309,7 +309,22 @@ func (a *App) renderDirtyV2() {
 
 	a.engine.RenderDirty()
 
+	// Paint devtools overlay on top of the rendered content if visible.
+	if a.devtools.Visible {
+		panelH := a.devtools.Height
+		panelY := a.height - panelH
+		paintDevToolsOverlay(a.engine.Buffer(), a.devtools, panelY, a.width, panelH)
+	}
+
 	dirtyRect := a.engine.DirtyRect()
+	// When devtools is visible, expand dirty rect to include the panel area.
+	if a.devtools.Visible {
+		panelH := a.devtools.Height
+		panelY := a.height - panelH
+		panelRect := buffer.Rect{X: 0, Y: panelY, W: a.width, H: panelH}
+		dirtyRect = unionRect(dirtyRect, panelRect)
+	}
+
 	if dirtyRect.W > 0 && dirtyRect.H > 0 {
 		screen := a.engine.ToBuffer()
 		_ = a.adapter.WriteDirty(screen, []buffer.Rect{dirtyRect})
@@ -320,6 +335,33 @@ func (a *App) renderDirtyV2() {
 	}
 
 	a.tracker.EndFrame()
+}
+
+// unionRect returns the bounding rect containing both a and b.
+func unionRect(a, b buffer.Rect) buffer.Rect {
+	if a.W == 0 || a.H == 0 {
+		return b
+	}
+	if b.W == 0 || b.H == 0 {
+		return a
+	}
+	x1 := a.X
+	if b.X < x1 {
+		x1 = b.X
+	}
+	y1 := a.Y
+	if b.Y < y1 {
+		y1 = b.Y
+	}
+	x2 := a.X + a.W
+	if b.X+b.W > x2 {
+		x2 = b.X + b.W
+	}
+	y2 := a.Y + a.H
+	if b.Y+b.H > y2 {
+		y2 = b.Y + b.H
+	}
+	return buffer.Rect{X: x1, Y: y1, W: x2 - x1, H: y2 - y1}
 }
 
 // handleEventV2 dispatches events through the new render engine.
@@ -346,13 +388,14 @@ func (a *App) handleEventV2(e *event.Event) {
 // Input VNodes get built-in keyboard handling (text editing, cursor movement).
 // Scroll events get built-in scroll container handling (mouse wheel scrolling).
 func (a *App) HandleEvent(e *event.Event) {
-	if a.engine != nil {
-		a.handleEventV2(e)
-		return
-	}
+	// F12 toggles devtools regardless of render pipeline (old or V2 engine).
 	if e.Type == "keydown" {
 		if e.Key == "F12" {
-			a.toggleDevTools()
+			if a.engine != nil {
+				a.toggleDevToolsV2()
+			} else {
+				a.toggleDevTools()
+			}
 			return
 		}
 		// Tab switching when devtools is visible.
@@ -360,14 +403,28 @@ func (a *App) HandleEvent(e *event.Event) {
 			switch e.Key {
 			case "1":
 				a.devtools.SetTab(devtools.TabElements)
-				a.refreshDevTools()
+				if a.engine != nil {
+					a.refreshDevToolsV2()
+				} else {
+					a.refreshDevTools()
+				}
 				return
 			case "2":
 				a.devtools.SetTab(devtools.TabPerf)
-				a.refreshDevTools()
+				if a.engine != nil {
+					a.refreshDevToolsV2()
+				} else {
+					a.refreshDevTools()
+				}
 				return
 			}
 		}
+	}
+	if a.engine != nil {
+		a.handleEventV2(e)
+		return
+	}
+	if e.Type == "keydown" {
 		// Built-in input handling: if focused VNode is type="input",
 		// handle text editing before normal dispatch.
 		if a.handleInputKeyDown(e) {
@@ -467,6 +524,10 @@ func (a *App) toggleDevTools() {
 // It updates FPS, snapshots perf data, and marks the devtools component dirty
 // so it auto-refreshes each frame with up-to-date stats.
 func (a *App) tickDevTools() {
+	if a.engine != nil {
+		a.tickDevToolsV2()
+		return
+	}
 	a.devtools.TickFPS()
 	if !a.devtools.Visible {
 		return

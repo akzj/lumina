@@ -1202,10 +1202,7 @@ func TestV2E2E_TodoMVC_Navigation(t *testing.T) {
 
 func TestV2E2E_TodoMVC_Toggle(t *testing.T) {
 	// V2 engine bug: Component.SetState panics when comparing uncomparable types
-	// ([]interface{} from Lua table → Go slice). The todos state is a Lua table
-	// converted to []interface{}, and SetState tries to compare old == new which
-	// panics for slices.
-	t.Skip("V2 engine: Component.SetState panics on uncomparable types ([]interface{} from Lua tables)")
+	// P0 fix: SetState now uses reflect.DeepEqual for uncomparable types.
 
 	app, ta, _ := newV2App(t, 80, 24)
 
@@ -1282,9 +1279,7 @@ func TestV2E2E_TodoMVC_Filter(t *testing.T) {
 }
 
 func TestV2E2E_TodoMVC_Delete(t *testing.T) {
-	// V2 engine bug: Component.SetState panics on uncomparable types.
-	// Delete calls setTodos(newTable) which triggers the panic.
-	t.Skip("V2 engine: Component.SetState panics on uncomparable types ([]interface{} from Lua tables)")
+	// P0 fix: SetState now uses reflect.DeepEqual for uncomparable types.
 
 	app, ta, _ := newV2App(t, 80, 24)
 
