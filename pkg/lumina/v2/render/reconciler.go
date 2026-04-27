@@ -3,7 +3,19 @@ package render
 // Reconcile updates an existing Node tree to match a new Descriptor.
 // It patches the node in-place, marking LayoutDirty/PaintDirty as needed.
 // Returns true if any changes were made.
+// Old Lua refs replaced during reconcile are not tracked (use ReconcileCollectRefs
+// when you need to unref them).
 func Reconcile(node *Node, desc Descriptor) bool {
+	return reconcileImpl(node, desc, nil)
+}
+
+// ReconcileCollectRefs is like Reconcile but appends replaced/removed Lua refs
+// to freedRefs so the caller can call L.Unref on them.
+func ReconcileCollectRefs(node *Node, desc Descriptor, freedRefs *[]int64) bool {
+	return reconcileImpl(node, desc, freedRefs)
+}
+
+func reconcileImpl(node *Node, desc Descriptor, freedRefs *[]int64) bool {
 	changed := false
 
 	// 1. Update content
@@ -38,17 +50,17 @@ func Reconcile(node *Node, desc Descriptor) bool {
 		changed = true
 	}
 
-	// 4. Update event handlers (just swap refs)
-	changed = updateRef(&node.OnClick, desc.OnClick) || changed
-	changed = updateRef(&node.OnMouseEnter, desc.OnMouseEnter) || changed
-	changed = updateRef(&node.OnMouseLeave, desc.OnMouseLeave) || changed
-	changed = updateRef(&node.OnKeyDown, desc.OnKeyDown) || changed
-	changed = updateRef(&node.OnChange, desc.OnChange) || changed
-	changed = updateRef(&node.OnScroll, desc.OnScroll) || changed
+	// 4. Update event handlers (just swap refs, collect old refs for cleanup)
+	changed = updateRef(&node.OnClick, desc.OnClick, freedRefs) || changed
+	changed = updateRef(&node.OnMouseEnter, desc.OnMouseEnter, freedRefs) || changed
+	changed = updateRef(&node.OnMouseLeave, desc.OnMouseLeave, freedRefs) || changed
+	changed = updateRef(&node.OnKeyDown, desc.OnKeyDown, freedRefs) || changed
+	changed = updateRef(&node.OnChange, desc.OnChange, freedRefs) || changed
+	changed = updateRef(&node.OnScroll, desc.OnScroll, freedRefs) || changed
 
 	// 5. Reconcile children (skip for component nodes — children are grafted)
 	if node.Type != "component" {
-		if reconcileChildren(node, desc.Children) {
+		if reconcileChildrenImpl(node, desc.Children, freedRefs) {
 			changed = true
 		}
 	}
@@ -103,13 +115,17 @@ func reconcileStyle(node *Node, newStyle Style) bool {
 
 // reconcileChildren matches new descriptors against existing children by key+type.
 func reconcileChildren(parent *Node, descs []Descriptor) bool {
+	return reconcileChildrenImpl(parent, descs, nil)
+}
+
+func reconcileChildrenImpl(parent *Node, descs []Descriptor, freedRefs *[]int64) bool {
 	oldChildren := parent.Children
 	changed := false
 
 	// Fast path: same length, same keys in order
 	if len(oldChildren) == len(descs) && allKeysMatch(oldChildren, descs) {
 		for i, desc := range descs {
-			if Reconcile(oldChildren[i], desc) {
+			if reconcileImpl(oldChildren[i], desc, freedRefs) {
 				changed = true
 			}
 		}
@@ -134,7 +150,7 @@ func reconcileChildren(parent *Node, descs []Descriptor) bool {
 		if idx, ok := oldByKey[key]; ok && oldChildren[idx].Type == desc.Type {
 			// Reuse existing node
 			usedOld[idx] = true
-			Reconcile(oldChildren[idx], desc)
+			reconcileImpl(oldChildren[idx], desc, freedRefs)
 			newChildren = append(newChildren, oldChildren[idx])
 		} else {
 			// Create new node
@@ -150,6 +166,7 @@ func reconcileChildren(parent *Node, descs []Descriptor) bool {
 	// Cleanup removed children
 	for i, child := range oldChildren {
 		if !usedOld[i] {
+			collectNodeRefsRecursive(child, freedRefs)
 			markRemovedRecursive(child)
 			changed = true
 			parent.PaintDirty = true // Force parent repaint to clear ghost pixels
@@ -178,13 +195,49 @@ func reconcileChildren(parent *Node, descs []Descriptor) bool {
 
 // Helper functions
 
-func updateRef(ref *LuaRef, newRef LuaRef) bool {
+func updateRef(ref *LuaRef, newRef LuaRef, freedRefs *[]int64) bool {
 	if *ref != newRef {
-		// TODO: unref old, ref new
+		if *ref != 0 && freedRefs != nil {
+			*freedRefs = append(*freedRefs, *ref)
+		}
 		*ref = newRef
 		return true
 	}
 	return false
+}
+
+// collectNodeRefsRecursive appends all non-zero Lua refs from a node and its
+// descendants to freedRefs. Used when removing nodes from the tree.
+func collectNodeRefsRecursive(node *Node, freedRefs *[]int64) {
+	if freedRefs == nil {
+		return
+	}
+	collectNodeRefs(node, freedRefs)
+	for _, child := range node.Children {
+		collectNodeRefsRecursive(child, freedRefs)
+	}
+}
+
+// collectNodeRefs appends all non-zero Lua refs from a single node.
+func collectNodeRefs(node *Node, refs *[]int64) {
+	if node.OnClick != 0 {
+		*refs = append(*refs, node.OnClick)
+	}
+	if node.OnMouseEnter != 0 {
+		*refs = append(*refs, node.OnMouseEnter)
+	}
+	if node.OnMouseLeave != 0 {
+		*refs = append(*refs, node.OnMouseLeave)
+	}
+	if node.OnKeyDown != 0 {
+		*refs = append(*refs, node.OnKeyDown)
+	}
+	if node.OnChange != 0 {
+		*refs = append(*refs, node.OnChange)
+	}
+	if node.OnScroll != 0 {
+		*refs = append(*refs, node.OnScroll)
+	}
 }
 
 func childKey(node *Node) string {

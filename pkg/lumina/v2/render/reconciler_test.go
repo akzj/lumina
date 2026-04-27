@@ -304,3 +304,82 @@ func TestReconcile_UnkeyedChildren(t *testing.T) {
 		t.Error("third child not created")
 	}
 }
+
+func TestReconcileCollectRefs_UpdatedHandlers(t *testing.T) {
+	// When event handlers change, old refs should be collected
+	node := NewNode("box")
+	node.OnClick = 10
+	node.OnMouseEnter = 20
+
+	desc := Descriptor{Type: "box", OnClick: 30, OnMouseEnter: 40}
+
+	var freedRefs []int64
+	ReconcileCollectRefs(node, desc, &freedRefs)
+
+	if node.OnClick != 30 {
+		t.Errorf("expected OnClick=30, got %d", node.OnClick)
+	}
+	if node.OnMouseEnter != 40 {
+		t.Errorf("expected OnMouseEnter=40, got %d", node.OnMouseEnter)
+	}
+
+	// Old refs (10, 20) should be in freedRefs
+	if len(freedRefs) != 2 {
+		t.Fatalf("expected 2 freed refs, got %d: %v", len(freedRefs), freedRefs)
+	}
+	found10, found20 := false, false
+	for _, r := range freedRefs {
+		if r == 10 {
+			found10 = true
+		}
+		if r == 20 {
+			found20 = true
+		}
+	}
+	if !found10 || !found20 {
+		t.Errorf("expected freed refs to contain 10 and 20, got %v", freedRefs)
+	}
+}
+
+func TestReconcileCollectRefs_RemovedChildren(t *testing.T) {
+	// When children are removed, their refs should be collected
+	parent := NewNode("vbox")
+	child := NewNode("box")
+	child.Key = "a"
+	child.OnClick = 50
+	child.OnKeyDown = 60
+	parent.AddChild(child)
+
+	desc := Descriptor{Type: "vbox", Children: nil} // remove all children
+
+	var freedRefs []int64
+	ReconcileCollectRefs(parent, desc, &freedRefs)
+
+	// Refs from removed child should be collected
+	if len(freedRefs) != 2 {
+		t.Fatalf("expected 2 freed refs from removed child, got %d: %v", len(freedRefs), freedRefs)
+	}
+	found50, found60 := false, false
+	for _, r := range freedRefs {
+		if r == 50 {
+			found50 = true
+		}
+		if r == 60 {
+			found60 = true
+		}
+	}
+	if !found50 || !found60 {
+		t.Errorf("expected freed refs to contain 50 and 60, got %v", freedRefs)
+	}
+}
+
+func TestReconcileCollectRefs_NilDoesNotPanic(t *testing.T) {
+	// Reconcile without freedRefs (nil) should still work
+	node := NewNode("box")
+	node.OnClick = 10
+	desc := Descriptor{Type: "box", OnClick: 20}
+	Reconcile(node, desc) // uses nil freedRefs internally
+	if node.OnClick != 20 {
+		t.Errorf("expected OnClick=20, got %d", node.OnClick)
+	}
+}
