@@ -14,6 +14,9 @@ type Descriptor struct {
 	// Input/textarea specific
 	Placeholder string
 
+	// Scroll state
+	ScrollY int
+
 	// Event handler refs (Lua registry refs)
 	OnClick      LuaRef
 	OnMouseEnter LuaRef

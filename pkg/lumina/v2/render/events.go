@@ -163,7 +163,7 @@ func (e *Engine) callLuaRefKey(ref LuaRef, key string) {
 	L.PCall(1, 0, 0)
 }
 
-// callLuaRefScroll calls a Lua function with an event table {delta=delta}.
+// callLuaRefScroll calls a Lua function with an event table {delta=delta, key="up"/"down"}.
 func (e *Engine) callLuaRefScroll(ref LuaRef, delta int) {
 	L := e.L
 	L.RawGetI(lua.RegistryIndex, ref)
@@ -175,6 +175,13 @@ func (e *Engine) callLuaRefScroll(ref LuaRef, delta int) {
 	tblIdx := L.AbsIndex(-1)
 	L.PushInteger(int64(delta))
 	L.SetField(tblIdx, "delta")
+	// Also add key field for compatibility with Lua scripts expecting "up"/"down"
+	if delta < 0 {
+		L.PushString("up")
+	} else {
+		L.PushString("down")
+	}
+	L.SetField(tblIdx, "key")
 	L.PCall(1, 0, 0)
 }
 

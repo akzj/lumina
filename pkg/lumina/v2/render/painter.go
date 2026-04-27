@@ -88,9 +88,128 @@ func paintBox(buf *CellBuffer, node *Node) {
 		paintBorder(buf, node)
 	}
 
-	// 3. Paint children
+	// 3. Paint children (with scroll offset if applicable)
+	if node.Style.Overflow == "scroll" && node.ScrollY != 0 {
+		paintScrollChildren(buf, node)
+	} else {
+		for _, child := range node.Children {
+			paintNode(buf, child)
+		}
+	}
+}
+
+// paintScrollChildren paints children with a scroll offset, clipping to the container bounds.
+// It temporarily shifts child Y positions by -scrollY, paints only visible cells, then restores.
+func paintScrollChildren(buf *CellBuffer, node *Node) {
+	scrollY := node.ScrollY
+
+	// Shift all child subtree Y positions
+	shiftNodeTreeY(node, -scrollY)
+	defer shiftNodeTreeY(node, scrollY) // restore
+
+	// Paint children, but clip to the container bounds
 	for _, child := range node.Children {
-		paintNode(buf, child)
+		paintNodeClipped(buf, child, node.X, node.Y, node.X+node.W, node.Y+node.H)
+	}
+}
+
+// shiftNodeTreeY shifts all children (recursively) of a node by dy.
+// Does NOT shift the node itself (only its children).
+func shiftNodeTreeY(node *Node, dy int) {
+	for _, child := range node.Children {
+		shiftNodeY(child, dy)
+	}
+}
+
+// shiftNodeY shifts a node and all its descendants by dy.
+func shiftNodeY(node *Node, dy int) {
+	node.Y += dy
+	for _, child := range node.Children {
+		shiftNodeY(child, dy)
+	}
+}
+
+// paintNodeClipped paints a node, but only writes cells within the clip rect [clipX1, clipY1) to [clipX2, clipY2).
+func paintNodeClipped(buf *CellBuffer, node *Node, clipX1, clipY1, clipX2, clipY2 int) {
+	if node == nil || node.W <= 0 || node.H <= 0 {
+		return
+	}
+	// Skip entirely if the node is outside the clip rect
+	if node.Y >= clipY2 || node.Y+node.H <= clipY1 || node.X >= clipX2 || node.X+node.W <= clipX1 {
+		return
+	}
+
+	switch node.Type {
+	case "text":
+		paintTextClipped(buf, node, clipX1, clipY1, clipX2, clipY2)
+	case "box", "vbox", "hbox":
+		paintBoxClipped(buf, node, clipX1, clipY1, clipX2, clipY2)
+	case "input", "textarea":
+		paintTextClipped(buf, node, clipX1, clipY1, clipX2, clipY2)
+	case "component":
+		for _, child := range node.Children {
+			paintNodeClipped(buf, child, clipX1, clipY1, clipX2, clipY2)
+		}
+	}
+}
+
+func paintBoxClipped(buf *CellBuffer, node *Node, clipX1, clipY1, clipX2, clipY2 int) {
+	// Fill background (clipped)
+	if node.Style.Background != "" {
+		for y := node.Y; y < node.Y+node.H; y++ {
+			if y < clipY1 || y >= clipY2 {
+				continue
+			}
+			for x := node.X; x < node.X+node.W; x++ {
+				if x >= clipX1 && x < clipX2 {
+					buf.SetChar(x, y, ' ', "", node.Style.Background, false)
+				}
+			}
+		}
+	}
+	// Paint children (clipped)
+	for _, child := range node.Children {
+		paintNodeClipped(buf, child, clipX1, clipY1, clipX2, clipY2)
+	}
+}
+
+func paintTextClipped(buf *CellBuffer, node *Node, clipX1, clipY1, clipX2, clipY2 int) {
+	// Fill background (clipped)
+	if node.Style.Background != "" {
+		for y := node.Y; y < node.Y+node.H; y++ {
+			if y < clipY1 || y >= clipY2 {
+				continue
+			}
+			for x := node.X; x < node.X+node.W; x++ {
+				if x >= clipX1 && x < clipX2 {
+					buf.SetChar(x, y, ' ', "", node.Style.Background, false)
+				}
+			}
+		}
+	}
+
+	fg := node.Style.Foreground
+	bold := node.Style.Bold
+
+	x := node.X
+	y := node.Y
+	for _, ch := range node.Content {
+		if ch == '\n' {
+			y++
+			x = node.X
+			continue
+		}
+		if x < node.X+node.W && y < node.Y+node.H {
+			if y >= clipY1 && y < clipY2 && x >= clipX1 && x < clipX2 {
+				bg := node.Style.Background
+				if bg == "" {
+					existing := buf.Get(x, y)
+					bg = existing.BG
+				}
+				buf.SetChar(x, y, ch, fg, bg, bold)
+			}
+			x++
+		}
 	}
 }
 

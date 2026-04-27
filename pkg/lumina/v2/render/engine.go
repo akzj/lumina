@@ -247,6 +247,7 @@ func (e *Engine) readDescriptor(L *lua.State, idx int) Descriptor {
 		}
 	}
 	desc.Placeholder = getStringField(L, absIdx, "placeholder")
+	desc.ScrollY = int(getIntField(L, absIdx, "scrollY"))
 
 	// Read style — check for nested "style" table first, then top-level style fields
 	L.GetField(absIdx, "style")

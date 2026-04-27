@@ -20,6 +20,13 @@ func Reconcile(node *Node, desc Descriptor) bool {
 		changed = true
 	}
 
+	// 1c. Update scroll position
+	if desc.ScrollY != node.ScrollY {
+		node.ScrollY = desc.ScrollY
+		node.PaintDirty = true
+		changed = true
+	}
+
 	// 2. Update ComponentType (for component placeholder nodes)
 	if desc.ComponentType != node.ComponentType {
 		node.ComponentType = desc.ComponentType
@@ -215,6 +222,7 @@ func createNodeFromDesc(desc Descriptor) *Node {
 	node.Key = desc.Key
 	node.Content = desc.Content
 	node.Placeholder = desc.Placeholder
+	node.ScrollY = desc.ScrollY
 	node.Style = desc.Style
 	node.ComponentType = desc.ComponentType
 	node.OnClick = desc.OnClick
