@@ -2164,3 +2164,210 @@ return H
 		t.Errorf("expected 'hi from subdir' on screen from subdirectory module, got line: %q", readScreenLine(ta, 0, 40))
 	}
 }
+
+// --- Textarea E2E Tests ---
+
+func TestLuaE2E_Textarea_Render(t *testing.T) {
+	app, ta, _ := newLuaApp(t, 40, 10)
+
+	err := app.RunString(`
+		lumina.createComponent({
+			id = "ta-render",
+			x = 0, y = 0, w = 40, h = 10,
+			render = function(state, props)
+				return lumina.createElement("textarea", {
+					id = "my-textarea",
+					value = "Hello\nWorld",
+				})
+			end
+		})
+	`)
+	if err != nil {
+		t.Fatalf("RunString failed: %v", err)
+	}
+
+	app.RenderAll()
+
+	if !screenHasString(ta, "Hello") {
+		t.Errorf("expected 'Hello' on screen, got line0: %q", readScreenLine(ta, 0, 40))
+	}
+	if !screenHasString(ta, "World") {
+		t.Errorf("expected 'World' on screen, got line1: %q", readScreenLine(ta, 1, 40))
+	}
+}
+
+func TestLuaE2E_Textarea_Placeholder(t *testing.T) {
+	app, ta, _ := newLuaApp(t, 40, 10)
+
+	err := app.RunString(`
+		lumina.createComponent({
+			id = "ta-ph",
+			x = 0, y = 0, w = 40, h = 10,
+			render = function(state, props)
+				return lumina.createElement("textarea", {
+					id = "ph-textarea",
+					value = "",
+					placeholder = "Enter text...",
+				})
+			end
+		})
+	`)
+	if err != nil {
+		t.Fatalf("RunString failed: %v", err)
+	}
+
+	app.RenderAll()
+
+	if !screenHasString(ta, "Enter text...") {
+		t.Errorf("expected placeholder 'Enter text...' on screen, got line0: %q", readScreenLine(ta, 0, 40))
+	}
+}
+
+func TestLuaE2E_Textarea_Typing(t *testing.T) {
+	app, ta, _ := newLuaApp(t, 40, 10)
+
+	err := app.RunString(`
+		lumina.createComponent({
+			id = "ta-type",
+			x = 0, y = 0, w = 40, h = 10,
+			render = function(state, props)
+				local text, setText = lumina.useState("text", "")
+				return lumina.createElement("textarea", {
+					id = "type-textarea",
+					value = text,
+					onChange = function(newValue)
+						setText(newValue)
+					end,
+				})
+			end
+		})
+	`)
+	if err != nil {
+		t.Fatalf("RunString failed: %v", err)
+	}
+
+	app.RenderAll()
+
+	// Focus the textarea (Tab cycles to first focusable).
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "Tab"})
+	app.RenderDirty()
+
+	// Type "Hi"
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "H"})
+	app.RenderDirty()
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "i"})
+	app.RenderDirty()
+
+	if !screenHasString(ta, "Hi") {
+		t.Errorf("expected 'Hi' on screen after typing, got line0: %q", readScreenLine(ta, 0, 40))
+	}
+}
+
+func TestLuaE2E_Textarea_Newline(t *testing.T) {
+	app, ta, _ := newLuaApp(t, 40, 10)
+
+	err := app.RunString(`
+		lumina.createComponent({
+			id = "ta-newline",
+			x = 0, y = 0, w = 40, h = 10,
+			render = function(state, props)
+				local text, setText = lumina.useState("text", "")
+				return lumina.createElement("textarea", {
+					id = "nl-textarea",
+					value = text,
+					onChange = function(newValue)
+						setText(newValue)
+					end,
+				})
+			end
+		})
+	`)
+	if err != nil {
+		t.Fatalf("RunString failed: %v", err)
+	}
+
+	app.RenderAll()
+
+	// Focus
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "Tab"})
+	app.RenderDirty()
+
+	// Type "AB", then Enter, then "CD"
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "A"})
+	app.RenderDirty()
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "B"})
+	app.RenderDirty()
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "Enter"})
+	app.RenderDirty()
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "C"})
+	app.RenderDirty()
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "D"})
+	app.RenderDirty()
+
+	// "AB" should be on line 0, "CD" on line 1
+	if !screenHasString(ta, "AB") {
+		t.Errorf("expected 'AB' on screen, got line0: %q", readScreenLine(ta, 0, 40))
+	}
+	if !screenHasString(ta, "CD") {
+		t.Errorf("expected 'CD' on screen, got line1: %q", readScreenLine(ta, 1, 40))
+	}
+}
+
+func TestLuaE2E_Textarea_MultilineNavigation(t *testing.T) {
+	app, ta, _ := newLuaApp(t, 40, 10)
+
+	err := app.RunString(`
+		lumina.createComponent({
+			id = "ta-nav",
+			x = 0, y = 0, w = 40, h = 10,
+			render = function(state, props)
+				local text, setText = lumina.useState("text", "")
+				return lumina.createElement("textarea", {
+					id = "nav-textarea",
+					value = text,
+					onChange = function(newValue)
+						setText(newValue)
+					end,
+				})
+			end
+		})
+	`)
+	if err != nil {
+		t.Fatalf("RunString failed: %v", err)
+	}
+
+	app.RenderAll()
+
+	// Focus
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "Tab"})
+	app.RenderDirty()
+
+	// Type "AB\nCD" (two lines)
+	for _, ch := range "AB" {
+		app.HandleEvent(&event.Event{Type: "keydown", Key: string(ch)})
+		app.RenderDirty()
+	}
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "Enter"})
+	app.RenderDirty()
+	for _, ch := range "CD" {
+		app.HandleEvent(&event.Event{Type: "keydown", Key: string(ch)})
+		app.RenderDirty()
+	}
+
+	// Cursor is at end of "CD" (line 1, col 2).
+	// Press ArrowUp → cursor moves to line 0.
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "ArrowUp"})
+	app.RenderDirty()
+
+	// Now type "X" — should insert on line 0 at col 2: "ABX"
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "X"})
+	app.RenderDirty()
+
+	if !screenHasString(ta, "ABX") {
+		t.Errorf("expected 'ABX' on screen after ArrowUp+typing, got line0: %q", readScreenLine(ta, 0, 40))
+	}
+	// Line 1 should still have "CD"
+	if !screenHasString(ta, "CD") {
+		t.Errorf("expected 'CD' still on screen, got line1: %q", readScreenLine(ta, 1, 40))
+	}
+}
