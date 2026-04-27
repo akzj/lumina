@@ -22,6 +22,11 @@ type Rect struct {
 	X, Y, W, H int
 }
 
+// Translated returns a copy of r shifted by (dx, dy). Width and height are unchanged.
+func (r Rect) Translated(dx, dy int) Rect {
+	return Rect{X: r.X + dx, Y: r.Y + dy, W: r.W, H: r.H}
+}
+
 // Contains checks if point (px, py) is inside the rect.
 func (r Rect) Contains(px, py int) bool {
 	return px >= r.X && px < r.X+r.W && py >= r.Y && py < r.Y+r.H
