@@ -1706,3 +1706,70 @@ func TestV2E2E_ChildRemovalClearsGhost(t *testing.T) {
 		t.Error("ghost pixel bug: 'CCCC' still visible after child removal")
 	}
 }
+
+// TestV2E2E_ChildMovePositionClearsGhost verifies that when a child moves
+// position due to a sibling's height change (no removal), the old position
+// is cleared with the parent's background.
+func TestV2E2E_ChildMovePositionClearsGhost(t *testing.T) {
+	app, ta, _ := newV2App(t, 40, 10)
+
+	// A has height=1 initially, then shrinks to height=0 (hidden) on click.
+	// B starts at row 1. After A shrinks, B moves to row 0.
+	// Row 1 (B's old position) should show parent bg, not ghost "BBBB".
+	err := app.RunString(`
+		lumina.createComponent({
+			id = "move-test",
+			render = function(props)
+				local tall, setTall = lumina.useState("tall", true)
+
+				local aHeight = 3
+				if not tall then aHeight = 1 end
+
+				return lumina.createElement("vbox", {
+					id = "container",
+					style = {width = 40, height = 10, background = "#112233"},
+					onClick = function()
+						setTall(false)
+					end,
+				},
+					lumina.createElement("text", {id = "a", style = {height = aHeight}}, "AAAA"),
+					lumina.createElement("text", {id = "b"}, "BBBB")
+				)
+			end,
+		})
+	`)
+	if err != nil {
+		t.Fatalf("RunScript failed: %v", err)
+	}
+
+	// Initial render: A takes rows 0-2 (height=3), B at row 3
+	app.RenderAll()
+
+	if !screenHasString(ta, "AAAA") {
+		t.Fatal("expected 'AAAA' on screen initially")
+	}
+	bCell := ta.LastScreen.Get(0, 3)
+	if bCell.Char != 'B' {
+		t.Fatalf("expected 'B' at (0,3) initially, got %q", bCell.Char)
+	}
+
+	// Click to shrink A to height=1 → B moves from row 3 to row 1
+	app.HandleEvent(&event.Event{Type: "click", X: 5, Y: 0})
+	app.RenderDirty()
+
+	// B should now be at row 1
+	movedCell := ta.LastScreen.Get(0, 1)
+	if movedCell.Char != 'B' {
+		t.Errorf("expected 'B' at (0,1) after A shrinks, got %q", movedCell.Char)
+	}
+
+	// Row 3 (B's old position) should be cleared — parent bg, not ghost "BBBB"
+	ghostCell := ta.LastScreen.Get(0, 3)
+	if ghostCell.Char == 'B' {
+		t.Error("ghost pixel bug: 'B' still visible at old position (0,3) after child moved up")
+	}
+	// Should have parent background
+	if ghostCell.Background != "#112233" {
+		t.Errorf("expected parent bg '#112233' at old position (0,3), got %q", ghostCell.Background)
+	}
+}

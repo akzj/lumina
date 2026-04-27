@@ -238,6 +238,11 @@ func computeFlex(node *Node, x, y, w, h int) {
 	// Mark PaintDirty if position/size changed
 	if node.X != x || node.Y != y || node.W != w || node.H != h {
 		node.PaintDirty = true
+		// Parent must repaint to clear the old position area
+		// (ClearRect on old pos alone would leave a hole in parent's background)
+		if node.Parent != nil {
+			node.Parent.PaintDirty = true
+		}
 	}
 
 	node.X = x
