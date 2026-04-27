@@ -113,6 +113,20 @@ func (b *Bridge) DestroyComponent(compID string) {
 	}
 }
 
+// Reset clears all hook contexts and tracked refs. Used during hot reload
+// to start fresh while allowing state to be restored externally.
+func (b *Bridge) Reset() {
+	// Destroy all hook contexts (runs effect cleanups).
+	for id, hc := range b.hookContexts {
+		hc.Destroy()
+		delete(b.hookContexts, id)
+	}
+	// Release tracked Lua registry refs.
+	b.ReleaseRefs()
+	// Clear current component.
+	b.currentComp = nil
+}
+
 // WrapRenderFn wraps a Lua render function (stored as registry ref) as a Go
 // RenderFunc. When the returned function is called, it:
 //  1. Pushes the Lua function from the registry
