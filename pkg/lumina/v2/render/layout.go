@@ -274,6 +274,13 @@ func computeFlex(node *Node, x, y, w, h int) {
 		layoutVBox(node, x, y, w, h, style)
 		return
 
+	case "component":
+		// Component placeholder: transparent container, passes through to children
+		for _, child := range node.Children {
+			computeFlex(child, x, y, w, h)
+		}
+		return
+
 	case "text":
 		layoutText(node, layoutW)
 

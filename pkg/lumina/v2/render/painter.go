@@ -52,6 +52,11 @@ func paintNode(buf *CellBuffer, node *Node) {
 		paintBox(buf, node)
 	case "input", "textarea":
 		paintInput(buf, node)
+	case "component":
+		// Component placeholder: transparent container, just paint children
+		for _, child := range node.Children {
+			paintNode(buf, child)
+		}
 	}
 }
 
