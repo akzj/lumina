@@ -275,11 +275,15 @@ func (m *Manager) Reconcile(parent *Component, newChildren []ChildDescriptor) {
 			newList = append(newList, existing)
 		} else {
 			// New child — create.
+			// Stack above the parent so the parent's full-screen fill does not
+			// occlude child layers when both would otherwise share z=0.
+			childZ := parent.zIndex + 1
 			comp := &Component{
 				id:         parent.id + ":" + desc.Key,
 				name:       desc.Name,
 				buf:        buffer.New(1, 1),
 				rect:       buffer.Rect{W: 1, H: 1},
+				zIndex:     childZ,
 				props:      desc.Props,
 				renderFn:   desc.RenderFn,
 				state:      make(map[string]any),
