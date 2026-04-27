@@ -133,14 +133,18 @@ func (c *Component) SetState(key string, value any) {
 }
 
 // Move moves the component to a new rect, updating prevRect and resizing
-// the buffer if dimensions changed.
+// the buffer if dimensions changed. Position-only moves (same W, H) do NOT
+// mark dirtyPaint — the buffer content is identical in component-local
+// coordinates, so only recompose is needed, not re-render.
 func (c *Component) Move(newRect buffer.Rect) {
 	c.prevRect = c.rect
 	c.rect = newRect
 	c.rectChanged = true
-	c.dirtyPaint = true
+	// Only re-render if size changed (need new buffer, re-layout, re-paint).
+	// Position-only moves just need recompose, not re-render.
 	if newRect.W != c.buf.Width() || newRect.H != c.buf.Height() {
 		c.buf = buffer.New(newRect.W, newRect.H)
+		c.dirtyPaint = true
 	}
 }
 
