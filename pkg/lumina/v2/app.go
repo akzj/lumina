@@ -122,6 +122,18 @@ func (a *App) RenderDirty() {
 			allDirtyRects = append(allDirtyRects, a.compositor.ComposeRects(rects)...)
 		}
 
+		// Re-layout VNode trees for components that moved but weren't
+		// re-rendered (position-only move). The VNode tree's absolute
+		// coordinates (X, Y) are stale after a move; we must recompute
+		// them so the hit tester finds VNodes at the new position.
+		// This is cheap: just a tree walk, no renderFn/paint/buffer.
+		for _, comp := range rectChanged {
+			if comp.VNodeTree() != nil && !comp.IsDirtyPaint() {
+				r := comp.Rect()
+				layout.ComputeLayout(comp.VNodeTree(), r.X, r.Y, r.W, r.H)
+			}
+		}
+
 		// Rebuild hit tester + sync handlers after structural change.
 		a.rebuildHitTester()
 		a.syncHandlers()
