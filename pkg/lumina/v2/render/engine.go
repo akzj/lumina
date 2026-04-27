@@ -368,10 +368,9 @@ func (e *Engine) reconcileChildComponents(parent *Component, node *Node) {
 			parent.AddChild(child)
 			e.components[childID] = child
 			child.Dirty = true
-		} else {
-			// Existing child — mark dirty so it re-renders with latest props
-			child.Dirty = true
 		}
+		// Existing child: do NOT mark dirty unless props changed.
+		// Child state changes (hover, click) mark themselves dirty via setState.
 		node.Component = child
 		return
 	}
