@@ -3,6 +3,7 @@ package devtools
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/akzj/lumina/pkg/lumina/v2/layout"
 	"github.com/akzj/lumina/pkg/lumina/v2/perf"
@@ -140,6 +141,9 @@ func TestPanel_RenderPerf(t *testing.T) {
 	p.Width = 80
 	p.Height = 20
 
+	// Snapshot perf data before render (as the app would do)
+	p.SnapshotPerf()
+
 	vn := p.Render(nil, nil)
 	if vn == nil {
 		t.Fatal("Render returned nil")
@@ -165,6 +169,9 @@ func TestPanel_RenderPerf(t *testing.T) {
 	}
 	if !strings.Contains(allText, "Runtime") {
 		t.Error("perf tab should contain 'Runtime'")
+	}
+	if !strings.Contains(allText, "FPS") {
+		t.Error("perf tab should contain 'FPS'")
 	}
 }
 
@@ -211,6 +218,67 @@ func TestPanel_TabBar(t *testing.T) {
 	}
 	if !perfTab.Style.Bold {
 		t.Error("active Perf tab should be bold")
+	}
+}
+
+func TestPanel_TabBarShowsFPS(t *testing.T) {
+	tracker := perf.NewTracker(10)
+	p := NewPanel(tracker)
+	p.Visible = true
+	p.Width = 80
+	p.Height = 20
+
+	// Simulate FPS measurement
+	p.fpsLastTime = time.Now().Add(-400 * time.Millisecond) // 400ms ago
+	p.fpsFrameCount = 24                                     // 24 frames in 400ms = 60fps
+	p.TickFPS()
+	p.SnapshotPerf()
+
+	vn := p.Render(nil, nil)
+	tabBar := vn.Children[0]
+	allText := collectText(tabBar)
+	if !strings.Contains(allText, "FPS") {
+		t.Errorf("tab bar should show FPS, got: %s", allText)
+	}
+}
+
+func TestPanel_TickFPS(t *testing.T) {
+	tracker := perf.NewTracker(10)
+	p := NewPanel(tracker)
+
+	// Initially FPS should be 0
+	if p.FPS() != 0 {
+		t.Errorf("initial FPS should be 0, got %d", p.FPS())
+	}
+
+	// Simulate 60 ticks over 1 second (300ms measurement window)
+	p.fpsLastTime = time.Now().Add(-350 * time.Millisecond)
+	p.fpsFrameCount = 20 // ~57 fps
+	p.TickFPS()
+
+	fps := p.FPS()
+	if fps < 40 || fps > 80 {
+		t.Errorf("FPS should be ~57, got %d", fps)
+	}
+}
+
+func TestPanel_SnapshotPerf(t *testing.T) {
+	tracker := perf.NewTracker(10)
+	tracker.Enable()
+	tracker.BeginFrame()
+	tracker.Record(perf.Renders, 5)
+	tracker.EndFrame()
+
+	p := NewPanel(tracker)
+	p.fps = 60
+
+	p.SnapshotPerf()
+
+	if p.perfSnap.Last.Get(perf.Renders) != 5 {
+		t.Errorf("snapshot last renders = %d, want 5", p.perfSnap.Last.Get(perf.Renders))
+	}
+	if p.perfSnap.FPS != 60 {
+		t.Errorf("snapshot FPS = %d, want 60", p.perfSnap.FPS)
 	}
 }
 

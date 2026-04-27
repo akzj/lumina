@@ -48,17 +48,28 @@ type App struct {
 }
 
 // trackerRenderObserver bridges component.RenderObserver to perf.Tracker.
+// It skips the "__devtools" component so that DevTools' own rendering does
+// not pollute the application's performance statistics.
 type trackerRenderObserver struct {
 	tracker *perf.Tracker
 }
 
 func (o *trackerRenderObserver) OnRender(compID string) {
+	if compID == "__devtools" {
+		return
+	}
 	o.tracker.RecordComponent(compID)
 }
-func (o *trackerRenderObserver) OnLayout(_ string) {
+func (o *trackerRenderObserver) OnLayout(compID string) {
+	if compID == "__devtools" {
+		return
+	}
 	o.tracker.Record(perf.Layouts, 1)
 }
-func (o *trackerRenderObserver) OnPaint(_ string) {
+func (o *trackerRenderObserver) OnPaint(compID string) {
+	if compID == "__devtools" {
+		return
+	}
 	o.tracker.Record(perf.Paints, 1)
 }
 
@@ -351,8 +362,29 @@ func (a *App) toggleDevTools() {
 	a.RenderAll()
 }
 
-// refreshDevTools triggers a re-render of the DevTools component.
+// tickDevTools is called every frame tick from the event loop.
+// It updates FPS, snapshots perf data, and marks the devtools component dirty
+// so it auto-refreshes each frame with up-to-date stats.
+func (a *App) tickDevTools() {
+	a.devtools.TickFPS()
+	if !a.devtools.Visible {
+		return
+	}
+	// Snapshot perf data BEFORE marking devtools dirty, so the snapshot
+	// captures application stats without the devtools' own render cycle.
+	a.devtools.SnapshotPerf()
+	a.updateDevToolsComponentInfo()
+	// Mark dirty so RenderDirty (called right after) will re-render it.
+	comp := a.manager.Get("__devtools")
+	if comp != nil {
+		comp.MarkDirty()
+	}
+}
+
+// refreshDevTools triggers an immediate re-render of the DevTools component.
+// Used for tab switching where we want instant feedback without waiting for tick.
 func (a *App) refreshDevTools() {
+	a.devtools.SnapshotPerf()
 	a.updateDevToolsComponentInfo()
 	a.SetState("__devtools", "__refresh", time.Now().UnixNano())
 	a.RenderDirty()

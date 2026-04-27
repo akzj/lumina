@@ -153,6 +153,9 @@ func (a *App) eventLoop(cfg RunConfig) error {
 				_ = completed // animation completion callbacks are handled by the animation system
 			}
 
+			// Tick FPS counter and auto-refresh devtools.
+			a.tickDevTools()
+
 			// Render dirty components.
 			a.RenderDirty()
 		}
