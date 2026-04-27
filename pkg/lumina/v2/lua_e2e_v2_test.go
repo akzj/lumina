@@ -968,8 +968,7 @@ func TestV2E2E_InputRender(t *testing.T) {
 }
 
 func TestV2E2E_InputPlaceholder(t *testing.T) {
-	// V2 engine gap: no placeholder support in Node/readDescriptor/painter.
-	t.Skip("V2 engine: input placeholder not supported yet")
+	// P1b fix: placeholder now supported in Node + readDescriptor + painter.
 
 	app, ta, _ := newV2App(t, 40, 10)
 
@@ -1089,8 +1088,7 @@ func TestV2E2E_Textarea_Render(t *testing.T) {
 }
 
 func TestV2E2E_Textarea_Placeholder(t *testing.T) {
-	// V2 engine gap: no placeholder support in Node/readDescriptor/painter.
-	t.Skip("V2 engine: textarea placeholder not supported yet")
+	// P1b fix: placeholder now supported in Node + readDescriptor + painter.
 
 	app, ta, _ := newV2App(t, 40, 10)
 

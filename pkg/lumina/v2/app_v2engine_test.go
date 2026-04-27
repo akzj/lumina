@@ -263,3 +263,116 @@ func TestAppV2Engine_ExistingPipelineUnaffected(t *testing.T) {
 		t.Error("NewAppWithLua should not set engine")
 	}
 }
+
+func TestAppV2Engine_F12DevToolsToggle(t *testing.T) {
+	app, ta, _ := newEngineApp(t, 40, 20)
+
+	err := app.RunString(`
+		lumina.createComponent({
+			id = "root",
+			render = function(props)
+				return { type = "text", content = "Hello" }
+			end
+		})
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	app.RenderAll()
+	writesBefore := ta.WriteCount
+
+	// Initially devtools is not visible.
+	if app.DevTools().Visible {
+		t.Fatal("devtools should be hidden initially")
+	}
+
+	// Press F12 to open devtools.
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "F12"})
+
+	if !app.DevTools().Visible {
+		t.Fatal("devtools should be visible after F12")
+	}
+
+	// Verify something was written to the adapter (the devtools overlay).
+	if ta.WriteCount <= writesBefore {
+		t.Error("expected adapter write after opening devtools")
+	}
+
+	// Verify the devtools panel is painted at the bottom of the screen.
+	// The panel should occupy ~40% of height (8 rows for h=20).
+	screen := ta.LastScreen
+	if screen == nil {
+		t.Fatal("expected screen output")
+	}
+
+	// Check that the bottom area has devtools content (tab bar with "Elements").
+	panelH := 20 * 4 / 10 // 8 rows
+	panelY := 20 - panelH  // row 12
+	found := false
+	for x := 0; x < 40; x++ {
+		cell := screen.Get(x, panelY)
+		if cell.Char == 'E' { // "Elements" in tab bar
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected devtools tab bar content at panel top")
+	}
+
+	writesBefore = ta.WriteCount
+
+	// Press F12 again to close devtools.
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "F12"})
+
+	if app.DevTools().Visible {
+		t.Fatal("devtools should be hidden after second F12")
+	}
+}
+
+func TestAppV2Engine_DevToolsTabSwitch(t *testing.T) {
+	app, ta, _ := newEngineApp(t, 40, 20)
+
+	err := app.RunString(`
+		lumina.createComponent({
+			id = "root",
+			render = function(props)
+				return { type = "text", content = "Hello" }
+			end
+		})
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	app.RenderAll()
+
+	// Open devtools.
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "F12"})
+	if !app.DevTools().Visible {
+		t.Fatal("devtools should be visible")
+	}
+
+	// Default tab is Elements.
+	if app.DevTools().ActiveTab != 0 { // TabElements = 0
+		t.Errorf("expected Elements tab, got %d", app.DevTools().ActiveTab)
+	}
+
+	writesBefore := ta.WriteCount
+
+	// Switch to Perf tab.
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "2"})
+	if app.DevTools().ActiveTab != 1 { // TabPerf = 1
+		t.Errorf("expected Perf tab, got %d", app.DevTools().ActiveTab)
+	}
+
+	// Verify something was written (tab switch triggers repaint).
+	if ta.WriteCount <= writesBefore {
+		t.Error("expected adapter write after tab switch")
+	}
+
+	// Switch back to Elements tab.
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "1"})
+	if app.DevTools().ActiveTab != 0 {
+		t.Errorf("expected Elements tab, got %d", app.DevTools().ActiveTab)
+	}
+}
