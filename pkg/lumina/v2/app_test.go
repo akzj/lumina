@@ -515,5 +515,203 @@ func TestApp_RenderDirty_NoDirty(t *testing.T) {
 	}
 }
 
+// --- Test 16: DevTools F12 toggle ---
+
+func TestApp_DevTools_F12Toggle(t *testing.T) {
+	app, _ := NewTestApp(80, 24)
+
+	app.RegisterComponent("main", "Main", buffer.Rect{X: 0, Y: 0, W: 80, H: 24}, 0,
+		func(state, props map[string]any) *layout.VNode {
+			vn := layout.NewVNode("text")
+			vn.Content = "Hello App"
+			return vn
+		})
+
+	app.RenderAll()
+
+	// DevTools should not be visible initially
+	if app.DevTools().Visible {
+		t.Fatal("devtools should be hidden initially")
+	}
+	if app.manager.Get("__devtools") != nil {
+		t.Fatal("__devtools component should not exist initially")
+	}
+
+	// Press F12 to open
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "F12"})
+
+	if !app.DevTools().Visible {
+		t.Fatal("devtools should be visible after F12")
+	}
+	dtComp := app.manager.Get("__devtools")
+	if dtComp == nil {
+		t.Fatal("__devtools component should be registered after F12")
+	}
+	if dtComp.ZIndex() != 9999 {
+		t.Errorf("devtools zIndex = %d, want 9999", dtComp.ZIndex())
+	}
+
+	// Check that devtools panel takes bottom 40% of screen
+	r := dtComp.Rect()
+	expectedH := 24 * 4 / 10
+	if r.H != expectedH {
+		t.Errorf("devtools height = %d, want %d", r.H, expectedH)
+	}
+	if r.Y != 24-expectedH {
+		t.Errorf("devtools Y = %d, want %d", r.Y, 24-expectedH)
+	}
+	if r.W != 80 {
+		t.Errorf("devtools width = %d, want 80", r.W)
+	}
+
+	// Check the screen has devtools content
+	screen := app.Screen()
+	foundElements := false
+	for y := 0; y < 24; y++ {
+		line := ""
+		for x := 0; x < 80; x++ {
+			c := screen.Get(x, y)
+			if c.Char != 0 {
+				line += string(c.Char)
+			}
+		}
+		if len(line) > 0 && (contains(line, "Elements") || contains(line, "Perf")) {
+			foundElements = true
+			break
+		}
+	}
+	if !foundElements {
+		t.Error("devtools panel content not found on screen after F12")
+	}
+
+	// Press F12 again to close
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "F12"})
+
+	if app.DevTools().Visible {
+		t.Fatal("devtools should be hidden after second F12")
+	}
+	if app.manager.Get("__devtools") != nil {
+		t.Fatal("__devtools component should be unregistered after second F12")
+	}
+}
+
+// --- Test 17: DevTools tab switching ---
+
+func TestApp_DevTools_TabSwitch(t *testing.T) {
+	app, _ := NewTestApp(80, 24)
+
+	app.RegisterComponent("main", "Main", buffer.Rect{X: 0, Y: 0, W: 80, H: 24}, 0,
+		func(state, props map[string]any) *layout.VNode {
+			vn := layout.NewVNode("text")
+			vn.Content = "Hello"
+			return vn
+		})
+
+	app.RenderAll()
+
+	// Open devtools
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "F12"})
+
+	if app.DevTools().ActiveTab != 0 { // TabElements
+		t.Errorf("default tab should be Elements (0), got %d", app.DevTools().ActiveTab)
+	}
+
+	// Switch to Perf tab
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "2"})
+	if app.DevTools().ActiveTab != 1 { // TabPerf
+		t.Errorf("tab should be Perf (1) after pressing 2, got %d", app.DevTools().ActiveTab)
+	}
+
+	// Switch back to Elements
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "1"})
+	if app.DevTools().ActiveTab != 0 {
+		t.Errorf("tab should be Elements (0) after pressing 1, got %d", app.DevTools().ActiveTab)
+	}
+
+	// Tab keys should NOT be intercepted when devtools is closed
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "F12"}) // close
+	app.DevTools().SetTab(0)                                     // reset
+
+	// Now "2" should be dispatched normally (not intercepted)
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "2"})
+	if app.DevTools().ActiveTab != 0 {
+		t.Errorf("tab should still be Elements when devtools is closed, got %d", app.DevTools().ActiveTab)
+	}
+}
+
+// --- Test 18: DevTools Elements tab shows component info ---
+
+func TestApp_DevTools_ElementsContent(t *testing.T) {
+	app, _ := NewTestApp(80, 24)
+
+	app.RegisterComponent("counter", "Counter", buffer.Rect{X: 5, Y: 3, W: 30, H: 8}, 2,
+		func(state, props map[string]any) *layout.VNode {
+			root := layout.NewVNode("box")
+			root.ID = "counter-root"
+			child := layout.NewVNode("text")
+			child.Content = "Count: 42"
+			root.AddChild(child)
+			return root
+		})
+
+	app.RenderAll()
+
+	// Open devtools
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "F12"})
+
+	// The devtools component should have rendered with Elements tab
+	dtComp := app.manager.Get("__devtools")
+	if dtComp == nil {
+		t.Fatal("__devtools not registered")
+	}
+
+	vn := dtComp.VNodeTree()
+	if vn == nil {
+		t.Fatal("devtools VNodeTree is nil")
+	}
+
+	// Walk the VNode tree to find component info
+	allText := collectAllText(vn)
+	if !contains(allText, "Counter") {
+		t.Errorf("Elements tab should show component name 'Counter', got: %s", truncate(allText, 200))
+	}
+	if !contains(allText, "counter") {
+		t.Errorf("Elements tab should show component ID 'counter', got: %s", truncate(allText, 200))
+	}
+}
+
+// helper: contains checks if s contains substr
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && searchString(s, substr)
+}
+
+func searchString(s, sub string) bool {
+	for i := 0; i <= len(s)-len(sub); i++ {
+		if s[i:i+len(sub)] == sub {
+			return true
+		}
+	}
+	return false
+}
+
+// helper: collect all text content from a VNode tree
+func collectAllText(vn *layout.VNode) string {
+	if vn == nil {
+		return ""
+	}
+	result := vn.Content
+	for _, child := range vn.Children {
+		result += " " + collectAllText(child)
+	}
+	return result
+}
+
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "..."
+}
+
 // Suppress unused import warning
 var _ = (*component.Component)(nil)

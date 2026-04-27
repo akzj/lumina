@@ -4,12 +4,15 @@
 package v2
 
 import (
+	"time"
+
 	"github.com/akzj/go-lua/pkg/lua"
 	"github.com/akzj/lumina/pkg/lumina/v2/animation"
 	"github.com/akzj/lumina/pkg/lumina/v2/bridge"
 	"github.com/akzj/lumina/pkg/lumina/v2/buffer"
 	"github.com/akzj/lumina/pkg/lumina/v2/component"
 	"github.com/akzj/lumina/pkg/lumina/v2/compositor"
+	"github.com/akzj/lumina/pkg/lumina/v2/devtools"
 	"github.com/akzj/lumina/pkg/lumina/v2/event"
 	"github.com/akzj/lumina/pkg/lumina/v2/layout"
 	"github.com/akzj/lumina/pkg/lumina/v2/output"
@@ -31,6 +34,9 @@ type App struct {
 	// Internal state
 	lastDirtyRects []buffer.Rect
 	layersDirty    bool // true when components added/removed/resized → need OcclusionMap rebuild
+
+	// DevTools panel
+	devtools *devtools.Panel
 
 	// Runtime (populated by NewAppWithLua / Run)
 	luaState  *lua.State
@@ -81,6 +87,7 @@ func NewApp(w, h int, adapter output.Adapter) *App {
 		dispatcher: disp,
 		adapter:    adapter,
 		tracker:    t,
+		devtools:   devtools.NewPanel(t),
 	}
 }
 
@@ -249,7 +256,27 @@ func (a *App) RenderDirty() {
 }
 
 // HandleEvent dispatches an input event through the event system.
+// F12 and DevTools tab-switching keys are intercepted before normal dispatch.
 func (a *App) HandleEvent(e *event.Event) {
+	if e.Type == "keydown" {
+		if e.Key == "F12" {
+			a.toggleDevTools()
+			return
+		}
+		// Tab switching when devtools is visible.
+		if a.devtools.Visible {
+			switch e.Key {
+			case "1":
+				a.devtools.SetTab(devtools.TabElements)
+				a.refreshDevTools()
+				return
+			case "2":
+				a.devtools.SetTab(devtools.TabPerf)
+				a.refreshDevTools()
+				return
+			}
+		}
+	}
 	a.dispatcher.Dispatch(e)
 }
 
@@ -293,6 +320,66 @@ func (a *App) Resize(w, h int) {
 	for _, comp := range a.manager.GetAll() {
 		comp.MarkDirty()
 	}
+}
+
+// DevTools returns the DevTools panel (for testing/inspection).
+func (a *App) DevTools() *devtools.Panel {
+	return a.devtools
+}
+
+// toggleDevTools shows or hides the DevTools panel.
+func (a *App) toggleDevTools() {
+	a.devtools.Toggle()
+	if a.devtools.Visible {
+		// Enable perf tracking when devtools opens.
+		a.tracker.Enable()
+
+		panelH := a.height * 4 / 10
+		if panelH < 8 {
+			panelH = 8
+		}
+		a.devtools.Width = a.width
+		a.devtools.Height = panelH
+
+		a.updateDevToolsComponentInfo()
+
+		rect := buffer.Rect{X: 0, Y: a.height - panelH, W: a.width, H: panelH}
+		a.RegisterComponent("__devtools", "DevTools", rect, 9999, a.devtools.Render)
+	} else {
+		a.UnregisterComponent("__devtools")
+	}
+	a.RenderAll()
+}
+
+// refreshDevTools triggers a re-render of the DevTools component.
+func (a *App) refreshDevTools() {
+	a.updateDevToolsComponentInfo()
+	a.SetState("__devtools", "__refresh", time.Now().UnixNano())
+	a.RenderDirty()
+}
+
+// updateDevToolsComponentInfo snapshots all registered components for the
+// Elements tab, excluding the devtools component itself.
+func (a *App) updateDevToolsComponentInfo() {
+	all := a.manager.GetAll()
+	infos := make([]devtools.ComponentInfo, 0, len(all))
+	for _, comp := range all {
+		if comp.ID() == "__devtools" {
+			continue
+		}
+		r := comp.Rect()
+		infos = append(infos, devtools.ComponentInfo{
+			ID:        comp.ID(),
+			Name:      comp.Name(),
+			X:         r.X,
+			Y:         r.Y,
+			W:         r.W,
+			H:         r.H,
+			ZIndex:    comp.ZIndex(),
+			VNodeTree: comp.VNodeTree(),
+		})
+	}
+	a.devtools.UpdateComponents(infos)
 }
 
 // --- internal helpers ---
