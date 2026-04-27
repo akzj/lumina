@@ -61,9 +61,10 @@ type Node struct {
 	LayoutDirty bool // true → recompute this subtree's layout
 
 	// Paint
-	Content    string // text content
-	Style      Style  // visual style
-	PaintDirty bool   // true → repaint this node
+	Content     string // text content
+	Placeholder string // placeholder text (input/textarea)
+	Style       Style  // visual style
+	PaintDirty  bool   // true → repaint this node
 
 	// Events (persistent references, not re-registered per frame)
 	OnClick      LuaRef

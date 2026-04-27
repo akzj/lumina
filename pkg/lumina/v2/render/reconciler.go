@@ -13,6 +13,13 @@ func Reconcile(node *Node, desc Descriptor) bool {
 		changed = true
 	}
 
+	// 1b. Update placeholder
+	if desc.Placeholder != node.Placeholder {
+		node.Placeholder = desc.Placeholder
+		node.PaintDirty = true
+		changed = true
+	}
+
 	// 2. Update ComponentType (for component placeholder nodes)
 	if desc.ComponentType != node.ComponentType {
 		node.ComponentType = desc.ComponentType
@@ -207,6 +214,7 @@ func createNodeFromDesc(desc Descriptor) *Node {
 	node.ID = desc.ID
 	node.Key = desc.Key
 	node.Content = desc.Content
+	node.Placeholder = desc.Placeholder
 	node.Style = desc.Style
 	node.ComponentType = desc.ComponentType
 	node.OnClick = desc.OnClick

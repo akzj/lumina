@@ -11,6 +11,9 @@ type Descriptor struct {
 	Style    Style
 	Children []Descriptor
 
+	// Input/textarea specific
+	Placeholder string
+
 	// Event handler refs (Lua registry refs)
 	OnClick      LuaRef
 	OnMouseEnter LuaRef
