@@ -118,6 +118,16 @@ func (p *Panel) UpdateComponents(infos []ComponentInfo) {
 	p.components = infos
 }
 
+// Components returns the current component snapshot list.
+func (p *Panel) Components() []ComponentInfo {
+	return p.components
+}
+
+// Snapshot returns the frozen perf snapshot for display.
+func (p *Panel) Snapshot() PerfSnapshot {
+	return p.perfSnap
+}
+
 // UpdateLuaMetrics updates Lua runtime metrics.
 func (p *Panel) UpdateLuaMetrics(cpuTime time.Duration, memBytes uint64) {
 	p.LuaCPUTime = cpuTime

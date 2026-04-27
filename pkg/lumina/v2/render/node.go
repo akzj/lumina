@@ -1,5 +1,7 @@
 package render
 
+import "reflect"
+
 // LuaRef is a Lua registry reference. 0 means nil/unset.
 type LuaRef = int64
 
@@ -174,7 +176,7 @@ func (n *Node) MarkLayoutDirty() {
 
 // SetState sets a state value and marks the component dirty.
 func (c *Component) SetState(key string, value any) {
-	if c.State[key] == value {
+	if reflect.DeepEqual(c.State[key], value) {
 		return // no change
 	}
 	c.State[key] = value
