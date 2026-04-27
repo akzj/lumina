@@ -24,6 +24,7 @@ func NewAppWithLua(L *lua.State, w, h int, adapter output.Adapter) *App {
 	app.luaState = L
 	app.animMgr = animation.NewManager()
 	app.routerMgr = router.New()
+	app.timerMgr = newTimerManager()
 	app.quit = make(chan struct{})
 
 	// Create bridge and wire dependencies.
@@ -66,6 +67,22 @@ func (a *App) registerAppLuaAPIs() {
 	// lumina.quit() — signals the event loop to stop.
 	L.PushFunction(a.luaQuit)
 	L.SetField(tblIdx, "quit")
+
+	// lumina.setInterval(fn, ms) — repeating timer, returns ID.
+	L.PushFunction(a.luaSetInterval)
+	L.SetField(tblIdx, "setInterval")
+
+	// lumina.setTimeout(fn, ms) — one-shot timer, returns ID.
+	L.PushFunction(a.luaSetTimeout)
+	L.SetField(tblIdx, "setTimeout")
+
+	// lumina.clearInterval(id) — cancel a timer.
+	L.PushFunction(a.luaClearTimer)
+	L.SetField(tblIdx, "clearInterval")
+
+	// lumina.clearTimeout(id) — alias for clearInterval.
+	L.PushFunction(a.luaClearTimer)
+	L.SetField(tblIdx, "clearTimeout")
 
 	L.SetGlobal("lumina")
 }

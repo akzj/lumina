@@ -43,6 +43,7 @@ type App struct {
 	bridge    *bridge.Bridge
 	animMgr   *animation.Manager
 	routerMgr *router.Router
+	timerMgr  *timerManager
 	quit      chan struct{}
 	running   bool
 }

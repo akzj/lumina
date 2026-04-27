@@ -182,6 +182,9 @@ func (a *App) eventLoop(cfg RunConfig) error {
 				_ = completed // animation completion callbacks are handled by the animation system
 			}
 
+			// Fire due timers (setInterval/setTimeout callbacks).
+			a.fireTimers()
+
 			// Tick FPS counter and auto-refresh devtools.
 			a.tickDevTools()
 
@@ -214,9 +217,12 @@ func (a *App) reloadScript(path string) {
 		}
 	}
 
-	// 3. Reset bridge state (hook contexts, refs) and re-execute script.
+	// 3. Reset bridge state (hook contexts, refs), clear timers, and re-execute script.
 	if a.bridge != nil {
 		a.bridge.Reset()
+	}
+	if a.timerMgr != nil {
+		a.timerMgr.releaseAll(a.luaState)
 	}
 	if err := a.luaState.DoFile(path); err != nil {
 		// Script error — log but don't crash. Components are gone, so
