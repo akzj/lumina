@@ -95,7 +95,7 @@ func paintBox(buf *CellBuffer, node *Node) {
 }
 
 func paintText(buf *CellBuffer, node *Node) {
-	// Fill background first
+	// DON'T fill background if not set (preserve parent's background)
 	if node.Style.Background != "" {
 		for y := node.Y; y < node.Y+node.H; y++ {
 			for x := node.X; x < node.X+node.W; x++ {
@@ -106,7 +106,6 @@ func paintText(buf *CellBuffer, node *Node) {
 
 	// Write text content
 	fg := node.Style.Foreground
-	bg := node.Style.Background
 	bold := node.Style.Bold
 
 	x := node.X
@@ -118,6 +117,12 @@ func paintText(buf *CellBuffer, node *Node) {
 			continue
 		}
 		if x < node.X+node.W && y < node.Y+node.H {
+			bg := node.Style.Background
+			if bg == "" {
+				// Inherit background from existing cell (parent painted it)
+				existing := buf.Get(x, y)
+				bg = existing.BG
+			}
 			buf.SetChar(x, y, ch, fg, bg, bold)
 			x++
 		}
