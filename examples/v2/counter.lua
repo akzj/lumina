@@ -18,7 +18,11 @@ lumina.createComponent({
         local count, setCount = lumina.useState("count", 0)
 
         return lumina.createElement("box", {
-            background = "#1E1E2E",
+            id = "counter-box",
+            style = {background = "#1E1E2E"},
+            onClick = function()
+                setCount(count + 1)
+            end,
         },
             lumina.createElement("text", {
                 foreground = "#89B4FA",
