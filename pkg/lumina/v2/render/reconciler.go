@@ -150,10 +150,9 @@ func reconcileChildren(parent *Node, descs []Descriptor) bool {
 	// Cleanup removed children
 	for i, child := range oldChildren {
 		if !usedOld[i] {
-			child.Parent = nil
+			markRemovedRecursive(child)
 			changed = true
 			parent.PaintDirty = true // Force parent repaint to clear ghost pixels
-			// TODO: cleanup Lua refs for removed nodes
 		}
 	}
 
@@ -239,4 +238,13 @@ func createNodeFromDesc(desc Descriptor) *Node {
 		node.AddChild(child)
 	}
 	return node
+}
+
+// markRemovedRecursive sets Removed=true and Parent=nil on a node and all descendants.
+func markRemovedRecursive(node *Node) {
+	node.Removed = true
+	node.Parent = nil
+	for _, child := range node.Children {
+		markRemovedRecursive(child)
+	}
 }

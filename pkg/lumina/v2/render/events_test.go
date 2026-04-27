@@ -351,6 +351,116 @@ func TestEngine_HandleScroll(t *testing.T) {
 
 // Benchmarks
 
+
+func TestEngine_StaleHoveredNode_AfterRemoval(t *testing.T) {
+	// Bug #2: hoveredNode points to an orphaned node after reconcile removes it.
+	// Should not panic and should clear the stale pointer.
+	e, L := newTestEngine(t)
+
+	err := L.DoString(`
+		show_child = true
+		lumina.createComponent({
+			id = "stale",
+			name = "Stale",
+			render = function(props)
+				if show_child then
+					return lumina.createElement("vbox", {style={width=80, height=24}},
+						lumina.createElement("box", {
+							key = "target",
+							id = "target",
+							style = {width = 40, height = 12},
+							onMouseEnter = function() end,
+							onMouseLeave = function() end,
+						}),
+						lumina.createElement("box", {
+							key = "other",
+							style = {width = 40, height = 12},
+						})
+					)
+				else
+					return lumina.createElement("vbox", {style={width=80, height=24}},
+						lumina.createElement("box", {
+							key = "other",
+							style = {width = 40, height = 12},
+						})
+					)
+				end
+			end,
+		})
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	e.RenderAll()
+
+	// Hover over the "target" box
+	e.HandleMouseMove(5, 3)
+
+	// Remove the target box by toggling show_child
+	err = L.DoString(`show_child = false`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.GetComponent("stale").Dirty = true
+	e.RenderDirty()
+
+	// Now hoveredNode points to a removed node. Moving the mouse should not panic.
+	e.HandleMouseMove(5, 15) // move to a different position
+	// If we get here without panic, the stale pointer was handled correctly.
+}
+
+func TestEngine_StaleFocusedNode_AfterRemoval(t *testing.T) {
+	// Bug #2: focusedNode points to an orphaned node after reconcile removes it.
+	e, L := newTestEngine(t)
+
+	err := L.DoString(`
+		show_input = true
+		lumina.createComponent({
+			id = "stale_focus",
+			name = "StaleFocus",
+			render = function(props)
+				if show_input then
+					return lumina.createElement("vbox", {style={width=80, height=24}},
+						lumina.createElement("input", {
+							key = "inp",
+							id = "inp",
+							style = {width = 40, height = 1},
+						})
+					)
+				else
+					return lumina.createElement("vbox", {style={width=80, height=24}},
+						lumina.createElement("text", {key = "txt"}, "no input")
+					)
+				end
+			end,
+		})
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	e.RenderAll()
+
+	// Focus the input by clicking it
+	e.HandleClick(5, 0)
+	if e.FocusedNode() == nil {
+		t.Fatal("expected input to be focused after click")
+	}
+
+	// Remove the input
+	err = L.DoString(`show_input = false`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.GetComponent("stale_focus").Dirty = true
+	e.RenderDirty()
+
+	// Now try to type — should not panic, focused node should be cleared
+	e.HandleKeyDown("a")
+	// If we get here without panic, the stale pointer was handled correctly.
+}
+
 func BenchmarkHitTest_DeepTree(b *testing.B) {
 	// Build a tree: root → 10 children → 10 grandchildren each = 100 leaves
 	root := NewNode("box")

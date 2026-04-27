@@ -75,6 +75,9 @@ type Node struct {
 	OnMouseEnter LuaRef
 	OnMouseLeave LuaRef
 	OnKeyDown    LuaRef
+
+	// Lifecycle
+	Removed bool // true when orphaned from tree (stale pointer guard)
 	OnChange     LuaRef
 	OnScroll     LuaRef
 
