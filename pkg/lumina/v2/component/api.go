@@ -164,11 +164,16 @@ type RenderObserver interface {
 	OnPaint(compID string)
 }
 
+// PostRenderHook is called after renderFn + layout but before paint.
+// Used by the App to inject dynamic props (e.g. focused, cursorPos on input VNodes).
+type PostRenderHook func(comp *Component)
+
 // Manager manages the component tree.
 type Manager struct {
 	components     map[string]*Component
 	painter        paint.Painter
 	renderObserver RenderObserver
+	postRenderHook PostRenderHook
 }
 
 // NewManager creates a new component Manager with the given painter.
@@ -182,6 +187,12 @@ func NewManager(painter paint.Painter) *Manager {
 // SetRenderObserver sets a render observer for performance tracking.
 func (m *Manager) SetRenderObserver(obs RenderObserver) {
 	m.renderObserver = obs
+}
+
+// SetPostRenderHook sets a hook that runs after renderFn + layout but before paint.
+// Used by the App to inject dynamic props (e.g. focused, cursorPos on input VNodes).
+func (m *Manager) SetPostRenderHook(hook PostRenderHook) {
+	m.postRenderHook = hook
 }
 
 // Register adds a component to the manager.
@@ -271,6 +282,10 @@ func (m *Manager) RenderDirty() {
 		layout.ComputeLayout(comp.vnodeTree, comp.rect.X, comp.rect.Y, comp.rect.W, comp.rect.H)
 		if m.renderObserver != nil {
 			m.renderObserver.OnLayout(comp.id)
+		}
+		// Post-render hook: inject dynamic props before paint.
+		if m.postRenderHook != nil {
+			m.postRenderHook(comp)
 		}
 		comp.buf.Clear()
 		m.painter.Paint(comp.buf, comp.vnodeTree, comp.rect.X, comp.rect.Y)
