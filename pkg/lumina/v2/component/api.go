@@ -83,6 +83,15 @@ func (m *Manager) Get(id string) *Component {
 	return m.components[id]
 }
 
+// GetAll returns all registered components.
+func (m *Manager) GetAll() []*Component {
+	all := make([]*Component, 0, len(m.components))
+	for _, c := range m.components {
+		all = append(all, c)
+	}
+	return all
+}
+
 // SetState sets a single state key on a component and marks it dirty.
 func (m *Manager) SetState(compID string, key string, value any) {
 	comp := m.components[compID]
@@ -128,6 +137,10 @@ func (m *Manager) ClearDirty() {
 func (m *Manager) RenderDirty() {
 	for _, comp := range m.GetDirtyPaint() {
 		comp.VNodeTree = comp.RenderFn(comp.State, comp.Props)
+		if comp.VNodeTree == nil {
+			comp.DirtyPaint = false
+			continue // skip layout/paint for nil render result
+		}
 		layout.ComputeLayout(comp.VNodeTree, comp.Rect.X, comp.Rect.Y, comp.Rect.W, comp.Rect.H)
 		comp.Buffer.Clear()
 		m.painter.Paint(comp.Buffer, comp.VNodeTree, comp.Rect.X, comp.Rect.Y)
@@ -177,6 +190,8 @@ func (m *Manager) Reconcile(parent *Component, newChildren []ChildDescriptor) {
 			comp := &Component{
 				ID:         parent.ID + ":" + desc.Key,
 				Name:       desc.Name,
+				Buffer:     buffer.New(1, 1),
+				Rect:       buffer.Rect{W: 1, H: 1},
 				Props:      desc.Props,
 				RenderFn:   desc.RenderFn,
 				State:      make(map[string]any),

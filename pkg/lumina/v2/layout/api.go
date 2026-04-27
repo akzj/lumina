@@ -79,6 +79,9 @@ func (v *VNode) AddChild(child *VNode) {
 // Padding and Margin shorthand fields are expanded into per-side values first
 // (non-zero longhands are left unchanged).
 func ComputeLayout(root *VNode, x, y, w, h int) {
+	if root == nil {
+		return
+	}
 	normalizeSpacingInTree(root)
 	computeFlexLayout(root, x, y, w, h)
 }

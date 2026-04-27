@@ -401,5 +401,119 @@ func TestApp_UnregisterComponent(t *testing.T) {
 	}
 }
 
+// --- Test 11: syncHandlers clears stale handlers (BUG-1) ---
+
+func TestApp_SyncHandlers_ClearsStale(t *testing.T) {
+	app, _ := NewTestApp(10, 5)
+
+	clicked := ""
+	app.RegisterComponent("c1", "c1", buffer.Rect{X: 0, Y: 0, W: 10, H: 5}, 0,
+		func(state, props map[string]any) *layout.VNode {
+			vn := layout.NewVNode("text")
+			vn.ID = "btn-stale"
+			vn.Content = "X"
+			vn.Props["onClick"] = event.EventHandler(func(e *event.Event) {
+				clicked = "stale-handler-fired"
+			})
+			return vn
+		})
+
+	app.RenderAll()
+
+	// Verify handler works initially
+	app.HandleEvent(&event.Event{Type: "mousedown", X: 0, Y: 0})
+	if clicked != "stale-handler-fired" {
+		t.Fatalf("expected handler to fire initially, got %q", clicked)
+	}
+
+	// Unregister the component
+	clicked = ""
+	app.UnregisterComponent("c1")
+	app.RenderAll()
+
+	// Now click in the same area — stale handler should NOT fire
+	app.HandleEvent(&event.Event{Type: "mousedown", X: 0, Y: 0})
+	if clicked != "" {
+		t.Errorf("stale handler fired after unregister: got %q", clicked)
+	}
+}
+
+// --- Test 12: RenderFn returning nil doesn't panic (BUG-3) ---
+
+func TestApp_NilRenderFn(t *testing.T) {
+	app, _ := NewTestApp(10, 5)
+
+	app.RegisterComponent("nil-comp", "nil", buffer.Rect{X: 0, Y: 0, W: 10, H: 5}, 0,
+		func(state, props map[string]any) *layout.VNode {
+			return nil // intentionally return nil
+		})
+
+	// Should not panic
+	app.RenderAll()
+	app.RenderDirty()
+}
+
+// --- Test 13: Resize marks components dirty (EDGE-1) ---
+
+func TestApp_Resize_MarksDirty(t *testing.T) {
+	app, ta := NewTestApp(10, 5)
+
+	app.RegisterComponent("c", "c", buffer.Rect{X: 0, Y: 0, W: 10, H: 5}, 0,
+		func(state, props map[string]any) *layout.VNode {
+			vn := layout.NewVNode("text")
+			vn.Content = "Z"
+			return vn
+		})
+
+	app.RenderAll()
+	if c := ta.LastScreen.Get(0, 0).Char; c != 'Z' {
+		t.Fatalf("initial: expected 'Z', got %q", c)
+	}
+
+	// Resize and use RenderDirty (not RenderAll) — should still repaint
+	app.Resize(20, 10)
+	app.RenderDirty()
+
+	if ta.LastScreen == nil {
+		t.Fatal("after resize+RenderDirty: LastScreen is nil")
+	}
+	if ta.LastScreen.Width() != 20 || ta.LastScreen.Height() != 10 {
+		t.Errorf("after resize: expected 20x10, got %dx%d", ta.LastScreen.Width(), ta.LastScreen.Height())
+	}
+}
+
+// --- Test 14: HandleEvent on empty app doesn't panic ---
+
+func TestApp_HandleEvent_EmptyApp(t *testing.T) {
+	app, _ := NewTestApp(10, 5)
+	// No components registered — should not panic
+	app.HandleEvent(&event.Event{Type: "mousedown", X: 0, Y: 0})
+	app.HandleEvent(&event.Event{Type: "mousemove", X: 5, Y: 3})
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "Tab"})
+}
+
+// --- Test 15: RenderDirty with nothing dirty is a no-op ---
+
+func TestApp_RenderDirty_NoDirty(t *testing.T) {
+	app, ta := NewTestApp(10, 5)
+
+	app.RegisterComponent("c", "c", buffer.Rect{X: 0, Y: 0, W: 10, H: 5}, 0,
+		func(state, props map[string]any) *layout.VNode {
+			vn := layout.NewVNode("text")
+			vn.Content = "A"
+			return vn
+		})
+
+	app.RenderAll()
+	writesBefore := ta.WriteCount
+
+	// Nothing dirty — RenderDirty should be a no-op
+	app.RenderDirty()
+
+	if ta.WriteCount != writesBefore {
+		t.Errorf("expected no new writes, but WriteCount went from %d to %d", writesBefore, ta.WriteCount)
+	}
+}
+
 // Suppress unused import warning
 var _ = (*component.Component)(nil)

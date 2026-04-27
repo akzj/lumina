@@ -82,6 +82,16 @@ func (d *Dispatcher) UnregisterHandlers(vnodeID string) {
 	delete(d.handlers, vnodeID)
 }
 
+// ClearAllHandlers removes all registered handlers.
+func (d *Dispatcher) ClearAllHandlers() {
+	d.handlers = make(map[string]HandlerMap)
+}
+
+// ClearAllFocusables removes all focusable entries.
+func (d *Dispatcher) ClearAllFocusables() {
+	d.focusables = nil
+}
+
 // SetParentMap sets the VNode parent relationships for event bubbling.
 func (d *Dispatcher) SetParentMap(parentMap map[string]string) {
 	d.parentMap = parentMap
