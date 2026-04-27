@@ -25,6 +25,7 @@ func walkExtract(vn *layout.VNode, c *Component) {
 		for _, evtName := range []string{
 			"onClick", "onMouseEnter", "onMouseLeave",
 			"onKeyDown", "onMouseDown", "onMouseUp", "onMouseMove",
+			"onScroll",
 		} {
 			if fn, ok := vn.Props[evtName]; ok {
 				// Store as HandlerFunc (any) — the event package will

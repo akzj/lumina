@@ -278,6 +278,7 @@ func (a *App) RenderDirty() {
 // HandleEvent dispatches an input event through the event system.
 // F12 and DevTools tab-switching keys are intercepted before normal dispatch.
 // Input VNodes get built-in keyboard handling (text editing, cursor movement).
+// Scroll events get built-in scroll container handling (mouse wheel scrolling).
 func (a *App) HandleEvent(e *event.Event) {
 	if e.Type == "keydown" {
 		if e.Key == "F12" {
@@ -300,6 +301,12 @@ func (a *App) HandleEvent(e *event.Event) {
 		// Built-in input handling: if focused VNode is type="input",
 		// handle text editing before normal dispatch.
 		if a.handleInputKeyDown(e) {
+			return
+		}
+	}
+	// Built-in scroll handling: mouse wheel on overflow="scroll" containers.
+	if e.Type == "scroll" {
+		if a.handleScrollEvent(e) {
 			return
 		}
 	}

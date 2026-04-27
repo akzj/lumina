@@ -63,9 +63,161 @@ func (p *painter) paintContainer(buf *buffer.Buffer, node *layout.VNode, ox, oy 
 	}
 
 	// 3. Recurse children
-	for _, child := range node.Children {
-		p.paintNode(buf, child, ox, oy)
+	if style.Overflow == "scroll" {
+		p.paintScrollChildren(buf, node, ox, oy)
+	} else {
+		for _, child := range node.Children {
+			p.paintNode(buf, child, ox, oy)
+		}
 	}
+}
+
+// paintScrollChildren renders children of a scroll container with clipping
+// and a scrollbar. Children are painted into a temporary buffer at their
+// natural (layout) positions, then only the visible portion (determined by
+// ScrollY) is copied into the main buffer.
+func (p *painter) paintScrollChildren(buf *buffer.Buffer, node *layout.VNode, ox, oy int) {
+	style := node.Style
+	bx := node.X - ox
+	by := node.Y - oy
+	w := node.W
+	h := node.H
+
+	borderW := 0
+	if hasBorder(style) {
+		borderW = 1
+	}
+
+	contentX := bx + borderW + resolvedPaddingLeft(style)
+	contentY := by + borderW + resolvedPaddingTop(style)
+	scrollbarW := 1 // always reserve 1 column for scrollbar track
+	contentW := w - 2*borderW - resolvedPaddingLeft(style) - resolvedPaddingRight(style) - scrollbarW
+	contentH := h - 2*borderW - resolvedPaddingTop(style) - resolvedPaddingBottom(style)
+
+	if contentW <= 0 || contentH <= 0 {
+		return
+	}
+
+	// The layout engine already positioned children at absolute screen coords.
+	// The content origin in absolute coords is:
+	absContentX := node.X + borderW + resolvedPaddingLeft(style)
+	absContentY := node.Y + borderW + resolvedPaddingTop(style)
+
+	// Calculate total content height from children's layout positions.
+	totalContentH := 0
+	for _, child := range node.Children {
+		childBottom := (child.Y - absContentY) + child.H
+		if childBottom > totalContentH {
+			totalContentH = childBottom
+		}
+	}
+
+	// Clamp scrollY
+	scrollY := node.ScrollY
+	maxScroll := totalContentH - contentH
+	if maxScroll < 0 {
+		maxScroll = 0
+	}
+	if scrollY < 0 {
+		scrollY = 0
+	}
+	if scrollY > maxScroll {
+		scrollY = maxScroll
+	}
+
+	// Paint children into a temporary buffer sized to the full content area.
+	// Temp buffer coords: (0,0) = (absContentX, absContentY) in screen space.
+	if totalContentH < 1 {
+		totalContentH = 1
+	}
+	tempBuf := buffer.New(contentW, totalContentH)
+	for _, child := range node.Children {
+		p.paintNode(tempBuf, child, absContentX, absContentY)
+	}
+
+	// Copy visible portion from temp buffer to main buffer.
+	for dy := 0; dy < contentH; dy++ {
+		srcY := scrollY + dy
+		if srcY < 0 || srcY >= totalContentH {
+			continue
+		}
+		dstY := contentY + dy
+		for dx := 0; dx < contentW; dx++ {
+			cell := tempBuf.Get(dx, srcY)
+			if !cell.Zero() {
+				buf.Set(contentX+dx, dstY, cell)
+			}
+		}
+	}
+
+	// Draw scrollbar
+	p.paintScrollbar(buf, contentX+contentW, contentY, contentH, scrollY, totalContentH, style.Background)
+}
+
+// paintScrollbar renders a vertical scrollbar track and thumb.
+func (p *painter) paintScrollbar(buf *buffer.Buffer, x, y, viewH, scrollY, totalH int, containerBg string) {
+	if viewH <= 0 {
+		return
+	}
+
+	trackBg := containerBg
+	if trackBg == "" {
+		trackBg = "#313244"
+	}
+
+	if totalH <= viewH {
+		// Content fits — draw empty track
+		for dy := 0; dy < viewH; dy++ {
+			buf.Set(x, y+dy, buffer.Cell{
+				Char:       ' ',
+				Background: trackBg,
+			})
+		}
+		return
+	}
+
+	// Calculate thumb position and size
+	thumbH := viewH * viewH / totalH
+	if thumbH < 1 {
+		thumbH = 1
+	}
+	scrollRange := totalH - viewH
+	trackRange := viewH - thumbH
+	thumbY := 0
+	if scrollRange > 0 && trackRange > 0 {
+		thumbY = scrollY * trackRange / scrollRange
+	}
+	if thumbY < 0 {
+		thumbY = 0
+	}
+	if thumbY+thumbH > viewH {
+		thumbY = viewH - thumbH
+	}
+
+	for dy := 0; dy < viewH; dy++ {
+		var cell buffer.Cell
+		if dy >= thumbY && dy < thumbY+thumbH {
+			cell = buffer.Cell{
+				Char:       '█',
+				Foreground: "#585B70",
+				Background: trackBg,
+			}
+		} else {
+			cell = buffer.Cell{
+				Char:       ' ',
+				Background: trackBg,
+			}
+		}
+		buf.Set(x, y+dy, cell)
+	}
+}
+
+// resolvedPaddingBottom returns the effective bottom padding.
+func resolvedPaddingBottom(s layout.Style) int {
+	if s.PaddingBottom > 0 {
+		return s.PaddingBottom
+	}
+	return s.Padding
 }
 
 // paintBorder draws a border around the given rectangle.
