@@ -30,6 +30,9 @@ type Engine struct {
 	// Focus state: currently focused input/textarea node
 	focusedNode *Node
 
+	// Lua ref cleanup: refs to unref after reconcile
+	pendingUnrefs []int64
+
 	// Performance tracking
 	tracker *perf.Tracker
 }
@@ -38,6 +41,19 @@ type Engine struct {
 func (e *Engine) SetTracker(t *perf.Tracker) {
 	e.tracker = t
 }
+
+// drainPendingUnrefs frees all Lua registry refs collected during reconcile.
+func (e *Engine) drainPendingUnrefs() {
+	if len(e.pendingUnrefs) == 0 {
+		return
+	}
+	L := e.L
+	for _, ref := range e.pendingUnrefs {
+		L.Unref(lua.RegistryIndex, int(ref))
+	}
+	e.pendingUnrefs = e.pendingUnrefs[:0]
+}
+
 
 // NewEngine creates a new render engine.
 func NewEngine(L *lua.State, width, height int) *Engine {
@@ -236,8 +252,8 @@ func (e *Engine) renderComponent(comp *Component) {
 		comp.RootNode.LayoutDirty = true
 		comp.RootNode.PaintDirty = true
 	} else {
-		// Update: reconcile (diff + patch in-place)
-		Reconcile(comp.RootNode, desc)
+		// Update: reconcile (diff + patch in-place), collect freed refs
+		ReconcileCollectRefs(comp.RootNode, desc, &e.pendingUnrefs)
 	}
 
 	// Handle sub-component children
@@ -245,6 +261,9 @@ func (e *Engine) renderComponent(comp *Component) {
 
 	// Cleanup child components that are no longer in the tree
 	e.cleanupRemovedChildComponents(comp, comp.RootNode)
+
+	// Unref all freed Lua refs from this reconcile
+	e.drainPendingUnrefs()
 
 	comp.Dirty = false
 	comp.Mounted = true
@@ -537,11 +556,22 @@ func collectActiveComponentKeys(node *Node, keys map[string]bool) {
 }
 
 // cleanupComponentTree recursively removes a component and all its descendants
-// from the engine's component map.
+// from the engine's component map, and unrefs their Lua render functions and
+// any refs on their render nodes.
 func (e *Engine) cleanupComponentTree(comp *Component) {
 	for _, child := range comp.Children {
 		delete(e.components, child.ID)
 		e.cleanupComponentTree(child)
+	}
+	// Unref the component's render function
+	if comp.RenderFn != 0 {
+		e.L.Unref(lua.RegistryIndex, int(comp.RenderFn))
+		comp.RenderFn = 0
+	}
+	// Collect and unref all node refs from the component's render tree
+	if comp.RootNode != nil {
+		collectNodeRefsRecursive(comp.RootNode, &e.pendingUnrefs)
+		e.drainPendingUnrefs()
 	}
 	comp.Children = nil
 	comp.ChildMap = nil
