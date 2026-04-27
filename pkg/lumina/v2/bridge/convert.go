@@ -121,6 +121,18 @@ func (b *Bridge) LuaTableToVNode(idx int) *layout.VNode {
 		}
 	}
 
+	// Scroll-specific: read scrollY prop into VNode.ScrollY.
+	if sy, ok := vn.Props["scrollY"]; ok {
+		switch v := sy.(type) {
+		case int:
+			vn.ScrollY = v
+		case int64:
+			vn.ScrollY = int(v)
+		case float64:
+			vn.ScrollY = int(v)
+		}
+	}
+
 	return vn
 }
 

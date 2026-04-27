@@ -125,6 +125,8 @@ func (d *Dispatcher) Dispatch(e *Event) {
 	switch {
 	case e.Type == "mousemove" || e.Type == "mousedown" || e.Type == "mouseup":
 		d.dispatchMouse(e)
+	case e.Type == "scroll":
+		d.dispatchScroll(e)
 	case e.Type == "keydown" || e.Type == "keyup":
 		d.dispatchKey(e)
 	default:
@@ -132,6 +134,27 @@ func (d *Dispatcher) Dispatch(e *Event) {
 		if e.Target != "" {
 			d.emit(e.Type, e.Target, e)
 		}
+	}
+}
+
+// dispatchScroll dispatches a scroll event. It hit-tests to find the target,
+// then emits the "scroll" event on that target. The event bubbles up via
+// the parent map so that a scroll container ancestor can handle it.
+func (d *Dispatcher) dispatchScroll(e *Event) {
+	targetID := ""
+	if d.hitTester != nil {
+		targetID = d.hitTester.HitTest(e.X, e.Y)
+	}
+	e.Target = targetID
+	e.Bubbles = true // scroll events bubble to find scroll containers
+
+	// Notify observer.
+	if d.eventObserver != nil {
+		d.eventObserver.OnEvent(e.Type, targetID != "")
+	}
+
+	if targetID != "" {
+		d.emit(e.Type, targetID, e)
 	}
 }
 

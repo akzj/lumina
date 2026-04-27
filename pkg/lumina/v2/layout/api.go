@@ -52,6 +52,9 @@ type VNode struct {
 
 	// Layout results (set by ComputeLayout)
 	X, Y, W, H int
+
+	// Scroll state (managed by event system for overflow="scroll" containers)
+	ScrollY int // vertical scroll offset in rows from top
 }
 
 // NewVNode creates a new VNode of the given type with initialized fields.
