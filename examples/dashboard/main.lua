@@ -1,265 +1,309 @@
 -- ============================================================================
--- Lumina Example: Admin Dashboard
+-- Lumina v2 Example: Admin Dashboard
 -- ============================================================================
--- Showcases: Router, shadcn Card/Table/Button, Theme switcher, i18n,
---            Flexbox layout, createStore, useStore, useTheme
+-- Sidebar + home / users / settings, stat cards, user table, theme + locale.
+-- v2: lumina.createComponent / useState / createElement / quit (no require,
+--     createStore, mount, onKey, i18n API, setTheme).
 --
--- Run:  go run ./cmd/lumina examples/dashboard/main.lua
--- Web:  lumina.serve(8080) at bottom instead of lumina.run()
+-- Run:  lumina-v2 examples/dashboard/main.lua
+-- Web:  lumina-v2 --web :8080 examples/dashboard/main.lua
+--
+-- Table columns use fixed style.width so headers align with cells under hbox.
+--
+-- Keys (focus root: click the top hint line if shortcuts are ignored):
+--   1 / 2 / 3   Home / Users / Settings
+--   t / T       Theme mocha ↔ latte
+--   l / L       en ↔ zh
+--   q / Q       Quit
 -- ============================================================================
 
-local lumina = require("lumina")
+-- "lumina" is injected by lumina-v2. No require().
 
--- ── i18n setup ─────────────────────────────────────────────────────────────
-lumina.i18n.addTranslation("en", {
-    ["app.title"]       = "Lumina Dashboard",
-    ["nav.home"]        = "🏠 Home",
-    ["nav.users"]       = "👥 Users",
-    ["nav.settings"]    = "⚙ Settings",
-    ["stats.users"]     = "Total Users",
-    ["stats.revenue"]   = "Revenue",
-    ["stats.orders"]    = "Orders",
-    ["stats.growth"]    = "Growth",
-    ["settings.theme"]  = "Theme",
-    ["settings.lang"]   = "Language",
-    ["table.name"]      = "Name",
-    ["table.email"]     = "Email",
-    ["table.role"]      = "Role",
-    ["table.status"]    = "Status",
-})
-
-lumina.i18n.addTranslation("zh", {
-    ["app.title"]       = "Lumina 控制台",
-    ["nav.home"]        = "🏠 首页",
-    ["nav.users"]       = "👥 用户",
-    ["nav.settings"]    = "⚙ 设置",
-    ["stats.users"]     = "用户总数",
-    ["stats.revenue"]   = "收入",
-    ["stats.orders"]    = "订单",
-    ["stats.growth"]    = "增长率",
-    ["settings.theme"]  = "主题",
-    ["settings.lang"]   = "语言",
-    ["table.name"]      = "姓名",
-    ["table.email"]     = "邮箱",
-    ["table.role"]      = "角色",
-    ["table.status"]    = "状态",
-})
-
--- ── Store ───────────────────────────────────────────────────────────────────
-local store = lumina.createStore({
-    state = {
-        page = "home",
-        theme = "catppuccin-mocha",
-        locale = "en",
-        stats = { users = 1234, revenue = 56789, orders = 890, growth = 12.5 },
-        users = {
-            { name = "Alice Chen",   email = "alice@example.com",   role = "Admin",  status = "Active" },
-            { name = "Bob Wang",     email = "bob@example.com",     role = "Editor", status = "Active" },
-            { name = "Carol Li",     email = "carol@example.com",   role = "Viewer", status = "Inactive" },
-            { name = "David Zhang",  email = "david@example.com",   role = "Editor", status = "Active" },
-            { name = "Eve Liu",      email = "eve@example.com",     role = "Admin",  status = "Active" },
-        },
+local i18n = {
+    en = {
+        ["app.title"] = "Lumina Dashboard",
+        ["nav.home"] = "Home",
+        ["nav.users"] = "Users",
+        ["nav.settings"] = "Settings",
+        ["stats.users"] = "Total Users",
+        ["stats.revenue"] = "Revenue",
+        ["stats.orders"] = "Orders",
+        ["stats.growth"] = "Growth",
+        ["settings.theme"] = "Theme",
+        ["settings.lang"] = "Language",
+        ["table.name"] = "Name",
+        ["table.email"] = "Email",
+        ["table.role"] = "Role",
+        ["table.status"] = "Status",
     },
-})
+    zh = {
+        ["app.title"] = "Lumina 控制台",
+        ["nav.home"] = "首页",
+        ["nav.users"] = "用户",
+        ["nav.settings"] = "设置",
+        ["stats.users"] = "用户总数",
+        ["stats.revenue"] = "收入",
+        ["stats.orders"] = "订单",
+        ["stats.growth"] = "增长率",
+        ["settings.theme"] = "主题",
+        ["settings.lang"] = "语言",
+        ["table.name"] = "姓名",
+        ["table.email"] = "邮箱",
+        ["table.role"] = "角色",
+        ["table.status"] = "状态",
+    },
+}
 
--- ── Stat Card Component ────────────────────────────────────────────────────
-local function StatCard(props)
-    local theme = lumina.useTheme()
-    return {
-        type = "vbox",
-        style = {
-            flex = 1, height = 5, border = "rounded",
-            background = theme.colors.card or "#1E1E2E",
-            padding = 1,
-        },
-        children = {
-            { type = "text", content = props.label, style = { foreground = theme.colors.secondary or "#A6ADC8", dim = true } },
-            { type = "text", content = tostring(props.value), style = { foreground = theme.colors.primary or "#89B4FA", bold = true } },
-        },
-    }
+local function T(locale, key)
+    local pack = i18n[locale] or i18n.en
+    return pack[key] or key
 end
 
--- ── Home Page ──────────────────────────────────────────────────────────────
-local function HomePage()
-    local t = lumina.useTranslation()
-    local state = lumina.useStore(store)
-    local stats = state.stats or {}
-
-    return {
-        type = "vbox",
-        style = { padding = 1 },
-        children = {
-            { type = "text", content = t("app.title"), style = { bold = true, foreground = "#89B4FA" } },
-            { type = "text", content = "" },
-            {
-                type = "hbox",
-                style = { gap = 1 },
-                children = {
-                    StatCard({ label = t("stats.users"),   value = stats.users or 0 }),
-                    StatCard({ label = t("stats.revenue"), value = "$" .. tostring(stats.revenue or 0) }),
-                    StatCard({ label = t("stats.orders"),  value = stats.orders or 0 }),
-                    StatCard({ label = t("stats.growth"),  value = tostring(stats.growth or 0) .. "%" }),
-                },
-            },
-        },
-    }
-end
-
--- ── Users Page ─────────────────────────────────────────────────────────────
-local function UsersPage()
-    local t = lumina.useTranslation()
-    local state = lumina.useStore(store)
-    local users = state.users or {}
-
-    local rows = {}
-    for _, u in ipairs(users) do
-        local statusColor = u.status == "Active" and "#A6E3A1" or "#F38BA8"
-        rows[#rows + 1] = {
-            type = "hbox",
-            style = { height = 1 },
-            children = {
-                { type = "text", content = string.format("%-14s", u.name),   style = { foreground = "#CDD6F4" } },
-                { type = "text", content = string.format("%-22s", u.email),  style = { foreground = "#A6ADC8" } },
-                { type = "text", content = string.format("%-8s",  u.role),   style = { foreground = "#89B4FA" } },
-                { type = "text", content = string.format("%-8s",  u.status), style = { foreground = statusColor } },
-            },
+local function themePalette(name)
+    if name == "catppuccin-latte" then
+        return {
+            card = "#EFF1F5",
+            secondary = "#6C6F85",
+            primary = "#1E66F5",
+            muted = "#8C8FA1",
+            sidebarBg = "#E6E9EF",
+            sidebarFg = "#4C4F69",
+            accentBg = "#DCE0E8",
         }
     end
-
     return {
-        type = "vbox",
-        style = { padding = 1 },
-        children = {
-            { type = "text", content = t("nav.users"), style = { bold = true, foreground = "#89B4FA" } },
-            { type = "text", content = "" },
-            -- Header
-            {
-                type = "hbox",
-                style = { height = 1 },
-                children = {
-                    { type = "text", content = string.format("%-14s", t("table.name")),   style = { bold = true, foreground = "#F5C2E7" } },
-                    { type = "text", content = string.format("%-22s", t("table.email")),  style = { bold = true, foreground = "#F5C2E7" } },
-                    { type = "text", content = string.format("%-8s",  t("table.role")),   style = { bold = true, foreground = "#F5C2E7" } },
-                    { type = "text", content = string.format("%-8s",  t("table.status")), style = { bold = true, foreground = "#F5C2E7" } },
-                },
-            },
-            { type = "text", content = string.rep("─", 52), style = { foreground = "#45475A" } },
-            table.unpack(rows),
-        },
+        card = "#1E1E2E",
+        secondary = "#A6ADC8",
+        primary = "#89B4FA",
+        muted = "#6C7086",
+        sidebarBg = "#181825",
+        sidebarFg = "#A6ADC8",
+        accentBg = "#313244",
     }
 end
 
--- ── Settings Page ──────────────────────────────────────────────────────────
-local function SettingsPage()
-    local t = lumina.useTranslation()
-    local state = lumina.useStore(store)
-
-    return {
-        type = "vbox",
-        style = { padding = 1 },
-        children = {
-            { type = "text", content = t("nav.settings"), style = { bold = true, foreground = "#89B4FA" } },
-            { type = "text", content = "" },
-            {
-                type = "hbox",
-                children = {
-                    { type = "text", content = t("settings.theme") .. ": ", style = { foreground = "#CDD6F4" } },
-                    { type = "text", content = state.theme or "catppuccin-mocha", style = { foreground = "#A6E3A1" } },
-                },
-            },
-            {
-                type = "hbox",
-                children = {
-                    { type = "text", content = t("settings.lang") .. ": ", style = { foreground = "#CDD6F4" } },
-                    { type = "text", content = state.locale or "en", style = { foreground = "#A6E3A1" } },
-                },
-            },
-            { type = "text", content = "" },
-            { type = "text", content = "[T] Toggle theme  [L] Toggle language  [Q] Quit", style = { foreground = "#6C7086", dim = true } },
+local function StatCard(theme, label, value)
+    return lumina.createElement("vbox", {
+        style = {
+            flex = 1,
+            height = 5,
+            border = "rounded",
+            background = theme.card,
+            padding = 1,
         },
-    }
+    },
+        lumina.createElement("text", {
+            foreground = theme.secondary,
+            dim = true,
+        }, label),
+        lumina.createElement("text", {
+            foreground = theme.primary,
+            bold = true,
+        }, value)
+    )
 end
 
--- ── Sidebar ────────────────────────────────────────────────────────────────
-local function Sidebar()
-    local t = lumina.useTranslation()
-    local state = lumina.useStore(store)
-    local page = state.page or "home"
+local function HomePage(theme, tFn, stats)
+    return lumina.createElement("vbox", {
+        style = { padding = 1 },
+    },
+        lumina.createElement("text", {
+            foreground = theme.primary,
+            bold = true,
+        }, tFn("app.title")),
+        lumina.createElement("text", {}, ""),
+        lumina.createElement("hbox", {
+            style = { gap = 1 },
+        },
+            StatCard(theme, tFn("stats.users"), tostring(stats.users or 0)),
+            StatCard(theme, tFn("stats.revenue"), "$" .. tostring(stats.revenue or 0)),
+            StatCard(theme, tFn("stats.orders"), tostring(stats.orders or 0)),
+            StatCard(theme, tFn("stats.growth"), tostring(stats.growth or 0) .. "%")
+        )
+    )
+end
 
+-- Fixed widths: hbox flex + string.format byte padding misaligns CJK headers vs ASCII cells.
+local COL_NAME, COL_EMAIL, COL_ROLE, COL_STATUS = 16, 28, 12, 12
+
+local function usersTableCell(width, opts, text)
+    return lumina.createElement("text", {
+        style = { width = width, height = 1 },
+        foreground = opts.fg,
+        bold = opts.bold,
+        dim = opts.dim,
+    }, text)
+end
+
+local function UsersPage(theme, tFn, users)
+    local sepW = COL_NAME + COL_EMAIL + COL_ROLE + COL_STATUS
+    local rows = {}
+    for _, u in ipairs(users) do
+        local statusColor = (u.status == "Active") and "#A6E3A1" or "#F38BA8"
+        rows[#rows + 1] = lumina.createElement("hbox", {
+            style = { height = 1 },
+        },
+            usersTableCell(COL_NAME, { fg = "#CDD6F4" }, u.name),
+            usersTableCell(COL_EMAIL, { fg = "#A6ADC8" }, u.email),
+            usersTableCell(COL_ROLE, { fg = "#89B4FA" }, u.role),
+            usersTableCell(COL_STATUS, { fg = statusColor }, u.status)
+        )
+    end
+
+    local children = {
+        lumina.createElement("text", { foreground = theme.primary, bold = true }, tFn("nav.users")),
+        lumina.createElement("text", {}, ""),
+        lumina.createElement("hbox", { style = { height = 1 } },
+            usersTableCell(COL_NAME, { fg = "#F5C2E7", bold = true }, tFn("table.name")),
+            usersTableCell(COL_EMAIL, { fg = "#F5C2E7", bold = true }, tFn("table.email")),
+            usersTableCell(COL_ROLE, { fg = "#F5C2E7", bold = true }, tFn("table.role")),
+            usersTableCell(COL_STATUS, { fg = "#F5C2E7", bold = true }, tFn("table.status"))
+        ),
+        lumina.createElement("text", { foreground = "#45475A" }, string.rep("─", sepW)),
+    }
+    for i = 1, #rows do
+        children[#children + 1] = rows[i]
+    end
+
+    return lumina.createElement("vbox", { style = { padding = 1 } }, table.unpack(children))
+end
+
+local function SettingsPage(theme, tFn, themeName, locale)
+    return lumina.createElement("vbox", {
+        style = { padding = 1 },
+    },
+        lumina.createElement("text", { foreground = theme.primary, bold = true }, tFn("nav.settings")),
+        lumina.createElement("text", {}, ""),
+        lumina.createElement("hbox", {},
+            lumina.createElement("text", { foreground = "#CDD6F4" }, tFn("settings.theme") .. ": "),
+            lumina.createElement("text", { foreground = "#A6E3A1" }, themeName)
+        ),
+        lumina.createElement("hbox", {},
+            lumina.createElement("text", { foreground = "#CDD6F4" }, tFn("settings.lang") .. ": "),
+            lumina.createElement("text", { foreground = "#A6E3A1" }, locale)
+        ),
+        lumina.createElement("text", {}, ""),
+        lumina.createElement("text", { foreground = "#6C7086", dim = true },
+            "[T] Theme  [L] Language  [1-3] Pages  [Q] Quit")
+    )
+end
+
+local function Sidebar(theme, tFn, page, setPage)
     local items = {
-        { key = "home",     label = t("nav.home") },
-        { key = "users",    label = t("nav.users") },
-        { key = "settings", label = t("nav.settings") },
+        { key = "home", label = tFn("nav.home") },
+        { key = "users", label = tFn("nav.users") },
+        { key = "settings", label = tFn("nav.settings") },
     }
-
     local children = {}
     for _, item in ipairs(items) do
         local isActive = (page == item.key)
-        children[#children + 1] = {
-            type = "text",
+        local prefix = isActive and " > " or "   "
+        children[#children + 1] = lumina.createElement("text", {
             id = "nav-" .. item.key,
-            content = (isActive and " ▸ " or "   ") .. item.label,
-            style = {
-                foreground = isActive and "#89B4FA" or "#A6ADC8",
-                bold = isActive,
-                background = isActive and "#313244" or nil,
-            },
+            foreground = isActive and theme.primary or theme.sidebarFg,
+            bold = isActive,
+            background = isActive and theme.accentBg or nil,
             onClick = function()
-                store.dispatch("setState", { page = item.key })
+                setPage(item.key)
             end,
-        }
+        }, prefix .. item.label)
     end
-
-    return {
-        type = "vbox",
-        style = { width = 20, border = "single", background = "#181825" },
-        children = children,
-    }
+    return lumina.createElement("vbox", {
+        style = {
+            width = 20,
+            border = "single",
+            background = theme.sidebarBg,
+        },
+    }, table.unpack(children))
 end
 
--- ── Main App ───────────────────────────────────────────────────────────────
-local App = lumina.defineComponent({
+lumina.createComponent({
+    id = "dashboard",
     name = "DashboardApp",
-    render = function(self)
-        local state = lumina.useStore(store)
-        local page = state.page or "home"
+    x = 0,
+    y = 0,
+    w = 100,
+    h = 35,
+    zIndex = 0,
+
+    render = function(state, props)
+        local page, setPage = lumina.useState("page", "home")
+        local themeName, setThemeName = lumina.useState("theme", "catppuccin-mocha")
+        local locale, setLocale = lumina.useState("locale", "en")
+        local stats, _setStats = lumina.useState("stats", {
+            users = 1234,
+            revenue = 56789,
+            orders = 890,
+            growth = 12.5,
+        })
+        local users, _setUsers = lumina.useState("users", {
+            { name = "Alice Chen", email = "alice@example.com", role = "Admin", status = "Active" },
+            { name = "Bob Wang", email = "bob@example.com", role = "Editor", status = "Active" },
+            { name = "Carol Li", email = "carol@example.com", role = "Viewer", status = "Inactive" },
+            { name = "David Zhang", email = "david@example.com", role = "Editor", status = "Active" },
+            { name = "Eve Liu", email = "eve@example.com", role = "Admin", status = "Active" },
+        })
+
+        local function tFn(key)
+            return T(locale, key)
+        end
+
+        local pal = themePalette(themeName)
 
         local content
         if page == "users" then
-            content = UsersPage()
+            content = UsersPage(pal, tFn, users)
         elseif page == "settings" then
-            content = SettingsPage()
+            content = SettingsPage(pal, tFn, themeName, locale)
         else
-            content = HomePage()
+            content = HomePage(pal, tFn, stats)
         end
 
-        return {
-            type = "hbox",
-            children = {
-                Sidebar(),
-                { type = "vbox", style = { flex = 1 }, children = { content } },
+        local function onKeyDown(e)
+            local k = e.key
+            if k == "1" then
+                setPage("home")
+            elseif k == "2" then
+                setPage("users")
+            elseif k == "3" then
+                setPage("settings")
+            elseif k == "t" or k == "T" then
+                if themeName == "catppuccin-mocha" then
+                    setThemeName("catppuccin-latte")
+                else
+                    setThemeName("catppuccin-mocha")
+                end
+            elseif k == "l" or k == "L" then
+                if locale == "en" then
+                    setLocale("zh")
+                else
+                    setLocale("en")
+                end
+            elseif k == "q" or k == "Q" then
+                lumina.quit()
+            end
+        end
+
+        return lumina.createElement("vbox", {
+            id = "dashboard-root",
+            style = {
+                background = pal.card,
+                height = 35,
             },
-        }
+            onKeyDown = onKeyDown,
+            focusable = true,
+        },
+            lumina.createElement("text", {
+                foreground = pal.muted,
+                dim = true,
+                style = { height = 1 },
+            }, " [1-3] Pages  [T] Theme  [L] Language  [Q] Quit — click here if keys ignored "),
+            lumina.createElement("hbox", {
+                style = { flex = 1 },
+            },
+                Sidebar(pal, tFn, page, setPage),
+                lumina.createElement("vbox", { style = { flex = 1 } }, content)
+            )
+        )
     end,
 })
-
--- ── Key bindings ───────────────────────────────────────────────────────────
-lumina.onKey("1", function() store.dispatch("setState", { page = "home" }) end)
-lumina.onKey("2", function() store.dispatch("setState", { page = "users" }) end)
-lumina.onKey("3", function() store.dispatch("setState", { page = "settings" }) end)
-lumina.onKey("t", function()
-    local state = store.getState()
-    local newTheme = (state.theme == "catppuccin-mocha") and "catppuccin-latte" or "catppuccin-mocha"
-    lumina.setTheme(newTheme)
-    store.dispatch("setState", { theme = newTheme })
-end)
-lumina.onKey("l", function()
-    local state = store.getState()
-    local newLocale = (state.locale == "en") and "zh" or "en"
-    lumina.i18n.setLocale(newLocale)
-    store.dispatch("setState", { locale = newLocale })
-end)
-lumina.onKey("q", function() lumina.quit() end)
-
-lumina.mount(App)
-lumina.run()
