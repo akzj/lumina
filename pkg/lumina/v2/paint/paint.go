@@ -337,6 +337,7 @@ func (p *painter) paintText(buf *buffer.Buffer, node *layout.VNode, ox, oy int) 
 		px := startX + col
 		py := startY + row
 		cell.Char = ch
+		cell.Wide = (w == 2)
 
 		// Inherit parent's background if text has no explicit background
 		if style.Background == "" {
@@ -476,6 +477,7 @@ func (p *painter) paintInput(buf *buffer.Buffer, node *layout.VNode, ox, oy int)
 		}
 
 		cell.Char = ch
+		cell.Wide = (rw == 2)
 		buf.Set(px, py, cell)
 
 		if rw == 2 {

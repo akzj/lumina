@@ -10,6 +10,7 @@ type Cell struct {
 	Bold       bool
 	Dim        bool
 	Underline  bool
+	Wide       bool // true if this char occupies 2 columns (CJK, emoji)
 }
 
 // Zero returns true if this cell has never been written to.

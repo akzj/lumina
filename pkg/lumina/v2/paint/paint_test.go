@@ -773,3 +773,91 @@ func TestPaint_ScrollContainer_Scrollbar_BottomPosition(t *testing.T) {
 		t.Errorf("scrollbar thumb at (10,3) char=%q, want '█'", thumbCell2.Char)
 	}
 }
+
+func TestPaint_CJKText_WideFlagSet(t *testing.T) {
+	// Paint Chinese text "中文" → each CJK char occupies 2 columns.
+	// cell(0,0) should have Char='中', Wide=true
+	// cell(2,0) should have Char='文', Wide=true
+	node := layout.NewVNode("text")
+	node.Content = "中文"
+	node.X, node.Y, node.W, node.H = 0, 0, 10, 1
+
+	buf := buffer.New(10, 1)
+	p := NewPainter()
+	p.Paint(buf, node, 0, 0)
+
+	c0 := buf.Get(0, 0)
+	if c0.Char != '中' {
+		t.Errorf("cell(0,0) char=%q, want '中'", c0.Char)
+	}
+	if !c0.Wide {
+		t.Error("cell(0,0) Wide=false, want true for CJK char '中'")
+	}
+
+	c2 := buf.Get(2, 0)
+	if c2.Char != '文' {
+		t.Errorf("cell(2,0) char=%q, want '文'", c2.Char)
+	}
+	if !c2.Wide {
+		t.Error("cell(2,0) Wide=false, want true for CJK char '文'")
+	}
+}
+
+func TestPaint_CJKText_PaddingCell(t *testing.T) {
+	// Paint "中A" → cell(0,0)='中' Wide=true, cell(1,0)=padding (Char=0),
+	// cell(2,0)='A' Wide=false
+	node := layout.NewVNode("text")
+	node.Content = "中A"
+	node.X, node.Y, node.W, node.H = 0, 0, 10, 1
+
+	buf := buffer.New(10, 1)
+	p := NewPainter()
+	p.Paint(buf, node, 0, 0)
+
+	c0 := buf.Get(0, 0)
+	if c0.Char != '中' || !c0.Wide {
+		t.Errorf("cell(0,0) char=%q wide=%v, want '中' true", c0.Char, c0.Wide)
+	}
+
+	// Padding cell at (1,0)
+	c1 := buf.Get(1, 0)
+	if c1.Char != 0 {
+		t.Errorf("cell(1,0) char=%d, want 0 (padding cell)", c1.Char)
+	}
+	if c1.Wide {
+		t.Error("cell(1,0) Wide=true, want false for padding cell")
+	}
+
+	// ASCII 'A' at column 2
+	c2 := buf.Get(2, 0)
+	if c2.Char != 'A' {
+		t.Errorf("cell(2,0) char=%q, want 'A'", c2.Char)
+	}
+	if c2.Wide {
+		t.Error("cell(2,0) Wide=true, want false for ASCII char")
+	}
+}
+
+func TestPaint_MixedCJKASCII_Alignment(t *testing.T) {
+	// Paint "A中B" → A at col 0, 中 at col 1-2, B at col 3
+	node := layout.NewVNode("text")
+	node.Content = "A中B"
+	node.X, node.Y, node.W, node.H = 0, 0, 10, 1
+
+	buf := buffer.New(10, 1)
+	p := NewPainter()
+	p.Paint(buf, node, 0, 0)
+
+	if c := buf.Get(0, 0); c.Char != 'A' || c.Wide {
+		t.Errorf("cell(0,0) char=%q wide=%v, want 'A' false", c.Char, c.Wide)
+	}
+	if c := buf.Get(1, 0); c.Char != '中' || !c.Wide {
+		t.Errorf("cell(1,0) char=%q wide=%v, want '中' true", c.Char, c.Wide)
+	}
+	if c := buf.Get(2, 0); c.Char != 0 {
+		t.Errorf("cell(2,0) char=%d, want 0 (padding)", c.Char)
+	}
+	if c := buf.Get(3, 0); c.Char != 'B' || c.Wide {
+		t.Errorf("cell(3,0) char=%q wide=%v, want 'B' false", c.Char, c.Wide)
+	}
+}

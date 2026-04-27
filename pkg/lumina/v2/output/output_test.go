@@ -262,3 +262,125 @@ func TestTestAdapter_DirtyRects(t *testing.T) {
 		t.Errorf("expected WriteCount=2, got %d", adapter.WriteCount)
 	}
 }
+
+func TestTUI_CJKAlignment_WriteFull(t *testing.T) {
+	// Buffer: 6 columns wide, 1 row.
+	// Layout: '中'(wide) at col 0, padding at col 1, 'A' at col 2, '│' at col 3, ' ' at 4, ' ' at 5
+	screen := buffer.New(6, 1)
+	screen.Set(0, 0, buffer.Cell{Char: '中', Wide: true, Foreground: "#ffffff"})
+	screen.Set(1, 0, buffer.Cell{Char: 0, Foreground: "#ffffff"}) // padding cell
+	screen.Set(2, 0, buffer.Cell{Char: 'A', Foreground: "#ffffff"})
+	screen.Set(3, 0, buffer.Cell{Char: '│', Foreground: "#ffffff"})
+	screen.Set(4, 0, buffer.Cell{Char: ' '})
+	screen.Set(5, 0, buffer.Cell{Char: ' '})
+
+	var buf bytes.Buffer
+	adapter := NewTUIAdapter(&buf)
+	if err := adapter.WriteFull(screen); err != nil {
+		t.Fatalf("WriteFull error: %v", err)
+	}
+	if err := adapter.Flush(); err != nil {
+		t.Fatalf("Flush error: %v", err)
+	}
+
+	out := buf.String()
+
+	// The output should contain '中' followed by 'A' then '│'.
+	// It should NOT contain a space between '中' and 'A' (the padding cell must be skipped).
+	// Count the visible characters after stripping ANSI escapes.
+	stripped := stripANSI(out)
+
+	// Should be: 中A│  (with spaces at end)
+	// The wide char '中' occupies 2 columns, so terminal cursor is at col 3 after it.
+	// Then 'A' at col 3, '│' at col 4, spaces at 5-6.
+	if !strings.Contains(stripped, "中A│") {
+		t.Errorf("expected '中A│' in output, got stripped=%q", stripped)
+	}
+
+	// The padding cell (Char=0 → ' ') should NOT appear between 中 and A.
+	// If padding cell was written, we'd see "中 A│" instead of "中A│".
+	if strings.Contains(stripped, "中 A") {
+		t.Error("padding cell was written as space — CJK alignment is broken")
+	}
+}
+
+func TestTUI_CJKAlignment_WriteDirty(t *testing.T) {
+	// Same as above but via WriteDirty.
+	screen := buffer.New(6, 1)
+	screen.Set(0, 0, buffer.Cell{Char: '中', Wide: true, Foreground: "#ffffff"})
+	screen.Set(1, 0, buffer.Cell{Char: 0, Foreground: "#ffffff"})
+	screen.Set(2, 0, buffer.Cell{Char: 'A', Foreground: "#ffffff"})
+	screen.Set(3, 0, buffer.Cell{Char: '│', Foreground: "#ffffff"})
+	screen.Set(4, 0, buffer.Cell{Char: ' '})
+	screen.Set(5, 0, buffer.Cell{Char: ' '})
+
+	var buf bytes.Buffer
+	adapter := NewTUIAdapter(&buf)
+	dirty := []buffer.Rect{{X: 0, Y: 0, W: 6, H: 1}}
+	if err := adapter.WriteDirty(screen, dirty); err != nil {
+		t.Fatalf("WriteDirty error: %v", err)
+	}
+	if err := adapter.Flush(); err != nil {
+		t.Fatalf("Flush error: %v", err)
+	}
+
+	out := buf.String()
+	stripped := stripANSI(out)
+
+	if !strings.Contains(stripped, "中A│") {
+		t.Errorf("expected '中A│' in dirty output, got stripped=%q", stripped)
+	}
+	if strings.Contains(stripped, "中 A") {
+		t.Error("padding cell was written as space in WriteDirty — CJK alignment is broken")
+	}
+}
+
+func TestTUI_MixedCJKASCII(t *testing.T) {
+	// "A中B" → A at col 0, 中 at col 1 (wide), padding at col 2, B at col 3
+	screen := buffer.New(4, 1)
+	screen.Set(0, 0, buffer.Cell{Char: 'A'})
+	screen.Set(1, 0, buffer.Cell{Char: '中', Wide: true})
+	screen.Set(2, 0, buffer.Cell{Char: 0}) // padding
+	screen.Set(3, 0, buffer.Cell{Char: 'B'})
+
+	var buf bytes.Buffer
+	adapter := NewTUIAdapter(&buf)
+	if err := adapter.WriteFull(screen); err != nil {
+		t.Fatalf("WriteFull error: %v", err)
+	}
+	if err := adapter.Flush(); err != nil {
+		t.Fatalf("Flush error: %v", err)
+	}
+
+	stripped := stripANSI(buf.String())
+
+	// Should be "A中B" — no extra space from padding cell
+	if !strings.Contains(stripped, "A中B") {
+		t.Errorf("expected 'A中B' in output, got stripped=%q", stripped)
+	}
+}
+
+// stripANSI removes ANSI escape sequences from a string.
+func stripANSI(s string) string {
+	var result strings.Builder
+	i := 0
+	for i < len(s) {
+		if s[i] == '\033' {
+			// Skip escape sequence
+			i++
+			if i < len(s) && s[i] == '[' {
+				i++
+				for i < len(s) && !((s[i] >= 'A' && s[i] <= 'Z') || (s[i] >= 'a' && s[i] <= 'z')) {
+					i++
+				}
+				if i < len(s) {
+					i++ // skip the final letter
+				}
+			}
+		} else {
+			result.WriteByte(s[i])
+			i++
+		}
+	}
+	return result.String()
+}
