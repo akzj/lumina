@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/akzj/go-lua/pkg/lua"
+	"github.com/akzj/lumina/pkg/lumina/v2/buffer"
 )
 
 // Engine is the new render engine that manages persistent RenderNode trees.
@@ -693,3 +694,40 @@ func readMapFromTable(L *lua.State, idx int) map[string]any {
 	})
 	return m
 }
+
+// ToBuffer converts the engine's CellBuffer to a buffer.Buffer for output.
+func (e *Engine) ToBuffer() *buffer.Buffer {
+	buf := buffer.New(e.width, e.height)
+	cb := e.buffer
+	for y := 0; y < e.height; y++ {
+		for x := 0; x < e.width; x++ {
+			c := cb.Get(x, y)
+			if c.Ch == 0 && c.FG == "" && c.BG == "" {
+				continue // skip zero cells
+			}
+			buf.Set(x, y, buffer.Cell{
+				Char:       c.Ch,
+				Foreground: c.FG,
+				Background: c.BG,
+				Bold:       c.Bold,
+				Dim:        c.Dim,
+				Underline:  c.Underline,
+				Wide:       c.Wide,
+			})
+		}
+	}
+	return buf
+}
+
+// DirtyRect returns the bounding rect of all PaintDirty nodes.
+// Used for incremental output.
+func (e *Engine) DirtyRect() buffer.Rect {
+	// For now, return full screen. Optimization: track dirty regions.
+	return buffer.Rect{X: 0, Y: 0, W: e.width, H: e.height}
+}
+
+// Width returns the engine width.
+func (e *Engine) Width() int { return e.width }
+
+// Height returns the engine height.
+func (e *Engine) Height() int { return e.height }
