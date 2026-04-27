@@ -243,6 +243,9 @@ func (e *Engine) renderComponent(comp *Component) {
 	// Handle sub-component children
 	e.reconcileChildComponents(comp, comp.RootNode)
 
+	// Cleanup child components that are no longer in the tree
+	e.cleanupRemovedChildComponents(comp, comp.RootNode)
+
 	comp.Dirty = false
 	comp.Mounted = true
 }
@@ -450,6 +453,100 @@ func (e *Engine) reconcileChildComponents(parent *Component, node *Node) {
 		e.reconcileChildComponents(parent, ch)
 	}
 }
+
+// cleanupRemovedChildComponents removes child components that are no longer
+// referenced in the current render tree. This prevents component leaks.
+func (e *Engine) cleanupRemovedChildComponents(parent *Component, rootNode *Node) {
+	// Collect all component type:key pairs referenced in the current tree
+	activeKeys := make(map[string]bool)
+	collectActiveComponentKeys(rootNode, activeKeys)
+
+	// Remove children not in activeKeys
+	var kept []*Component
+	for _, child := range parent.Children {
+		mapKey := child.Type
+		// Find the lookup key used in ChildMap
+		for k, v := range parent.ChildMap {
+			if v == child {
+				mapKey = k
+				break
+			}
+		}
+		if activeKeys[mapKey] {
+			kept = append(kept, child)
+		} else {
+			// Remove from engine
+			delete(e.components, child.ID)
+			// Recursively cleanup grandchildren
+			e.cleanupComponentTree(child)
+		}
+	}
+
+	if len(kept) != len(parent.Children) {
+		parent.Children = kept
+		// Rebuild ChildMap from kept children
+		parent.ChildMap = make(map[string]*Component)
+		for _, child := range kept {
+			// Reconstruct the map key from type + lookup key
+			lookupKey := ""
+			if child.ID != "" {
+				parts := splitAfterColon(child.ID, parent.ID)
+				if parts != "" {
+					lookupKey = parts
+				}
+			}
+			mapKey := child.Type
+			if lookupKey != "" {
+				mapKey = child.Type + ":" + lookupKey
+			}
+			parent.ChildMap[mapKey] = child
+		}
+	}
+}
+
+// splitAfterColon extracts the part after "parentID:" from childID.
+func splitAfterColon(childID, parentID string) string {
+	prefix := parentID + ":"
+	if len(childID) > len(prefix) && childID[:len(prefix)] == prefix {
+		return childID[len(prefix):]
+	}
+	return ""
+}
+
+// collectActiveComponentKeys walks the node tree and collects the ChildMap keys
+// for all component placeholder nodes.
+func collectActiveComponentKeys(node *Node, keys map[string]bool) {
+	if node == nil {
+		return
+	}
+	if node.Type == "component" && node.ComponentType != "" {
+		lookupKey := node.ID
+		if lookupKey == "" {
+			lookupKey = node.Key
+		}
+		mapKey := node.ComponentType
+		if lookupKey != "" {
+			mapKey = node.ComponentType + ":" + lookupKey
+		}
+		keys[mapKey] = true
+		return // Don't recurse into component children (they belong to the child component)
+	}
+	for _, child := range node.Children {
+		collectActiveComponentKeys(child, keys)
+	}
+}
+
+// cleanupComponentTree recursively removes a component and all its descendants
+// from the engine's component map.
+func (e *Engine) cleanupComponentTree(comp *Component) {
+	for _, child := range comp.Children {
+		delete(e.components, child.ID)
+		e.cleanupComponentTree(child)
+	}
+	comp.Children = nil
+	comp.ChildMap = nil
+}
+
 
 // --- Lua API Registration ---
 
