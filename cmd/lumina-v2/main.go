@@ -77,8 +77,8 @@ func runWeb(addr string, scriptPath string, watch bool, mcpAddr string) {
 	listenAddr := wsAdapter.Addr()
 	fmt.Fprintf(os.Stderr, "Lumina v2 web mode — open http://%s in your browser\n", listenAddr)
 
-	// 3. Create App.
-	app := v2.NewAppWithLua(L, defaultW, defaultH, wsAdapter)
+	// 3. Create App with V2 render engine (sub-component support).
+	app := v2.NewAppWithEngine(L, defaultW, defaultH, wsAdapter)
 
 	// 3b. Start MCP HTTP server if requested.
 	if mcpAddr != "" {
@@ -147,8 +147,8 @@ func runTerminal(scriptPath string, watch bool, mcpAddr string) {
 	// 6. Create TUI adapter writing to the terminal output.
 	adapter := output.NewTUIAdapter(term.Output())
 
-	// 7. Create App with Lua wiring.
-	app := v2.NewAppWithLua(L, w, h, adapter)
+	// 7. Create App with V2 render engine (sub-component support).
+	app := v2.NewAppWithEngine(L, w, h, adapter)
 
 	// 7b. Start MCP HTTP server if requested.
 	if mcpAddr != "" {
