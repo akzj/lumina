@@ -2,12 +2,25 @@ package render
 
 // PaintFull paints the entire node tree into the buffer.
 // The buffer is cleared first. Used for initial render.
+// Clears all PaintDirty flags after painting.
 func PaintFull(buf *CellBuffer, root *Node) {
 	if buf == nil || root == nil {
 		return
 	}
 	buf.Clear()
 	paintNode(buf, root)
+	clearPaintDirty(root)
+}
+
+// clearPaintDirty recursively clears PaintDirty flags on all nodes.
+func clearPaintDirty(node *Node) {
+	if node == nil {
+		return
+	}
+	node.PaintDirty = false
+	for _, child := range node.Children {
+		clearPaintDirty(child)
+	}
 }
 
 // PaintDirty paints only PaintDirty nodes into the buffer.

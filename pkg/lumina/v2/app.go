@@ -296,7 +296,9 @@ func (a *App) renderAllV2() {
 
 	screen := a.engine.ToBuffer()
 	_ = a.adapter.WriteFull(screen)
+	a.tracker.Record(perf.WriteFullCalls, 1)
 	_ = a.adapter.Flush()
+	a.tracker.Record(perf.FlushCalls, 1)
 
 	a.tracker.EndFrame()
 }
@@ -307,10 +309,15 @@ func (a *App) renderDirtyV2() {
 
 	a.engine.RenderDirty()
 
-	screen := a.engine.ToBuffer()
 	dirtyRect := a.engine.DirtyRect()
-	_ = a.adapter.WriteDirty(screen, []buffer.Rect{dirtyRect})
-	_ = a.adapter.Flush()
+	if dirtyRect.W > 0 && dirtyRect.H > 0 {
+		screen := a.engine.ToBuffer()
+		_ = a.adapter.WriteDirty(screen, []buffer.Rect{dirtyRect})
+		a.tracker.Record(perf.DirtyRectsOut, 1)
+		a.tracker.Record(perf.WriteDirtyCalls, 1)
+		_ = a.adapter.Flush()
+		a.tracker.Record(perf.FlushCalls, 1)
+	}
 
 	a.tracker.EndFrame()
 }

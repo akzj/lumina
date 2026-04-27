@@ -152,6 +152,86 @@ func CheckHandlerDirtySyncs(expected int) FrameCheck {
 	}
 }
 
+// --- V2 Render Engine checks ---
+
+// CheckV2ComponentsRendered asserts the V2ComponentsRendered counter equals expected.
+func CheckV2ComponentsRendered(expected int) FrameCheck {
+	return func(f FrameStats) (bool, string) {
+		got := f.Get(V2ComponentsRendered)
+		if got != expected {
+			return false, fmt.Sprintf("V2ComponentsRendered: got %d, want %d", got, expected)
+		}
+		return true, ""
+	}
+}
+
+// CheckV2PaintCells asserts the V2PaintCells counter equals expected.
+func CheckV2PaintCells(expected int) FrameCheck {
+	return func(f FrameStats) (bool, string) {
+		got := f.Get(V2PaintCells)
+		if got != expected {
+			return false, fmt.Sprintf("V2PaintCells: got %d, want %d", got, expected)
+		}
+		return true, ""
+	}
+}
+
+// CheckV2PaintCellsMax asserts the V2PaintCells counter is at most max.
+func CheckV2PaintCellsMax(max int) FrameCheck {
+	return func(f FrameStats) (bool, string) {
+		got := f.Get(V2PaintCells)
+		if got > max {
+			return false, fmt.Sprintf("V2PaintCells: got %d, want ≤%d (overdraw!)", got, max)
+		}
+		return true, ""
+	}
+}
+
+// CheckV2PaintClearCells asserts the V2PaintClearCells counter equals expected.
+func CheckV2PaintClearCells(expected int) FrameCheck {
+	return func(f FrameStats) (bool, string) {
+		got := f.Get(V2PaintClearCells)
+		if got != expected {
+			return false, fmt.Sprintf("V2PaintClearCells: got %d, want %d", got, expected)
+		}
+		return true, ""
+	}
+}
+
+// CheckV2DirtyRectArea asserts the V2DirtyRectArea counter equals expected.
+func CheckV2DirtyRectArea(expected int) FrameCheck {
+	return func(f FrameStats) (bool, string) {
+		got := f.Get(V2DirtyRectArea)
+		if got != expected {
+			return false, fmt.Sprintf("V2DirtyRectArea: got %d, want %d", got, expected)
+		}
+		return true, ""
+	}
+}
+
+// CheckV2DirtyRectAreaMax asserts the V2DirtyRectArea counter is at most max.
+func CheckV2DirtyRectAreaMax(max int) FrameCheck {
+	return func(f FrameStats) (bool, string) {
+		got := f.Get(V2DirtyRectArea)
+		if got > max {
+			return false, fmt.Sprintf("V2DirtyRectArea: got %d, want ≤%d (overdraw!)", got, max)
+		}
+		return true, ""
+	}
+}
+
+// CheckV2ComponentsRenderedMax asserts the V2ComponentsRendered counter is at most max.
+func CheckV2ComponentsRenderedMax(max int) FrameCheck {
+	return func(f FrameStats) (bool, string) {
+		got := f.Get(V2ComponentsRendered)
+		if got > max {
+			return false, fmt.Sprintf("V2ComponentsRendered: got %d, want ≤%d", got, max)
+		}
+		return true, ""
+	}
+}
+
+
 // AssertLastFrame asserts all checks against the last completed frame.
 func (t *Tracker) AssertLastFrame(tb testing.TB, checks ...FrameCheck) {
 	tb.Helper()
