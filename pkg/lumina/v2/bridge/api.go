@@ -36,6 +36,9 @@ type Bridge struct {
 
 	// router provides SPA-style routing accessible from Lua.
 	router *router.Router
+
+	// themeMgr manages named color themes accessible from Lua.
+	themeMgr *ThemeManager
 }
 
 // NewBridge creates a new Bridge for the given Lua state.
@@ -43,6 +46,7 @@ func NewBridge(L *lua.State) *Bridge {
 	return &Bridge{
 		L:            L,
 		hookContexts: make(map[string]*hooks.HookContext),
+		themeMgr:     NewThemeManager(),
 	}
 }
 

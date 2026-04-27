@@ -31,7 +31,7 @@ func (p *painter) paintNode(buf *buffer.Buffer, node *layout.VNode, ox, oy int) 
 		return
 
 	case "textarea":
-		p.paintText(buf, node, ox, oy)
+		p.paintTextarea(buf, node, ox, oy)
 		return
 
 	default:
@@ -509,6 +509,234 @@ func (p *painter) paintInput(buf *buffer.Buffer, node *layout.VNode, ox, oy int)
 		}
 	}
 }
+
+// paintTextarea renders a multi-line textarea node: background, border,
+// lines of text with wrapping, vertical scroll, and cursor.
+func (p *painter) paintTextarea(buf *buffer.Buffer, node *layout.VNode, ox, oy int) {
+	style := node.Style
+	bx := node.X - ox
+	by := node.Y - oy
+	w := node.W
+	h := node.H
+
+	// 1. Fill background
+	if style.Background != "" {
+		bgCell := buffer.Cell{
+			Char:       ' ',
+			Background: style.Background,
+		}
+		buf.Fill(buffer.Rect{X: bx, Y: by, W: w, H: h}, bgCell)
+	}
+
+	// 2. Draw border if any
+	if style.Border != "" && style.Border != "none" {
+		p.paintBorder(buf, bx, by, w, h, style)
+	}
+
+	borderW := 0
+	if hasBorder(style) {
+		borderW = 1
+	}
+
+	startX := bx + borderW + resolvedPaddingLeft(style)
+	startY := by + borderW + resolvedPaddingTop(style)
+	availW := w - 2*borderW - resolvedPaddingLeft(style) - resolvedPaddingRight(style)
+	availH := h - 2*borderW - resolvedPaddingTop(style) - resolvedPaddingBottom(style)
+	if availW <= 0 || availH <= 0 {
+		return
+	}
+
+	// 3. Determine display text
+	value := node.Content
+	placeholder := ""
+	if pv, ok := node.Props["placeholder"]; ok {
+		if s, ok := pv.(string); ok {
+			placeholder = s
+		}
+	}
+
+	displayText := value
+	isPlaceholder := false
+	if displayText == "" && placeholder != "" {
+		displayText = placeholder
+		isPlaceholder = true
+	}
+
+	// 4. Split text into lines
+	lines := splitLines(displayText)
+
+	// 5. Get cursor position (only when focused)
+	cursorPos := -1 // -1 = no cursor
+	if f, ok := node.Props["focused"]; ok {
+		if fb, ok := f.(bool); ok && fb {
+			cursorPos = len([]rune(value)) // default: end of text
+			if cp, ok := node.Props["cursorPos"]; ok {
+				switch v := cp.(type) {
+				case int:
+					cursorPos = v
+				case int64:
+					cursorPos = int(v)
+				case float64:
+					cursorPos = int(v)
+				}
+			}
+		}
+	}
+
+	// 6. Convert cursorPos (rune offset) to (line, col)
+	cursorLine, cursorCol := -1, -1
+	if cursorPos >= 0 && !isPlaceholder {
+		cursorLine, cursorCol = offsetToLineCol(value, cursorPos)
+	}
+
+	// 7. Determine scrollY
+	scrollY := 0
+	if sy, ok := node.Props["scrollY"]; ok {
+		switch v := sy.(type) {
+		case int:
+			scrollY = v
+		case int64:
+			scrollY = int(v)
+		case float64:
+			scrollY = int(v)
+		}
+	}
+	// Auto-scroll to keep cursor visible
+	if cursorLine >= 0 {
+		if cursorLine < scrollY {
+			scrollY = cursorLine
+		}
+		if cursorLine >= scrollY+availH {
+			scrollY = cursorLine - availH + 1
+		}
+	}
+	// Clamp scrollY
+	maxScroll := len(lines) - availH
+	if maxScroll < 0 {
+		maxScroll = 0
+	}
+	if scrollY > maxScroll {
+		scrollY = maxScroll
+	}
+	if scrollY < 0 {
+		scrollY = 0
+	}
+
+	// 8. Render visible lines
+	fg := style.Foreground
+	if isPlaceholder {
+		fg = "#6C7086"
+	}
+
+	cell := buffer.Cell{
+		Foreground: fg,
+		Background: style.Background,
+		Bold:       style.Bold,
+		Dim:        isPlaceholder,
+	}
+
+	for row := 0; row < availH; row++ {
+		lineIdx := scrollY + row
+		if lineIdx >= len(lines) {
+			break
+		}
+		lineRunes := []rune(lines[lineIdx])
+		col := 0
+		for i := 0; i < len(lineRunes) && col < availW; i++ {
+			ch := lineRunes[i]
+			rw := runeWidth(ch)
+			if rw == 0 {
+				continue
+			}
+			if col+rw > availW {
+				break
+			}
+
+			px := startX + col
+			py := startY + row
+
+			// Cursor highlight
+			if lineIdx == cursorLine && i == cursorCol && !isPlaceholder {
+				cell.Background = "#585B70"
+			} else if style.Background != "" {
+				cell.Background = style.Background
+			} else {
+				existing := buf.Get(px, py)
+				cell.Background = existing.Background
+			}
+
+			cell.Char = ch
+			cell.Wide = (rw == 2)
+			buf.Set(px, py, cell)
+
+			if rw == 2 {
+				padCell := buffer.Cell{
+					Char:       0,
+					Foreground: cell.Foreground,
+					Background: cell.Background,
+				}
+				buf.Set(px+1, py, padCell)
+			}
+			col += rw
+		}
+
+		// Draw cursor at end of line
+		if !isPlaceholder && lineIdx == cursorLine && cursorCol >= len(lineRunes) {
+			cursorColPos := 0
+			for _, r := range lineRunes {
+				cursorColPos += runeWidth(r)
+			}
+			if cursorColPos >= 0 && cursorColPos < availW {
+				px := startX + cursorColPos
+				py := startY + row
+				cursorCell := buffer.Cell{
+					Char:       ' ',
+					Background: "#585B70",
+					Foreground: fg,
+				}
+				buf.Set(px, py, cursorCell)
+			}
+		}
+	}
+}
+
+// splitLines splits text by newline characters. An empty string returns one empty line.
+func splitLines(s string) []string {
+	if s == "" {
+		return []string{""}
+	}
+	lines := []string{}
+	start := 0
+	for i, ch := range s {
+		if ch == '\n' {
+			lines = append(lines, s[start:i])
+			start = i + 1
+		}
+	}
+	lines = append(lines, s[start:])
+	return lines
+}
+
+// offsetToLineCol converts a rune offset in text to (line, col) indices.
+// Line and col are 0-based. Col is a rune index within the line.
+func offsetToLineCol(text string, offset int) (int, int) {
+	runes := []rune(text)
+	if offset > len(runes) {
+		offset = len(runes)
+	}
+	line := 0
+	col := 0
+	for i := 0; i < offset; i++ {
+		if runes[i] == '\n' {
+			line++
+			col = 0
+		} else {
+			col++
+		}
+	}
+	return line, col
+}
+
 
 // hasBorder returns true if the style has a visible border.
 func hasBorder(s layout.Style) bool {

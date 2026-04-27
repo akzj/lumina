@@ -861,3 +861,239 @@ func TestPaint_MixedCJKASCII_Alignment(t *testing.T) {
 		t.Errorf("cell(3,0) char=%q wide=%v, want 'B' false", c.Char, c.Wide)
 	}
 }
+
+// --- Textarea paint tests ---
+
+func TestPaint_Textarea_BasicRender(t *testing.T) {
+	// Textarea with 3 lines of text → each line on a separate row.
+	node := layout.NewVNode("textarea")
+	node.Content = "Hello\nWorld\nFoo"
+	node.Style.Foreground = "#CDD6F4"
+	node.X, node.Y, node.W, node.H = 0, 0, 20, 5
+
+	buf := buffer.New(20, 5)
+	p := NewPainter()
+	p.Paint(buf, node, 0, 0)
+
+	// Line 0: "Hello"
+	assertChar(t, buf, 0, 0, 'H')
+	assertChar(t, buf, 1, 0, 'e')
+	assertChar(t, buf, 4, 0, 'o')
+
+	// Line 1: "World"
+	assertChar(t, buf, 0, 1, 'W')
+	assertChar(t, buf, 4, 1, 'd')
+
+	// Line 2: "Foo"
+	assertChar(t, buf, 0, 2, 'F')
+	assertChar(t, buf, 2, 2, 'o')
+
+	// Verify foreground color
+	c := buf.Get(0, 0)
+	if c.Foreground != "#CDD6F4" {
+		t.Errorf("foreground=%q, want #CDD6F4", c.Foreground)
+	}
+}
+
+func TestPaint_Textarea_Placeholder(t *testing.T) {
+	// Empty textarea with placeholder → shows placeholder text, dimmed.
+	node := layout.NewVNode("textarea")
+	node.Content = ""
+	node.Props["placeholder"] = "Enter text..."
+	node.Style.Foreground = "#CDD6F4"
+	node.X, node.Y, node.W, node.H = 0, 0, 20, 3
+
+	buf := buffer.New(20, 3)
+	p := NewPainter()
+	p.Paint(buf, node, 0, 0)
+
+	// Should show placeholder text
+	assertChar(t, buf, 0, 0, 'E')
+	assertChar(t, buf, 1, 0, 'n')
+	assertChar(t, buf, 2, 0, 't')
+
+	// Placeholder text should be dimmed
+	c := buf.Get(0, 0)
+	if !c.Dim {
+		t.Error("placeholder text should be Dim=true")
+	}
+	if c.Foreground != "#6C7086" {
+		t.Errorf("placeholder fg=%q, want #6C7086", c.Foreground)
+	}
+}
+
+func TestPaint_Textarea_Cursor(t *testing.T) {
+	// Focused textarea with cursor at position 7 (line 1, col 1 = 'o' in "World").
+	// Text: "Hello\nWorld" → rune offsets: H=0,e=1,l=2,l=3,o=4,\n=5,W=6,o=7
+	node := layout.NewVNode("textarea")
+	node.Content = "Hello\nWorld"
+	node.Props["focused"] = true
+	node.Props["cursorPos"] = 7
+	node.Style.Foreground = "#CDD6F4"
+	node.Style.Background = "#313244"
+	node.X, node.Y, node.W, node.H = 0, 0, 20, 3
+
+	buf := buffer.New(20, 3)
+	p := NewPainter()
+	p.Paint(buf, node, 0, 0)
+
+	// Text should be rendered
+	assertChar(t, buf, 0, 0, 'H')
+	assertChar(t, buf, 0, 1, 'W')
+
+	// Cursor at line 1, col 1 ('o') should have cursor background
+	cursorCell := buf.Get(1, 1)
+	if cursorCell.Char != 'o' {
+		t.Errorf("cursor cell char=%q, want 'o'", cursorCell.Char)
+	}
+	if cursorCell.Background != "#585B70" {
+		t.Errorf("cursor cell bg=%q, want #585B70", cursorCell.Background)
+	}
+
+	// Non-cursor cell should have normal background
+	normalCell := buf.Get(0, 0)
+	if normalCell.Background != "#313244" {
+		t.Errorf("normal cell bg=%q, want #313244", normalCell.Background)
+	}
+}
+
+func TestPaint_Textarea_CursorAtEnd(t *testing.T) {
+	// Focused textarea with cursor at end → cursor block after last char.
+	node := layout.NewVNode("textarea")
+	node.Content = "Hi"
+	node.Props["focused"] = true
+	// cursorPos defaults to len(value) = 2
+	node.Style.Foreground = "#CDD6F4"
+	node.X, node.Y, node.W, node.H = 0, 0, 20, 3
+
+	buf := buffer.New(20, 3)
+	p := NewPainter()
+	p.Paint(buf, node, 0, 0)
+
+	assertChar(t, buf, 0, 0, 'H')
+	assertChar(t, buf, 1, 0, 'i')
+
+	// Cursor at end: position 2 should be a space with cursor bg
+	cursorCell := buf.Get(2, 0)
+	if cursorCell.Char != ' ' {
+		t.Errorf("cursor-at-end char=%q, want ' '", cursorCell.Char)
+	}
+	if cursorCell.Background != "#585B70" {
+		t.Errorf("cursor-at-end bg=%q, want #585B70", cursorCell.Background)
+	}
+}
+
+func TestPaint_Textarea_Scroll(t *testing.T) {
+	// Textarea with 5 lines, height=3 → only 3 visible.
+	// scrollY=2 → shows lines 2,3,4.
+	node := layout.NewVNode("textarea")
+	node.Content = "AAA\nBBB\nCCC\nDDD\nEEE"
+	node.Props["scrollY"] = 2
+	node.X, node.Y, node.W, node.H = 0, 0, 10, 3
+
+	buf := buffer.New(10, 3)
+	p := NewPainter()
+	p.Paint(buf, node, 0, 0)
+
+	// Row 0 should show line 2: "CCC"
+	assertChar(t, buf, 0, 0, 'C')
+	// Row 1 should show line 3: "DDD"
+	assertChar(t, buf, 0, 1, 'D')
+	// Row 2 should show line 4: "EEE"
+	assertChar(t, buf, 0, 2, 'E')
+}
+
+func TestPaint_Textarea_WithBorder(t *testing.T) {
+	// Textarea with border → text inside border area.
+	node := layout.NewVNode("textarea")
+	node.Content = "AB\nCD"
+	node.Style.Border = "single"
+	node.Style.Background = "#313244"
+	node.X, node.Y, node.W, node.H = 0, 0, 10, 4
+
+	buf := buffer.New(10, 4)
+	p := NewPainter()
+	p.Paint(buf, node, 0, 0)
+
+	// Border corners
+	assertChar(t, buf, 0, 0, '┌')
+	assertChar(t, buf, 9, 0, '┐')
+	assertChar(t, buf, 0, 3, '└')
+	assertChar(t, buf, 9, 3, '┘')
+
+	// Text inside border (at x=1, y=1 and y=2)
+	assertChar(t, buf, 1, 1, 'A')
+	assertChar(t, buf, 2, 1, 'B')
+	assertChar(t, buf, 1, 2, 'C')
+	assertChar(t, buf, 2, 2, 'D')
+}
+
+func TestPaint_Textarea_WithBackground(t *testing.T) {
+	// Textarea with background fills entire area.
+	node := layout.NewVNode("textarea")
+	node.Content = "X"
+	node.Style.Background = "#FF0000"
+	node.X, node.Y, node.W, node.H = 0, 0, 10, 3
+
+	buf := buffer.New(10, 3)
+	p := NewPainter()
+	p.Paint(buf, node, 0, 0)
+
+	// Text cell should have background
+	c := buf.Get(0, 0)
+	if c.Background != "#FF0000" {
+		t.Errorf("text cell bg=%q, want #FF0000", c.Background)
+	}
+
+	// Empty cell should also have background (from Fill)
+	c2 := buf.Get(5, 2)
+	if c2.Background != "#FF0000" {
+		t.Errorf("empty cell bg=%q, want #FF0000", c2.Background)
+	}
+}
+
+func TestPaint_Textarea_CursorAtEndOfLine(t *testing.T) {
+	// Cursor at end of first line (position 5, just before '\n').
+	// Text: "Hello\nWorld" → H=0,e=1,l=2,l=3,o=4,\n=5
+	// cursorPos=5 → line 1, col 0 (the '\n' at pos 5 means line 1 starts)
+	// Actually: offset 5 is the '\n' itself. After splitting:
+	// line 0 = "Hello" (5 chars), offset 5 = line 1, col 0
+	node := layout.NewVNode("textarea")
+	node.Content = "Hello\nWorld"
+	node.Props["focused"] = true
+	node.Props["cursorPos"] = 5 // right after "Hello", at start of line 1
+	node.Style.Foreground = "#CDD6F4"
+	node.Style.Background = "#313244"
+	node.X, node.Y, node.W, node.H = 0, 0, 20, 3
+
+	buf := buffer.New(20, 3)
+	p := NewPainter()
+	p.Paint(buf, node, 0, 0)
+
+	// cursorPos 5 means we've consumed H(0),e(1),l(2),l(3),o(4),\n(5)
+	// That's line=1, col=0 → cursor on 'W'
+	cursorCell := buf.Get(0, 1)
+	if cursorCell.Char != 'W' {
+		t.Errorf("cursor cell char=%q, want 'W'", cursorCell.Char)
+	}
+	if cursorCell.Background != "#585B70" {
+		t.Errorf("cursor cell bg=%q, want #585B70", cursorCell.Background)
+	}
+}
+
+func TestPaint_Textarea_EmptyLines(t *testing.T) {
+	// Textarea with empty lines: "A\n\nB"
+	node := layout.NewVNode("textarea")
+	node.Content = "A\n\nB"
+	node.X, node.Y, node.W, node.H = 0, 0, 10, 5
+
+	buf := buffer.New(10, 5)
+	p := NewPainter()
+	p.Paint(buf, node, 0, 0)
+
+	// Row 0: "A"
+	assertChar(t, buf, 0, 0, 'A')
+	// Row 1: empty (nothing to assert except no crash)
+	// Row 2: "B"
+	assertChar(t, buf, 0, 2, 'B')
+}
