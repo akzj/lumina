@@ -359,3 +359,179 @@ func assertChar(t *testing.T, buf *buffer.Buffer, x, y int, want rune) {
 		t.Errorf("cell(%d,%d) char=%q (0x%X), want %q (0x%X)", x, y, c.Char, c.Char, want, want)
 	}
 }
+
+// --- Input paint tests ---
+
+func TestPaint_InputBasic(t *testing.T) {
+	// Input with value "Hello" → cells show H,e,l,l,o
+	node := layout.NewVNode("input")
+	node.Content = "Hello"
+	node.Style.Foreground = "#CDD6F4"
+	node.X, node.Y, node.W, node.H = 0, 0, 20, 1
+
+	buf := buffer.New(20, 1)
+	p := NewPainter()
+	p.Paint(buf, node, 0, 0)
+
+	assertChar(t, buf, 0, 0, 'H')
+	assertChar(t, buf, 1, 0, 'e')
+	assertChar(t, buf, 2, 0, 'l')
+	assertChar(t, buf, 3, 0, 'l')
+	assertChar(t, buf, 4, 0, 'o')
+
+	// Verify foreground color
+	c := buf.Get(0, 0)
+	if c.Foreground != "#CDD6F4" {
+		t.Errorf("foreground=%q, want #CDD6F4", c.Foreground)
+	}
+}
+
+func TestPaint_InputPlaceholder(t *testing.T) {
+	// Empty input with placeholder → shows placeholder text, dimmed
+	node := layout.NewVNode("input")
+	node.Content = "" // empty value
+	node.Props["placeholder"] = "Type here"
+	node.Style.Foreground = "#CDD6F4"
+	node.X, node.Y, node.W, node.H = 0, 0, 20, 1
+
+	buf := buffer.New(20, 1)
+	p := NewPainter()
+	p.Paint(buf, node, 0, 0)
+
+	// Should show placeholder text
+	assertChar(t, buf, 0, 0, 'T')
+	assertChar(t, buf, 1, 0, 'y')
+	assertChar(t, buf, 2, 0, 'p')
+	assertChar(t, buf, 3, 0, 'e')
+
+	// Placeholder text should be dimmed
+	c := buf.Get(0, 0)
+	if !c.Dim {
+		t.Error("placeholder text should be Dim=true")
+	}
+	// Placeholder uses muted foreground color
+	if c.Foreground != "#6C7086" {
+		t.Errorf("placeholder fg=%q, want #6C7086", c.Foreground)
+	}
+}
+
+func TestPaint_InputCursor(t *testing.T) {
+	// Focused input with cursor at position 3 → cell at position 3 has cursor bg
+	node := layout.NewVNode("input")
+	node.Content = "Hello"
+	node.Props["focused"] = true
+	node.Props["cursorPos"] = 3
+	node.Style.Foreground = "#CDD6F4"
+	node.Style.Background = "#313244"
+	node.X, node.Y, node.W, node.H = 0, 0, 20, 1
+
+	buf := buffer.New(20, 1)
+	p := NewPainter()
+	p.Paint(buf, node, 0, 0)
+
+	// Text should still be rendered
+	assertChar(t, buf, 0, 0, 'H')
+	assertChar(t, buf, 3, 0, 'l')
+
+	// Cell at cursor position 3 should have cursor background
+	cursorCell := buf.Get(3, 0)
+	if cursorCell.Background != "#585B70" {
+		t.Errorf("cursor cell bg=%q, want #585B70", cursorCell.Background)
+	}
+
+	// Cell NOT at cursor should have normal background
+	normalCell := buf.Get(0, 0)
+	if normalCell.Background != "#313244" {
+		t.Errorf("normal cell bg=%q, want #313244", normalCell.Background)
+	}
+}
+
+func TestPaint_InputCursorAtEnd(t *testing.T) {
+	// Focused input with cursor at end of text → cursor block after text
+	node := layout.NewVNode("input")
+	node.Content = "Hi"
+	node.Props["focused"] = true
+	// cursorPos defaults to len(value) = 2
+	node.Style.Foreground = "#CDD6F4"
+	node.X, node.Y, node.W, node.H = 0, 0, 20, 1
+
+	buf := buffer.New(20, 1)
+	p := NewPainter()
+	p.Paint(buf, node, 0, 0)
+
+	assertChar(t, buf, 0, 0, 'H')
+	assertChar(t, buf, 1, 0, 'i')
+
+	// Cursor at end: position 2 should be a space with cursor bg
+	cursorCell := buf.Get(2, 0)
+	if cursorCell.Char != ' ' {
+		t.Errorf("cursor-at-end char=%q, want ' '", cursorCell.Char)
+	}
+	if cursorCell.Background != "#585B70" {
+		t.Errorf("cursor-at-end bg=%q, want #585B70", cursorCell.Background)
+	}
+}
+
+func TestPaint_InputWithBorder(t *testing.T) {
+	// Input with border → text inside border area
+	node := layout.NewVNode("input")
+	node.Content = "AB"
+	node.Style.Border = "single"
+	node.Style.Background = "#313244"
+	node.X, node.Y, node.W, node.H = 0, 0, 10, 3
+
+	buf := buffer.New(10, 3)
+	p := NewPainter()
+	p.Paint(buf, node, 0, 0)
+
+	// Border corners
+	assertChar(t, buf, 0, 0, '┌')
+	assertChar(t, buf, 9, 0, '┐')
+
+	// Text inside border (at x=1, y=1)
+	assertChar(t, buf, 1, 1, 'A')
+	assertChar(t, buf, 2, 1, 'B')
+}
+
+func TestPaint_InputWithBackground(t *testing.T) {
+	// Input with background fills entire area
+	node := layout.NewVNode("input")
+	node.Content = "X"
+	node.Style.Background = "#FF0000"
+	node.X, node.Y, node.W, node.H = 0, 0, 10, 1
+
+	buf := buffer.New(10, 1)
+	p := NewPainter()
+	p.Paint(buf, node, 0, 0)
+
+	// Text cell should have background
+	c := buf.Get(0, 0)
+	if c.Background != "#FF0000" {
+		t.Errorf("text cell bg=%q, want #FF0000", c.Background)
+	}
+
+	// Empty cell should also have background (from Fill)
+	c2 := buf.Get(5, 0)
+	if c2.Background != "#FF0000" {
+		t.Errorf("empty cell bg=%q, want #FF0000", c2.Background)
+	}
+}
+
+func TestPaint_InputEmpty_NoCursor(t *testing.T) {
+	// Empty unfocused input → nothing visible (no cursor, no placeholder)
+	node := layout.NewVNode("input")
+	node.Content = ""
+	node.X, node.Y, node.W, node.H = 0, 0, 10, 1
+
+	buf := buffer.New(10, 1)
+	p := NewPainter()
+	p.Paint(buf, node, 0, 0)
+
+	// All cells should be zero (nothing rendered)
+	for x := 0; x < 10; x++ {
+		c := buf.Get(x, 0)
+		if c.Char != 0 && c.Char != ' ' {
+			t.Errorf("cell(%d,0) char=%q, want 0 or ' '", x, c.Char)
+		}
+	}
+}
