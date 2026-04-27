@@ -27,7 +27,7 @@ func (p *painter) paintNode(buf *buffer.Buffer, node *layout.VNode, ox, oy int) 
 		return
 
 	case "input":
-		p.paintText(buf, node, ox, oy)
+		p.paintInput(buf, node, ox, oy)
 		return
 
 	case "textarea":
@@ -199,6 +199,160 @@ func (p *painter) paintText(buf *buffer.Buffer, node *layout.VNode, ox, oy int) 
 		}
 		col += w
 	}
+}
+
+
+// paintInput renders an input node: background, border, value/placeholder, cursor.
+func (p *painter) paintInput(buf *buffer.Buffer, node *layout.VNode, ox, oy int) {
+	style := node.Style
+	bx := node.X - ox
+	by := node.Y - oy
+	w := node.W
+	h := node.H
+
+	// 1. Fill background
+	if style.Background != "" {
+		bgCell := buffer.Cell{
+			Char:       ' ',
+			Background: style.Background,
+		}
+		buf.Fill(buffer.Rect{X: bx, Y: by, W: w, H: h}, bgCell)
+	}
+
+	// 2. Draw border if any
+	if style.Border != "" && style.Border != "none" {
+		p.paintBorder(buf, bx, by, w, h, style)
+	}
+
+	borderW := 0
+	if hasBorder(style) {
+		borderW = 1
+	}
+
+	startX := bx + borderW + resolvedPaddingLeft(style)
+	startY := by + borderW + resolvedPaddingTop(style)
+	availW := w - 2*borderW - resolvedPaddingLeft(style) - resolvedPaddingRight(style)
+	if availW <= 0 {
+		return
+	}
+
+	// 3. Determine display text
+	value := node.Content
+	placeholder := ""
+	if pv, ok := node.Props["placeholder"]; ok {
+		if s, ok := pv.(string); ok {
+			placeholder = s
+		}
+	}
+
+	displayText := value
+	isPlaceholder := false
+	if displayText == "" && placeholder != "" {
+		displayText = placeholder
+		isPlaceholder = true
+	}
+
+	// 4. Get cursor position (only when focused)
+	cursorPos := -1 // -1 = no cursor
+	if f, ok := node.Props["focused"]; ok {
+		if fb, ok := f.(bool); ok && fb {
+			cursorPos = len([]rune(value)) // default: end of text
+			if cp, ok := node.Props["cursorPos"]; ok {
+				switch v := cp.(type) {
+				case int:
+					cursorPos = v
+				case int64:
+					cursorPos = int(v)
+				case float64:
+					cursorPos = int(v)
+				}
+			}
+		}
+	}
+
+	// 5. Determine scroll offset for long text
+	scrollOffset := 0
+	runes := []rune(displayText)
+	if cursorPos >= 0 && !isPlaceholder {
+		// Ensure cursor is visible within availW
+		if cursorPos > availW-1 {
+			scrollOffset = cursorPos - availW + 1
+		}
+	}
+
+	// 6. Render text
+	fg := style.Foreground
+	if isPlaceholder {
+		fg = "#6C7086" // muted color for placeholder
+	}
+
+	cell := buffer.Cell{
+		Foreground: fg,
+		Background: style.Background,
+		Bold:       style.Bold,
+		Dim:        isPlaceholder,
+	}
+
+	col := 0
+	for i := scrollOffset; i < len(runes) && col < availW; i++ {
+		ch := runes[i]
+		rw := runeWidth(ch)
+		if rw == 0 {
+			continue
+		}
+		if col+rw > availW {
+			break
+		}
+
+		px := startX + col
+		py := startY
+
+		// Cursor highlight
+		if i == cursorPos && !isPlaceholder {
+			cell.Background = "#585B70"
+		} else if style.Background != "" {
+			cell.Background = style.Background
+		} else {
+			existing := buf.Get(px, py)
+			cell.Background = existing.Background
+		}
+
+		cell.Char = ch
+		buf.Set(px, py, cell)
+
+		if rw == 2 {
+			padCell := buffer.Cell{
+				Char:       0,
+				Foreground: cell.Foreground,
+				Background: cell.Background,
+			}
+			buf.Set(px+1, py, padCell)
+		}
+		col += rw
+	}
+
+	// 7. Draw cursor at end of text (block cursor)
+	if cursorPos >= 0 && !isPlaceholder {
+		cursorCol := 0
+		for i := scrollOffset; i < cursorPos && i < len(runes); i++ {
+			cursorCol += runeWidth(runes[i])
+		}
+		if cursorCol >= 0 && cursorCol < availW && cursorPos >= len(runes) {
+			px := startX + cursorCol
+			py := startY
+			cursorCell := buffer.Cell{
+				Char:       ' ',
+				Background: "#585B70",
+				Foreground: fg,
+			}
+			buf.Set(px, py, cursorCell)
+		}
+	}
+}
+
+// hasBorder returns true if the style has a visible border.
+func hasBorder(s layout.Style) bool {
+	return s.Border == "single" || s.Border == "double" || s.Border == "rounded"
 }
 
 // resolvedPaddingLeft returns the effective left padding.
