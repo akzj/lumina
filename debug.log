@@ -1,3 +1,55 @@
 lumina: pprof listening on http://127.0.0.1:6060/debug/pprof/
 [TREE] BuildVNodeTree: 26049 parents, 12993 byID
 [TREE] BuildVNodeTree: 26049 parents, 12993 byID
+[HOVER] old="" new="186,60"
+[RENDER] renderDirtyChildren comp=comp_1
+[RENDER] reRenderDirtySubtree changed=true structureChanged=false
+[TREE] BuildVNodeTree: 26049 parents, 12992 byID
+[HOVER] old="186,60" new="186,59"
+[HOVER] old="186,59" new="185,59"
+[HOVER] old="185,59" new="184,59"
+[HOVER] old="184,59" new="183,59"
+[HOVER] old="183,59" new="182,58"
+[RENDER] renderDirtyChildren comp=comp_1
+[RENDER] reRenderDirtySubtree changed=true structureChanged=false
+[TREE] BuildVNodeTree: 26049 parents, 12987 byID
+[HOVER] old="182,58" new="181,58"
+[HIT] type=mousemove x=180 y=59 ownerID="180,58" target="180,58" hoveredID="181,58"
+[HOVER] old="181,58" new="180,58"
+[RENDER] renderDirtyChildren comp=comp_1
+[RENDER] reRenderDirtySubtree changed=true structureChanged=false
+[TREE] BuildVNodeTree: 26049 parents, 12985 byID
+[HOVER] old="180,58" new="179,58"
+[RENDER] renderDirtyChildren comp=comp_1
+[RENDER] reRenderDirtySubtree changed=true structureChanged=false
+[TREE] BuildVNodeTree: 26049 parents, 12984 byID
+[HOVER] old="179,58" new="178,57"
+[HOVER] old="178,57" new="177,57"
+[HOVER] old="177,57" new="176,57"
+[HOVER] old="176,57" new="175,57"
+[RENDER] renderDirtyChildren comp=comp_1
+[RENDER] reRenderDirtySubtree changed=true structureChanged=false
+[TREE] BuildVNodeTree: 26049 parents, 12980 byID
+[HOVER] old="175,57" new="174,56"
+[HOVER] old="174,56" new="172,56"
+[HOVER] old="172,56" new="169,55"
+[RENDER] renderDirtyChildren comp=comp_1
+[RENDER] reRenderDirtySubtree changed=true structureChanged=false
+[TREE] BuildVNodeTree: 26049 parents, 12977 byID
+[HOVER] old="169,55" new="166,53"
+[HOVER] old="166,53" new="165,53"
+[HOVER] old="165,53" new="163,52"
+[HOVER] old="163,52" new="161,52"
+[RENDER] renderDirtyChildren comp=comp_1
+[RENDER] reRenderDirtySubtree changed=true structureChanged=false
+[TREE] BuildVNodeTree: 26049 parents, 12973 byID
+[HOVER] old="161,52" new="161,51"
+[HOVER] old="161,51" new="159,51"
+[HOVER] old="159,51" new="159,50"
+[RENDER] renderDirtyChildren comp=comp_1
+[RENDER] reRenderDirtySubtree changed=true structureChanged=false
+[TREE] BuildVNodeTree: 26049 parents, 12970 byID
+[HOVER] old="159,50" new="157,50"
+[RENDER] renderDirtyChildren comp=comp_1
+[RENDER] reRenderDirtySubtree changed=true structureChanged=false
+[TREE] BuildVNodeTree: 26049 parents, 12969 byID
