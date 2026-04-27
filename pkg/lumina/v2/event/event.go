@@ -97,6 +97,14 @@ func (d *Dispatcher) SetParentMap(parentMap map[string]string) {
 	d.parentMap = parentMap
 }
 
+// MergeParentMap merges entries into the existing parent map without replacing it.
+// Used for incremental updates when only some components were re-rendered.
+func (d *Dispatcher) MergeParentMap(entries map[string]string) {
+	for k, v := range entries {
+		d.parentMap[k] = v
+	}
+}
+
 // HoveredID returns the currently hovered VNode ID.
 func (d *Dispatcher) HoveredID() string {
 	return d.hoveredID

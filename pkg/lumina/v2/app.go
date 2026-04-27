@@ -158,8 +158,9 @@ func (a *App) RenderDirty() {
 
 	// 5. Sync handlers when components were re-rendered (VNodeTree may have
 	//    changed handlers/focusables), even without structural change.
+	//    Only sync the dirty components — much cheaper than full syncHandlers.
 	if !needsRebuild && len(paintDirty) > 0 {
-		a.syncHandlers()
+		a.syncDirtyHandlers(paintDirty)
 	}
 
 	// 6. Output.
@@ -270,6 +271,33 @@ func (a *App) syncHandlers() {
 		}
 		for i, fID := range comp.Focusables {
 			a.dispatcher.RegisterFocusable(fID, i)
+		}
+	}
+}
+
+// syncDirtyHandlers updates handlers and focusables only for the given dirty
+// components, without clearing and re-registering everything. This is O(dirty)
+// instead of O(all_components).
+func (a *App) syncDirtyHandlers(dirtyComps []*component.Component) {
+	for _, comp := range dirtyComps {
+		// Remove old handlers for this component's VNode IDs.
+		// The dispatcher doesn't track per-component handler sets, so we
+		// re-register from the component's extracted handler map.
+		// Since ExtractHandlers was called during RenderDirty, comp.Handlers
+		// is already up-to-date.
+		for vnodeID, hm := range comp.Handlers {
+			a.dispatcher.RegisterHandlers(vnodeID, hm)
+		}
+		// Re-register focusables.
+		for i, fID := range comp.Focusables {
+			a.dispatcher.RegisterFocusable(fID, i)
+		}
+		// Rebuild parent map for this component's VNode tree.
+		if comp.VNodeTree != nil {
+			parentMap := make(map[string]string)
+			buildParentMap(comp.VNodeTree, "", parentMap)
+			// Merge into dispatcher's parent map.
+			a.dispatcher.MergeParentMap(parentMap)
 		}
 	}
 }
