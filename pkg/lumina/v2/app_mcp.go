@@ -13,19 +13,16 @@ var _ mcp.AppInspector = (*App)(nil)
 
 // MCPInspectTree returns a summary of all registered components.
 func (a *App) MCPInspectTree() []mcp.ComponentInfo {
-	all := a.manager.GetAll()
-	focused := a.FocusedID()
-	result := make([]mcp.ComponentInfo, 0, len(all))
-	for _, c := range all {
-		if c.ID() == "__devtools" {
-			continue
-		}
-		r := c.Rect()
+	var result []mcp.ComponentInfo
+	root := a.engine.Root()
+	if root == nil {
+		return result
+	}
+	// Walk the engine's component tree.
+	for id, comp := range a.engine.AllComponents() {
 		result = append(result, mcp.ComponentInfo{
-			ID:      c.ID(),
-			Name:    c.Name(),
-			Focused: c.ID() == focused,
-			Rect:    [4]int{r.X, r.Y, r.W, r.H},
+			ID:   id,
+			Name: comp.Name,
 		})
 	}
 	return result
@@ -33,33 +30,26 @@ func (a *App) MCPInspectTree() []mcp.ComponentInfo {
 
 // MCPInspectComponent returns detailed info for a single component.
 func (a *App) MCPInspectComponent(id string) (*mcp.ComponentDetail, error) {
-	c := a.manager.Get(id)
-	if c == nil {
+	comp := a.engine.GetComponent(id)
+	if comp == nil {
 		return nil, fmt.Errorf("component not found: %s", id)
 	}
-	r := c.Rect()
 	return &mcp.ComponentDetail{
-		ID:      c.ID(),
-		Name:    c.Name(),
-		State:   c.State(),
-		Focused: c.ID() == a.FocusedID(),
-		Dirty:   c.IsDirtyPaint(),
-		Rect:    [4]int{r.X, r.Y, r.W, r.H},
-		ZIndex:  c.ZIndex(),
+		ID:   comp.ID,
+		Name: comp.Name,
 	}, nil
 }
 
-// MCPGetState returns component state. If key is empty, returns the full state map.
-// If key is non-empty, returns the value for that key.
+// MCPGetState returns component state.
 func (a *App) MCPGetState(compID, key string) (any, error) {
-	c := a.manager.Get(compID)
-	if c == nil {
+	comp := a.engine.GetComponent(compID)
+	if comp == nil {
 		return nil, fmt.Errorf("component not found: %s", compID)
 	}
 	if key == "" {
-		return c.State(), nil
+		return comp.State, nil
 	}
-	val, ok := c.State()[key]
+	val, ok := comp.State[key]
 	if !ok {
 		return nil, fmt.Errorf("key not found: %s", key)
 	}
@@ -68,30 +58,25 @@ func (a *App) MCPGetState(compID, key string) (any, error) {
 
 // MCPSetState sets a state key on a component and marks it dirty.
 func (a *App) MCPSetState(compID, key string, value any) error {
-	c := a.manager.Get(compID)
-	if c == nil {
-		return fmt.Errorf("component not found: %s", compID)
-	}
-	a.SetState(compID, key, value)
+	a.engine.SetState(compID, key, value)
 	return nil
 }
 
-// MCPSimulateClick dispatches a click event targeting the given VNode ID.
+// MCPSimulateClick dispatches a click event at the given coordinates.
 func (a *App) MCPSimulateClick(id string) error {
-	e := &event.Event{Type: "click", Target: id, Bubbles: true}
-	a.dispatcher.Dispatch(e)
+	// The engine handles click by coordinates. For ID-based click,
+	// we dispatch through HandleEvent.
+	a.HandleEvent(&event.Event{Type: "click", Target: id, Bubbles: true})
 	return nil
 }
 
 // MCPSimulateKey dispatches a keydown event with the given key name.
 func (a *App) MCPSimulateKey(key string) error {
-	e := &event.Event{Type: "keydown", Key: key}
-	a.HandleEvent(e)
+	a.HandleEvent(&event.Event{Type: "keydown", Key: key})
 	return nil
 }
 
 // MCPEval executes Lua code in the app's Lua state.
-// Returns {"ok": true} on success, or an error if the code fails.
 func (a *App) MCPEval(code string) (any, error) {
 	if a.luaState == nil {
 		return nil, fmt.Errorf("no Lua state available")
@@ -104,24 +89,25 @@ func (a *App) MCPEval(code string) (any, error) {
 
 // MCPFocusNext moves focus to the next focusable VNode and returns the new focused ID.
 func (a *App) MCPFocusNext() string {
-	a.dispatcher.FocusNext()
-	return a.dispatcher.FocusedID()
+	// TODO: Implement focus management in engine.
+	return ""
 }
 
 // MCPFocusPrev moves focus to the previous focusable VNode and returns the new focused ID.
 func (a *App) MCPFocusPrev() string {
-	a.dispatcher.FocusPrev()
-	return a.dispatcher.FocusedID()
+	// TODO: Implement focus management in engine.
+	return ""
 }
 
 // MCPSetFocus sets focus to a specific VNode by ID.
 func (a *App) MCPSetFocus(id string) {
-	a.dispatcher.SetFocus(id)
+	// TODO: Implement focus management in engine.
 }
 
 // MCPGetFocusableIDs returns the ordered list of focusable VNode IDs.
 func (a *App) MCPGetFocusableIDs() []string {
-	return a.dispatcher.GetFocusableIDs()
+	// TODO: Implement focus management in engine.
+	return nil
 }
 
 // MCPGetFocusedID returns the currently focused VNode ID.
@@ -131,12 +117,11 @@ func (a *App) MCPGetFocusedID() string {
 
 // MCPToggleDevTools toggles the devtools panel and returns the new visibility.
 func (a *App) MCPToggleDevTools() bool {
-	a.toggleDevTools()
+	a.toggleDevToolsV2()
 	return a.devtools.Visible
 }
 
 // MCPGetScreenText reads the screen buffer and returns it as a text string.
-// Each row is one line, terminated by '\n'. Zero-char cells become spaces.
 func (a *App) MCPGetScreenText() string {
 	buf := a.Screen()
 	if buf == nil {

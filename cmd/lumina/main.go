@@ -42,7 +42,7 @@ func main() {
 	}
 
 	if len(args) < 1 {
-		fmt.Println("Usage: lumina-v2 [--web :8080] [--mcp :8088] [--watch] <script.lua>")
+		fmt.Println("Usage: lumina [--web :8080] [--mcp :8088] [--watch] <script.lua>")
 		os.Exit(1)
 	}
 	scriptPath = args[0]
@@ -78,7 +78,7 @@ func runWeb(addr string, scriptPath string, watch bool, mcpAddr string) {
 	fmt.Fprintf(os.Stderr, "Lumina v2 web mode — open http://%s in your browser\n", listenAddr)
 
 	// 3. Create App with V2 render engine (sub-component support).
-	app := v2.NewAppWithEngine(L, defaultW, defaultH, wsAdapter)
+	app := v2.NewApp(L, defaultW, defaultH, wsAdapter)
 
 	// 3b. Start MCP HTTP server if requested.
 	if mcpAddr != "" {
@@ -148,7 +148,7 @@ func runTerminal(scriptPath string, watch bool, mcpAddr string) {
 	adapter := output.NewTUIAdapter(term.Output())
 
 	// 7. Create App with V2 render engine (sub-component support).
-	app := v2.NewAppWithEngine(L, w, h, adapter)
+	app := v2.NewApp(L, w, h, adapter)
 
 	// 7b. Start MCP HTTP server if requested.
 	if mcpAddr != "" {

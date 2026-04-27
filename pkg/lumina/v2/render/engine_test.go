@@ -597,3 +597,188 @@ func TestEngine_ReadDescriptor_StringChild(t *testing.T) {
 		t.Errorf("child 1 content = %q, want 'table child'", comp.RootNode.Children[1].Content)
 	}
 }
+
+func TestEngine_GraftWalk_SkipWhenAlreadyGrafted(t *testing.T) {
+	e, L := newTestEngine(t)
+
+	// Define a child component
+	err := L.DoString(`
+		local Cell = lumina.defineComponent("Cell", function(props)
+			return lumina.createElement("text", {}, "cell")
+		end)
+
+		lumina.createComponent({
+			id = "root",
+			name = "Root",
+			render = function(props)
+				return lumina.createElement("box", {},
+					lumina.createElement(Cell, {key = "c1"}),
+					lumina.createElement(Cell, {key = "c2"})
+				)
+			end,
+		})
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Initial full render + graft
+	e.RenderAll()
+
+	root := e.Root().RootNode
+	if root == nil {
+		t.Fatal("root node nil after RenderAll")
+	}
+
+	// Find component placeholder nodes and verify they are grafted
+	var compNodes []*Node
+	var findCompNodes func(n *Node)
+	findCompNodes = func(n *Node) {
+		if n.Type == "component" {
+			compNodes = append(compNodes, n)
+		}
+		for _, ch := range n.Children {
+			findCompNodes(ch)
+		}
+	}
+	findCompNodes(root)
+	if len(compNodes) < 2 {
+		t.Fatalf("expected at least 2 component nodes, got %d", len(compNodes))
+	}
+
+	// Clear all dirty flags to simulate idle state
+	clearLayoutDirty(root)
+	clearPaintDirty(root)
+
+	// Verify no node is dirty
+	if hasAnyDirty(root) {
+		t.Fatal("expected no dirty nodes after clearing")
+	}
+
+	// Call RenderDirty (idle frame) — should NOT mark anything dirty
+	e.RenderDirty()
+
+	// After idle RenderDirty, nothing should be dirty (graftWalk should skip)
+	for i, cn := range compNodes {
+		if cn.LayoutDirty {
+			t.Errorf("component node %d: LayoutDirty=true after idle RenderDirty", i)
+		}
+		if cn.PaintDirty {
+			t.Errorf("component node %d: PaintDirty=true after idle RenderDirty", i)
+		}
+	}
+}
+
+func TestEngine_IdleFrame_NoPaintWork(t *testing.T) {
+	e, L := newTestEngine(t)
+
+	err := L.DoString(`
+		lumina.createComponent({
+			id = "test",
+			name = "Test",
+			render = function(props)
+				return lumina.createElement("box", {
+					style = {background = "#000"},
+				},
+					lumina.createElement("text", {}, "Hello")
+				)
+			end,
+		})
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	e.RenderAll()
+
+	// Run idle frame
+	e.RenderDirty()
+
+	// Check that no paint work was done
+	stats := e.Buffer().Stats()
+	if stats.WriteCount != 0 {
+		t.Errorf("idle frame: WriteCount=%d, want 0", stats.WriteCount)
+	}
+	if stats.ClearCount != 0 {
+		t.Errorf("idle frame: ClearCount=%d, want 0", stats.ClearCount)
+	}
+}
+
+func BenchmarkEngine_IdleFrame(b *testing.B) {
+	L := lua.NewState()
+	defer L.Close()
+	e := NewEngine(L, 80, 24)
+	e.RegisterLuaAPI()
+
+	// Create a component with many child components (simulates stress_test.lua)
+	err := L.DoString(`
+		local Cell = lumina.defineComponent("Cell", function(props)
+			return lumina.createElement("text", {
+				style = {foreground = "#FFF"},
+			}, "X")
+		end)
+
+		lumina.createComponent({
+			id = "root",
+			name = "Root",
+			render = function(props)
+				local children = {}
+				for i = 1, 100 do
+					children[i] = lumina.createElement(Cell, {key = "c" .. i})
+				end
+				return lumina.createElement("box", {}, table.unpack(children))
+			end,
+		})
+	`)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	e.RenderAll()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		e.RenderDirty()
+	}
+}
+
+func BenchmarkEngine_IdleFrame_WithSubComponents(b *testing.B) {
+	L := lua.NewState()
+	defer L.Close()
+	e := NewEngine(L, 160, 48)
+	e.RegisterLuaAPI()
+
+	err := L.DoString(`
+		local Cell = lumina.defineComponent("Cell", function(props)
+			return lumina.createElement("box", {
+				style = {width = 3, height = 1, background = "#333"},
+			}, lumina.createElement("text", {}, "X"))
+		end)
+
+		lumina.createComponent({
+			id = "root",
+			name = "Root",
+			render = function(props)
+				local rows = {}
+				for r = 1, 20 do
+					local cells = {}
+					for c = 1, 40 do
+						cells[c] = lumina.createElement(Cell, {key = "c" .. r .. "_" .. c})
+					end
+					rows[r] = lumina.createElement("hbox", {key = "row" .. r}, table.unpack(cells))
+				end
+				return lumina.createElement("box", {}, table.unpack(rows))
+			end,
+		})
+	`)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	e.RenderAll()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		e.RenderDirty()
+	}
+}

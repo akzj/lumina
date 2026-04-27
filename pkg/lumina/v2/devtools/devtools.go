@@ -6,7 +6,6 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/akzj/lumina/pkg/lumina/v2/layout"
 	"github.com/akzj/lumina/pkg/lumina/v2/perf"
 )
 
@@ -20,12 +19,11 @@ const (
 
 // ComponentInfo holds snapshot data about a registered component.
 type ComponentInfo struct {
-	ID        string
-	Name      string
-	X, Y      int
-	W, H      int
-	ZIndex    int
-	VNodeTree *layout.VNode
+	ID     string
+	Name   string
+	X, Y   int
+	W, H   int
+	ZIndex int
 }
 
 // PerfSnapshot holds a frozen copy of perf data, captured before the devtools
