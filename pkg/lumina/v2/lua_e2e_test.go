@@ -613,3 +613,44 @@ func TestLuaE2E_TextInheritsParentBackground(t *testing.T) {
 			textCell.Background, emptyCell.Background)
 	}
 }
+
+// --- Test: Top-level style props in createElement ---
+
+func TestLuaE2E_TextForegroundColor(t *testing.T) {
+	app, _, _ := newLuaApp(t, 40, 10)
+
+	err := app.RunString(`
+		lumina.createComponent({
+			id = "color-test",
+			x = 0, y = 0, w = 40, h = 10,
+			render = function(state, props)
+				return lumina.createElement("text", {
+					foreground = "#89B4FA",
+					bold = true,
+				}, "Colored")
+			end
+		})
+	`)
+	if err != nil {
+		t.Fatalf("RunString failed: %v", err)
+	}
+
+	app.RenderAll()
+	screen := app.Screen()
+
+	if screen == nil {
+		t.Fatal("Screen is nil")
+	}
+
+	// First character should be 'C' from "Colored"
+	cell := screen.Get(0, 0)
+	if cell.Char != 'C' {
+		t.Errorf("expected 'C' at (0,0), got %c (%d)", cell.Char, cell.Char)
+	}
+	if cell.Foreground != "#89B4FA" {
+		t.Errorf("foreground = %q, want %q", cell.Foreground, "#89B4FA")
+	}
+	if !cell.Bold {
+		t.Error("expected bold=true at (0,0)")
+	}
+}

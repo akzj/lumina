@@ -5,6 +5,22 @@ import (
 	"github.com/akzj/lumina/pkg/lumina/v2/layout"
 )
 
+// styleFieldSet contains all known style field names for efficient lookup.
+// These fields are extracted into vn.Style and should NOT also appear in Props.
+var styleFieldSet = map[string]bool{
+	"width": true, "height": true, "minWidth": true, "maxWidth": true,
+	"minHeight": true, "maxHeight": true, "flex": true,
+	"padding": true, "paddingTop": true, "paddingBottom": true,
+	"paddingLeft": true, "paddingRight": true,
+	"margin": true, "marginTop": true, "marginBottom": true,
+	"marginLeft": true, "marginRight": true, "gap": true,
+	"justify": true, "align": true,
+	"border": true, "foreground": true, "fg": true,
+	"background": true, "bg": true, "bold": true, "dim": true, "underline": true,
+	"overflow": true, "position": true, "top": true, "left": true,
+	"right": true, "bottom": true, "zIndex": true,
+}
+
 // LuaTableToVNode converts a Lua table at stack index idx to a VNode tree.
 // Expected Lua table structure:
 //
@@ -16,6 +32,9 @@ import (
 //	  children = { ... },    -- array of child VNode tables
 //	  -- remaining keys become Props (including event handler refs)
 //	}
+//
+// Style properties (foreground, bold, etc.) may appear at the top level OR
+// inside a nested "style" sub-table. The sub-table takes precedence.
 func (b *Bridge) LuaTableToVNode(idx int) *layout.VNode {
 	L := b.L
 	absIdx := L.AbsIndex(idx)
@@ -33,14 +52,17 @@ func (b *Bridge) LuaTableToVNode(idx int) *layout.VNode {
 	// Read "content" field (for text nodes).
 	vn.Content = L.GetFieldString(absIdx, "content")
 
-	// Read "style" table → populate vn.Style.
+	// Extract style properties from the main table first (top-level style props).
+	extractStyle(L, absIdx, &vn.Style)
+
+	// Read "style" sub-table → override with explicit style values.
 	L.GetField(absIdx, "style")
 	if L.IsTable(-1) {
 		extractStyle(L, -1, &vn.Style)
 	}
 	L.Pop(1)
 
-	// Read remaining keys as Props (skip known fields).
+	// Read remaining keys as Props (skip known fields and style fields).
 	// This captures event handlers (onClick, etc.) and arbitrary props.
 	L.ForEach(absIdx, func(L *lua.State) bool {
 		if L.Type(-2) != lua.TypeString {
@@ -49,6 +71,9 @@ func (b *Bridge) LuaTableToVNode(idx int) *layout.VNode {
 		key, _ := L.ToString(-2)
 		if key == "type" || key == "id" || key == "content" || key == "style" || key == "children" {
 			return true // skip known structural fields
+		}
+		if styleFieldSet[key] {
+			return true // skip style fields (already extracted above)
 		}
 		if L.Type(-1) == lua.TypeFunction {
 			// Store function as registry ref so it survives stack cleanup.
