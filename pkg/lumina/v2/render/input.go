@@ -161,7 +161,9 @@ func (e *Engine) fireOnChange(node *Node) {
 		return
 	}
 	L.PushString(node.Content)
-	L.PCall(1, 0, 0)
+	if status := L.PCall(1, 0, 0); status != lua.OK {
+		L.Pop(1) // pop error message to prevent stack pollution
+	}
 
 	// Mark the component owning this node dirty so it re-renders
 	e.markOwnerDirty(node)

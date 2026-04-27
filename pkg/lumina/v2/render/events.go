@@ -175,7 +175,9 @@ func (e *Engine) callLuaRef(ref LuaRef, x, y int) {
 	L.SetField(tblIdx, "x")
 	L.PushInteger(int64(y))
 	L.SetField(tblIdx, "y")
-	L.PCall(1, 0, 0)
+	if status := L.PCall(1, 0, 0); status != lua.OK {
+		L.Pop(1) // pop error message to prevent stack pollution
+	}
 }
 
 // callLuaRefKey calls a Lua function with an event table {key=key}.
@@ -190,7 +192,9 @@ func (e *Engine) callLuaRefKey(ref LuaRef, key string) {
 	tblIdx := L.AbsIndex(-1)
 	L.PushString(key)
 	L.SetField(tblIdx, "key")
-	L.PCall(1, 0, 0)
+	if status := L.PCall(1, 0, 0); status != lua.OK {
+		L.Pop(1) // pop error message to prevent stack pollution
+	}
 }
 
 // callLuaRefScroll calls a Lua function with an event table {delta=delta, key="up"/"down"}.
@@ -212,7 +216,9 @@ func (e *Engine) callLuaRefScroll(ref LuaRef, delta int) {
 		L.PushString("down")
 	}
 	L.SetField(tblIdx, "key")
-	L.PCall(1, 0, 0)
+	if status := L.PCall(1, 0, 0); status != lua.OK {
+		L.Pop(1) // pop error message to prevent stack pollution
+	}
 }
 
 // findKeyHandler walks the tree (DFS) to find a node with an onKeyDown handler.
