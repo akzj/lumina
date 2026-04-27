@@ -1319,23 +1319,31 @@ func TestLuaE2E_Dashboard_Scroll(t *testing.T) {
 		t.Fatal("expected 'Server started' visible initially")
 	}
 
-	// Press 'j' multiple times to scroll down in the activity log.
-	for i := 0; i < 10; i++ {
+	// A late entry (entry ~40+) should NOT be visible before scrolling.
+	if screenHasString(ta, "Daily report") {
+		t.Fatal("'Daily report' should not be visible before scrolling")
+	}
+
+	// Press 'j' many times to scroll down in the activity log.
+	// With 45 entries and ~20 visible rows, scrolling 30 times should
+	// push early entries off screen and reveal late entries.
+	for i := 0; i < 30; i++ {
 		app.HandleEvent(&event.Event{Type: "keydown", Key: "j"})
 		app.RenderDirty()
 	}
 
-	// After scrolling, later entries should become visible.
-	// "Index rebuild finished" is entry 14 (0-indexed: 13), should be visible
-	// after scrolling past the viewport.
-	if !screenHasString(ta, "Index rebuild") {
-		// It's OK if the exact entry varies — just verify the screen changed.
-		// At minimum, the scroll state should have changed (scrollY > 0).
-		t.Log("Note: 'Index rebuild' not found after scrolling — checking scroll effect")
+	// After scrolling down significantly, late entries should be visible.
+	if !screenHasString(ta, "Daily report") {
+		t.Error("expected 'Daily report' visible after scrolling down")
 	}
 
-	// Press 'k' to scroll back up.
-	for i := 0; i < 10; i++ {
+	// Early entries should have scrolled off screen.
+	if screenHasString(ta, "Server started") {
+		t.Error("'Server started' should have scrolled off screen")
+	}
+
+	// Press 'k' many times to scroll back to top.
+	for i := 0; i < 30; i++ {
 		app.HandleEvent(&event.Event{Type: "keydown", Key: "k"})
 		app.RenderDirty()
 	}
