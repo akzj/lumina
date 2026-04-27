@@ -1,11 +1,13 @@
 package v2
 
 import (
+	"log"
 	"time"
 
 	"github.com/akzj/lumina/pkg/lumina/v2/animation"
 	"github.com/akzj/lumina/pkg/lumina/v2/bridge"
 	"github.com/akzj/lumina/pkg/lumina/v2/event"
+	"github.com/akzj/lumina/pkg/lumina/v2/hotreload"
 	"github.com/akzj/lumina/pkg/lumina/v2/router"
 )
 
@@ -39,6 +41,10 @@ type RunConfig struct {
 
 	// FrameRate is the target frame rate in Hz. Default: 60.
 	FrameRate int
+
+	// Watch enables hot reload: when the ScriptPath .lua file changes on
+	// disk, the app re-executes it and restores component state.
+	Watch bool
 }
 
 // Run starts the application event loop. It loads the Lua script (if configured),
@@ -118,7 +124,8 @@ func (a *App) RouterManager() *router.Router {
 }
 
 // eventLoop is the core event loop. It processes input events, ticks
-// animations, and renders dirty components at the target frame rate.
+// animations, handles hot reload, and renders dirty components at the
+// target frame rate.
 func (a *App) eventLoop(cfg RunConfig) error {
 	frameRate := cfg.FrameRate
 	if frameRate <= 0 {
@@ -134,6 +141,25 @@ func (a *App) eventLoop(cfg RunConfig) error {
 
 	events := cfg.Events
 
+	// Set up hot reload watcher if enabled.
+	var reloadCh chan string
+	if cfg.Watch && cfg.ScriptPath != "" {
+		reloadCh = make(chan string, 1)
+		watcher := hotreload.NewWatcher([]string{cfg.ScriptPath}, 500*time.Millisecond)
+		watcher.SetOnChange(func(path string) {
+			select {
+			case reloadCh <- path:
+			default: // drop if already queued
+			}
+		})
+		watcher.Start()
+		defer watcher.Stop()
+	}
+	// Provide a nil-safe channel that never receives when watch is disabled.
+	if reloadCh == nil {
+		reloadCh = make(chan string)
+	}
+
 	for {
 		select {
 		case <-a.quit:
@@ -144,6 +170,9 @@ func (a *App) eventLoop(cfg RunConfig) error {
 				return nil // input channel closed
 			}
 			a.handleInputEvent(ie)
+
+		case path := <-reloadCh:
+			a.reloadScript(path)
 
 		case <-ticker.C:
 			// Tick animations.
@@ -160,6 +189,61 @@ func (a *App) eventLoop(cfg RunConfig) error {
 			a.RenderDirty()
 		}
 	}
+}
+
+// reloadScript performs a hot reload: snapshots component state, re-executes
+// the Lua script, restores state, and re-renders.
+func (a *App) reloadScript(path string) {
+	// 1. Snapshot all component states (excluding devtools).
+	snapshots := make(map[string]hotreload.StateSnapshot)
+	for _, comp := range a.manager.GetAll() {
+		if comp.ID() == "__devtools" {
+			continue
+		}
+		snapshots[comp.ID()] = hotreload.Snapshot(comp)
+	}
+
+	// 2. Unregister all non-devtools components and destroy bridge state.
+	for _, comp := range a.manager.GetAll() {
+		if comp.ID() == "__devtools" {
+			continue
+		}
+		a.UnregisterComponent(comp.ID())
+		if a.bridge != nil {
+			a.bridge.DestroyComponent(comp.ID())
+		}
+	}
+
+	// 3. Reset bridge state (hook contexts, refs) and re-execute script.
+	if a.bridge != nil {
+		a.bridge.Reset()
+	}
+	if err := a.luaState.DoFile(path); err != nil {
+		// Script error — log but don't crash. Components are gone, so
+		// the screen will be blank until the user fixes the script.
+		log.Printf("[hotreload] error reloading %s: %v", path, err)
+		return
+	}
+
+	// 4. Restore state to matching components (by ID).
+	for _, comp := range a.manager.GetAll() {
+		if comp.ID() == "__devtools" {
+			continue
+		}
+		if snap, ok := snapshots[comp.ID()]; ok {
+			for k, v := range snap.State {
+				comp.SetState(k, v)
+			}
+			for k, v := range snap.HookStore {
+				comp.HookStore()[k] = v
+			}
+		}
+	}
+
+	// 5. Full re-render.
+	a.RenderAll()
+
+	log.Printf("[hotreload] reloaded %s", path)
 }
 
 // handleInputEvent converts a terminal InputEvent to an event.Event and
