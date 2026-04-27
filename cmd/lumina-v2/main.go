@@ -10,13 +10,15 @@ import (
 
 	"github.com/akzj/go-lua/pkg/lua"
 	v2 "github.com/akzj/lumina/pkg/lumina/v2"
+	"github.com/akzj/lumina/pkg/lumina/v2/mcp"
 	"github.com/akzj/lumina/pkg/lumina/v2/output"
 	"github.com/akzj/lumina/pkg/lumina/v2/terminal"
 )
 
 func main() {
-	// Parse simple flags: --web :8080, --watch
+	// Parse simple flags: --web :8080, --watch, --mcp :8088
 	var webAddr string
+	var mcpAddr string
 	var watchMode bool
 	var scriptPath string
 	var args []string
@@ -27,6 +29,11 @@ func main() {
 			i++ // skip value
 		} else if strings.HasPrefix(os.Args[i], "--web=") {
 			webAddr = strings.TrimPrefix(os.Args[i], "--web=")
+		} else if os.Args[i] == "--mcp" && i+1 < len(os.Args) {
+			mcpAddr = os.Args[i+1]
+			i++ // skip value
+		} else if strings.HasPrefix(os.Args[i], "--mcp=") {
+			mcpAddr = strings.TrimPrefix(os.Args[i], "--mcp=")
 		} else if os.Args[i] == "--watch" {
 			watchMode = true
 		} else {
@@ -35,20 +42,20 @@ func main() {
 	}
 
 	if len(args) < 1 {
-		fmt.Println("Usage: lumina-v2 [--web :8080] [--watch] <script.lua>")
+		fmt.Println("Usage: lumina-v2 [--web :8080] [--mcp :8088] [--watch] <script.lua>")
 		os.Exit(1)
 	}
 	scriptPath = args[0]
 
 	if webAddr != "" {
-		runWeb(webAddr, scriptPath, watchMode)
+		runWeb(webAddr, scriptPath, watchMode, mcpAddr)
 	} else {
-		runTerminal(scriptPath, watchMode)
+		runTerminal(scriptPath, watchMode, mcpAddr)
 	}
 }
 
 // runWeb starts the WebSocket server mode — renders to browser instead of terminal.
-func runWeb(addr string, scriptPath string, watch bool) {
+func runWeb(addr string, scriptPath string, watch bool, mcpAddr string) {
 	const defaultW, defaultH = 80, 24
 
 	// 1. Create Lua state.
@@ -72,6 +79,12 @@ func runWeb(addr string, scriptPath string, watch bool) {
 
 	// 3. Create App.
 	app := v2.NewAppWithLua(L, defaultW, defaultH, wsAdapter)
+
+	// 3b. Start MCP HTTP server if requested.
+	if mcpAddr != "" {
+		mcpHandler := mcp.NewHandler(app)
+		go serveMCP(mcpHandler, mcpAddr)
+	}
 
 	// 4. Bridge WSEvent → v2.InputEvent.
 	appEvents := make(chan v2.InputEvent, 64)
@@ -106,7 +119,7 @@ func runWeb(addr string, scriptPath string, watch bool) {
 }
 
 // runTerminal runs in standard TUI terminal mode (existing behavior).
-func runTerminal(scriptPath string, watch bool) {
+func runTerminal(scriptPath string, watch bool, mcpAddr string) {
 	// 1. Create terminal.
 	term, err := terminal.New()
 	if err != nil {
@@ -136,6 +149,12 @@ func runTerminal(scriptPath string, watch bool) {
 
 	// 7. Create App with Lua wiring.
 	app := v2.NewAppWithLua(L, w, h, adapter)
+
+	// 7b. Start MCP HTTP server if requested.
+	if mcpAddr != "" {
+		mcpHandler := mcp.NewHandler(app)
+		go serveMCP(mcpHandler, mcpAddr)
+	}
 
 	// 8. Start input reader — reads raw bytes from stdin, parses into events.
 	termEvents := make(chan terminal.InputEvent, 64)
