@@ -63,6 +63,57 @@ func (om *OcclusionMap) Build(layers []*Layer) {
 	}
 }
 
+// UpdateRegion re-scans a specific screen rect to update ownership.
+// Only cells within the rect are re-evaluated against all layers.
+// This is O(rect_area × num_layers) instead of O(screen_area × num_layers).
+func (om *OcclusionMap) UpdateRegion(layers []*Layer, rect buffer.Rect) {
+	if len(om.owners) == 0 {
+		return
+	}
+
+	screenBounds := buffer.Rect{X: 0, Y: 0, W: om.width, H: om.height}
+	clipped := rect.Intersect(screenBounds)
+	if clipped.W <= 0 || clipped.H <= 0 {
+		return
+	}
+
+	// Sort layers by ZIndex ascending (lowest first) so highest z wins.
+	sorted := make([]*Layer, len(layers))
+	copy(sorted, layers)
+	sort.Slice(sorted, func(i, j int) bool {
+		return sorted[i].ZIndex < sorted[j].ZIndex
+	})
+
+	// Clear ownership in the region, then re-scan all layers.
+	for y := clipped.Y; y < clipped.Y+clipped.H; y++ {
+		for x := clipped.X; x < clipped.X+clipped.W; x++ {
+			om.owners[y*om.width+x] = nil
+		}
+	}
+
+	for _, layer := range sorted {
+		if layer.Buffer == nil {
+			continue
+		}
+		// Only process cells in the intersection of layer rect and update rect.
+		visible := layer.Rect.Intersect(clipped)
+		if visible.W <= 0 || visible.H <= 0 {
+			continue
+		}
+
+		for y := visible.Y; y < visible.Y+visible.H; y++ {
+			for x := visible.X; x < visible.X+visible.W; x++ {
+				localX := x - layer.Rect.X
+				localY := y - layer.Rect.Y
+				cell := layer.Buffer.Get(localX, localY)
+				if !cell.Zero() {
+					om.owners[y*om.width+x] = layer
+				}
+			}
+		}
+	}
+}
+
 // Owner returns the layer ID that owns cell (x, y). Empty string if no owner.
 func (om *OcclusionMap) Owner(x, y int) string {
 	if x < 0 || y < 0 || x >= om.width || y >= om.height {
@@ -95,6 +146,26 @@ func NewCompositor(w, h int) *Compositor {
 func (c *Compositor) SetLayers(layers []*Layer) {
 	c.layers = layers
 	c.om.Build(layers)
+}
+
+// UpdateDirtyRegions incrementally updates the occlusion map for the given
+// dirty layer rects. This is much cheaper than a full SetLayers rebuild when
+// only paint changed (no structural/positional changes).
+func (c *Compositor) UpdateDirtyRegions(dirtyLayers []*Layer) {
+	for _, dl := range dirtyLayers {
+		var rect buffer.Rect
+		if dl.DirtyRect != nil {
+			rect = buffer.Rect{
+				X: dl.Rect.X + dl.DirtyRect.X,
+				Y: dl.Rect.Y + dl.DirtyRect.Y,
+				W: dl.DirtyRect.W,
+				H: dl.DirtyRect.H,
+			}
+		} else {
+			rect = dl.Rect
+		}
+		c.om.UpdateRegion(c.layers, rect)
+	}
 }
 
 // ComposeAll composes all layers into the screen buffer. Returns the screen.
