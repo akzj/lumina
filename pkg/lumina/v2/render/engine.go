@@ -5,6 +5,7 @@ import (
 
 	"github.com/akzj/go-lua/pkg/lua"
 	"github.com/akzj/lumina/pkg/lumina/v2/buffer"
+	"github.com/akzj/lumina/pkg/lumina/v2/perf"
 )
 
 // Engine is the new render engine that manages persistent RenderNode trees.
@@ -25,6 +26,14 @@ type Engine struct {
 
 	// Event state: currently hovered node for enter/leave tracking
 	hoveredNode *Node
+
+	// Performance tracking
+	tracker *perf.Tracker
+}
+
+// SetTracker sets the performance tracker for recording V2 engine metrics.
+func (e *Engine) SetTracker(t *perf.Tracker) {
+	e.tracker = t
 }
 
 // NewEngine creates a new render engine.
@@ -89,8 +98,14 @@ func (e *Engine) SetState(compID, key string, value any) {
 // RenderDirty renders all dirty components, reconciles, layouts, and paints.
 // This is the main frame function.
 func (e *Engine) RenderDirty() {
+	// Reset CellBuffer stats for this frame.
+	e.buffer.ResetStats()
+
 	// 1. Render dirty components in dependency order (parents first)
-	e.renderInOrder()
+	rendered := e.renderInOrder()
+	if e.tracker != nil {
+		e.tracker.Record(perf.V2ComponentsRendered, rendered)
+	}
 
 	// 2. Graft child component RootNodes into parent tree
 	e.graftChildComponents()
@@ -108,16 +123,30 @@ func (e *Engine) RenderDirty() {
 	if e.root != nil && e.root.RootNode != nil {
 		PaintDirty(e.buffer, e.root.RootNode)
 	}
+
+	// 5. Record paint stats from CellBuffer.
+	if e.tracker != nil {
+		stats := e.buffer.Stats()
+		e.tracker.Record(perf.V2PaintCells, stats.WriteCount)
+		e.tracker.Record(perf.V2PaintClearCells, stats.ClearCount)
+		e.tracker.Record(perf.V2DirtyRectArea, stats.DirtyW*stats.DirtyH)
+	}
 }
 
 // RenderAll does a full render of everything (initial mount).
 func (e *Engine) RenderAll() {
+	// Reset CellBuffer stats for this frame.
+	e.buffer.ResetStats()
+
 	for _, comp := range e.components {
 		comp.Dirty = true
 	}
 
 	// Render all components in dependency order (parents first)
-	e.renderInOrder()
+	rendered := e.renderInOrder()
+	if e.tracker != nil {
+		e.tracker.Record(perf.V2ComponentsRendered, rendered)
+	}
 
 	// Graft child component RootNodes into parent tree
 	e.graftChildComponents()
@@ -126,6 +155,14 @@ func (e *Engine) RenderAll() {
 	if e.root != nil && e.root.RootNode != nil {
 		LayoutFull(e.root.RootNode, 0, 0, e.width, e.height)
 		PaintFull(e.buffer, e.root.RootNode)
+	}
+
+	// Record paint stats from CellBuffer.
+	if e.tracker != nil {
+		stats := e.buffer.Stats()
+		e.tracker.Record(perf.V2PaintCells, stats.WriteCount)
+		e.tracker.Record(perf.V2PaintClearCells, stats.ClearCount)
+		e.tracker.Record(perf.V2DirtyRectArea, stats.DirtyW*stats.DirtyH)
 	}
 }
 
@@ -385,10 +422,13 @@ func (e *Engine) reconcileChildComponents(parent *Component, node *Node) {
 
 // renderInOrder renders components in dependency order: parents before children.
 // This ensures parent trees have component placeholders before child components render.
-func (e *Engine) renderInOrder() {
+// Returns the number of components that were rendered.
+func (e *Engine) renderInOrder() int {
+	count := 0
 	// Render root first (it creates the component placeholders)
 	if e.root != nil && e.root.Dirty {
 		e.renderComponent(e.root)
+		count++
 	}
 	// Then render all other dirty components (children)
 	for _, comp := range e.components {
@@ -396,7 +436,9 @@ func (e *Engine) renderInOrder() {
 			continue
 		}
 		e.renderComponent(comp)
+		count++
 	}
+	return count
 }
 
 // graftChildComponents walks the root tree and connects child component
@@ -760,11 +802,14 @@ func (e *Engine) ToBuffer() *buffer.Buffer {
 	return buf
 }
 
-// DirtyRect returns the bounding rect of all PaintDirty nodes.
-// Used for incremental output.
+// DirtyRect returns the bounding rect of cells that were written or cleared
+// since the last ResetStats (i.e., during the most recent RenderDirty/RenderAll).
 func (e *Engine) DirtyRect() buffer.Rect {
-	// For now, return full screen. Optimization: track dirty regions.
-	return buffer.Rect{X: 0, Y: 0, W: e.width, H: e.height}
+	stats := e.buffer.Stats()
+	if stats.DirtyW == 0 || stats.DirtyH == 0 {
+		return buffer.Rect{} // nothing dirty
+	}
+	return buffer.Rect{X: stats.DirtyX, Y: stats.DirtyY, W: stats.DirtyW, H: stats.DirtyH}
 }
 
 // Width returns the engine width.

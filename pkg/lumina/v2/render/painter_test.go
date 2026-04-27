@@ -505,3 +505,105 @@ func TestCellBuffer_SetChar(t *testing.T) {
 		t.Errorf("SetChar mismatch: got %+v", c)
 	}
 }
+
+// --- CellBuffer Stats Tests ---
+
+func TestCellBuffer_Stats_ResetStats(t *testing.T) {
+	buf := NewCellBuffer(10, 5)
+	buf.SetChar(3, 2, 'A', "#FFF", "#000", false)
+	buf.SetChar(4, 2, 'B', "#FFF", "#000", false)
+
+	s := buf.Stats()
+	if s.WriteCount != 2 {
+		t.Errorf("WriteCount: got %d, want 2", s.WriteCount)
+	}
+	if s.DirtyX != 3 || s.DirtyY != 2 || s.DirtyW != 2 || s.DirtyH != 1 {
+		t.Errorf("DirtyRect: got (%d,%d,%d,%d), want (3,2,2,1)", s.DirtyX, s.DirtyY, s.DirtyW, s.DirtyH)
+	}
+
+	buf.ResetStats()
+	s2 := buf.Stats()
+	if s2.WriteCount != 0 || s2.ClearCount != 0 {
+		t.Errorf("after ResetStats: WriteCount=%d ClearCount=%d, want 0,0", s2.WriteCount, s2.ClearCount)
+	}
+	if s2.DirtyW != 0 || s2.DirtyH != 0 {
+		t.Errorf("after ResetStats: DirtyRect should be zero, got (%d,%d,%d,%d)", s2.DirtyX, s2.DirtyY, s2.DirtyW, s2.DirtyH)
+	}
+}
+
+func TestCellBuffer_Stats_Set(t *testing.T) {
+	buf := NewCellBuffer(10, 5)
+	buf.Set(0, 0, Cell{Ch: 'X'})
+	buf.Set(9, 4, Cell{Ch: 'Y'})
+
+	s := buf.Stats()
+	if s.WriteCount != 2 {
+		t.Errorf("WriteCount: got %d, want 2", s.WriteCount)
+	}
+	if s.DirtyX != 0 || s.DirtyY != 0 || s.DirtyW != 10 || s.DirtyH != 5 {
+		t.Errorf("DirtyRect: got (%d,%d,%d,%d), want (0,0,10,5)", s.DirtyX, s.DirtyY, s.DirtyW, s.DirtyH)
+	}
+}
+
+func TestCellBuffer_Stats_ClearRect(t *testing.T) {
+	buf := NewCellBuffer(10, 5)
+	buf.ClearRect(2, 1, 3, 2)
+
+	s := buf.Stats()
+	if s.ClearCount != 6 {
+		t.Errorf("ClearCount: got %d, want 6", s.ClearCount)
+	}
+	if s.DirtyX != 2 || s.DirtyY != 1 || s.DirtyW != 3 || s.DirtyH != 2 {
+		t.Errorf("DirtyRect: got (%d,%d,%d,%d), want (2,1,3,2)", s.DirtyX, s.DirtyY, s.DirtyW, s.DirtyH)
+	}
+}
+
+func TestCellBuffer_Stats_Clear(t *testing.T) {
+	buf := NewCellBuffer(4, 3)
+	buf.Clear()
+
+	s := buf.Stats()
+	if s.ClearCount != 12 {
+		t.Errorf("ClearCount: got %d, want 12", s.ClearCount)
+	}
+	if s.DirtyX != 0 || s.DirtyY != 0 || s.DirtyW != 4 || s.DirtyH != 3 {
+		t.Errorf("DirtyRect: got (%d,%d,%d,%d), want (0,0,4,3)", s.DirtyX, s.DirtyY, s.DirtyW, s.DirtyH)
+	}
+}
+
+func TestCellBuffer_Stats_OutOfBounds_NoTrack(t *testing.T) {
+	buf := NewCellBuffer(5, 5)
+	buf.Set(-1, -1, Cell{Ch: 'X'})
+	buf.Set(10, 10, Cell{Ch: 'Y'})
+	buf.SetChar(-1, 0, 'Z', "", "", false)
+
+	s := buf.Stats()
+	if s.WriteCount != 0 {
+		t.Errorf("out-of-bounds writes should not be counted, got WriteCount=%d", s.WriteCount)
+	}
+	if s.DirtyW != 0 || s.DirtyH != 0 {
+		t.Errorf("out-of-bounds should not expand dirty rect, got W=%d H=%d", s.DirtyW, s.DirtyH)
+	}
+}
+
+func TestCellBuffer_Stats_MixedWritesAndClears(t *testing.T) {
+	buf := NewCellBuffer(10, 10)
+	// Write 3 cells
+	buf.SetChar(1, 1, 'A', "", "", false)
+	buf.SetChar(2, 1, 'B', "", "", false)
+	buf.SetChar(3, 1, 'C', "", "", false)
+	// Clear a 2x2 rect
+	buf.ClearRect(5, 5, 2, 2)
+
+	s := buf.Stats()
+	if s.WriteCount != 3 {
+		t.Errorf("WriteCount: got %d, want 3", s.WriteCount)
+	}
+	if s.ClearCount != 4 {
+		t.Errorf("ClearCount: got %d, want 4", s.ClearCount)
+	}
+	// Dirty bounding box should span both regions
+	if s.DirtyX != 1 || s.DirtyY != 1 || s.DirtyW != 6 || s.DirtyH != 6 {
+		t.Errorf("DirtyRect: got (%d,%d,%d,%d), want (1,1,6,6)", s.DirtyX, s.DirtyY, s.DirtyW, s.DirtyH)
+	}
+}

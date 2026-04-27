@@ -33,6 +33,11 @@ func (t *Tracker) Report() string {
 		f.Get(MovesPositionOnly), f.Get(MovesWithResize), f.Get(StateSets))
 	fmt.Fprintf(&b, "Output: dirtyRects=%d writeDirty=%d writeFull=%d flush=%d\n",
 		f.Get(DirtyRectsOut), f.Get(WriteDirtyCalls), f.Get(WriteFullCalls), f.Get(FlushCalls))
+	if f.Get(V2ComponentsRendered) > 0 || f.Get(V2PaintCells) > 0 {
+		fmt.Fprintf(&b, "V2 Engine: components=%d paintCells=%d clearCells=%d dirtyArea=%d reconcileChanges=%d\n",
+			f.Get(V2ComponentsRendered), f.Get(V2PaintCells), f.Get(V2PaintClearCells),
+			f.Get(V2DirtyRectArea), f.Get(V2ReconcileChanges))
+	}
 	return b.String()
 }
 
@@ -60,5 +65,10 @@ func (t *Tracker) TotalReport() string {
 		s.Get(MovesPositionOnly), s.Get(MovesWithResize), s.Get(StateSets))
 	fmt.Fprintf(&b, "Output: dirtyRects=%d writeDirty=%d writeFull=%d flush=%d\n",
 		s.Get(DirtyRectsOut), s.Get(WriteDirtyCalls), s.Get(WriteFullCalls), s.Get(FlushCalls))
+	if s.Get(V2ComponentsRendered) > 0 || s.Get(V2PaintCells) > 0 {
+		fmt.Fprintf(&b, "V2 Engine: components=%d paintCells=%d clearCells=%d dirtyArea=%d reconcileChanges=%d\n",
+			s.Get(V2ComponentsRendered), s.Get(V2PaintCells), s.Get(V2PaintClearCells),
+			s.Get(V2DirtyRectArea), s.Get(V2ReconcileChanges))
+	}
 	return b.String()
 }

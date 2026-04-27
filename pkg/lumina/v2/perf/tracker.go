@@ -40,6 +40,15 @@ const (
 	WriteFullCalls  // adapter.WriteFull calls
 	FlushCalls      // adapter.Flush calls
 
+	// V2 Render Engine metrics.
+	V2ComponentsRendered // number of components whose render function was called
+	V2LayoutNodes        // number of nodes that had layout computed
+	V2PaintNodes         // number of nodes that were painted
+	V2PaintCells         // number of cells written to CellBuffer
+	V2PaintClearCells    // number of cells cleared (ClearRect) before repaint
+	V2DirtyRectArea      // total area of dirty rects (W×H sum)
+	V2ReconcileChanges   // number of nodes that changed during reconcile
+
 	metricCount // sentinel for array sizing
 )
 

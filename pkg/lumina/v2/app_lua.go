@@ -58,6 +58,7 @@ func NewAppWithEngine(L *lua.State, w, h int, adapter output.Adapter) *App {
 	// Create the new render engine.
 	eng := render.NewEngine(L, w, h)
 	eng.RegisterLuaAPI()
+	eng.SetTracker(app.tracker)
 	app.engine = eng
 
 	// Register app-level APIs that the engine doesn't provide:
