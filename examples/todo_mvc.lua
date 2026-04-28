@@ -153,9 +153,7 @@ lumina.createComponent({
         else
             for i, todo in ipairs(filtered) do
                 local isSelected = (i == selectedIdx)
-                local checkbox = todo.done and "[x]" or "[ ]"
                 local prefix = isSelected and " > " or "   "
-                local line = prefix .. checkbox .. " " .. todo.text
 
                 -- Priority badge using Lux Badge component
                 local priorityBadge = nil
@@ -173,9 +171,31 @@ lumina.createComponent({
 
                 local rowChildren = {
                     lumina.createElement("text", {
-                        foreground = isSelected and t.primary or (todo.done and t.surface2 or t.text),
+                        foreground = isSelected and t.primary or t.text,
                         bold = isSelected,
-                    }, line),
+                    }, prefix),
+                    lumina.createElement(lumina.Checkbox, {
+                        key = "cb-" .. tostring(todo.id),
+                        label = todo.text,
+                        checked = todo.done,
+                        onChange = function(newChecked)
+                            local id = todo.id
+                            local newTodos = {}
+                            for _, tt in ipairs(todos) do
+                                if tt.id == id then
+                                    newTodos[#newTodos + 1] = {
+                                        id = tt.id,
+                                        text = tt.text,
+                                        done = newChecked,
+                                        priority = tt.priority,
+                                    }
+                                else
+                                    newTodos[#newTodos + 1] = tt
+                                end
+                            end
+                            setTodos(newTodos)
+                        end,
+                    }),
                 }
                 if priorityBadge then
                     rowChildren[#rowChildren + 1] = priorityBadge
