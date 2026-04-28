@@ -1393,6 +1393,46 @@ func (e *Engine) luaCreateComponentElement(L *lua.State, nArgs int) int {
 		}
 	}
 
+	// Collect children (args 3+) and inject into _props.children
+	if nArgs > 2 {
+		// Count non-nil children
+		childCount := 0
+		for i := 3; i <= nArgs; i++ {
+			if !L.IsNoneOrNil(i) {
+				childCount++
+			}
+		}
+
+		if childCount > 0 {
+			// Ensure we have a _props table
+			L.GetField(resultIdx, "_props")
+			if L.IsNil(-1) {
+				L.Pop(1)
+				L.NewTable()
+				L.PushValue(-1) // dup for SetField
+				L.SetField(resultIdx, "_props")
+			}
+			propsIdx := L.AbsIndex(-1)
+
+			// Create children array
+			L.CreateTable(childCount, 0)
+			childrenIdx := L.AbsIndex(-1)
+			idx := int64(1)
+			for i := 3; i <= nArgs; i++ {
+				if !L.IsNoneOrNil(i) {
+					L.PushValue(i)
+					L.RawSetI(childrenIdx, idx)
+					idx++
+				}
+			}
+
+			// Set props.children = childrenArray
+			L.SetField(propsIdx, "children")
+
+			L.Pop(1) // pop _props
+		}
+	}
+
 	return 1
 }
 
