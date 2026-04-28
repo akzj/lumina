@@ -17,6 +17,7 @@ var Switch = &Widget{
 		return &SwitchState{}
 	},
 	Render: func(props map[string]any, state any) any {
+		t := CurrentTheme
 		s := state.(*SwitchState)
 		label, _ := props["label"].(string)
 		disabled, _ := props["disabled"].(bool)
@@ -31,24 +32,24 @@ var Switch = &Widget{
 
 		// Determine switch track visual
 		track := "[○  ]"
-		trackBg := "#45475A"
+		trackBg := t.Surface1
 		if checked {
 			track = "[  ●]"
-			trackBg = "#89B4FA"
+			trackBg = t.Primary
 		}
 
 		// Colors
-		fg := "#CDD6F4"
-		trackFg := "#CDD6F4"
+		fg := t.Text
+		trackFg := t.Text
 		if disabled {
-			fg = "#6C7086"
-			trackFg = "#6C7086"
-			trackBg = "#313244"
+			fg = t.Muted
+			trackFg = t.Muted
+			trackBg = t.Surface0
 		} else if s.Hovered {
 			if checked {
-				trackBg = "#B4BEFE"
+				trackBg = t.Hover
 			} else {
-				trackBg = "#585B70"
+				trackBg = t.Surface2
 			}
 		}
 

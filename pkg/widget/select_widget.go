@@ -75,6 +75,7 @@ var Select = &Widget{
 		}
 	},
 	Render: func(props map[string]any, state any) any {
+		t := CurrentTheme
 		s := state.(*SelectState)
 		disabled, _ := props["disabled"].(bool)
 		placeholder, _ := props["placeholder"].(string)
@@ -104,26 +105,26 @@ var Select = &Widget{
 		}
 
 		// Colors
-		bg := "#313244"
-		fg := "#CDD6F4"
-		borderColor := "#45475A"
+		bg := t.Surface0
+		fg := t.Text
+		borderColor := t.Surface1
 		if disabled {
-			bg = "#1E1E2E"
-			fg = "#6C7086"
-			borderColor = "#313244"
+			bg = t.Base
+			fg = t.Muted
+			borderColor = t.Surface0
 		} else if s.Hovered || s.Open {
-			borderColor = "#89B4FA"
+			borderColor = t.Primary
 		}
 
-		arrowFg := "#89B4FA"
+		arrowFg := t.Primary
 		if disabled {
-			arrowFg = "#6C7086"
+			arrowFg = t.Muted
 		}
 
 		// Placeholder color
 		textFg := fg
 		if selected < 0 || selected >= len(options) {
-			textFg = "#6C7086" // dim for placeholder
+			textFg = t.Muted
 		}
 
 		textNode := &render.Node{
@@ -163,15 +164,15 @@ var Select = &Widget{
 			optionNodes := make([]*render.Node, len(options))
 			for i, opt := range options {
 				optBg := ""
-				optFg := "#CDD6F4"
+				optFg := t.Text
 				content := opt.Label
 
 				if i == s.Highlighted {
-					optBg = "#45475A"
+					optBg = t.Surface1
 				}
 				if i == selected {
 					content = content + " ✓"
-					optFg = "#89B4FA"
+					optFg = t.Primary
 				}
 
 				optionNodes[i] = &render.Node{
@@ -194,7 +195,7 @@ var Select = &Widget{
 					Top:        1, // below trigger row
 					Left:       0,
 					Border:     "single",
-					Background: "#1E1E2E",
+					Background: t.Base,
 					Foreground: borderColor,
 					Right:      -1,
 					Bottom:     -1,

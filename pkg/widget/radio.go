@@ -19,6 +19,7 @@ var Radio = &Widget{
 		return &RadioState{}
 	},
 	Render: func(props map[string]any, state any) any {
+		t := CurrentTheme
 		s := state.(*RadioState)
 		label, _ := props["label"].(string)
 		disabled, _ := props["disabled"].(bool)
@@ -38,13 +39,13 @@ var Radio = &Widget{
 		}
 
 		// Colors
-		fg := "#CDD6F4"
-		indicatorFg := "#89B4FA"
+		fg := t.Text
+		indicatorFg := t.Primary
 		if disabled {
-			fg = "#6C7086"
-			indicatorFg = "#6C7086"
+			fg = t.Muted
+			indicatorFg = t.Muted
 		} else if s.Hovered {
-			indicatorFg = "#B4BEFE"
+			indicatorFg = t.Hover
 		}
 
 		indicatorNode := &render.Node{
