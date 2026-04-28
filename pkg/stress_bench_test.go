@@ -13,7 +13,7 @@ import (
 // ═══════════════════════════════════════════════════════════════════════
 // Stress Test Benchmarks
 //
-// These benchmarks reproduce the scenario from examples/v2/stress_test.lua:
+// These benchmarks reproduce the scenario from examples/stress_test.lua:
 // 80×23 = 1840 individual box elements with hover/click handlers.
 // Each hover triggers a full re-render of all 1840 elements.
 // ═══════════════════════════════════════════════════════════════════════
@@ -25,7 +25,7 @@ const (
 )
 
 // stressLuaScript is the inline Lua that creates the stress test grid.
-// It mirrors examples/v2/stress_test.lua but is self-contained for benchmarks.
+// It mirrors examples/stress_test.lua but is self-contained for benchmarks.
 const stressLuaScript = `
 local COLS = 80
 local ROWS = 23
@@ -361,7 +361,7 @@ func TestStressPerf_ClickCycle(t *testing.T) {
 func TestStressPerf_ActualScript(t *testing.T) {
 	app, ta, _ := newLuaApp(t, stressCols, stressRows+1)
 
-	err := app.RunScript("../examples/v2/stress_test.lua")
+	err := app.RunScript("../examples/stress_test.lua")
 	if err != nil {
 		// stress_test.lua now uses V2 APIs (defineComponent) — skip for V1 pipeline
 		t.Skipf("Skipping V1 actual script test (script uses V2 APIs): %v", err)
@@ -560,7 +560,7 @@ func TestStressPerfV2_ActualScript(t *testing.T) {
 	ta := output.NewTestAdapter()
 	app := NewApp(L, stressCols, stressRows+1, ta)
 
-	err := app.RunScript("../examples/v2/stress_test.lua")
+	err := app.RunScript("../examples/stress_test.lua")
 	if err != nil {
 		t.Fatalf("RunScript failed: %v", err)
 	}

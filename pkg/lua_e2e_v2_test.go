@@ -902,7 +902,7 @@ func TestV2E2E_Select(t *testing.T) {
 func TestV2E2E_CounterScript(t *testing.T) {
 	app, ta, _ := newV2App(t, 40, 10)
 
-	err := app.RunScript("../examples/v2/counter.lua")
+	err := app.RunScript("../examples/counter.lua")
 	if err != nil {
 		t.Fatalf("RunScript failed: %v", err)
 	}
@@ -1370,7 +1370,7 @@ func TestV2E2E_Textarea_MultilineNavigation(t *testing.T) {
 func TestV2E2E_TodoMVC_Render(t *testing.T) {
 	app, ta, _ := newV2App(t, 80, 24)
 
-	err := app.RunScript("../examples/v2/todo_mvc.lua")
+	err := app.RunScript("../examples/todo_mvc.lua")
 	if err != nil {
 		t.Fatalf("RunScript failed: %v", err)
 	}
@@ -1400,7 +1400,7 @@ func TestV2E2E_TodoMVC_Render(t *testing.T) {
 func TestV2E2E_TodoMVC_Navigation(t *testing.T) {
 	app, ta, _ := newV2App(t, 80, 24)
 
-	err := app.RunScript("../examples/v2/todo_mvc.lua")
+	err := app.RunScript("../examples/todo_mvc.lua")
 	if err != nil {
 		t.Fatalf("RunScript failed: %v", err)
 	}
@@ -1437,7 +1437,7 @@ func TestV2E2E_TodoMVC_Toggle(t *testing.T) {
 
 	app, ta, _ := newV2App(t, 80, 24)
 
-	err := app.RunScript("../examples/v2/todo_mvc.lua")
+	err := app.RunScript("../examples/todo_mvc.lua")
 	if err != nil {
 		t.Fatalf("RunScript failed: %v", err)
 	}
@@ -1471,7 +1471,7 @@ func TestV2E2E_TodoMVC_Filter(t *testing.T) {
 	// V2 engine: filter change uses string state (not table), should work.
 	app, ta, _ := newV2App(t, 80, 24)
 
-	err := app.RunScript("../examples/v2/todo_mvc.lua")
+	err := app.RunScript("../examples/todo_mvc.lua")
 	if err != nil {
 		t.Fatalf("RunScript failed: %v", err)
 	}
@@ -1514,7 +1514,7 @@ func TestV2E2E_TodoMVC_Delete(t *testing.T) {
 
 	app, ta, _ := newV2App(t, 80, 24)
 
-	err := app.RunScript("../examples/v2/todo_mvc.lua")
+	err := app.RunScript("../examples/todo_mvc.lua")
 	if err != nil {
 		t.Fatalf("RunScript failed: %v", err)
 	}
@@ -1552,7 +1552,7 @@ func TestV2E2E_TodoMVC_AddTodo(t *testing.T) {
 func TestV2E2E_Dashboard(t *testing.T) {
 	app, ta, _ := newV2App(t, 80, 24)
 
-	err := app.RunScript("../examples/v2/dashboard.lua")
+	err := app.RunScript("../examples/dashboard.lua")
 	if err != nil {
 		t.Fatalf("RunScript failed: %v", err)
 	}
@@ -1589,7 +1589,7 @@ func TestV2E2E_Dashboard_Scroll(t *testing.T) {
 
 	app, ta, _ := newV2App(t, 80, 24)
 
-	err := app.RunScript("../examples/v2/dashboard.lua")
+	err := app.RunScript("../examples/dashboard.lua")
 	if err != nil {
 		t.Fatalf("RunScript failed: %v", err)
 	}
@@ -1629,7 +1629,7 @@ func TestV2E2E_Dashboard_MouseScroll(t *testing.T) {
 
 	app, ta, _ := newV2App(t, 80, 24)
 
-	err := app.RunScript("../examples/v2/dashboard.lua")
+	err := app.RunScript("../examples/dashboard.lua")
 	if err != nil {
 		t.Fatalf("RunScript failed: %v", err)
 	}
@@ -1669,7 +1669,7 @@ func TestV2E2E_Dashboard_MouseScroll(t *testing.T) {
 func TestV2E2E_ComponentShowcase(t *testing.T) {
 	app, ta, _ := newV2App(t, 80, 24)
 
-	err := app.RunScript("../examples/v2/components_showcase.lua")
+	err := app.RunScript("../examples/components_showcase.lua")
 	if err != nil {
 		t.Fatalf("RunScript failed: %v", err)
 	}
@@ -1710,7 +1710,7 @@ func TestV2E2E_ComponentShowcase(t *testing.T) {
 func TestV2E2E_ComponentShowcase_TabSwitch(t *testing.T) {
 	app, ta, _ := newV2App(t, 80, 24)
 
-	err := app.RunScript("../examples/v2/components_showcase.lua")
+	err := app.RunScript("../examples/components_showcase.lua")
 	if err != nil {
 		t.Fatalf("RunScript failed: %v", err)
 	}
@@ -1745,7 +1745,7 @@ func TestV2E2E_ComponentShowcase_TabSwitch(t *testing.T) {
 func TestV2E2E_ComponentShowcase_Modal(t *testing.T) {
 	app, ta, _ := newV2App(t, 80, 24)
 
-	err := app.RunScript("../examples/v2/components_showcase.lua")
+	err := app.RunScript("../examples/components_showcase.lua")
 	if err != nil {
 		t.Fatalf("RunScript failed: %v", err)
 	}

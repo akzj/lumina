@@ -1,311 +1,183 @@
--- ============================================================================
--- Lumina Example: System Dashboard
--- ============================================================================
--- Showcases: Tabs, Table, Progress bars, Spinner, StatusBar, conditional
---            tab rendering, data formatting, nested layouts.
+-- Lumina v2 Example: Dual-Scroll Dashboard
+-- Demonstrates: two independent scrollable areas, clickable list,
+--               mouse wheel scroll dispatch by hit-test, Catppuccin Mocha theme
 --
--- Run: lumina examples/dashboard.lua
--- ============================================================================
+-- Usage: lumina examples/dashboard.lua
+-- Quit:  q or Ctrl+Q
+--
+-- Left panel:  Clickable list of 30 items (mouse wheel to scroll)
+-- Right panel: Detail view for selected item (mouse wheel to scroll)
 
-local lumina = require("lumina")
-
--- ── Theme ──────────────────────────────────────────────────────────────────
+-- Theme (Catppuccin Mocha)
 local theme = {
     bg       = "#1E1E2E",
+    surface  = "#313244",
+    overlay  = "#45475A",
     fg       = "#CDD6F4",
     accent   = "#89B4FA",
-    success  = "#A6E3A1",
-    warning  = "#F9E2AF",
-    error    = "#F38BA8",
+    green    = "#A6E3A1",
+    yellow   = "#F9E2AF",
+    red      = "#F38BA8",
+    peach    = "#FAB387",
     muted    = "#6C7086",
-    surface  = "#313244",
+    border   = "#585B70",
     headerBg = "#181825",
 }
 
--- ── Helper: progress bar string ────────────────────────────────────────────
-local function progressBar(value, width, label)
-    width = width or 30
-    local clamped = math.max(0, math.min(1, value))
-    local filled = math.floor(clamped * width + 0.5)
-    local empty = width - filled
-    local bar = string.rep("█", filled) .. string.rep("░", empty)
-    local pct = math.floor(clamped * 100 + 0.5)
+-- ═══════════════════════════════════════════
+-- Data: 30 items, each with 50 lines of content
+-- ═══════════════════════════════════════════
+local names = {
+    "Server Config", "Database Pool", "Cache Layer", "Auth Service",
+    "API Gateway", "Load Balancer", "Message Queue", "Task Scheduler",
+    "Log Aggregator", "Metrics Engine", "Alert Manager", "DNS Resolver",
+    "SSL Manager", "Rate Limiter", "Session Store", "File Storage",
+    "CDN Config", "Webhook Router", "Email Service", "Payment Gateway",
+    "Search Index", "Geo Lookup", "Feature Flags", "A/B Testing",
+    "User Profiles", "Audit Trail", "Backup Agent", "Health Monitor",
+    "Deploy Pipeline", "Secret Vault",
+}
 
-    -- Color based on usage level
-    local color = theme.success
-    if pct > 80 then color = theme.error
-    elseif pct > 60 then color = theme.warning end
-
-    return {
-        type = "hbox",
-        style = { height = 1 },
-        children = {
-            { type = "text",
-              content = string.format(" %-12s", label or ""),
-              style = { foreground = theme.fg, width = 14 } },
-            { type = "text",
-              content = "[" .. bar .. "]",
-              style = { foreground = color } },
-            { type = "text",
-              content = string.format(" %3d%%", pct),
-              style = { foreground = color, bold = pct > 80 } },
-        },
-    }
-end
-
--- ── Helper: fit text to column width ───────────────────────────────────────
-local function fit(str, width)
-    str = tostring(str or "")
-    if #str > width then return str:sub(1, width - 1) .. "…" end
-    return str .. string.rep(" ", width - #str)
-end
-
--- ── Tab: Processes ─────────────────────────────────────────────────────────
-local function renderProcesses()
-    local processes = {
-        { pid = "1",    name = "systemd",       cpu = "0.1",  mem = "12.3M" },
-        { pid = "142",  name = "go-lua",        cpu = "23.4", mem = "89.1M" },
-        { pid = "256",  name = "lumina-server",  cpu = "15.7", mem = "45.2M" },
-        { pid = "389",  name = "postgres",       cpu = "8.2",  mem = "256.8M" },
-        { pid = "412",  name = "nginx",          cpu = "2.1",  mem = "18.4M" },
-        { pid = "567",  name = "redis-server",   cpu = "1.3",  mem = "32.1M" },
-        { pid = "723",  name = "node",           cpu = "12.8", mem = "128.5M" },
-        { pid = "891",  name = "docker",         cpu = "5.6",  mem = "67.3M" },
-    }
-
-    local children = {}
-
-    -- Header
-    children[#children + 1] = {
-        type = "text",
-        content = fit("PID", 8) .. "│" .. fit("Name", 20) .. "│" .. fit("CPU%", 8) .. "│" .. fit("Memory", 10),
-        style = { foreground = theme.accent, bold = true },
-    }
-    -- Separator
-    children[#children + 1] = {
-        type = "text",
-        content = string.rep("─", 8) .. "┼" .. string.rep("─", 20) .. "┼" .. string.rep("─", 8) .. "┼" .. string.rep("─", 10),
-        style = { foreground = theme.muted },
-    }
-    -- Rows
-    for _, proc in ipairs(processes) do
-        local cpuVal = tonumber(proc.cpu) or 0
-        local cpuColor = theme.fg
-        if cpuVal > 20 then cpuColor = theme.error
-        elseif cpuVal > 10 then cpuColor = theme.warning end
-
-        children[#children + 1] = {
-            type = "hbox",
-            style = { height = 1 },
-            children = {
-                { type = "text", content = fit(proc.pid, 8) .. "│",
-                  style = { foreground = theme.muted } },
-                { type = "text", content = fit(proc.name, 20) .. "│",
-                  style = { foreground = theme.fg } },
-                { type = "text", content = fit(proc.cpu, 8) .. "│",
-                  style = { foreground = cpuColor, bold = cpuVal > 20 } },
-                { type = "text", content = fit(proc.mem, 10),
-                  style = { foreground = theme.fg } },
-            },
-        }
+local items = {}
+for i = 1, 30 do
+    local lines = {}
+    for j = 1, 50 do
+        lines[j] = string.format(
+            "Line %d: Configuration for %s — parameter %d set to value %d. "
+            .. "Status: active. Last modified: 2024-01-%02d %02d:%02d.",
+            j, names[i] or "Entry", j, j * 17 + i, (j % 28) + 1, (j + i) % 24, (j * 7) % 60
+        )
     end
-
-    return {
-        type = "vbox",
-        style = { flex = 1, overflow = "scroll" },
-        children = children,
+    items[i] = {
+        title = string.format("%-2d  %s", i, names[i] or "Entry"),
+        content = lines,
     }
 end
 
--- ── Tab: Memory ────────────────────────────────────────────────────────────
-local function renderMemory()
-    return {
-        type = "vbox",
-        style = { flex = 1, padding = 1 },
-        children = {
-            { type = "text",
-              content = " Memory Usage",
-              style = { foreground = theme.accent, bold = true } },
-            { type = "text", content = "" },
-            progressBar(0.67, 40, "RAM"),
-            { type = "text",
-              content = "              Used: 10.7 GB / 16.0 GB  (6 GB available)",
-              style = { foreground = theme.muted } },
-            { type = "text", content = "" },
-            progressBar(0.12, 40, "Swap"),
-            { type = "text",
-              content = "              Used: 0.5 GB / 4.0 GB",
-              style = { foreground = theme.muted } },
-            { type = "text", content = "" },
-            progressBar(0.43, 40, "Disk /"),
-            { type = "text",
-              content = "              Used: 215 GB / 500 GB",
-              style = { foreground = theme.muted } },
-            { type = "text", content = "" },
-            progressBar(0.89, 40, "Disk /data"),
-            { type = "text",
-              content = "              Used: 890 GB / 1.0 TB  ⚠️ Low space!",
-              style = { foreground = theme.warning, bold = true } },
-        },
-    }
-end
-
--- ── Tab: Network ───────────────────────────────────────────────────────────
-local function renderNetwork(spinnerFrame)
-    return {
-        type = "vbox",
-        style = { flex = 1, padding = 1 },
-        children = {
-            { type = "text",
-              content = " Network Activity",
-              style = { foreground = theme.accent, bold = true } },
-            { type = "text", content = "" },
-            -- Active connections
-            { type = "hbox",
-              children = {
-                  { type = "text",
-                    content = "  ● eth0  ",
-                    style = { foreground = theme.success } },
-                  { type = "text",
-                    content = "192.168.1.42  ↑ 12.3 MB/s  ↓ 45.6 MB/s",
-                    style = { foreground = theme.fg } },
-              } },
-            { type = "hbox",
-              children = {
-                  { type = "text",
-                    content = "  ● lo    ",
-                    style = { foreground = theme.success } },
-                  { type = "text",
-                    content = "127.0.0.1     ↑ 1.2 MB/s   ↓ 1.2 MB/s",
-                    style = { foreground = theme.fg } },
-              } },
-            { type = "hbox",
-              children = {
-                  { type = "text",
-                    content = "  ○ wlan0 ",
-                    style = { foreground = theme.muted } },
-                  { type = "text",
-                    content = "disconnected",
-                    style = { foreground = theme.muted } },
-              } },
-            { type = "text", content = "" },
-            -- Stats
-            { type = "text",
-              content = "  Open connections: 47",
-              style = { foreground = theme.fg } },
-            { type = "text",
-              content = "  Packets/sec:     1,234 in  |  892 out",
-              style = { foreground = theme.fg } },
-            { type = "text",
-              content = "  DNS queries:     56/min",
-              style = { foreground = theme.fg } },
-            { type = "text", content = "" },
-            -- Spinner for live data
-            {
-                type = "hbox",
-                children = {
-                    { type = "text",
-                      content = "  ⠋ ",
-                      style = { foreground = theme.accent } },
-                    { type = "text",
-                      content = "Monitoring network traffic...",
-                      style = { foreground = theme.muted } },
-                },
-            },
-        },
-    }
-end
-
--- ── Main Component ─────────────────────────────────────────────────────────
-local Dashboard = lumina.defineComponent({
+lumina.createComponent({
+    id = "dashboard",
     name = "Dashboard",
 
-    init = function(props)
-        return {
-            activeTab = 1,
-            tabs = { "Processes", "Memory", "Network" },
-            spinnerFrame = 1,
-            uptime = "3d 14h 22m",
-            loadAvg = "2.34 1.89 1.56",
-        }
-    end,
+    render = function(props)
+        local createElement = lumina.createElement
 
-    render = function(instance)
-        local activeTab = instance.activeTab or 1
+        -- ── State ──
+        local selectedIdx, setSelectedIdx = lumina.useState("sel", 1)
 
-        -- Build tab bar
-        local tabChildren = {}
-        for i, tab in ipairs(instance.tabs) do
-            local isActive = (i == activeTab)
-            tabChildren[#tabChildren + 1] = {
-                type = "text",
-                content = isActive
-                    and (" [ " .. tab .. " ] ")
-                    or  ("   " .. tab .. "   "),
-                style = {
-                    foreground = isActive and theme.accent or theme.muted,
-                    bold = isActive,
-                    background = isActive and theme.surface or nil,
-                },
-            }
+        -- ── Keyboard handler ──
+        local function handleKey(e)
+            if e.key == "q" then
+                lumina.quit()
+            end
         end
 
-        -- Render active tab content
-        local tabContent
-        if activeTab == 1 then
-            tabContent = renderProcesses()
-        elseif activeTab == 2 then
-            tabContent = renderMemory()
-        else
-            tabContent = renderNetwork(instance.spinnerFrame)
+        -- ═══════════════════════════════════════════
+        -- Header
+        -- ═══════════════════════════════════════════
+        local header = createElement("hbox", {
+            style = {background = theme.headerBg, height = 1},
+        },
+            createElement("text", {
+                foreground = theme.accent, bold = true,
+                style = {flex = 1},
+            }, " ◆ Dashboard — Dual Scroll Demo"),
+            createElement("text", {
+                foreground = theme.muted,
+            }, "q: quit ")
+        )
+
+        -- ═══════════════════════════════════════════
+        -- Left Panel: Clickable list with scroll
+        -- ═══════════════════════════════════════════
+        local leftItems = {}
+        for i, item in ipairs(items) do
+            local isSelected = (i == selectedIdx)
+            local bg = isSelected and theme.accent or theme.bg
+            local fg = isSelected and theme.bg or theme.fg
+            leftItems[#leftItems + 1] = createElement("text", {
+                style = {height = 1, background = bg},
+                foreground = fg,
+                onClick = function()
+                    setSelectedIdx(i)
+                end,
+            }, " " .. item.title)
         end
 
-        return {
+        local leftPanel = {
             type = "vbox",
-            style = { flex = 1, background = theme.bg },
-            children = {
-                -- ── Header ─────────────────────────────────────────────
-                {
-                    type = "hbox",
-                    style = { height = 1, background = theme.headerBg },
-                    children = {
-                        { type = "text",
-                          content = " 📊 System Dashboard ",
-                          style = { foreground = theme.accent, bold = true } },
-                        { type = "text",
-                          content = string.format("  Uptime: %s  |  Load: %s",
-                              instance.uptime, instance.loadAvg),
-                          style = { foreground = theme.muted } },
-                    },
-                },
-
-                -- ── Tab Bar ────────────────────────────────────────────
-                {
-                    type = "hbox",
-                    style = { height = 1, background = theme.surface },
-                    children = tabChildren,
-                },
-
-                -- ── Tab Content ────────────────────────────────────────
-                tabContent,
-
-                -- ── Status Bar ─────────────────────────────────────────
-                {
-                    type = "hbox",
-                    style = { height = 1, background = theme.headerBg },
-                    children = {
-                        { type = "text",
-                          content = " Refresh: 2s ",
-                          style = { foreground = theme.muted } },
-                        { type = "text",
-                          content = " [1-3] Switch Tab  [r] Refresh  [q] Quit ",
-                          style = { foreground = theme.muted, flex = 1 } },
-                    },
-                },
+            id = "left-list",
+            style = {
+                width = 30,
+                overflow = "scroll",
+                background = theme.surface,
+                border = "single",
             },
+            children = leftItems,
         }
+
+        -- ═══════════════════════════════════════════
+        -- Right Panel: Detail content with scroll
+        -- ═══════════════════════════════════════════
+        local selected = items[selectedIdx]
+        local contentLines = {}
+
+        -- Title
+        contentLines[#contentLines + 1] = createElement("text", {
+            foreground = theme.accent, bold = true,
+            style = {height = 1},
+        }, " " .. (names[selectedIdx] or "Entry"))
+
+        -- Separator
+        contentLines[#contentLines + 1] = createElement("text", {
+            foreground = theme.border,
+            style = {height = 1},
+        }, " " .. string.rep("─", 60))
+
+        -- Content lines
+        for _, line in ipairs(selected.content) do
+            contentLines[#contentLines + 1] = createElement("text", {
+                foreground = theme.fg,
+                style = {height = 1},
+            }, " " .. line)
+        end
+
+        local rightPanel = {
+            type = "vbox",
+            id = "right-detail",
+            style = {
+                flex = 1,
+                overflow = "scroll",
+                background = theme.bg,
+                border = "single",
+            },
+            children = contentLines,
+        }
+
+        -- ═══════════════════════════════════════════
+        -- Main content area (left + right side by side)
+        -- ═══════════════════════════════════════════
+        local mainContent = createElement("hbox", {
+            style = {flex = 1, background = theme.bg},
+        }, leftPanel, rightPanel)
+
+        -- ═══════════════════════════════════════════
+        -- Footer
+        -- ═══════════════════════════════════════════
+        local footer = createElement("text", {
+            foreground = theme.muted,
+            style = {background = theme.headerBg, height = 1},
+        }, " [Click] Select  [Mouse Wheel] Scroll  [q] Quit")
+
+        -- ═══════════════════════════════════════════
+        -- Root layout
+        -- ═══════════════════════════════════════════
+        return createElement("vbox", {
+            style = {background = theme.bg},
+            onKeyDown = handleKey,
+        },
+            header,
+            mainContent,
+            footer
+        )
     end,
 })
-
--- ── Render ─────────────────────────────────────────────────────────────────
-lumina.render(Dashboard, {})

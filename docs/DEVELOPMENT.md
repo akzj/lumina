@@ -15,8 +15,8 @@
 
 ```
 lumina/
-├── cmd/lumina-v2/        CLI 入口
-├── pkg/lumina/v2/        核心框架
+├── cmd/lumina/           CLI 入口
+├── pkg/                  核心框架（package v2）
 │   ├── render/           渲染引擎
 │   │   ├── engine.go     Engine + Lua API
 │   │   ├── node.go       Node, Component, Style 类型
@@ -40,7 +40,7 @@ lumina/
 │   ├── hotreload/        热加载
 │   ├── store/            状态管理
 │   └── terminal/         终端 I/O
-├── examples/v2/          示例应用
+├── examples/             示例 Lua 应用
 └── docs/                 文档
 ```
 
@@ -58,25 +58,25 @@ go build ./...
 
 ```bash
 # 全部测试
-go test ./pkg/lumina/v2/...
+go test ./pkg/...
 
 # 渲染引擎单元测试
-go test ./pkg/lumina/v2/render/...
+go test ./pkg/render/...
 
 # App 集成测试
-go test ./pkg/lumina/v2/ -run TestV2Engine
+go test ./pkg/ -run TestV2Engine
 
 # E2E 测试（完整 Lua 脚本执行）
-go test ./pkg/lumina/v2/ -run TestE2E
+go test ./pkg/ -run TestE2E
 
 # 性能测试
-go test ./pkg/lumina/v2/ -run TestPerf
+go test ./pkg/ -run TestPerf
 
 # 压力测试 benchmark
-go test ./pkg/lumina/v2/ -bench BenchmarkStress -benchtime 5s
+go test ./pkg/ -bench BenchmarkStress -benchtime 5s
 
 # 带详细输出
-go test ./pkg/lumina/v2/render/... -v -run TestReconcile
+go test ./pkg/render/... -v -run TestReconcile
 ```
 
 ---
@@ -127,7 +127,7 @@ assert.Equal(t, "#89B4FA", cell.Foreground)
 3. **绘制** — 在 `render/painter.go` 的 `paintNode()` 中添加 case
 4. **读取属性** — 在 `render/engine.go` 的 `readDescriptor()` 中读取特有属性
 5. **写测试** — 在 `render/` 下添加对应测试
-6. **验证**: `go build ./... && go test ./pkg/lumina/v2/render/...`
+6. **验证**: `go build ./... && go test ./pkg/render/...`
 
 ### 添加新的样式属性
 
@@ -180,7 +180,7 @@ stats := app.Tracker().Stats()
 使用 `--watch` 标志运行，修改 Lua 文件后自动重载：
 
 ```bash
-lumina-v2 --watch examples/v2/counter.lua
+lumina --watch examples/counter.lua
 ```
 
 ---
