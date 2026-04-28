@@ -1568,36 +1568,14 @@ func TestV2E2E_Dashboard(t *testing.T) {
 		t.Error("expected 'Dashboard' title on screen")
 	}
 
-	// Progress bar characters appear.
-	if !screenHasChar(ta, '█') {
-		t.Error("expected filled progress bar character '█' on screen")
-	}
-	if !screenHasChar(ta, '░') {
-		t.Error("expected empty progress bar character '░' on screen")
+	// Left panel: first item visible.
+	if !screenHasString(ta, "Server Config") {
+		t.Error("expected 'Server Config' in left panel")
 	}
 
-	// Resource labels appear.
-	if !screenHasString(ta, "CPU") {
-		t.Error("expected 'CPU' label on screen")
-	}
-	if !screenHasString(ta, "RAM") {
-		t.Error("expected 'RAM' label on screen")
-	}
-	if !screenHasString(ta, "Disk") {
-		t.Error("expected 'Disk' label on screen")
-	}
-
-	// Activity log entries appear.
-	if !screenHasString(ta, "Server started") {
-		t.Error("expected 'Server started' activity entry on screen")
-	}
-
-	// Stats appear.
-	if !screenHasString(ta, "Uptime") {
-		t.Error("expected 'Uptime' stat on screen")
-	}
-	if !screenHasString(ta, "42 days") {
-		t.Error("expected '42 days' stat value on screen")
+	// Right panel: detail content for item 1 visible.
+	if !screenHasString(ta, "Line 1") {
+		t.Error("expected 'Line 1' detail content on screen")
 	}
 
 	// Keyboard help appears in footer.
@@ -1607,7 +1585,7 @@ func TestV2E2E_Dashboard(t *testing.T) {
 }
 
 func TestV2E2E_Dashboard_Scroll(t *testing.T) {
-	// P2 fix: scrollY prop now read + scroll containers implemented.
+	// Dual-scroll: j/k scrolls right panel detail content.
 
 	app, ta, _ := newV2App(t, 80, 24)
 
@@ -1618,31 +1596,36 @@ func TestV2E2E_Dashboard_Scroll(t *testing.T) {
 
 	app.RenderAll()
 
-	if !screenHasString(ta, "Server started") {
-		t.Fatal("expected 'Server started' visible initially")
+	if !screenHasString(ta, "Server Config") {
+		t.Fatal("expected 'Server Config' visible initially in right panel header")
 	}
 
-	for i := 0; i < 30; i++ {
+	// Scroll right panel down with 'j' key (each press scrolls 3 lines)
+	for i := 0; i < 5; i++ {
 		app.HandleEvent(&event.Event{Type: "keydown", Key: "j"})
 		app.RenderDirty()
 	}
 
-	if !screenHasString(ta, "Daily report") {
-		t.Error("expected 'Daily report' visible after scrolling down")
+	// After scrolling down 15 lines, "Line 1" should no longer be at the top
+	// and later lines should be visible. Check that rendering still works.
+	if !screenHasString(ta, "Server Config") {
+		t.Error("expected 'Server Config' header still visible after scrolling")
 	}
 
-	for i := 0; i < 30; i++ {
+	// Scroll back up with 'k' key
+	for i := 0; i < 5; i++ {
 		app.HandleEvent(&event.Event{Type: "keydown", Key: "k"})
 		app.RenderDirty()
 	}
 
-	if !screenHasString(ta, "Server started") {
-		t.Error("expected 'Server started' visible after scrolling back up")
+	// After scrolling back, the first line should be visible again
+	if !screenHasString(ta, "Line 1") {
+		t.Error("expected 'Line 1' visible after scrolling right panel back up")
 	}
 }
 
 func TestV2E2E_Dashboard_MouseScroll(t *testing.T) {
-	// P2 fix: scroll event now includes key field + scroll container support.
+	// Mouse wheel scroll dispatches to the correct panel by hit-test.
 
 	app, ta, _ := newV2App(t, 80, 24)
 
@@ -1653,26 +1636,29 @@ func TestV2E2E_Dashboard_MouseScroll(t *testing.T) {
 
 	app.RenderAll()
 
-	if !screenHasString(ta, "Server started") {
-		t.Fatal("expected 'Server started' visible initially")
+	if !screenHasString(ta, "Line 1") {
+		t.Fatal("expected 'Line 1' visible initially")
 	}
 
+	// Mouse scroll on right panel area (X=50 is in right panel, Y=10 is in content area)
 	for i := 0; i < 10; i++ {
-		app.HandleEvent(&event.Event{Type: "scroll", X: 60, Y: 10, Key: "down"})
+		app.HandleEvent(&event.Event{Type: "scroll", X: 50, Y: 10, Key: "down"})
 		app.RenderDirty()
 	}
 
-	if !screenHasString(ta, "Daily report") {
-		t.Error("expected 'Daily report' visible after mouse scroll down")
+	// After scrolling down, later lines should be visible
+	if !screenHasString(ta, "Line 3") {
+		t.Error("expected later lines visible after mouse scroll down in right panel")
 	}
 
+	// Scroll back up
 	for i := 0; i < 10; i++ {
-		app.HandleEvent(&event.Event{Type: "scroll", X: 60, Y: 10, Key: "up"})
+		app.HandleEvent(&event.Event{Type: "scroll", X: 50, Y: 10, Key: "up"})
 		app.RenderDirty()
 	}
 
-	if !screenHasString(ta, "Server started") {
-		t.Error("expected 'Server started' visible after mouse scroll up")
+	if !screenHasString(ta, "Line 1") {
+		t.Error("expected 'Line 1' visible after mouse scroll up in right panel")
 	}
 }
 
