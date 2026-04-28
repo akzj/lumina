@@ -12,5 +12,8 @@ func All() []*Widget {
 		Dialog,
 		Tooltip,
 		Toast,
+		Table,
+		List,
+		Pagination,
 	}
 }
