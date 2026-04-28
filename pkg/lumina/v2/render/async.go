@@ -27,25 +27,6 @@ func (e *Engine) TickScheduler() {
 	}
 }
 
-// preloadAsyncModule ensures the "async" module is loaded into package.loaded
-// so that coroutines (which share the same global table) can use require("async")
-// without needing the global searcher (which isn't propagated to NewThread).
-func (e *Engine) preloadAsyncModule() {
-	L := e.L
-	// Call require("async") in the main state — this loads it into package.loaded
-	L.GetGlobal("require")
-	if L.IsFunction(-1) {
-		L.PushString("async")
-		if status := L.PCall(1, 1, 0); status == lua.OK {
-			L.Pop(1) // pop the module table; it's now in package.loaded
-		} else {
-			L.Pop(1) // pop error
-		}
-	} else {
-		L.Pop(1)
-	}
-}
-
 // --- Lua API: lumina.spawn(fn) ---
 
 // luaSpawn implements lumina.spawn(fn) — starts an async coroutine.

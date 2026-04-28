@@ -868,10 +868,6 @@ func (e *Engine) RegisterLuaAPI() {
 	L.SetField(tblIdx, "readFile")
 
 	L.SetGlobal("lumina")
-
-	// Pre-load the "async" module into package.loaded so coroutines can require it.
-	// (Coroutines created via NewThread don't inherit the global searcher.)
-	e.preloadAsyncModule()
 }
 
 // luaDefineComponent implements lumina.defineComponent(name, renderFn)

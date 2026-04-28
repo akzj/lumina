@@ -2,7 +2,7 @@ module github.com/akzj/lumina
 
 go 1.26.1
 
-require github.com/akzj/go-lua v0.5.1
+require github.com/akzj/go-lua v0.6.0
 
 require (
 	github.com/stretchr/testify v1.11.1
