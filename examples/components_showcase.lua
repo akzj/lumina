@@ -12,7 +12,7 @@
 --   q / Ctrl+Q  - Quit
 --
 -- NOTE: Component functions are inlined because v2 does not yet support
--- require() for local Lua files. See examples/lib/components.lua for
+-- require() for local Lua files. See lua/lux/ for
 -- the canonical library source.
 
 -- ═══════════════════════════════════════════════════════════════════
