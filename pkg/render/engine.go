@@ -18,6 +18,20 @@ type WidgetEvent struct {
 	// Output: set by widget, read by engine after OnEvent returns.
 	// Non-nil → engine calls onChange(value) on the widget's root node.
 	FireOnChange any
+
+	// Input: Widget's screen bounds (set by engine BEFORE calling OnEvent).
+	WidgetX, WidgetY, WidgetW, WidgetH int
+
+	// Output: Layer management (set by widget, processed by engine AFTER OnEvent).
+	CreateLayer *LayerRequest // non-nil → engine creates this layer
+	RemoveLayer string        // non-empty → engine removes this layer ID
+}
+
+// LayerRequest describes a layer to create.
+type LayerRequest struct {
+	ID    string
+	Root  *Node
+	Modal bool
 }
 
 // WidgetDef is the interface for Go-native widgets.
