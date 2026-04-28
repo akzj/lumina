@@ -1227,3 +1227,26 @@ func TestLayout_VBox_OverflowScroll_ScrollbarReservesColumn(t *testing.T) {
 		t.Errorf("child.W = %d, want 19 (scrollbar reserves 1 column)", child.W)
 	}
 }
+
+func TestRuneWidth(t *testing.T) {
+	tests := []struct {
+		r    rune
+		want int
+	}{
+		{'A', 1},    // ASCII
+		{'z', 1},    // ASCII lowercase
+		{'中', 2},   // CJK Unified Ideograph
+		{'あ', 2},   // Hiragana
+		{'한', 2},   // Korean Hangul
+		{'é', 1},    // Latin extended
+		{'\x00', 0}, // null
+		{'\n', 0},   // newline (control char)
+		{'\t', 0},   // tab (control char)
+	}
+	for _, tt := range tests {
+		got := runeWidth(tt.r)
+		if got != tt.want {
+			t.Errorf("runeWidth(%q) = %d, want %d", tt.r, got, tt.want)
+		}
+	}
+}
