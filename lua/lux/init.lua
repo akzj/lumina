@@ -10,5 +10,6 @@ M.Divider = require("lux.divider")
 M.Progress = require("lux.progress")
 M.Spinner = require("lux.spinner")
 M.Dialog = require("lux.dialog")
+M.Layout = require("lux.layout")
 
 return M
