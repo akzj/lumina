@@ -190,6 +190,11 @@ func (a *App) eventLoop(cfg RunConfig) error {
 			// Fire due timers (setInterval/setTimeout callbacks).
 			a.fireTimers()
 
+			// Tick async scheduler — resume completed coroutines.
+			if a.scheduler != nil {
+				a.scheduler.Tick()
+			}
+
 			// Tick FPS counter and auto-refresh devtools.
 			a.tickDevTools()
 

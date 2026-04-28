@@ -34,9 +34,7 @@ func reconcileImpl(node *Node, desc Descriptor, freedRefs *[]int64) bool {
 
 	// 1c. Update scroll position (only when Lua explicitly sets scrollY)
 	if desc.ScrollYSet && desc.ScrollY != node.ScrollY {
-		if desc.ScrollYSet {
 		node.ScrollY = desc.ScrollY
-	}
 		node.PaintDirty = true
 		changed = true
 	}
