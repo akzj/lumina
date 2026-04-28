@@ -9,13 +9,24 @@ import (
 	"github.com/akzj/lumina/pkg/perf"
 )
 
+// WidgetEvent is the event passed to widget OnEvent handlers.
+// Output fields (FireOnChange) are set by the widget and read by the engine.
+type WidgetEvent struct {
+	Type string // "click", "mousedown", "mouseup", "mouseenter", "mouseleave", "keydown", "focus", "blur"
+	Key  string
+	X, Y int
+	// Output: set by widget, read by engine after OnEvent returns.
+	// Non-nil → engine calls onChange(value) on the widget's root node.
+	FireOnChange any
+}
+
 // WidgetDef is the interface for Go-native widgets.
 // Implemented by widget.Widget (in pkg/widget) to avoid import cycles.
 type WidgetDef interface {
 	GetName() string
 	GetNewState() any
-	DoRender(props map[string]any, state any) any   // returns *Node
-	DoOnEvent(props map[string]any, state any, eventType, key string, x, y int) bool
+	DoRender(props map[string]any, state any) any // returns *Node
+	DoOnEvent(props map[string]any, state any, event *WidgetEvent) bool
 }
 
 // Engine is the new render engine that manages persistent RenderNode trees.

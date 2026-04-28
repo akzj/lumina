@@ -89,7 +89,7 @@ var Button = &Widget{
 
 		return boxNode
 	},
-	OnEvent: func(props map[string]any, state any, event *Event) bool {
+	OnEvent: func(props map[string]any, state any, event *render.WidgetEvent) bool {
 		s := state.(*ButtonState)
 		disabled, _ := props["disabled"].(bool)
 		if disabled {

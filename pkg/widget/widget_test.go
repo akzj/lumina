@@ -97,7 +97,7 @@ func TestButtonHoverState(t *testing.T) {
 	props := map[string]any{"label": "Hover"}
 
 	// mouseenter → hovered
-	changed := Button.OnEvent(props, state, &Event{Type: "mouseenter"})
+	changed := Button.OnEvent(props, state, &render.WidgetEvent{Type: "mouseenter"})
 	if !changed {
 		t.Error("mouseenter should return true (state changed)")
 	}
@@ -112,13 +112,13 @@ func TestButtonHoverState(t *testing.T) {
 	}
 
 	// Duplicate mouseenter → no change
-	changed = Button.OnEvent(props, state, &Event{Type: "mouseenter"})
+	changed = Button.OnEvent(props, state, &render.WidgetEvent{Type: "mouseenter"})
 	if changed {
 		t.Error("duplicate mouseenter should return false")
 	}
 
 	// mouseleave → not hovered
-	changed = Button.OnEvent(props, state, &Event{Type: "mouseleave"})
+	changed = Button.OnEvent(props, state, &render.WidgetEvent{Type: "mouseleave"})
 	if !changed {
 		t.Error("mouseleave should return true")
 	}
@@ -132,10 +132,10 @@ func TestButtonPressState(t *testing.T) {
 	props := map[string]any{"label": "Press"}
 
 	// mouseenter first
-	Button.OnEvent(props, state, &Event{Type: "mouseenter"})
+	Button.OnEvent(props, state, &render.WidgetEvent{Type: "mouseenter"})
 
 	// mousedown → pressed
-	changed := Button.OnEvent(props, state, &Event{Type: "mousedown"})
+	changed := Button.OnEvent(props, state, &render.WidgetEvent{Type: "mousedown"})
 	if !changed {
 		t.Error("mousedown should return true")
 	}
@@ -150,7 +150,7 @@ func TestButtonPressState(t *testing.T) {
 	}
 
 	// mouseup → not pressed
-	changed = Button.OnEvent(props, state, &Event{Type: "mouseup"})
+	changed = Button.OnEvent(props, state, &render.WidgetEvent{Type: "mouseup"})
 	if !changed {
 		t.Error("mouseup should return true")
 	}
@@ -163,7 +163,7 @@ func TestButtonDisabledIgnoresEvents(t *testing.T) {
 	state := Button.NewState().(*ButtonState)
 	props := map[string]any{"label": "Disabled", "disabled": true}
 
-	changed := Button.OnEvent(props, state, &Event{Type: "mouseenter"})
+	changed := Button.OnEvent(props, state, &render.WidgetEvent{Type: "mouseenter"})
 	if changed {
 		t.Error("disabled button should ignore mouseenter")
 	}
@@ -176,14 +176,14 @@ func TestButtonMouseleaveResetsPressed(t *testing.T) {
 	state := Button.NewState().(*ButtonState)
 	props := map[string]any{"label": "X"}
 
-	Button.OnEvent(props, state, &Event{Type: "mouseenter"})
-	Button.OnEvent(props, state, &Event{Type: "mousedown"})
+	Button.OnEvent(props, state, &render.WidgetEvent{Type: "mouseenter"})
+	Button.OnEvent(props, state, &render.WidgetEvent{Type: "mousedown"})
 	if !state.Pressed || !state.Hovered {
 		t.Fatal("precondition: should be hovered+pressed")
 	}
 
 	// mouseleave resets both
-	changed := Button.OnEvent(props, state, &Event{Type: "mouseleave"})
+	changed := Button.OnEvent(props, state, &render.WidgetEvent{Type: "mouseleave"})
 	if !changed {
 		t.Error("mouseleave should return true")
 	}
@@ -198,7 +198,7 @@ func TestWidgetDefInterface(t *testing.T) {
 		GetName() string
 		GetNewState() any
 		DoRender(props map[string]any, state any) any
-		DoOnEvent(props map[string]any, state any, eventType, key string, x, y int) bool
+		DoOnEvent(props map[string]any, state any, event *render.WidgetEvent) bool
 	} = Button
 
 	if w.GetName() != "Button" {
@@ -215,7 +215,7 @@ func TestWidgetDefInterface(t *testing.T) {
 		t.Fatal("DoRender returned nil")
 	}
 
-	changed := w.DoOnEvent(map[string]any{"label": "Test"}, state, "mouseenter", "", 0, 0)
+	changed := w.DoOnEvent(map[string]any{"label": "Test"}, state, &render.WidgetEvent{Type: "mouseenter"})
 	if !changed {
 		t.Error("DoOnEvent mouseenter should return true")
 	}

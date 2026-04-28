@@ -4,5 +4,8 @@ package widget
 func All() []*Widget {
 	return []*Widget{
 		Button,
+		Checkbox,
+		Switch,
+		Radio,
 	}
 }
