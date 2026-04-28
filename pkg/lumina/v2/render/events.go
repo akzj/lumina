@@ -167,15 +167,91 @@ func (e *Engine) HandleKeyDown(key string) {
 }
 
 // HandleScroll processes a scroll event at screen coordinates (x, y).
-// Finds the deepest node with an onScroll handler (bubbling) and dispatches.
+// Priority: custom onScroll Lua handler > built-in auto-scroll for overflow=scroll nodes.
 func (e *Engine) HandleScroll(x, y, delta int) {
 	if e.root == nil || e.root.RootNode == nil {
 		return
 	}
+
+	// First: check for a custom Lua onScroll handler (takes priority)
 	target := HitTestWithHandler(e.root.RootNode, x, y, "scroll")
 	if target != nil && target.OnScroll != 0 {
 		e.callLuaRefScroll(target.OnScroll, delta)
+		return
 	}
+
+	// No custom handler — find nearest overflow=scroll ancestor for auto-scroll
+	hitNode := HitTest(e.root.RootNode, x, y)
+	scrollNode := findScrollableAncestor(hitNode)
+	if scrollNode != nil {
+		e.autoScroll(scrollNode, delta)
+	}
+}
+
+// findScrollableAncestor walks up from node to find the nearest ancestor with overflow=scroll.
+func findScrollableAncestor(node *Node) *Node {
+	for n := node; n != nil; n = n.Parent {
+		if n.Style.Overflow == "scroll" {
+			return n
+		}
+	}
+	return nil
+}
+
+// autoScroll adjusts a scroll container's ScrollY by delta, clamped to [0, maxScroll].
+func (e *Engine) autoScroll(node *Node, delta int) {
+	maxScroll := computeMaxScrollY(node)
+	if maxScroll <= 0 {
+		return // content fits, no scrolling needed
+	}
+
+	const step = 3 // scroll 3 lines per wheel tick
+	newScrollY := node.ScrollY + delta*step
+
+	// Clamp
+	if newScrollY < 0 {
+		newScrollY = 0
+	}
+	if newScrollY > maxScroll {
+		newScrollY = maxScroll
+	}
+
+	if newScrollY == node.ScrollY {
+		return // no change
+	}
+
+	node.ScrollY = newScrollY
+	node.PaintDirty = true
+	e.needsRender = true
+}
+
+// computeMaxScrollY calculates total children height minus container content height.
+func computeMaxScrollY(node *Node) int {
+	// Total children height (sum of all child heights + gaps)
+	totalH := 0
+	gap := node.Style.Gap
+	for i, child := range node.Children {
+		totalH += child.H
+		if i > 0 && gap > 0 {
+			totalH += gap
+		}
+	}
+
+	// Container content height (node.H minus padding and border)
+	borderW := 0
+	if node.Style.Border != "" && node.Style.Border != "none" {
+		borderW = 1
+	}
+	contentH := node.H - 2*borderW - node.Style.PaddingTop - node.Style.PaddingBottom
+	if contentH <= 0 {
+		return 0
+	}
+
+	maxScroll := totalH - contentH
+	if maxScroll < 0 {
+		maxScroll = 0
+	}
+	return maxScroll
 }
 
 // callLuaRef calls a Lua function by registry ref with an event table {x=x, y=y}.
