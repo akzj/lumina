@@ -59,6 +59,9 @@ type Engine struct {
 	// Factory registry: name → Lua registry ref for render function
 	factories map[string]int64 // factory name → renderFn Lua ref
 
+	// Shared metatable ref for callable factory tables (__call → createElement)
+	factoryMetaRef int64
+
 	// Event state: currently hovered node for enter/leave tracking
 	hoveredNode *Node
 
@@ -540,6 +543,14 @@ func (e *Engine) renderGoWidget(comp *Component, w WidgetDef) {
 		e.widgetStates[comp.ID] = state
 	}
 
+	// Convert children descriptors to Node trees
+	comp.ChildNodes = convertChildDescriptors(comp.Props)
+
+	// Pass child nodes via props so Widget.Render can use them
+	if len(comp.ChildNodes) > 0 {
+		comp.Props["_childNodes"] = comp.ChildNodes
+	}
+
 	// Call Go render function (returns *Node as any)
 	result := w.DoRender(comp.Props, state)
 	if result == nil {
@@ -595,6 +606,297 @@ func copyWidgetEventHandlers(placeholder *Node, root *Node) {
 	root.OnMouseEnter = placeholder.OnMouseEnter
 	root.OnMouseLeave = placeholder.OnMouseLeave
 }
+
+// convertChildDescriptors converts raw children data from Lua props into Node trees.
+// Children come from Lua as []any (each element is map[string]any descriptor).
+func convertChildDescriptors(props map[string]any) []*Node {
+	raw, ok := props["children"]
+	if !ok {
+		return nil
+	}
+	arr, ok := raw.([]any)
+	if !ok {
+		return nil
+	}
+
+	nodes := make([]*Node, 0, len(arr))
+	for _, item := range arr {
+		m, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		desc := descriptorFromMap(m)
+		node := createNodeFromDesc(desc)
+		if node != nil {
+			nodes = append(nodes, node)
+		}
+	}
+	return nodes
+}
+
+// descriptorFromMap converts a raw map (from Lua ToAny) back into a Descriptor.
+// This is the inverse of readDescriptor but works on Go maps instead of Lua stack.
+func descriptorFromMap(m map[string]any) Descriptor {
+	var desc Descriptor
+
+	// Type
+	if t, ok := m["type"].(string); ok {
+		desc.Type = t
+	}
+	if desc.Type == "" {
+		desc.Type = "box"
+	}
+
+	// Content
+	if c, ok := m["content"].(string); ok {
+		desc.Content = c
+		desc.ContentSet = true
+	}
+
+	// ID
+	if id, ok := m["id"].(string); ok {
+		desc.ID = id
+	}
+
+	// Key
+	if k, ok := m["key"].(string); ok {
+		desc.Key = k
+	}
+
+	// Component type (for sub-components)
+	if ft, ok := m["_factoryName"].(string); ok {
+		desc.Type = "component"
+		desc.ComponentType = ft
+		if p, ok := m["_props"].(map[string]any); ok {
+			desc.ComponentProps = p
+		}
+	}
+
+	// Style
+	if s, ok := m["style"].(map[string]any); ok {
+		desc.Style = styleFromMap(s)
+	} else {
+		desc.Style.Right = -1
+		desc.Style.Bottom = -1
+	}
+
+	// Foreground/Background at top level (Lua shorthand)
+	if fg, ok := m["foreground"].(string); ok {
+		desc.Style.Foreground = fg
+	}
+	if bg, ok := m["background"].(string); ok {
+		desc.Style.Background = bg
+	}
+
+	// Bold, Dim, Underline at top level
+	if b, ok := m["bold"].(bool); ok {
+		desc.Style.Bold = b
+	}
+	if d, ok := m["dim"].(bool); ok {
+		desc.Style.Dim = d
+	}
+	if u, ok := m["underline"].(bool); ok {
+		desc.Style.Underline = u
+	}
+
+	// Focusable / Disabled
+	if f, ok := m["focusable"].(bool); ok {
+		desc.Focusable = f
+	}
+	if d, ok := m["disabled"].(bool); ok {
+		desc.Disabled = d
+	}
+
+	// Placeholder
+	if p, ok := m["placeholder"].(string); ok {
+		desc.Placeholder = p
+	}
+
+	// AutoFocus
+	if af, ok := m["autoFocus"].(bool); ok {
+		desc.AutoFocus = af
+	}
+
+	// Children (recursive)
+	if children, ok := m["children"].([]any); ok {
+		for _, child := range children {
+			if cm, ok := child.(map[string]any); ok {
+				childDesc := descriptorFromMap(cm)
+				desc.Children = append(desc.Children, childDesc)
+			}
+		}
+	}
+
+	return desc
+}
+
+// styleFromMap converts a raw map to a Style struct.
+func styleFromMap(m map[string]any) Style {
+	var s Style
+	s.Right = -1
+	s.Bottom = -1
+
+	if w, ok := m["width"].(int64); ok {
+		s.Width = int(w)
+	} else if w, ok := m["width"].(float64); ok {
+		s.Width = int(w)
+	}
+	if h, ok := m["height"].(int64); ok {
+		s.Height = int(h)
+	} else if h, ok := m["height"].(float64); ok {
+		s.Height = int(h)
+	}
+	if bg, ok := m["background"].(string); ok {
+		s.Background = bg
+	}
+	if fg, ok := m["foreground"].(string); ok {
+		s.Foreground = fg
+	}
+	if b, ok := m["border"].(string); ok {
+		s.Border = b
+	}
+	if p, ok := m["padding"].(int64); ok {
+		s.Padding = int(p)
+	} else if p, ok := m["padding"].(float64); ok {
+		s.Padding = int(p)
+	}
+	if g, ok := m["gap"].(int64); ok {
+		s.Gap = int(g)
+	} else if g, ok := m["gap"].(float64); ok {
+		s.Gap = int(g)
+	}
+	if f, ok := m["flex"].(int64); ok {
+		s.Flex = int(f)
+	} else if f, ok := m["flex"].(float64); ok {
+		s.Flex = int(f)
+	}
+	if b, ok := m["bold"].(bool); ok {
+		s.Bold = b
+	}
+	if d, ok := m["dim"].(bool); ok {
+		s.Dim = d
+	}
+	if u, ok := m["underline"].(bool); ok {
+		s.Underline = u
+	}
+
+	// Margin
+	if v, ok := m["margin"].(int64); ok {
+		s.Margin = int(v)
+	} else if v, ok := m["margin"].(float64); ok {
+		s.Margin = int(v)
+	}
+	if v, ok := m["marginTop"].(int64); ok {
+		s.MarginTop = int(v)
+	} else if v, ok := m["marginTop"].(float64); ok {
+		s.MarginTop = int(v)
+	}
+	if v, ok := m["marginBottom"].(int64); ok {
+		s.MarginBottom = int(v)
+	} else if v, ok := m["marginBottom"].(float64); ok {
+		s.MarginBottom = int(v)
+	}
+	if v, ok := m["marginLeft"].(int64); ok {
+		s.MarginLeft = int(v)
+	} else if v, ok := m["marginLeft"].(float64); ok {
+		s.MarginLeft = int(v)
+	}
+	if v, ok := m["marginRight"].(int64); ok {
+		s.MarginRight = int(v)
+	} else if v, ok := m["marginRight"].(float64); ok {
+		s.MarginRight = int(v)
+	}
+
+	// Padding individual
+	if v, ok := m["paddingTop"].(int64); ok {
+		s.PaddingTop = int(v)
+	} else if v, ok := m["paddingTop"].(float64); ok {
+		s.PaddingTop = int(v)
+	}
+	if v, ok := m["paddingBottom"].(int64); ok {
+		s.PaddingBottom = int(v)
+	} else if v, ok := m["paddingBottom"].(float64); ok {
+		s.PaddingBottom = int(v)
+	}
+	if v, ok := m["paddingLeft"].(int64); ok {
+		s.PaddingLeft = int(v)
+	} else if v, ok := m["paddingLeft"].(float64); ok {
+		s.PaddingLeft = int(v)
+	}
+	if v, ok := m["paddingRight"].(int64); ok {
+		s.PaddingRight = int(v)
+	} else if v, ok := m["paddingRight"].(float64); ok {
+		s.PaddingRight = int(v)
+	}
+
+	// Alignment
+	if j, ok := m["justify"].(string); ok {
+		s.Justify = j
+	}
+	if a, ok := m["align"].(string); ok {
+		s.Align = a
+	}
+
+	// Overflow
+	if o, ok := m["overflow"].(string); ok {
+		s.Overflow = o
+	}
+
+	// Positioning
+	if p, ok := m["position"].(string); ok {
+		s.Position = p
+	}
+	if v, ok := m["top"].(int64); ok {
+		s.Top = int(v)
+	} else if v, ok := m["top"].(float64); ok {
+		s.Top = int(v)
+	}
+	if v, ok := m["left"].(int64); ok {
+		s.Left = int(v)
+	} else if v, ok := m["left"].(float64); ok {
+		s.Left = int(v)
+	}
+	if v, ok := m["right"].(int64); ok {
+		s.Right = int(v)
+	} else if v, ok := m["right"].(float64); ok {
+		s.Right = int(v)
+	}
+	if v, ok := m["bottom"].(int64); ok {
+		s.Bottom = int(v)
+	} else if v, ok := m["bottom"].(float64); ok {
+		s.Bottom = int(v)
+	}
+	if v, ok := m["zIndex"].(int64); ok {
+		s.ZIndex = int(v)
+	} else if v, ok := m["zIndex"].(float64); ok {
+		s.ZIndex = int(v)
+	}
+
+	// Min/Max sizing
+	if v, ok := m["minWidth"].(int64); ok {
+		s.MinWidth = int(v)
+	} else if v, ok := m["minWidth"].(float64); ok {
+		s.MinWidth = int(v)
+	}
+	if v, ok := m["maxWidth"].(int64); ok {
+		s.MaxWidth = int(v)
+	} else if v, ok := m["maxWidth"].(float64); ok {
+		s.MaxWidth = int(v)
+	}
+	if v, ok := m["minHeight"].(int64); ok {
+		s.MinHeight = int(v)
+	} else if v, ok := m["minHeight"].(float64); ok {
+		s.MinHeight = int(v)
+	}
+	if v, ok := m["maxHeight"].(int64); ok {
+		s.MaxHeight = int(v)
+	} else if v, ok := m["maxHeight"].(float64); ok {
+		s.MaxHeight = int(v)
+	}
+
+	return s
+}
+
 
 // readDescriptor reads a Lua table at stack index and converts to Descriptor.
 func (e *Engine) readDescriptor(L *lua.State, idx int) Descriptor {
@@ -1195,6 +1497,12 @@ func (e *Engine) RegisterLuaAPI() {
 	L.PushFunction(e.luaReadFile)
 	L.SetField(tblIdx, "readFile")
 
+	// Create shared callable metatable for factory tables (__call → createElement)
+	L.NewTable()
+	L.PushFunction(e.luaFactoryCall)
+	L.SetField(-2, "__call")
+	sharedMetaIdx := L.AbsIndex(-1)
+
 	// Register Go widgets as Lua-accessible factories (e.g., lumina.Button)
 	for name := range e.widgets {
 		L.NewTable()
@@ -1203,8 +1511,14 @@ func (e *Engine) RegisterLuaAPI() {
 		L.SetField(factoryIdx, "_isFactory")
 		L.PushString(name)
 		L.SetField(factoryIdx, "_name")
+		// Set callable metatable so lumina.Button { props } works
+		L.PushValue(sharedMetaIdx)
+		L.SetMetatable(factoryIdx)
 		L.SetField(tblIdx, name) // lumina.Button = {_isFactory=true, _name="Button"}
 	}
+
+	// Store shared metatable as registry ref for reuse by defineComponent
+	e.factoryMetaRef = int64(L.Ref(lua.RegistryIndex)) // pops metatable
 
 	// lumina.getTheme() → returns theme color table
 	L.PushFunction(e.luaGetTheme)
@@ -1248,7 +1562,26 @@ func (e *Engine) luaDefineComponent(L *lua.State) int {
 	L.PushString(name)
 	L.SetField(resultIdx, "_name")
 
+	// Set callable metatable so Factory { props } works
+	e.setFactoryMetatable(L, resultIdx)
+
 	return 1
+}
+
+// luaFactoryCall implements the __call metamethod for factory tables.
+// Called when user writes: lumina.Checkbox { label = "hi" }
+// Lua passes: self (the factory table), props, ...children
+// The stack is [self, props, children...] which is exactly what luaCreateElement expects.
+func (e *Engine) luaFactoryCall(L *lua.State) int {
+	return e.luaCreateElement(L)
+}
+
+// setFactoryMetatable sets the shared __call metatable on a factory table at the given index.
+// This enables the syntax: Factory { props } or Factory(props, child1, child2)
+func (e *Engine) setFactoryMetatable(L *lua.State, tableIdx int) {
+	absIdx := L.AbsIndex(tableIdx)
+	L.RawGetI(lua.RegistryIndex, e.factoryMetaRef)
+	L.SetMetatable(absIdx)
 }
 
 // luaCreateElement implements lumina.createElement(type_or_factory, props, children...)
