@@ -9,5 +9,6 @@ M.Badge = require("lux.badge")
 M.Divider = require("lux.divider")
 M.Progress = require("lux.progress")
 M.Spinner = require("lux.spinner")
+M.Dialog = require("lux.dialog")
 
 return M
