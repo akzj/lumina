@@ -7,5 +7,7 @@ func All() []*Widget {
 		Checkbox,
 		Switch,
 		Radio,
+		Label,
+		Select,
 	}
 }
