@@ -111,6 +111,15 @@ func paintBox(buf *CellBuffer, node *Node) {
 // paintScrollChildren paints children with a scroll offset, clipping to the content area
 // (inside border + padding). Temporarily shifts child Y positions by -scrollY, then restores.
 func paintScrollChildren(buf *CellBuffer, node *Node) {
+	// Clamp scrollY to valid range (content may have shrunk since last scroll)
+	maxScroll := computeMaxScrollY(node)
+	if node.ScrollY > maxScroll {
+		node.ScrollY = maxScroll
+	}
+	if node.ScrollY < 0 {
+		node.ScrollY = 0
+	}
+
 	scrollY := node.ScrollY
 
 	// Shift all child subtree Y positions
