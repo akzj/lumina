@@ -99,6 +99,14 @@ func hasHandler(n *Node, eventType string) bool {
 		return n.OnKeyDown != 0
 	case "scroll":
 		return n.OnScroll != 0
+	case "mousedown":
+		return n.OnMouseDown != 0
+	case "mouseup":
+		return n.OnMouseUp != 0
+	case "submit":
+		return n.OnSubmit != 0
+	case "outsideclick":
+		return n.OnOutsideClick != 0
 	default:
 		return false
 	}
@@ -148,7 +156,7 @@ func (e *Engine) HandleMouseMove(x, y int) {
 
 // HandleClick processes a click event at screen coordinates (x, y).
 // Finds the deepest node with an onClick handler (bubbling) and dispatches.
-// Also handles focus: clicking an input/textarea focuses it.
+// Also handles focus: clicking a focusable node focuses it.
 func (e *Engine) HandleClick(x, y int) {
 	if e.root == nil || e.root.RootNode == nil {
 		return
@@ -162,23 +170,58 @@ func (e *Engine) HandleClick(x, y int) {
 	// Hit-test for the deepest node at this position
 	hitNode := HitTest(e.root.RootNode, x, y)
 
-	// Focus management: clicking on input/textarea focuses it
-	if hitNode != nil && (hitNode.Type == "input" || hitNode.Type == "textarea") {
-		old := e.focusedNode
-		e.focusedNode = hitNode
-		if old != hitNode { // Only repaint if focus actually changed
-			if old != nil && !old.Removed {
-				old.PaintDirty = true
-			}
-			hitNode.PaintDirty = true
-			e.needsRender = true
+	// Focus management: clicking on a focusable node focuses it
+	// Walk up from hitNode to find the nearest focusable ancestor
+	var focusTarget *Node
+	for n := hitNode; n != nil; n = n.Parent {
+		if n.Focusable && !n.Disabled {
+			focusTarget = n
+			break
 		}
 	}
 
-	// Dispatch onClick (bubble up from hit node)
+	// Fire onOutsideClick on the previously focused node if focus is moving away
+	if e.focusedNode != nil && focusTarget != e.focusedNode && !e.focusedNode.Removed {
+		if e.focusedNode.OnOutsideClick != 0 {
+			e.callLuaRef(e.focusedNode.OnOutsideClick, x, y)
+		}
+	}
+
+	if focusTarget != nil {
+		e.setFocus(focusTarget)
+	} else if e.focusedNode != nil {
+		// Clicked on non-focusable area → blur current
+		e.setFocus(nil)
+	}
+
+	// Dispatch onClick (bubble up from hit node, skip disabled)
 	target := HitTestWithHandler(e.root.RootNode, x, y, "click")
-	if target != nil && target.OnClick != 0 {
+	if target != nil && target.OnClick != 0 && !target.Disabled {
 		e.callLuaRef(target.OnClick, x, y)
+	}
+}
+
+// HandleMouseDown processes a mousedown event at screen coordinates (x, y).
+// Finds the deepest node with an onMouseDown handler (bubbling) and dispatches.
+func (e *Engine) HandleMouseDown(x, y int) {
+	if e.root == nil || e.root.RootNode == nil {
+		return
+	}
+	target := HitTestWithHandler(e.root.RootNode, x, y, "mousedown")
+	if target != nil && target.OnMouseDown != 0 && !target.Disabled {
+		e.callLuaRef(target.OnMouseDown, x, y)
+	}
+}
+
+// HandleMouseUp processes a mouseup event at screen coordinates (x, y).
+// Finds the deepest node with an onMouseUp handler (bubbling) and dispatches.
+func (e *Engine) HandleMouseUp(x, y int) {
+	if e.root == nil || e.root.RootNode == nil {
+		return
+	}
+	target := HitTestWithHandler(e.root.RootNode, x, y, "mouseup")
+	if target != nil && target.OnMouseUp != 0 && !target.Disabled {
+		e.callLuaRef(target.OnMouseUp, x, y)
 	}
 }
 
@@ -366,4 +409,17 @@ func (e *Engine) findKeyHandler(node *Node) *Node {
 		}
 	}
 	return nil
+}
+
+// callLuaRefSimple calls a Lua function by registry ref with no arguments.
+func (e *Engine) callLuaRefSimple(ref LuaRef) {
+	L := e.L
+	L.RawGetI(lua.RegistryIndex, ref)
+	if !L.IsFunction(-1) {
+		L.Pop(1)
+		return
+	}
+	if status := L.PCall(0, 0, 0); status != lua.OK {
+		L.Pop(1) // pop error message to prevent stack pollution
+	}
 }

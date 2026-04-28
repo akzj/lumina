@@ -57,6 +57,23 @@ func reconcileImpl(node *Node, desc Descriptor, freedRefs *[]int64) bool {
 	changed = updateRef(&node.OnKeyDown, desc.OnKeyDown, freedRefs) || changed
 	changed = updateRef(&node.OnChange, desc.OnChange, freedRefs) || changed
 	changed = updateRef(&node.OnScroll, desc.OnScroll, freedRefs) || changed
+	changed = updateRef(&node.OnMouseDown, desc.OnMouseDown, freedRefs) || changed
+	changed = updateRef(&node.OnMouseUp, desc.OnMouseUp, freedRefs) || changed
+	changed = updateRef(&node.OnFocus, desc.OnFocus, freedRefs) || changed
+	changed = updateRef(&node.OnBlur, desc.OnBlur, freedRefs) || changed
+	changed = updateRef(&node.OnSubmit, desc.OnSubmit, freedRefs) || changed
+	changed = updateRef(&node.OnOutsideClick, desc.OnOutsideClick, freedRefs) || changed
+
+	// 4b. Update widget fields
+	if desc.Focusable != node.Focusable {
+		node.Focusable = desc.Focusable
+		changed = true
+	}
+	if desc.Disabled != node.Disabled {
+		node.Disabled = desc.Disabled
+		node.PaintDirty = true
+		changed = true
+	}
 
 	// 5. Reconcile children (skip for component nodes — children are grafted)
 	if node.Type != "component" {
@@ -240,6 +257,24 @@ func collectNodeRefs(node *Node, refs *[]int64) {
 	if node.OnScroll != 0 {
 		*refs = append(*refs, node.OnScroll)
 	}
+	if node.OnMouseDown != 0 {
+		*refs = append(*refs, node.OnMouseDown)
+	}
+	if node.OnMouseUp != 0 {
+		*refs = append(*refs, node.OnMouseUp)
+	}
+	if node.OnFocus != 0 {
+		*refs = append(*refs, node.OnFocus)
+	}
+	if node.OnBlur != 0 {
+		*refs = append(*refs, node.OnBlur)
+	}
+	if node.OnSubmit != 0 {
+		*refs = append(*refs, node.OnSubmit)
+	}
+	if node.OnOutsideClick != 0 {
+		*refs = append(*refs, node.OnOutsideClick)
+	}
 }
 
 func childKey(node *Node) string {
@@ -283,12 +318,20 @@ func createNodeFromDesc(desc Descriptor) *Node {
 	}
 	node.Style = desc.Style
 	node.ComponentType = desc.ComponentType
+	node.Focusable = desc.Focusable
+	node.Disabled = desc.Disabled
 	node.OnClick = desc.OnClick
 	node.OnMouseEnter = desc.OnMouseEnter
 	node.OnMouseLeave = desc.OnMouseLeave
 	node.OnKeyDown = desc.OnKeyDown
 	node.OnChange = desc.OnChange
 	node.OnScroll = desc.OnScroll
+	node.OnMouseDown = desc.OnMouseDown
+	node.OnMouseUp = desc.OnMouseUp
+	node.OnFocus = desc.OnFocus
+	node.OnBlur = desc.OnBlur
+	node.OnSubmit = desc.OnSubmit
+	node.OnOutsideClick = desc.OnOutsideClick
 
 	for _, childDesc := range desc.Children {
 		child := createNodeFromDesc(childDesc)
