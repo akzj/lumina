@@ -15,6 +15,7 @@ var Button = &Widget{
 		return &ButtonState{}
 	},
 	Render: func(props map[string]any, state any) any {
+		t := CurrentTheme
 		s := state.(*ButtonState)
 		label, _ := props["label"].(string)
 		if label == "" {
@@ -27,27 +28,27 @@ var Button = &Widget{
 		}
 
 		// Determine colors based on variant + state
-		bg := "#89B4FA" // primary blue
-		fg := "#1E1E2E" // dark text
+		bg := t.Primary
+		fg := t.PrimaryDark
 		switch variant {
 		case "outline":
 			bg = ""
-			fg = "#89B4FA"
+			fg = t.Primary
 		case "ghost":
 			bg = ""
-			fg = "#CDD6F4"
+			fg = t.Text
 		case "secondary":
-			bg = "#45475A"
-			fg = "#CDD6F4"
+			bg = t.Surface1
+			fg = t.Text
 		}
 
 		if disabled {
-			bg = "#313244"
-			fg = "#6C7086"
+			bg = t.Surface0
+			fg = t.Muted
 		} else if s.Pressed {
-			bg = "#74C7EC" // lighter when pressed
+			bg = t.Pressed
 		} else if s.Hovered {
-			bg = "#B4BEFE" // lighter when hovered
+			bg = t.Hover
 		}
 
 		// Determine border style

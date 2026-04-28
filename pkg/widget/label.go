@@ -13,12 +13,13 @@ var Label = &Widget{
 		return nil // Label has no state
 	},
 	Render: func(props map[string]any, state any) any {
+		t := CurrentTheme
 		text, _ := props["text"].(string)
 		if text == "" {
 			text = "Label"
 		}
 
-		fg := "#CDD6F4"
+		fg := t.Text
 
 		node := &render.Node{
 			Type:    "text",
