@@ -522,6 +522,13 @@ func (e *Engine) dispatchWidgetEvent(node *Node, eventType, key string, x, y int
 		return
 	}
 	evt := &WidgetEvent{Type: eventType, Key: key, X: x, Y: y}
+	// Populate widget screen bounds so widgets know their position
+	if comp.RootNode != nil {
+		evt.WidgetX = comp.RootNode.X
+		evt.WidgetY = comp.RootNode.Y
+		evt.WidgetW = comp.RootNode.W
+		evt.WidgetH = comp.RootNode.H
+	}
 	if w.DoOnEvent(comp.Props, state, evt) {
 		comp.Dirty = true
 		e.needsRender = true
@@ -530,6 +537,15 @@ func (e *Engine) dispatchWidgetEvent(node *Node, eventType, key string, x, y int
 	// Fire onChange if widget requested it
 	if evt.FireOnChange != nil && comp.RootNode != nil && comp.RootNode.OnChange != 0 {
 		e.callLuaRefWithValue(comp.RootNode.OnChange, evt.FireOnChange)
+	}
+
+	// Process layer requests from widget
+	if evt.CreateLayer != nil {
+		req := evt.CreateLayer
+		e.CreateLayer(req.ID, req.Root, req.Modal)
+	}
+	if evt.RemoveLayer != "" {
+		e.RemoveLayer(evt.RemoveLayer)
 	}
 }
 
