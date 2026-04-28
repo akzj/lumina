@@ -72,4 +72,24 @@ test.describe("Notes example app", function()
         test.assert.eq(app:screenContains("Navigate"), true)
         test.assert.eq(app:screenContains("Quit"), true)
     end)
+
+    test.it("many notes do not overflow over header/footer", function()
+        -- Add 10 notes (total 13 with 3 initial = 26 lines of NotePreview)
+        for i = 1, 10 do
+            app:keyPress("n")
+        end
+        -- Navigate to the last note (selectedIdx is already 13 after adding)
+        -- Header and footer should still be visible despite overflow
+        test.assert.eq(app:screenContains("Notes"), true)
+        test.assert.eq(app:screenContains("Navigate"), true)
+        -- Navigate up to first note
+        for i = 1, 12 do
+            app:keyPress("k")
+        end
+        -- Header and footer should still be visible
+        test.assert.eq(app:screenContains("Notes"), true)
+        test.assert.eq(app:screenContains("Navigate"), true)
+        -- First note should be visible after scrolling up
+        test.assert.eq(app:screenContains("Welcome to Lumina"), true)
+    end)
 end)

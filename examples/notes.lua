@@ -123,8 +123,15 @@ lumina.app {
             noteList = lumina.createElement("text", { foreground = t.muted },
                 "  No notes yet. Press [n] to create one.")
         else
+            -- Auto-scroll to keep selected note visible
+            local noteH = 2  -- each NotePreview is 2 lines tall
+            local scrollY = 0
+            if selectedIdx > 1 then
+                scrollY = math.max(0, (selectedIdx - 1) * noteH - 4)
+            end
             noteList = lumina.createElement("vbox", {
-                style = { flex = 1 },
+                style = { flex = 1, overflow = "scroll" },
+                scrollY = scrollY,
             }, table.unpack(listItems))
         end
 
