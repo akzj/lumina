@@ -1,5 +1,6 @@
--- Lumina v2 Example: Todo MVC
--- Demonstrates: useState, keyboard events, dynamic lists, filtering
+-- Lumina v2 Example: Todo MVC (using Lux component library + theme)
+-- Demonstrates: useState, keyboard events, dynamic lists, filtering,
+--               Lux Badge/Divider components, lumina.getTheme()
 --
 -- Usage: lumina examples/todo_mvc.lua
 -- Quit:  Ctrl+C or Ctrl+Q
@@ -13,6 +14,10 @@
 --   Escape             - Cancel input mode
 --   f or 1/2/3         - Cycle/select filter (All/Active/Completed)
 
+local lux = require("lux")
+local Badge = lux.Badge
+local Divider = lux.Divider
+
 lumina.createComponent({
     id = "todo-app",
     name = "TodoMVC",
@@ -21,6 +26,8 @@ lumina.createComponent({
     zIndex = 0,
 
     render = function(state, props)
+        local t = lumina.getTheme()
+
         -- State
         local todos, setTodos = lumina.useState("todos", {
             {id=1, text="Learn Lumina v2", done=true, priority="high"},
@@ -68,8 +75,8 @@ lumina.createComponent({
                 elseif e.key == "Enter" then
                     if #inputText > 0 then
                         local newTodos = {}
-                        for _, t in ipairs(todos) do
-                            newTodos[#newTodos + 1] = t
+                        for _, tt in ipairs(todos) do
+                            newTodos[#newTodos + 1] = tt
                         end
                         newTodos[#newTodos + 1] = {
                             id = nextId,
@@ -92,7 +99,6 @@ lumina.createComponent({
                         end
                     end
                 elseif utf8.len(e.key) == 1 then
-                    -- Single printable character (supports Unicode/CJK)
                     setInputText(inputText .. e.key)
                 end
             else
@@ -106,32 +112,30 @@ lumina.createComponent({
                         setSelectedIdx(selectedIdx - 1)
                     end
                 elseif e.key == " " then
-                    -- Toggle done
                     if filtered[selectedIdx] then
                         local id = filtered[selectedIdx].id
                         local newTodos = {}
-                        for _, t in ipairs(todos) do
-                            if t.id == id then
+                        for _, tt in ipairs(todos) do
+                            if tt.id == id then
                                 newTodos[#newTodos + 1] = {
-                                    id = t.id,
-                                    text = t.text,
-                                    done = not t.done,
-                                    priority = t.priority,
+                                    id = tt.id,
+                                    text = tt.text,
+                                    done = not tt.done,
+                                    priority = tt.priority,
                                 }
                             else
-                                newTodos[#newTodos + 1] = t
+                                newTodos[#newTodos + 1] = tt
                             end
                         end
                         setTodos(newTodos)
                     end
                 elseif e.key == "d" then
-                    -- Delete selected
                     if filtered[selectedIdx] then
                         local id = filtered[selectedIdx].id
                         local newTodos = {}
-                        for _, t in ipairs(todos) do
-                            if t.id ~= id then
-                                newTodos[#newTodos + 1] = t
+                        for _, tt in ipairs(todos) do
+                            if tt.id ~= id then
+                                newTodos[#newTodos + 1] = tt
                             end
                         end
                         setTodos(newTodos)
@@ -142,7 +146,6 @@ lumina.createComponent({
                 elseif e.key == "a" or e.key == "i" then
                     setMode("input")
                 elseif e.key == "f" then
-                    -- Cycle filter
                     if filter == "all" then
                         setFilter("active")
                     elseif filter == "active" then
@@ -161,46 +164,49 @@ lumina.createComponent({
             end
         end
 
-        -- Theme (Catppuccin Mocha)
-        local theme = {
-            bg = "#1E1E2E",
-            fg = "#CDD6F4",
-            accent = "#89B4FA",
-            success = "#A6E3A1",
-            error = "#F38BA8",
-            warning = "#F9E2AF",
-            muted = "#6C7086",
-            surface = "#313244",
-            headerBg = "#181825",
-            done = "#585B70",
-        }
-
         -- Build todo item children
         local todoChildren = {}
         if #filtered == 0 then
             todoChildren[#todoChildren + 1] = lumina.createElement("text", {
-                foreground = theme.muted,
+                foreground = t.muted,
             }, "  No todos to show.")
         else
             for i, todo in ipairs(filtered) do
                 local isSelected = (i == selectedIdx)
                 local checkbox = todo.done and "[x]" or "[ ]"
-                local textColor = todo.done and theme.done or theme.fg
-                local priorityMark = ""
+                local prefix = isSelected and " > " or "   "
+                local line = prefix .. checkbox .. " " .. todo.text
+
+                -- Priority badge using Lux Badge component
+                local priorityBadge = nil
                 if todo.priority == "high" then
-                    priorityMark = " !"
+                    priorityBadge = lumina.createElement(Badge, {
+                        label = "!",
+                        variant = "error",
+                    })
                 elseif todo.priority == "medium" then
-                    priorityMark = " *"
+                    priorityBadge = lumina.createElement(Badge, {
+                        label = "*",
+                        variant = "warning",
+                    })
                 end
 
-                local prefix = isSelected and " > " or "   "
-                local line = prefix .. checkbox .. " " .. todo.text .. priorityMark
+                local rowChildren = {
+                    lumina.createElement("text", {
+                        foreground = isSelected and t.primary or (todo.done and t.surface2 or t.text),
+                        bold = isSelected,
+                    }, line),
+                }
+                if priorityBadge then
+                    rowChildren[#rowChildren + 1] = priorityBadge
+                end
 
-                todoChildren[#todoChildren + 1] = lumina.createElement("text", {
-                    foreground = isSelected and theme.accent or textColor,
-                    bold = isSelected,
-                    style = {background = isSelected and theme.surface or theme.bg, height = 1},
-                }, line)
+                todoChildren[#todoChildren + 1] = lumina.createElement("hbox", {
+                    style = {
+                        background = isSelected and t.surface0 or t.base,
+                        height = 1,
+                    },
+                }, table.unpack(rowChildren))
             end
         end
 
@@ -226,49 +232,77 @@ lumina.createComponent({
         else
             inputContent = " + [a] Add new todo"
         end
-        local inputFg = mode == "input" and theme.fg or theme.muted
 
-        -- Build the VNode tree using a raw table for the todo list section
-        -- (since table.unpack may not work well with many children)
+        -- Completion progress bar
+        local totalCount = #todos
+        local progressPct = totalCount > 0 and math.floor(completedCount * 100 / totalCount) or 0
+        local barWidth = 20
+        local filled = math.floor(barWidth * progressPct / 100)
+        local progressBar = string.rep("█", filled) .. string.rep("░", barWidth - filled)
+
+        -- Build the todo list section (raw table for dynamic children)
         local todoList = {
             type = "vbox",
             id = "todo-list",
-            style = {background = theme.bg},
+            style = {background = t.base},
             children = todoChildren,
         }
 
         return lumina.createElement("vbox", {
             id = "todo-root",
-            style = {background = theme.bg},
+            style = {background = t.base, border = "rounded"},
             onKeyDown = handleKey,
             focusable = true,
         },
             -- Header
             lumina.createElement("text", {
-                foreground = theme.accent,
+                foreground = t.primary,
                 bold = true,
-                style = {background = theme.headerBg, height = 1},
-            }, " Todo MVC  " .. #todos .. " items, " .. activeCount .. " active"),
+                style = {background = t.surface0, height = 1},
+            }, " Todo MVC  " .. totalCount .. " items, " .. activeCount .. " active"),
 
             -- Input bar
             lumina.createElement("text", {
-                foreground = inputFg,
-                style = {background = theme.surface, height = 1},
+                foreground = mode == "input" and t.text or t.muted,
+                style = {background = t.surface0, height = 1},
             }, inputContent),
+
+            -- Divider (Lux component)
+            lumina.createElement(Divider, {width = 78}),
 
             -- Filter bar
             lumina.createElement("text", {
-                foreground = theme.muted,
-                style = {background = theme.surface, height = 1},
+                foreground = t.muted,
+                style = {background = t.surface0, height = 1},
             }, filterText),
 
-            -- Todo list (raw table, not createElement, for dynamic children)
+            -- Todo list
             todoList,
+
+            -- Divider before progress
+            lumina.createElement(Divider, {width = 78}),
+
+            -- Progress bar
+            lumina.createElement("hbox", {
+                style = {height = 1},
+            },
+                lumina.createElement("text", {
+                    foreground = t.muted,
+                    dim = true,
+                }, " Progress: "),
+                lumina.createElement("text", {
+                    foreground = t.primary,
+                }, progressBar),
+                lumina.createElement("text", {
+                    foreground = t.text,
+                }, " " .. progressPct .. "%")
+            ),
 
             -- Footer
             lumina.createElement("text", {
-                foreground = theme.muted,
-                style = {background = theme.headerBg, height = 1},
+                foreground = t.muted,
+                dim = true,
+                style = {background = t.surface0, height = 1},
             }, " [j/k] Navigate  [Space] Toggle  [d] Delete  [a] Add  [f/1-3] Filter")
         )
     end,
