@@ -18,6 +18,7 @@ M.Badge = require("lux.badge")
 M.Divider = require("lux.divider")
 M.Progress = require("lux.progress")
 M.Spinner = require("lux.spinner")
+M.Dialog = require("lux.dialog")
 return M
 `
 
@@ -120,6 +121,147 @@ end)
 return Spinner
 `
 
+const luxSlotLua = `
+local function Slot(name)
+    return setmetatable({}, {
+        __call = function(self, arg)
+            local children = {}
+            local props = {}
+
+            if type(arg) == "table" then
+                for k, v in pairs(arg) do
+                    if type(k) == "number" then
+                        children[k] = v
+                    else
+                        props[k] = v
+                    end
+                end
+            elseif type(arg) == "string" then
+                children[1] = arg
+            end
+
+            return {
+                type = "_slot",
+                _slotName = name,
+                children = children,
+                props = props,
+            }
+        end,
+    })
+end
+return Slot
+`
+
+const luxDialogLua = `
+local Slot = require("lux.slot")
+
+local DialogTitle = Slot("title")
+local DialogContent = Slot("content")
+local DialogActions = Slot("actions")
+
+local Dialog = lumina.defineComponent("LuxDialog", function(props)
+    local t = lumina.getTheme and lumina.getTheme() or {}
+    local open = props.open
+    if not open then
+        return lumina.createElement("box", { style = { width = 0, height = 0 } })
+    end
+
+    local title = props.title or "Dialog"
+    local width = props.width or 40
+    local children = props.children or {}
+
+    local titleSlot = nil
+    local contentSlot = nil
+    local actionsSlot = nil
+    local otherChildren = {}
+
+    for _, child in ipairs(children) do
+        if type(child) == "table" and child._slotName then
+            if child._slotName == "title" then
+                titleSlot = child
+            elseif child._slotName == "content" then
+                contentSlot = child
+            elseif child._slotName == "actions" then
+                actionsSlot = child
+            end
+        else
+            otherChildren[#otherChildren + 1] = child
+        end
+    end
+
+    local dialogChildren = {}
+
+    if titleSlot and titleSlot.children and #titleSlot.children > 0 then
+        local titleText = titleSlot.children[1]
+        if type(titleText) == "string" then
+            dialogChildren[#dialogChildren + 1] = lumina.createElement("text", {
+                foreground = t.primary or "#89B4FA",
+                bold = true,
+            }, titleText)
+        else
+            dialogChildren[#dialogChildren + 1] = titleText
+        end
+    else
+        dialogChildren[#dialogChildren + 1] = lumina.createElement("text", {
+            foreground = t.primary or "#89B4FA",
+            bold = true,
+        }, title)
+    end
+
+    local divWidth = width - 4
+    if divWidth < 1 then divWidth = 1 end
+    dialogChildren[#dialogChildren + 1] = lumina.createElement("text", {
+        foreground = t.muted or "#6C7086",
+        dim = true,
+    }, string.rep("-", divWidth))
+
+    if contentSlot and contentSlot.children and #contentSlot.children > 0 then
+        for _, child in ipairs(contentSlot.children) do
+            if type(child) == "string" then
+                dialogChildren[#dialogChildren + 1] = lumina.createElement("text", {
+                    foreground = t.text or "#CDD6F4",
+                }, child)
+            else
+                dialogChildren[#dialogChildren + 1] = child
+            end
+        end
+    elseif props.message then
+        dialogChildren[#dialogChildren + 1] = lumina.createElement("text", {
+            foreground = t.text or "#CDD6F4",
+        }, props.message)
+    end
+
+    for _, child in ipairs(otherChildren) do
+        dialogChildren[#dialogChildren + 1] = child
+    end
+
+    if actionsSlot and actionsSlot.children and #actionsSlot.children > 0 then
+        dialogChildren[#dialogChildren + 1] = lumina.createElement("text", {
+            foreground = t.muted or "#6C7086",
+            dim = true,
+        }, string.rep("-", divWidth))
+        dialogChildren[#dialogChildren + 1] = lumina.createElement("hbox", {
+            style = { gap = 1 },
+        }, table.unpack(actionsSlot.children))
+    end
+
+    return lumina.createElement("vbox", {
+        style = {
+            border = "rounded",
+            padding = 1,
+            width = width,
+            background = t.surface0 or "#313244",
+        },
+    }, table.unpack(dialogChildren))
+end)
+
+Dialog.Title = DialogTitle
+Dialog.Content = DialogContent
+Dialog.Actions = DialogActions
+
+return Dialog
+`
+
 const luxThemeLua = `
 local M = {}
 local _fallback = {
@@ -155,11 +297,13 @@ func registerLuxModules(L *lua.State) {
 	preloadLuaSource(L, "theme", luxThemeLua)
 
 	// Register individual lux components
+	preloadLuaSource(L, "lux.slot", luxSlotLua)
 	preloadLuaSource(L, "lux.card", luxCardLua)
 	preloadLuaSource(L, "lux.badge", luxBadgeLua)
 	preloadLuaSource(L, "lux.divider", luxDividerLua)
 	preloadLuaSource(L, "lux.progress", luxProgressLua)
 	preloadLuaSource(L, "lux.spinner", luxSpinnerLua)
+	preloadLuaSource(L, "lux.dialog", luxDialogLua)
 
 	// Register the lux umbrella module (requires individual modules)
 	preloadLuaSource(L, "lux", luxInitLua)
