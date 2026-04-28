@@ -175,9 +175,15 @@ local function Modal(props)
 
     return lumina.createElement("box", {
         style = {
+            position = "absolute",
+            top = 5,
+            left = 20,
+            width = w,
+            height = 12,
             border = "rounded",
             background = theme.bg,
             padding = 1,
+            zIndex = 10,
         },
     },
         lumina.createElement("text", {
