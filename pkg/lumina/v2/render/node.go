@@ -91,6 +91,42 @@ type Node struct {
 }
 
 // Component is a stateful UI unit.
+// hookKind identifies the type of a positional hook slot.
+type hookKind int
+
+const (
+	hookEffect   hookKind = iota
+	hookMemo              // also used for useCallback
+	hookRef
+)
+
+// effectSlot stores state for a single useEffect call.
+type effectSlot struct {
+	deps        []any  // dependency values from last render
+	callbackRef int    // Lua registry ref to effect function
+	cleanupRef  int    // Lua registry ref to cleanup function (0 = none)
+	pending     bool   // needs to fire this cycle
+}
+
+// memoSlot stores state for a single useMemo/useCallback call.
+type memoSlot struct {
+	deps []any // dependency values from last render
+	ref  int   // Lua registry ref to cached value
+}
+
+// refSlot stores state for a single useRef call.
+type refSlot struct {
+	tableRef int // Lua registry ref to the {current=...} table
+}
+
+// hookSlot is a tagged union for positional hook tracking.
+type hookSlot struct {
+	kind   hookKind
+	effect *effectSlot
+	memo   *memoSlot
+	ref    *refSlot
+}
+
 type Component struct {
 	ID   string
 	Type string // factory name (for reconciliation matching)
@@ -115,6 +151,10 @@ type Component struct {
 	// Lifecycle
 	IsRoot  bool
 	Mounted bool
+
+	// Hooks (React-style positional)
+	hookIdx   int         // current hook call index (reset each render)
+	hookSlots []*hookSlot // ordered hook slots
 }
 
 // NewNode creates a new Node with the given type.

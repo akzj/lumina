@@ -490,6 +490,13 @@ func (fw *testFramework) luaCreateApp(L *lua.State) int {
 	})
 	L.SetField(appTblIdx, "findAll")
 
+	// app:render() — trigger a RenderDirty cycle (useful after effects set state)
+	L.PushFunction(func(L *lua.State) int {
+		handle.app.engine.RenderDirty()
+		return 0
+	})
+	L.SetField(appTblIdx, "render")
+
 	// app:destroy()
 	L.PushFunction(func(L *lua.State) int {
 		if !handle.closed {
