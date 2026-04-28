@@ -236,6 +236,7 @@ func paintTextClipped(buf *CellBuffer, node *Node, clipX1, clipY1, clipX2, clipY
 
 	x := node.X
 	y := node.Y
+	rightEdge := node.X + node.W
 	for _, ch := range node.Content {
 		if ch == '\n' {
 			y++
@@ -243,7 +244,15 @@ func paintTextClipped(buf *CellBuffer, node *Node, clipX1, clipY1, clipX2, clipY
 			continue
 		}
 		w := runeWidth(ch)
-		if x+w-1 < node.X+node.W && y < node.Y+node.H {
+		// Wrap to next line if character doesn't fit
+		if x+w > rightEdge {
+			y++
+			x = node.X
+		}
+		if y >= node.Y+node.H {
+			break
+		}
+		if x+w-1 < rightEdge {
 			if y >= clipY1 && y < clipY2 && x >= clipX1 && x < clipX2 {
 				bg := node.Style.Background
 				if bg == "" {
@@ -276,6 +285,7 @@ func paintText(buf *CellBuffer, node *Node) {
 
 	x := node.X
 	y := node.Y
+	rightEdge := node.X + node.W
 	for _, ch := range node.Content {
 		if ch == '\n' {
 			y++
@@ -283,7 +293,15 @@ func paintText(buf *CellBuffer, node *Node) {
 			continue
 		}
 		w := runeWidth(ch)
-		if x+w-1 < node.X+node.W && y < node.Y+node.H {
+		// Wrap to next line if character doesn't fit
+		if x+w > rightEdge {
+			y++
+			x = node.X
+		}
+		if y >= node.Y+node.H {
+			break
+		}
+		if x+w-1 < rightEdge {
 			bg := node.Style.Background
 			if bg == "" {
 				// Inherit background from existing cell (parent painted it)
@@ -293,7 +311,7 @@ func paintText(buf *CellBuffer, node *Node) {
 			buf.SetChar(x, y, ch, fg, bg, bold)
 			if w == 2 {
 				// Set padding cell for wide character
-				if x+1 < node.X+node.W {
+				if x+1 < rightEdge {
 					buf.Set(x+1, y, Cell{Wide: true, BG: bg})
 				}
 			}

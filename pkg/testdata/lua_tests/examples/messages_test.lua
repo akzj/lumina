@@ -78,4 +78,16 @@ test.describe("Messages example app", function()
     test.it("badge shows message count", function()
         test.assert.eq(app:screenContains("7"), true)
     end)
+
+    -- Test 7: Inner scroll reveals hidden content in long messages
+    test.it("ArrowDown scrolls inner message content to reveal end", function()
+        -- Initially "scrolling" (end of Alice's message) is NOT visible
+        test.assert.eq(app:screenContains("scrolling"), false)
+        -- Scroll inner content down several times
+        app:keyPress("ArrowDown")
+        app:keyPress("ArrowDown")
+        app:keyPress("ArrowDown")
+        -- Now the end of Alice's message should be visible
+        test.assert.eq(app:screenContains("scrolling"), true)
+    end)
 end)
