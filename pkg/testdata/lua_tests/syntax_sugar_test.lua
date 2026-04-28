@@ -11,84 +11,95 @@ test.describe("Factory __call syntax (Go widgets)", function()
         app:destroy()
     end)
 
-    test.it("Checkbox __call syntax", function()
+    test.it("Checkbox __call syntax with id", function()
         app:loadString([[
             lumina.createComponent({
                 id = "test", name = "Test",
                 render = function()
                     return lumina.createElement("vbox", {id = "root"},
-                        lumina.Checkbox { label = "Accept", checked = true, key = "cb1" }
+                        lumina.Checkbox { id = "cb", label = "Accept", checked = true, key = "cb1" }
                     )
                 end,
             })
         ]])
+        local node = app:find("cb")
+        test.assert.notNil(node)
         test.assert.eq(app:screenContains("[x]"), true)
         test.assert.eq(app:screenContains("Accept"), true)
     end)
 
-    test.it("Button __call syntax", function()
+    test.it("Button __call syntax with id", function()
         app:loadString([[
             lumina.createComponent({
                 id = "test", name = "Test",
                 render = function()
                     return lumina.createElement("vbox", {id = "root"},
-                        lumina.Button { label = "Click", key = "btn1" }
+                        lumina.Button { id = "btn", label = "Click", key = "btn1" }
                     )
                 end,
             })
         ]])
+        local node = app:find("btn")
+        test.assert.notNil(node)
         test.assert.eq(app:screenContains("Click"), true)
     end)
 
-    test.it("Switch __call syntax", function()
+    test.it("Switch __call syntax with id", function()
         app:loadString([[
             lumina.createComponent({
                 id = "test", name = "Test",
                 render = function()
                     return lumina.createElement("vbox", {id = "root"},
-                        lumina.Switch { label = "Toggle", checked = true, key = "sw1" }
+                        lumina.Switch { id = "sw", label = "Toggle", checked = true, key = "sw1" }
                     )
                 end,
             })
         ]])
+        local node = app:find("sw")
+        test.assert.notNil(node)
         test.assert.eq(app:screenContains("Toggle"), true)
     end)
 
-    test.it("Radio __call syntax", function()
+    test.it("Radio __call syntax with id", function()
         app:loadString([[
             lumina.createComponent({
                 id = "test", name = "Test",
                 render = function()
                     return lumina.createElement("vbox", {id = "root"},
-                        lumina.Radio { label = "Option", value = "opt1", checked = true, key = "rd1" }
+                        lumina.Radio { id = "rd", label = "Option", value = "opt1", checked = true, key = "rd1" }
                     )
                 end,
             })
         ]])
+        local node = app:find("rd")
+        test.assert.notNil(node)
         test.assert.eq(app:screenContains("Option"), true)
     end)
 
-    test.it("Label __call syntax", function()
+    test.it("Label __call syntax with id", function()
         app:loadString([[
             lumina.createComponent({
                 id = "test", name = "Test",
                 render = function()
                     return lumina.createElement("vbox", {id = "root"},
-                        lumina.Label { text = "Hello Label", key = "lbl1" }
+                        lumina.Label { id = "lbl", text = "Hello Label", key = "lbl1" }
                     )
                 end,
             })
         ]])
+        local node = app:find("lbl")
+        test.assert.notNil(node)
         test.assert.eq(app:screenContains("Hello Label"), true)
     end)
 
-    test.it("Select __call syntax", function()
+    test.it("Select __call syntax with id", function()
         app:loadString([[
             lumina.createComponent({
                 id = "test", name = "Test",
                 render = function()
                     return lumina.createElement("vbox", {id = "root"},
                         lumina.Select {
+                            id = "sel",
                             placeholder = "Pick...",
                             options = {
                                 {label = "A", value = "a"},
@@ -100,6 +111,8 @@ test.describe("Factory __call syntax (Go widgets)", function()
                 end,
             })
         ]])
+        local node = app:find("sel")
+        test.assert.notNil(node)
         test.assert.eq(app:screenContains("Pick..."), true)
     end)
 end)
@@ -115,18 +128,20 @@ test.describe("Mixed table pattern (props + children)", function()
         app:destroy()
     end)
 
-    test.it("multiple widgets in vbox", function()
+    test.it("multiple widgets in vbox with id", function()
         app:loadString([[
             lumina.createComponent({
                 id = "test", name = "Test",
                 render = function()
                     return lumina.createElement("vbox", {id = "root"},
-                        lumina.Checkbox { label = "A", checked = true, key = "cba" },
-                        lumina.Checkbox { label = "B", checked = false, key = "cbb" }
+                        lumina.Checkbox { id = "cb1", label = "A", checked = true, key = "cba" },
+                        lumina.Checkbox { id = "cb2", label = "B", checked = false, key = "cbb" }
                     )
                 end,
             })
         ]])
+        test.assert.notNil(app:find("cb1"))
+        test.assert.notNil(app:find("cb2"))
         test.assert.eq(app:screenContains("A"), true)
         test.assert.eq(app:screenContains("B"), true)
         test.assert.eq(app:screenContains("[x]"), true)
@@ -140,6 +155,7 @@ test.describe("Mixed table pattern (props + children)", function()
                 render = function()
                     return lumina.createElement("vbox", {id = "root"},
                         lumina.createElement(lumina.Checkbox, {
+                            id = "old-cb",
                             label = "Old Syntax",
                             checked = false,
                             key = "old1",
@@ -148,6 +164,7 @@ test.describe("Mixed table pattern (props + children)", function()
                 end,
             })
         ]])
+        test.assert.notNil(app:find("old-cb"))
         test.assert.eq(app:screenContains("[ ]"), true)
         test.assert.eq(app:screenContains("Old Syntax"), true)
     end)
@@ -172,12 +189,13 @@ test.describe("require lux modules", function()
                 render = function()
                     return lumina.createElement("vbox", {id = "root",
                         style = {width = 80, height = 24}},
-                        lux.Card { title = "Hello", key = "card1" }
+                        lux.Card { id = "card", title = "Hello", key = "card1" }
                     )
                 end,
             })
         ]])
         app:render()
+        test.assert.notNil(app:find("card"))
         test.assert.eq(app:screenContains("Hello"), true)
     end)
 
@@ -189,12 +207,13 @@ test.describe("require lux modules", function()
                 render = function()
                     return lumina.createElement("vbox", {id = "root",
                         style = {width = 80, height = 24}},
-                        Card { title = "Test Card", key = "c1" }
+                        Card { id = "c", title = "Test Card", key = "c1" }
                     )
                 end,
             })
         ]])
         app:render()
+        test.assert.notNil(app:find("c"))
         test.assert.eq(app:screenContains("Test Card"), true)
     end)
 
@@ -206,12 +225,13 @@ test.describe("require lux modules", function()
                 render = function()
                     return lumina.createElement("vbox", {id = "root",
                         style = {width = 80, height = 24}},
-                        Badge { label = "New", variant = "success", key = "b1" }
+                        Badge { id = "b", label = "New", variant = "success", key = "b1" }
                     )
                 end,
             })
         ]])
         app:render()
+        test.assert.notNil(app:find("b"))
         test.assert.eq(app:screenContains("New"), true)
     end)
 
@@ -223,12 +243,13 @@ test.describe("require lux modules", function()
                 render = function()
                     return lumina.createElement("vbox", {id = "root",
                         style = {width = 80, height = 24}},
-                        Divider { char = "=", width = 10, key = "div1" }
+                        Divider { id = "div", char = "=", width = 10, key = "div1" }
                     )
                 end,
             })
         ]])
         app:render()
+        test.assert.notNil(app:find("div"))
         test.assert.eq(app:screenContains("=========="), true)
     end)
 
@@ -240,12 +261,13 @@ test.describe("require lux modules", function()
                 render = function()
                     return lumina.createElement("vbox", {id = "root",
                         style = {width = 80, height = 24}},
-                        Progress { value = 50, key = "pg1" }
+                        Progress { id = "pg", value = 50, key = "pg1" }
                     )
                 end,
             })
         ]])
         app:render()
+        test.assert.notNil(app:find("pg"))
         test.assert.eq(app:screenContains("50%"), true)
     end)
 end)
@@ -331,7 +353,7 @@ test.describe("Nested lux composition", function()
                 render = function()
                     return lumina.createElement("vbox", {id = "root",
                         style = {width = 80, height = 24}},
-                        Card { title = "Status", key = "card1",
+                        Card { id = "card", title = "Status", key = "card1",
                             Badge { label = "Active", variant = "success", key = "badge1" },
                         }
                     )
@@ -339,6 +361,7 @@ test.describe("Nested lux composition", function()
             })
         ]])
         app:render()
+        test.assert.notNil(app:find("card"))
         test.assert.eq(app:screenContains("Status"), true)
     end)
 end)
