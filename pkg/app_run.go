@@ -280,6 +280,16 @@ func (a *App) handleInputEvent(ie InputEvent) {
 			Key:  key,
 		})
 
+		// Re-output screen buffer after character input to clear IME artifacts.
+		// When a CJK IME is active, the terminal writes composition characters
+		// at the parked cursor position. We overwrite them by re-flushing the
+		// existing screen buffer (no component re-render needed).
+		if ie.Type == "keydown" && ie.Char != "" {
+			screen := a.engine.ToBuffer()
+			_ = a.adapter.WriteFull(screen)
+			_ = a.adapter.Flush()
+		}
+
 	case "mousedown", "mouseup", "mousemove":
 		a.HandleEvent(&event.Event{
 			Type: ie.Type,
