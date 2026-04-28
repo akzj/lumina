@@ -188,6 +188,9 @@ func (e *Engine) RenderDirty() {
 		e.tracker.Record(perf.V2PaintClearCells, stats.ClearCount)
 		e.tracker.Record(perf.V2DirtyRectArea, stats.DirtyW*stats.DirtyH)
 	}
+
+	// 7. Fire pending useEffect callbacks (after paint, like React)
+	e.firePendingEffects()
 }
 
 // RenderAll does a full render of everything (initial mount).
@@ -225,6 +228,9 @@ func (e *Engine) RenderAll() {
 		e.tracker.Record(perf.V2PaintClearCells, stats.ClearCount)
 		e.tracker.Record(perf.V2DirtyRectArea, stats.DirtyW*stats.DirtyH)
 	}
+
+	// Fire pending useEffect callbacks (after paint, like React)
+	e.firePendingEffects()
 }
 
 // renderComponent calls the Lua render function and reconciles the result.
@@ -241,6 +247,9 @@ func (e *Engine) renderComponent(comp *Component) {
 	// Set current component (for hooks like useState)
 	e.currentComp = comp
 	defer func() { e.currentComp = nil }()
+
+	// Reset hook index for this render cycle
+	comp.hookIdx = 0
 
 	// Push render function from registry
 	L.RawGetI(lua.RegistryIndex, comp.RenderFn)
@@ -595,6 +604,8 @@ func (e *Engine) cleanupComponentTree(comp *Component) {
 		delete(e.components, child.ID)
 		e.cleanupComponentTree(child)
 	}
+	// Cleanup hook refs (effects, memos, refs) — runs effect cleanups
+	e.cleanupComponentHooks(comp)
 	// Unref the component's render function
 	if comp.RenderFn != 0 {
 		e.L.Unref(lua.RegistryIndex, int(comp.RenderFn))
@@ -715,6 +726,22 @@ func (e *Engine) RegisterLuaAPI() {
 	// lumina.useState(key, initial) → value, setter
 	L.PushFunction(e.luaUseState)
 	L.SetField(tblIdx, "useState")
+
+	// lumina.useEffect(callback, deps?)
+	L.PushFunction(e.luaUseEffect)
+	L.SetField(tblIdx, "useEffect")
+
+	// lumina.useRef(initialValue?)
+	L.PushFunction(e.luaUseRef)
+	L.SetField(tblIdx, "useRef")
+
+	// lumina.useMemo(factory, deps)
+	L.PushFunction(e.luaUseMemo)
+	L.SetField(tblIdx, "useMemo")
+
+	// lumina.useCallback(fn, deps)
+	L.PushFunction(e.luaUseCallback)
+	L.SetField(tblIdx, "useCallback")
 
 	L.SetGlobal("lumina")
 }
