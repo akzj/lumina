@@ -15,6 +15,7 @@ import (
 	"github.com/akzj/lumina/pkg/perf"
 	"github.com/akzj/lumina/pkg/render"
 	"github.com/akzj/lumina/pkg/router"
+	"github.com/akzj/lumina/pkg/widget"
 )
 
 // App is the composition root — ties all v2 modules together.
@@ -48,6 +49,9 @@ func NewApp(L *lua.State, w, h int, adapter output.Adapter) *App {
 	t := perf.NewTracker(60)
 
 	eng := render.NewEngine(L, w, h)
+	for _, wgt := range widget.All() {
+		eng.RegisterWidget(wgt)
+	}
 	eng.RegisterLuaAPI()
 	eng.SetTracker(t)
 

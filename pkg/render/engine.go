@@ -9,6 +9,15 @@ import (
 	"github.com/akzj/lumina/pkg/perf"
 )
 
+// WidgetDef is the interface for Go-native widgets.
+// Implemented by widget.Widget (in pkg/widget) to avoid import cycles.
+type WidgetDef interface {
+	GetName() string
+	GetNewState() any
+	DoRender(props map[string]any, state any) any   // returns *Node
+	DoOnEvent(props map[string]any, state any, eventType, key string, x, y int) bool
+}
+
 // Engine is the new render engine that manages persistent RenderNode trees.
 // It replaces the VNode-based rendering pipeline with direct Lua→Descriptor→Reconcile.
 type Engine struct {
@@ -42,6 +51,12 @@ type Engine struct {
 
 	// Render flag: true when any component is dirty or any node needs layout/paint
 	needsRender bool
+
+	// Go widget registry: name → widget definition
+	widgets map[string]WidgetDef
+
+	// Go widget state: component.ID → widget state
+	widgetStates map[string]any
 }
 
 // SetTracker sets the performance tracker for recording V2 engine metrics.
@@ -76,13 +91,26 @@ func (e *Engine) drainPendingUnrefs() {
 // NewEngine creates a new render engine.
 func NewEngine(L *lua.State, width, height int) *Engine {
 	return &Engine{
-		L:          L,
-		components: make(map[string]*Component),
-		factories:  make(map[string]int64),
-		width:      width,
-		height:     height,
-		buffer:     NewCellBuffer(width, height),
+		L:            L,
+		components:   make(map[string]*Component),
+		factories:    make(map[string]int64),
+		width:        width,
+		height:       height,
+		buffer:       NewCellBuffer(width, height),
+		widgets:      make(map[string]WidgetDef),
+		widgetStates: make(map[string]any),
 	}
+}
+
+// goWidgetSentinel is stored in e.factories for Go widgets (not a real Lua ref).
+const goWidgetSentinel LuaRef = -999
+
+// RegisterWidget registers a Go widget as a component factory.
+// It becomes available in Lua as lumina.<Name> (e.g., lumina.Button).
+func (e *Engine) RegisterWidget(w WidgetDef) {
+	name := w.GetName()
+	e.factories[name] = goWidgetSentinel
+	e.widgets[name] = w
 }
 
 // Buffer returns the engine's cell buffer.
@@ -239,6 +267,12 @@ func (e *Engine) RenderAll() {
 
 // renderComponent calls the Lua render function and reconciles the result.
 func (e *Engine) renderComponent(comp *Component) {
+	// Check if this is a Go widget
+	if w, ok := e.widgets[comp.Type]; ok {
+		e.renderGoWidget(comp, w)
+		return
+	}
+
 	L := e.L
 
 	// Stop GC during render
@@ -309,6 +343,72 @@ func (e *Engine) renderComponent(comp *Component) {
 
 	comp.Dirty = false
 	comp.Mounted = true
+}
+
+// renderGoWidget renders a component backed by a Go widget.
+// It calls Widget.Render to get a *Node tree, then replaces the component's RootNode.
+func (e *Engine) renderGoWidget(comp *Component, w WidgetDef) {
+	// Get or create widget state
+	state, ok := e.widgetStates[comp.ID]
+	if !ok {
+		state = w.GetNewState()
+		e.widgetStates[comp.ID] = state
+	}
+
+	// Call Go render function (returns *Node as any)
+	result := w.DoRender(comp.Props, state)
+	if result == nil {
+		comp.Dirty = false
+		return
+	}
+	newRoot, ok := result.(*Node)
+	if !ok {
+		comp.Dirty = false
+		return
+	}
+
+	if comp.RootNode == nil {
+		// First mount
+		comp.RootNode = newRoot
+		comp.RootNode.Component = comp
+		comp.RootNode.LayoutDirty = true
+		comp.RootNode.PaintDirty = true
+	} else {
+		// Update: replace the root node tree entirely
+		parent := comp.RootNode.Parent
+		markRemovedRecursive(comp.RootNode)
+		newRoot.Parent = parent
+		newRoot.Component = comp
+		newRoot.LayoutDirty = true
+		newRoot.PaintDirty = true
+		comp.RootNode = newRoot
+	}
+
+	comp.Dirty = false
+	comp.Mounted = true
+}
+
+// copyWidgetEventHandlers copies Lua event refs from the component placeholder
+// node to the widget's rendered root node. This allows Lua callbacks (onClick,
+// etc.) passed as props to fire through the normal event bubbling system.
+func copyWidgetEventHandlers(placeholder *Node, root *Node) {
+	if placeholder == nil || root == nil {
+		return
+	}
+	root.OnClick = placeholder.OnClick
+	root.OnMouseDown = placeholder.OnMouseDown
+	root.OnMouseUp = placeholder.OnMouseUp
+	root.OnFocus = placeholder.OnFocus
+	root.OnBlur = placeholder.OnBlur
+	root.OnKeyDown = placeholder.OnKeyDown
+	root.OnChange = placeholder.OnChange
+	root.OnScroll = placeholder.OnScroll
+	root.OnSubmit = placeholder.OnSubmit
+	root.OnOutsideClick = placeholder.OnOutsideClick
+	// OnMouseEnter/Leave are handled by Widget.OnEvent for hover state,
+	// but also copy them for Lua callbacks
+	root.OnMouseEnter = placeholder.OnMouseEnter
+	root.OnMouseLeave = placeholder.OnMouseLeave
 }
 
 // readDescriptor reads a Lua table at stack index and converts to Descriptor.
@@ -807,6 +907,10 @@ func (e *Engine) graftWalk(node *Node) {
 					child.LayoutDirty = true
 					child.PaintDirty = true
 				}
+				// For Go widgets, copy event handlers from placeholder to root node
+				if _, isWidget := e.widgets[comp.Type]; isWidget {
+					copyWidgetEventHandlers(child, comp.RootNode)
+				}
 			}
 		}
 		// Always recurse (component children may contain nested components)
@@ -879,6 +983,17 @@ func (e *Engine) RegisterLuaAPI() {
 	// lumina.readFile(path) — returns Future
 	L.PushFunction(e.luaReadFile)
 	L.SetField(tblIdx, "readFile")
+
+	// Register Go widgets as Lua-accessible factories (e.g., lumina.Button)
+	for name := range e.widgets {
+		L.NewTable()
+		factoryIdx := L.AbsIndex(-1)
+		L.PushBoolean(true)
+		L.SetField(factoryIdx, "_isFactory")
+		L.PushString(name)
+		L.SetField(factoryIdx, "_name")
+		L.SetField(tblIdx, name) // lumina.Button = {_isFactory=true, _name="Button"}
+	}
 
 	L.SetGlobal("lumina")
 }
@@ -1021,6 +1136,37 @@ func (e *Engine) luaCreateComponentElement(L *lua.State, nArgs int) int {
 			L.Pop(1)
 			L.PushString(s)
 			L.SetField(resultIdx, "id")
+		} else {
+			L.Pop(1)
+		}
+
+		// Copy event handler functions to top level so readDescriptor picks them up.
+		// This allows onClick etc. to be set on the placeholder Node and fire via
+		// the normal event bubbling system.
+		eventKeys := []string{
+			"onClick", "onMouseEnter", "onMouseLeave", "onKeyDown",
+			"onChange", "onScroll", "onMouseDown", "onMouseUp",
+			"onFocus", "onBlur", "onSubmit", "onOutsideClick",
+		}
+		for _, key := range eventKeys {
+			L.GetField(2, key)
+			if L.IsFunction(-1) {
+				L.SetField(resultIdx, key) // pops the function
+			} else {
+				L.Pop(1)
+			}
+		}
+
+		// Copy disabled/focusable fields if present
+		L.GetField(2, "disabled")
+		if L.IsBoolean(-1) {
+			L.SetField(resultIdx, "disabled")
+		} else {
+			L.Pop(1)
+		}
+		L.GetField(2, "focusable")
+		if L.IsBoolean(-1) {
+			L.SetField(resultIdx, "focusable")
 		} else {
 			L.Pop(1)
 		}

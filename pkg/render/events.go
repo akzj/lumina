@@ -135,6 +135,7 @@ func (e *Engine) HandleMouseMove(x, y int) {
 
 	// Fire onMouseLeave on old node (bubble up to find handler)
 	if old != nil && !old.Removed {
+		e.dispatchWidgetEvent(old, "mouseleave", "", x, y)
 		for n := old; n != nil; n = n.Parent {
 			if n.OnMouseLeave != 0 {
 				e.callLuaRef(n.OnMouseLeave, x, y)
@@ -145,6 +146,7 @@ func (e *Engine) HandleMouseMove(x, y int) {
 
 	// Fire onMouseEnter on new node (bubble up to find handler)
 	if target != nil {
+		e.dispatchWidgetEvent(target, "mouseenter", "", x, y)
 		for n := target; n != nil; n = n.Parent {
 			if n.OnMouseEnter != 0 {
 				e.callLuaRef(n.OnMouseEnter, x, y)
@@ -194,6 +196,11 @@ func (e *Engine) HandleClick(x, y int) {
 		e.setFocus(nil)
 	}
 
+	// Dispatch widget click event
+	if hitNode != nil {
+		e.dispatchWidgetEvent(hitNode, "click", "", x, y)
+	}
+
 	// Dispatch onClick (bubble up from hit node, skip disabled)
 	target := HitTestWithHandler(e.root.RootNode, x, y, "click")
 	if target != nil && target.OnClick != 0 && !target.Disabled {
@@ -207,6 +214,11 @@ func (e *Engine) HandleMouseDown(x, y int) {
 	if e.root == nil || e.root.RootNode == nil {
 		return
 	}
+	// Dispatch widget mousedown event
+	hitNode := HitTest(e.root.RootNode, x, y)
+	if hitNode != nil {
+		e.dispatchWidgetEvent(hitNode, "mousedown", "", x, y)
+	}
 	target := HitTestWithHandler(e.root.RootNode, x, y, "mousedown")
 	if target != nil && target.OnMouseDown != 0 && !target.Disabled {
 		e.callLuaRef(target.OnMouseDown, x, y)
@@ -218,6 +230,11 @@ func (e *Engine) HandleMouseDown(x, y int) {
 func (e *Engine) HandleMouseUp(x, y int) {
 	if e.root == nil || e.root.RootNode == nil {
 		return
+	}
+	// Dispatch widget mouseup event
+	hitNode := HitTest(e.root.RootNode, x, y)
+	if hitNode != nil {
+		e.dispatchWidgetEvent(hitNode, "mouseup", "", x, y)
 	}
 	target := HitTestWithHandler(e.root.RootNode, x, y, "mouseup")
 	if target != nil && target.OnMouseUp != 0 && !target.Disabled {
@@ -422,4 +439,36 @@ func (e *Engine) callLuaRefSimple(ref LuaRef) {
 	if status := L.PCall(0, 0, 0); status != lua.OK {
 		L.Pop(1) // pop error message to prevent stack pollution
 	}
+}
+
+// dispatchWidgetEvent walks up from node to find an owning Go widget component,
+// then calls WidgetDef.DoOnEvent. If it returns true (state changed), the
+// component is marked dirty for re-render.
+func (e *Engine) dispatchWidgetEvent(node *Node, eventType, key string, x, y int) {
+	comp := findOwnerComponent(node)
+	if comp == nil {
+		return
+	}
+	w, ok := e.widgets[comp.Type]
+	if !ok {
+		return
+	}
+	state, ok := e.widgetStates[comp.ID]
+	if !ok {
+		return
+	}
+	if w.DoOnEvent(comp.Props, state, eventType, key, x, y) {
+		comp.Dirty = true
+		e.needsRender = true
+	}
+}
+
+// findOwnerComponent walks up the node tree to find the nearest Component.
+func findOwnerComponent(node *Node) *Component {
+	for n := node; n != nil; n = n.Parent {
+		if n.Component != nil {
+			return n.Component
+		}
+	}
+	return nil
 }
