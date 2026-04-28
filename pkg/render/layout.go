@@ -371,6 +371,22 @@ func layoutVBox(node *Node, contentX, contentY, contentW, contentH int, style St
 				children[i].finalH = clamp(cs.Height, cs.MinHeight, cs.MaxHeight) + marginV
 			} else if cs.MinHeight > 0 {
 				children[i].finalH = cs.MinHeight + marginV
+			} else if child.Type == "component" && len(child.Children) > 0 {
+				// Component placeholder with no explicit height: use the grafted
+				// child's height if it has one. This lets defineComponent children
+				// inside scroll containers size correctly based on their rendered content.
+				graftedH := 0
+				for _, gc := range child.Children {
+					if gc.Style.Height > 0 {
+						graftedH = gc.Style.Height
+						break
+					}
+				}
+				if graftedH > 0 {
+					children[i].finalH = graftedH + marginV
+				} else {
+					children[i].finalH = 1 + marginV
+				}
 			} else {
 				// Natural height: 1 for all types (flex children get 1, not distributed)
 				children[i].finalH = 1 + marginV

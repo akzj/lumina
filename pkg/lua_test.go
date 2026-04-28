@@ -10,6 +10,10 @@ func TestLuaTestFramework(t *testing.T) {
 	}
 	for _, r := range results {
 		t.Run(r.Suite+"/"+r.Name, func(t *testing.T) {
+			// Output any test logs (visible with -v or on failure)
+			for _, log := range r.Logs {
+				t.Log(log)
+			}
 			if !r.Passed {
 				t.Errorf("%s", r.Error)
 			} else {
