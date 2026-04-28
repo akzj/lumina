@@ -38,6 +38,7 @@ func (e *Engine) FocusNext() {
 		old.PaintDirty = true
 	}
 	e.focusedNode.PaintDirty = true
+	e.needsRender = true
 }
 
 // FocusAutoFocus focuses the first node with AutoFocus=true.
@@ -78,6 +79,7 @@ func (e *Engine) HandleInputKeyDown(key string) bool {
 			node.Content = string(runes)
 			node.CursorPos--
 			node.PaintDirty = true
+			e.needsRender = true
 			e.fireOnChange(node)
 		}
 		return true
@@ -93,6 +95,7 @@ func (e *Engine) HandleInputKeyDown(key string) bool {
 			node.Content = string(runes)
 			node.CursorPos++
 			node.PaintDirty = true
+			e.needsRender = true
 			e.fireOnChange(node)
 			return true
 		}
@@ -105,6 +108,7 @@ func (e *Engine) HandleInputKeyDown(key string) bool {
 		if node.CursorPos > 0 {
 			node.CursorPos--
 			node.PaintDirty = true
+			e.needsRender = true
 		}
 		return true
 
@@ -113,6 +117,7 @@ func (e *Engine) HandleInputKeyDown(key string) bool {
 		if node.CursorPos < len(runes) {
 			node.CursorPos++
 			node.PaintDirty = true
+			e.needsRender = true
 		}
 		return true
 
@@ -142,6 +147,7 @@ func (e *Engine) HandleInputKeyDown(key string) bool {
 			node.Content = string(runes)
 			node.CursorPos++
 			node.PaintDirty = true
+			e.needsRender = true
 			e.fireOnChange(node)
 			return true
 		}
@@ -174,6 +180,7 @@ func (e *Engine) markOwnerDirty(node *Node) {
 	for n := node; n != nil; n = n.Parent {
 		if n.Component != nil {
 			n.Component.Dirty = true
+			e.needsRender = true
 			return
 		}
 	}
@@ -230,6 +237,7 @@ func (e *Engine) moveCursorVertical(node *Node, direction int) {
 
 	node.CursorPos = newPos
 	node.PaintDirty = true
+	e.needsRender = true
 }
 
 // collectFocusable walks the tree and collects all focusable nodes (input/textarea).

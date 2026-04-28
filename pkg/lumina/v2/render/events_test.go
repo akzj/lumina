@@ -403,6 +403,7 @@ func TestEngine_StaleHoveredNode_AfterRemoval(t *testing.T) {
 		t.Fatal(err)
 	}
 	e.GetComponent("stale").Dirty = true
+	e.MarkNeedsRender()
 	e.RenderDirty()
 
 	// Now hoveredNode points to a removed node. Moving the mouse should not panic.
@@ -454,6 +455,7 @@ func TestEngine_StaleFocusedNode_AfterRemoval(t *testing.T) {
 		t.Fatal(err)
 	}
 	e.GetComponent("stale_focus").Dirty = true
+	e.MarkNeedsRender()
 	e.RenderDirty()
 
 	// Now try to type — should not panic, focused node should be cleared

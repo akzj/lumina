@@ -3,6 +3,7 @@ package v2
 import (
 	"fmt"
 	"runtime"
+	"time"
 
 	"github.com/akzj/lumina/pkg/lumina/v2/devtools"
 	"github.com/akzj/lumina/pkg/lumina/v2/perf"
@@ -34,14 +35,43 @@ func (a *App) refreshDevToolsV2() {
 }
 
 // tickDevToolsV2 is called every frame tick when V2 engine is active.
-// It updates FPS and repaints the devtools overlay if visible.
+// It updates FPS and repaints the devtools overlay if visible (throttled to ~3Hz).
 func (a *App) tickDevToolsV2() {
 	a.devtools.TickFPS()
 	if !a.devtools.Visible {
 		return
 	}
+
+	// Only refresh devtools overlay every 300ms to avoid 60Hz full-screen writes
+	now := time.Now()
+	if now.Sub(a.devtoolsLastRefresh) < 300*time.Millisecond {
+		return
+	}
+	a.devtoolsLastRefresh = now
+
+	a.updateDevToolsComponents()
 	a.devtools.SnapshotPerf()
 	a.paintDevToolsV2()
+}
+
+// updateDevToolsComponents feeds current component data into the devtools panel.
+func (a *App) updateDevToolsComponents() {
+	comps := a.engine.AllComponents()
+	infos := make([]devtools.ComponentInfo, 0, len(comps))
+	for id, comp := range comps {
+		info := devtools.ComponentInfo{
+			ID:   id,
+			Name: comp.Name,
+		}
+		if comp.RootNode != nil {
+			info.X = comp.RootNode.X
+			info.Y = comp.RootNode.Y
+			info.W = comp.RootNode.W
+			info.H = comp.RootNode.H
+		}
+		infos = append(infos, info)
+	}
+	a.devtools.UpdateComponents(infos)
 }
 
 // paintDevToolsV2 paints the devtools panel directly onto the engine's CellBuffer.

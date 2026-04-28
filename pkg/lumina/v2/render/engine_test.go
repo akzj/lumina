@@ -429,6 +429,7 @@ func TestEngine_Reconcile_ChildAddRemove(t *testing.T) {
 		t.Fatal(err)
 	}
 	comp.Dirty = true
+	e.MarkNeedsRender()
 	e.RenderDirty()
 
 	if len(comp.RootNode.Children) != 2 {
@@ -444,6 +445,7 @@ func TestEngine_Reconcile_ChildAddRemove(t *testing.T) {
 		t.Fatal(err)
 	}
 	comp.Dirty = true
+	e.MarkNeedsRender()
 	e.RenderDirty()
 
 	if len(comp.RootNode.Children) != 1 {
@@ -503,6 +505,7 @@ func TestEngine_ComponentCleanup_RemovedFromMap(t *testing.T) {
 		t.Fatal(err)
 	}
 	e.GetComponent("root").Dirty = true
+	e.MarkNeedsRender()
 	e.RenderDirty()
 
 	// Should have only root component = 1 total
@@ -598,6 +601,7 @@ func TestEngine_UseState_Persists(t *testing.T) {
 
 	// Re-render again without changing state — value should persist
 	comp.Dirty = true
+	e.MarkNeedsRender()
 	e.RenderDirty()
 
 	if comp.RootNode.Content != "200" {
@@ -1050,6 +1054,7 @@ func TestReconcileChildComponents_SurvivesParentRerender(t *testing.T) {
 
 	// Force parent re-render
 	root.Dirty = true
+	e.MarkNeedsRender()
 	e.RenderDirty()
 
 	// Child count should still be 2 (not 4 due to duplicates)
@@ -1070,5 +1075,140 @@ func TestReconcileChildComponents_SurvivesParentRerender(t *testing.T) {
 	}
 	if childAAfter.State["v"] != int64(42) {
 		t.Errorf("child 'root:a' state lost: v=%v, want 42", childAAfter.State["v"])
+	}
+}
+
+// --- NeedsRender flag tests ---
+
+func TestEngine_NeedsRender_FalseWhenIdle(t *testing.T) {
+	e, L := newTestEngine(t)
+
+	err := L.DoString(`
+		lumina.createComponent({
+			id = "idle",
+			name = "Idle",
+			render = function(props)
+				return lumina.createElement("text", {}, "hello")
+			end,
+		})
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	e.RenderAll()
+
+	// After RenderAll, needsRender should be false
+	if e.NeedsRender() {
+		t.Error("expected NeedsRender=false after RenderAll")
+	}
+
+	// RenderDirty should be a no-op
+	e.RenderDirty()
+
+	if e.NeedsRender() {
+		t.Error("expected NeedsRender=false after idle RenderDirty")
+	}
+
+	// Verify no paint work was done
+	stats := e.Buffer().Stats()
+	if stats.WriteCount != 0 {
+		t.Errorf("expected 0 writes on idle frame, got %d", stats.WriteCount)
+	}
+	if stats.ClearCount != 0 {
+		t.Errorf("expected 0 clears on idle frame, got %d", stats.ClearCount)
+	}
+}
+
+func TestEngine_NeedsRender_TrueAfterSetState(t *testing.T) {
+	e, L := newTestEngine(t)
+
+	err := L.DoString(`
+		lumina.createComponent({
+			id = "state_test",
+			name = "StateTest",
+			render = function(props)
+				local val = lumina.useState("x", 0)
+				return lumina.createElement("text", {}, tostring(val))
+			end,
+		})
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	e.RenderAll()
+	e.RenderDirty() // clear any residual
+
+	if e.NeedsRender() {
+		t.Error("expected NeedsRender=false before SetState")
+	}
+
+	// SetState should mark needsRender
+	e.SetState("state_test", "x", int64(42))
+	if !e.NeedsRender() {
+		t.Error("expected NeedsRender=true after SetState")
+	}
+
+	// RenderDirty should process the change and clear the flag
+	e.RenderDirty()
+	if e.NeedsRender() {
+		t.Error("expected NeedsRender=false after RenderDirty processed the change")
+	}
+}
+
+func TestEngine_NeedsRender_TrueAfterResize(t *testing.T) {
+	e, L := newTestEngine(t)
+
+	err := L.DoString(`
+		lumina.createComponent({
+			id = "resize_test",
+			name = "ResizeTest",
+			render = function(props)
+				return lumina.createElement("box", {})
+			end,
+		})
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	e.RenderAll()
+	e.RenderDirty()
+
+	if e.NeedsRender() {
+		t.Error("expected NeedsRender=false before Resize")
+	}
+
+	e.Resize(100, 50)
+	if !e.NeedsRender() {
+		t.Error("expected NeedsRender=true after Resize")
+	}
+}
+
+func TestEngine_NeedsRender_SetStateSameValue_NoRender(t *testing.T) {
+	e, L := newTestEngine(t)
+
+	err := L.DoString(`
+		lumina.createComponent({
+			id = "same_val",
+			name = "SameVal",
+			render = function(props)
+				local val = lumina.useState("x", 10)
+				return lumina.createElement("text", {}, tostring(val))
+			end,
+		})
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	e.RenderAll()
+	e.RenderDirty()
+
+	// SetState with the same value should NOT mark needsRender
+	e.SetState("same_val", "x", int64(10))
+	if e.NeedsRender() {
+		t.Error("expected NeedsRender=false when SetState with same value")
 	}
 }
