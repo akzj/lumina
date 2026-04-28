@@ -31,6 +31,9 @@ lumina.createComponent({
 - **`defineComponent`** — 定义可复用子组件（工厂模式）
 - **`createElement`** — 创建 UI 元素（JSX 等价物）
 - **`useState`** — 组件状态管理（React 风格 Hook）
+- **Hooks** — `useEffect`、`useRef`、`useMemo`、`useCallback`（与 `useState` 同一套调用顺序规则）
+- **Go Widget** — `lumina.Button`、`lumina.Checkbox`、`lumina.Select` 等，由引擎随应用注册，可直接 `createElement(lumina.Button, { ... })`
+- **Lua Lux** — `require("lux")` 使用卡片、徽章、分割线等组合组件；主题可通过 `lumina.getTheme()` 或 `require("theme").current()` 读取
 
 ### 布局
 - **Flexbox** — `vbox`（垂直）/ `hbox`（水平）
@@ -55,8 +58,9 @@ lumina.createComponent({
 
 ### 运行时
 - **60fps 事件循环** — 定时渲染脏组件
-- **热加载** — 文件变化自动重载 Lua 脚本
+- **热加载** — 文件变化自动重载 Lua 脚本（`lumina --watch script.lua`）
 - **定时器** — `setInterval`, `setTimeout`, `clearInterval`, `clearTimeout`
+- **异步** — `lumina.spawn`、`lumina.sleep`、`lumina.readFile`、`lumina.exec`；在 spawn 协程内用 `require("async").await(...)` 等待 Future（示例见 `pkg/testdata/lua_tests/async_test.lua`）
 - **开发者工具** — F12 切换，显示组件树和性能指标
 
 ---
@@ -83,7 +87,20 @@ lumina examples/stress_test.lua
 
 # 系统仪表盘
 lumina examples/dashboard.lua
+
+# Widget + Lux 组件展示
+lumina examples/components_showcase.lua
 ```
+
+### CLI 常用参数
+
+```text
+lumina [--web :8080] [--mcp :8088] [--watch] <script.lua>
+```
+
+- **`--watch`** — 监听脚本所在目录，保存后热重载
+- **`--web :端口`** — WebSocket 输出到浏览器（终端里会打印本地 URL）
+- **`--mcp :端口`** — 并行启动 MCP HTTP 服务（便于 IDE / 工具对接）
 
 ### 退出
 
@@ -139,8 +156,15 @@ lumina.createElement("box", {style = {background = "#1E1E2E"}},
     lumina.createElement("text", {foreground = "#CDD6F4"}, "Hello")
 )
 
--- 子组件
+-- 子组件（工厂来自 defineComponent）
 lumina.createElement(MyComponent, {key = "unique-key", someProp = "value"})
+
+-- 子组件 + 子节点：第 3 个参数起的子节点会进入 props.children（数组），
+-- 便于在 defineComponent 里用 table.unpack(props.children or {}) 组合布局。
+lumina.createElement(MyComponent, {title = "Panel"},
+    lumina.createElement("text", {}, "Line A"),
+    lumina.createElement("text", {}, "Line B")
+)
 ```
 
 **元素类型**:
@@ -153,6 +177,38 @@ lumina.createElement(MyComponent, {key = "unique-key", someProp = "value"})
 | `"text"` | 文本节点 |
 | `"input"` | 单行文本输入 |
 | `"textarea"` | 多行文本输入 |
+
+### Go 内置 Widget（`lumina.*`）
+
+引擎启动时会注册一组高性能 Widget，在 Lua 中与基元一样通过 `createElement` 使用，例如：
+
+```lua
+lumina.createElement(lumina.Button, {
+    label = "OK",
+    variant = "primary",
+    onClick = function() end,
+})
+
+lumina.createElement(lumina.Checkbox, {
+    checked = true,
+    label = "Remember me",
+    onChange = function(checked) end,
+})
+```
+
+完整列表与交互说明见 [docs/DESIGN-widgets.md](docs/DESIGN-widgets.md)。
+
+### Lua Lux 组件库（`require("lux")`）
+
+仓库内嵌了 `lux` 模块（无需把 `lua/` 拷到运行目录），典型用法：
+
+```lua
+local lux = require("lux")
+
+lumina.createElement(lux.Card, {title = "Hello"},
+    lumina.createElement("text", {}, "Content")
+)
+```
 
 ### lumina.useState(key, defaultValue)
 
@@ -284,9 +340,9 @@ lumina.createElement("box", {
 ## 🏗️ 架构概览
 
 ```
-Lua 用户代码
-  ↓ createComponent / defineComponent / createElement / useState
-Engine (Go)
+Lua 用户代码（含 require("lux") / require("theme")）
+  ↓ createComponent / defineComponent / createElement / hooks
+Engine (Go) + Widget（pkg/widget）
   ↓ renderInOrder()     — 调用脏组件的 Lua renderFn
   ↓ readDescriptor()    — Lua 表 → Descriptor
   ↓ Reconcile()         — Descriptor vs Node 树，就地 patch
@@ -296,7 +352,7 @@ Engine (Go)
   ↓ ToBuffer()          — CellBuffer → Buffer
 Output Adapter
   ↓ WriteDirty(buf, dirtyRects) — 只输出变化区域
-终端
+终端 / WebSocket（--web）
 ```
 
 详细架构设计见 [DESIGN.md](DESIGN.md)。
@@ -319,6 +375,9 @@ go test ./pkg/ -run TestE2E
 
 # 压力测试 benchmark
 go test ./pkg/ -bench BenchmarkStress -benchtime 5s
+
+# Lua 测试框架（testdata/lua_tests 下 *_test.lua，含子目录）
+go test ./pkg/ -run TestLuaTestFramework
 ```
 
 ### 项目结构
@@ -327,6 +386,7 @@ go test ./pkg/ -bench BenchmarkStress -benchtime 5s
 cmd/lumina/           — CLI 入口
 pkg/                  — 核心框架（package v2）
   render/             — 渲染引擎（Engine, Node, Reconciler, Layout, Painter）
+  widget/             — Go 内置 Widget（Button、Checkbox、Select…）
   buffer/             — Buffer 类型
   output/             — 输出适配器（ANSI, TestAdapter）
   event/              — 事件类型
@@ -336,6 +396,8 @@ pkg/                  — 核心框架（package v2）
   router/             — 路由
   hotreload/          — 热加载
   store/              — 状态管理
+  testdata/lua_tests/ — Lua 侧单元测试脚本
+lua/                  — Lux / theme 源码（由 pkg 内嵌到运行时 require）
 examples/             — 示例 Lua 应用
 docs/                 — 文档
 ```

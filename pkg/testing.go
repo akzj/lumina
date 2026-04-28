@@ -538,6 +538,164 @@ func (fw *testFramework) luaCreateApp(L *lua.State) int {
 	})
 	L.SetField(appTblIdx, "waitAsync")
 
+	// app:screenText() → string
+	L.PushFunction(func(L *lua.State) int {
+		buf := handle.app.Screen()
+		if buf == nil {
+			L.PushString("")
+			return 1
+		}
+		var sb strings.Builder
+		sb.Grow(buf.Width()*buf.Height() + buf.Height())
+		for y := 0; y < buf.Height(); y++ {
+			for x := 0; x < buf.Width(); x++ {
+				cell := buf.Get(x, y)
+				if cell.Char == 0 {
+					sb.WriteRune(' ')
+				} else {
+					sb.WriteRune(cell.Char)
+				}
+			}
+			sb.WriteRune('\n')
+		}
+		L.PushString(sb.String())
+		return 1
+	})
+	L.SetField(appTblIdx, "screenText")
+
+	// app:screenContains(text) → bool
+	L.PushFunction(func(L *lua.State) int {
+		text := L.CheckString(2)
+		screen := handle.app.MCPGetScreenText()
+		L.PushBoolean(strings.Contains(screen, text))
+		return 1
+	})
+	L.SetField(appTblIdx, "screenContains")
+
+	// app:cellAt(x, y) → {char, fg, bg, bold, dim, underline}
+	L.PushFunction(func(L *lua.State) int {
+		x := int(L.CheckInteger(2))
+		y := int(L.CheckInteger(3))
+		buf := handle.app.Screen()
+		if buf == nil || x < 0 || y < 0 || x >= buf.Width() || y >= buf.Height() {
+			L.PushNil()
+			return 1
+		}
+		cell := buf.Get(x, y)
+		L.NewTable()
+		tbl := L.AbsIndex(-1)
+		if cell.Char == 0 {
+			L.PushString(" ")
+		} else {
+			L.PushString(string(cell.Char))
+		}
+		L.SetField(tbl, "char")
+		L.PushString(cell.Foreground)
+		L.SetField(tbl, "fg")
+		L.PushString(cell.Background)
+		L.SetField(tbl, "bg")
+		L.PushBoolean(cell.Bold)
+		L.SetField(tbl, "bold")
+		L.PushBoolean(cell.Dim)
+		L.SetField(tbl, "dim")
+		L.PushBoolean(cell.Underline)
+		L.SetField(tbl, "underline")
+		return 1
+	})
+	L.SetField(appTblIdx, "cellAt")
+
+	// app:getState(compID, key) → value
+	L.PushFunction(func(L *lua.State) int {
+		compID := L.CheckString(2)
+		key := L.CheckString(3)
+		val, err := handle.app.MCPGetState(compID, key)
+		if err != nil {
+			L.PushNil()
+			return 1
+		}
+		pushAnyToLua(L, val)
+		return 1
+	})
+	L.SetField(appTblIdx, "getState")
+
+	// app:setState(compID, key, value)
+	L.PushFunction(func(L *lua.State) int {
+		compID := L.CheckString(2)
+		key := L.CheckString(3)
+		value := L.ToAny(4)
+		handle.app.MCPSetState(compID, key, value)
+		handle.app.engine.RenderDirty()
+		return 0
+	})
+	L.SetField(appTblIdx, "setState")
+
+	// app:focusedID() → string or nil
+	L.PushFunction(func(L *lua.State) int {
+		id := handle.app.MCPGetFocusedID()
+		if id == "" {
+			L.PushNil()
+		} else {
+			L.PushString(id)
+		}
+		return 1
+	})
+	L.SetField(appTblIdx, "focusedID")
+
+	// app:type(text) — sends each character as a keyPress event
+	L.PushFunction(func(L *lua.State) int {
+		text := L.CheckString(2)
+		for _, ch := range text {
+			handle.app.engine.HandleKeyDown(string(ch))
+		}
+		handle.app.engine.RenderDirty()
+		return 0
+	})
+	L.SetField(appTblIdx, "type")
+
+	// app:snapshot() → {screen, components, focused, focusable}
+	L.PushFunction(func(L *lua.State) int {
+		L.NewTable()
+		tbl := L.AbsIndex(-1)
+
+		// screen text
+		L.PushString(handle.app.MCPGetScreenText())
+		L.SetField(tbl, "screen")
+
+		// focused ID
+		L.PushString(handle.app.MCPGetFocusedID())
+		L.SetField(tbl, "focused")
+
+		// focusable IDs
+		ids := handle.app.MCPGetFocusableIDs()
+		L.NewTable()
+		idsIdx := L.AbsIndex(-1)
+		for i, id := range ids {
+			L.PushString(id)
+			L.RawSetI(idsIdx, int64(i+1))
+		}
+		L.SetField(tbl, "focusable")
+
+		// components (basic info)
+		comps := handle.app.MCPInspectTree()
+		L.NewTable()
+		compsIdx := L.AbsIndex(-1)
+		for i, c := range comps {
+			L.NewTable()
+			cIdx := L.AbsIndex(-1)
+			L.PushString(c.ID)
+			L.SetField(cIdx, "id")
+			L.PushString(c.Name)
+			L.SetField(cIdx, "name")
+			L.PushBoolean(c.Focused)
+			L.SetField(cIdx, "focused")
+			L.RawSetI(compsIdx, int64(i+1))
+		}
+		L.SetField(tbl, "components")
+
+		return 1
+	})
+	L.SetField(appTblIdx, "snapshot")
+
 	// app:destroy()
 	L.PushFunction(func(L *lua.State) int {
 		if !handle.closed {
@@ -657,5 +815,39 @@ func pushVNodeToLua(L *lua.State, vn *render.VNode) {
 			L.RawSetI(childrenTbl, int64(i+1))
 		}
 		L.SetField(tbl, "children")
+	}
+}
+
+// pushAnyToLua converts an arbitrary Go value to a Lua value on the stack.
+func pushAnyToLua(L *lua.State, v any) {
+	switch val := v.(type) {
+	case nil:
+		L.PushNil()
+	case bool:
+		L.PushBoolean(val)
+	case int:
+		L.PushInteger(int64(val))
+	case int64:
+		L.PushInteger(val)
+	case float64:
+		L.PushNumber(val)
+	case string:
+		L.PushString(val)
+	case map[string]any:
+		L.NewTable()
+		tbl := L.AbsIndex(-1)
+		for k, inner := range val {
+			pushAnyToLua(L, inner)
+			L.SetField(tbl, k)
+		}
+	case []any:
+		L.NewTable()
+		tbl := L.AbsIndex(-1)
+		for i, inner := range val {
+			pushAnyToLua(L, inner)
+			L.RawSetI(tbl, int64(i+1))
+		}
+	default:
+		L.PushString(fmt.Sprintf("%v", val))
 	}
 }
