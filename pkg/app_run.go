@@ -3,6 +3,7 @@ package v2
 import (
 	"fmt"
 	"log"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -150,7 +151,11 @@ func (a *App) eventLoop(cfg RunConfig) error {
 	var reloadCh chan string
 	if cfg.Watch && cfg.ScriptPath != "" {
 		reloadCh = make(chan string, 1)
-		watcher := hotreload.NewWatcher([]string{cfg.ScriptPath}, 500*time.Millisecond)
+		// Watch the main script plus all .lua files in the script directory tree.
+		absScript, _ := filepath.Abs(cfg.ScriptPath)
+		scriptDir := filepath.Dir(absScript)
+		watchPaths := append([]string{cfg.ScriptPath}, collectLuaFiles(scriptDir)...)
+		watcher := hotreload.NewWatcher(watchPaths, 500*time.Millisecond)
 		watcher.SetOnChange(func(path string) {
 			select {
 			case reloadCh <- path:
@@ -204,8 +209,17 @@ func (a *App) eventLoop(cfg RunConfig) error {
 	}
 }
 
-// reloadScript performs a hot reload: re-executes the Lua script and re-renders.
+// reloadScript performs a hot reload. It tries smart module-level reload first
+// (preserves component state), falling back to full script re-execution.
 func (a *App) reloadScript(path string) {
+	// Try smart module-level reload first (preserves state).
+	if a.reloadModule(path) {
+		return
+	}
+
+	// Fallback: full script re-execution (destroys state).
+	log.Printf("[hotreload] falling back to full reload for %s", path)
+
 	// Reset timers.
 	if a.timerMgr != nil {
 		a.timerMgr.releaseAll(a.luaState)
@@ -226,7 +240,7 @@ func (a *App) reloadScript(path string) {
 	// Full re-render.
 	a.RenderAll()
 
-	log.Printf("[hotreload] reloaded %s", path)
+	log.Printf("[hotreload] full reload complete: %s", path)
 }
 
 // handleInputEvent converts a terminal InputEvent to an event.Event and
@@ -286,4 +300,20 @@ func addScriptDirToPackagePath(L *lua.State, scriptPath string) {
 	escaped := strings.ReplaceAll(dir, `\`, `\\`)
 	code := fmt.Sprintf(`package.path = "%s/?.lua;%s/?/init.lua;" .. package.path`, escaped, escaped)
 	_ = L.DoString(code)
+}
+
+// collectLuaFiles recursively finds all .lua files in a directory tree.
+// Used to populate the hot-reload watcher with all potential module files.
+func collectLuaFiles(dir string) []string {
+	var files []string
+	_ = filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil // skip errors
+		}
+		if !d.IsDir() && filepath.Ext(path) == ".lua" {
+			files = append(files, path)
+		}
+		return nil
+	})
+	return files
 }
