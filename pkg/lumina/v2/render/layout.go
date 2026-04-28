@@ -1,5 +1,7 @@
 package render
 
+import "github.com/mattn/go-runewidth"
+
 // LayoutFull computes layout for the entire Node tree.
 // Used for initial render and after structural changes.
 // The root is positioned at (x, y) with available size (w, h).
@@ -124,59 +126,9 @@ func stringWidth(s string) int {
 }
 
 // runeWidth returns the display width of a rune in terminal columns.
+// Uses go-runewidth for complete Unicode support (CJK, emoji, etc.).
 func runeWidth(r rune) int {
-	if r == 0 {
-		return 0
-	}
-	// Control characters
-	if r < 0x20 || (r >= 0x7F && r < 0xA0) {
-		return 0
-	}
-	// Combining characters (zero width)
-	if r >= 0x0300 && r <= 0x036F {
-		return 0
-	}
-	// CJK ranges (double width)
-	if r >= 0x1100 && r <= 0x115F {
-		return 2
-	}
-	if r >= 0x2E80 && r <= 0x303E {
-		return 2
-	}
-	if r >= 0x3041 && r <= 0x33BF {
-		return 2
-	}
-	if r >= 0x3400 && r <= 0x4DBF {
-		return 2
-	}
-	if r >= 0x4E00 && r <= 0xA4CF {
-		return 2
-	}
-	if r >= 0xAC00 && r <= 0xD7AF {
-		return 2
-	}
-	if r >= 0xF900 && r <= 0xFAFF {
-		return 2
-	}
-	if r >= 0xFE30 && r <= 0xFE6F {
-		return 2
-	}
-	if r >= 0xFF01 && r <= 0xFF60 {
-		return 2
-	}
-	if r >= 0xFFE0 && r <= 0xFFE6 {
-		return 2
-	}
-	if r >= 0x1F000 && r <= 0x1FFFF {
-		return 2
-	}
-	if r >= 0x20000 && r <= 0x2FFFF {
-		return 2
-	}
-	if r >= 0x30000 && r <= 0x3FFFF {
-		return 2
-	}
-	return 1
+	return runewidth.RuneWidth(r)
 }
 
 // hasBorder returns true if the style specifies a visible border.
