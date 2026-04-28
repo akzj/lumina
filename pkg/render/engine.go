@@ -1436,6 +1436,24 @@ func (e *Engine) graftWalk(node *Node) {
 		return
 	}
 
+	// Handle the case where node itself is a component placeholder
+	// (happens when root render returns a defineComponent directly)
+	if node.Type == "component" && node.Component != nil {
+		comp := node.Component
+		if comp.RootNode != nil {
+			alreadyGrafted := len(node.Children) == 1 && node.Children[0] == comp.RootNode
+			if !alreadyGrafted {
+				node.Children = []*Node{comp.RootNode}
+				comp.RootNode.Parent = node
+				node.LayoutDirty = true
+				node.PaintDirty = true
+			}
+			if _, isWidget := e.widgets[comp.Type]; isWidget {
+				copyWidgetEventHandlers(node, comp.RootNode)
+			}
+		}
+	}
+
 	for _, child := range node.Children {
 		if child.Type == "component" && child.Component != nil {
 			comp := child.Component
