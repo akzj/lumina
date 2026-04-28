@@ -18,5 +18,6 @@ func All() []*Widget {
 		Menu,
 		Dropdown,
 		Spacer,
+		Window,
 	}
 }

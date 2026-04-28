@@ -161,6 +161,30 @@ func (e *Engine) HandleMouseMove(x, y int) {
 		return
 	}
 
+	// If a widget has captured the mouse (dragging), dispatch directly to it
+	if e.capturedComp != nil {
+		w, ok := e.widgets[e.capturedComp.Type]
+		if ok {
+			state := e.widgetStates[e.capturedComp.ID]
+			evt := &WidgetEvent{Type: "mousemove", X: x, Y: y}
+			if e.capturedComp.RootNode != nil {
+				evt.WidgetX = e.capturedComp.RootNode.X
+				evt.WidgetY = e.capturedComp.RootNode.Y
+				evt.WidgetW = e.capturedComp.RootNode.W
+				evt.WidgetH = e.capturedComp.RootNode.H
+			}
+			if w.DoOnEvent(e.capturedComp.Props, state, evt) {
+				e.capturedComp.Dirty = true
+				e.needsRender = true
+			}
+			// Fire onChange if widget requested it
+			if evt.FireOnChange != nil && e.capturedComp.RootNode != nil && e.capturedComp.RootNode.OnChange != 0 {
+				e.callLuaRefWithValue(e.capturedComp.RootNode.OnChange, evt.FireOnChange)
+			}
+		}
+		return // captured widget gets ALL mouse events, skip normal dispatch
+	}
+
 	// Clear stale hovered pointer if node was removed from tree
 	if e.hoveredNode != nil && e.hoveredNode.Removed {
 		e.hoveredNode = nil
@@ -169,7 +193,11 @@ func (e *Engine) HandleMouseMove(x, y int) {
 	target, _ := e.hitTestLayers(x, y)
 
 	if target == e.hoveredNode {
-		return // same node, no change
+		// Same node — still dispatch mousemove to widget
+		if target != nil {
+			e.dispatchWidgetEvent(target, "mousemove", "", x, y)
+		}
+		return
 	}
 
 	old := e.hoveredNode
@@ -195,6 +223,8 @@ func (e *Engine) HandleMouseMove(x, y int) {
 				break
 			}
 		}
+		// Also dispatch mousemove to widget at current position
+		e.dispatchWidgetEvent(target, "mousemove", "", x, y)
 	}
 }
 
@@ -282,6 +312,32 @@ func (e *Engine) HandleMouseUp(x, y int) {
 	if len(e.layers) == 0 {
 		return
 	}
+
+	// If a widget has captured the mouse, dispatch to it and release capture
+	if e.capturedComp != nil {
+		w, ok := e.widgets[e.capturedComp.Type]
+		if ok {
+			state := e.widgetStates[e.capturedComp.ID]
+			evt := &WidgetEvent{Type: "mouseup", X: x, Y: y}
+			if e.capturedComp.RootNode != nil {
+				evt.WidgetX = e.capturedComp.RootNode.X
+				evt.WidgetY = e.capturedComp.RootNode.Y
+				evt.WidgetW = e.capturedComp.RootNode.W
+				evt.WidgetH = e.capturedComp.RootNode.H
+			}
+			if w.DoOnEvent(e.capturedComp.Props, state, evt) {
+				e.capturedComp.Dirty = true
+				e.needsRender = true
+			}
+			// Fire onChange if widget requested it
+			if evt.FireOnChange != nil && e.capturedComp.RootNode != nil && e.capturedComp.RootNode.OnChange != 0 {
+				e.callLuaRefWithValue(e.capturedComp.RootNode.OnChange, evt.FireOnChange)
+			}
+		}
+		e.capturedComp = nil // release capture
+		return
+	}
+
 	// Dispatch widget mouseup event
 	hitNode, _ := e.hitTestLayers(x, y)
 	if hitNode != nil {
@@ -540,6 +596,11 @@ func (e *Engine) dispatchWidgetEvent(node *Node, eventType, key string, x, y int
 	if w.DoOnEvent(comp.Props, state, evt) {
 		comp.Dirty = true
 		e.needsRender = true
+	}
+
+	// Mouse capture: widget requests to capture all subsequent mouse events
+	if evt.CaptureMouse {
+		e.capturedComp = comp
 	}
 
 	// Fire onChange if widget requested it
