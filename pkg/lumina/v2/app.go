@@ -172,7 +172,7 @@ func (a *App) HandleEvent(e *event.Event) {
 			a.toggleDevToolsV2()
 			return
 		}
-		// Tab switching when devtools is visible.
+		// Tab switching and Elements scroll when devtools is visible.
 		if a.devtools.Visible {
 			switch e.Key {
 			case "1":
@@ -183,6 +183,27 @@ func (a *App) HandleEvent(e *event.Event) {
 				a.devtools.SetTab(devtools.TabPerf)
 				a.refreshDevToolsV2()
 				return
+			}
+			// Elements tab scroll: arrow keys and page up/down
+			if a.devtools.ActiveTab == devtools.TabElements {
+				switch e.Key {
+				case "ArrowUp", "Up":
+					a.devtools.ScrollElements(-1)
+					a.refreshDevToolsV2()
+					return
+				case "ArrowDown", "Down":
+					a.devtools.ScrollElements(1)
+					a.refreshDevToolsV2()
+					return
+				case "PageUp":
+					a.devtools.ScrollElements(-(a.devtools.Height - 3))
+					a.refreshDevToolsV2()
+					return
+				case "PageDown":
+					a.devtools.ScrollElements(a.devtools.Height - 3)
+					a.refreshDevToolsV2()
+					return
+				}
 			}
 		}
 	}
@@ -199,6 +220,15 @@ func (a *App) HandleEvent(e *event.Event) {
 		delta := 1
 		if e.Key == "up" {
 			delta = -1
+		}
+		// If scroll is in devtools panel area, scroll the Elements tab
+		if a.devtools.Visible && a.devtools.ActiveTab == devtools.TabElements {
+			panelY := a.height - a.devtools.Height
+			if e.Y >= panelY {
+				a.devtools.ScrollElements(delta)
+				a.refreshDevToolsV2()
+				return
+			}
 		}
 		a.engine.HandleScroll(e.X, e.Y, delta)
 	}

@@ -3,7 +3,7 @@ package v2
 import (
 	"fmt"
 	"runtime"
-	"sort"
+	"strings"
 	"time"
 
 	"github.com/akzj/lumina/pkg/lumina/v2/devtools"
@@ -50,32 +50,53 @@ func (a *App) tickDevToolsV2() {
 	}
 	a.devtoolsLastRefresh = now
 
-	a.updateDevToolsComponents()
+	a.updateDevToolsElements()
 	a.devtools.SnapshotPerf()
 	a.paintDevToolsV2()
 }
 
-// updateDevToolsComponents feeds current component data into the devtools panel.
-func (a *App) updateDevToolsComponents() {
-	comps := a.engine.AllComponents()
-	infos := make([]devtools.ComponentInfo, 0, len(comps))
-	for id, comp := range comps {
-		info := devtools.ComponentInfo{
-			ID:   id,
-			Name: comp.Name,
+// updateDevToolsElements walks the engine's render node tree and builds a
+// flattened snapshot for the Elements tab (Chrome DevTools-style DOM tree).
+func (a *App) updateDevToolsElements() {
+	root := a.engine.Root()
+	if root == nil || root.RootNode == nil {
+		a.devtools.UpdateNodeTree(nil)
+		return
+	}
+
+	// Cap total nodes to avoid huge slices; depth limit keeps tree readable
+	const maxNodes = 500
+	const maxDepth = 5
+
+	var infos []devtools.NodeInfo
+	var walk func(node *render.Node, depth int)
+	walk = func(node *render.Node, depth int) {
+		if len(infos) >= maxNodes {
+			return
 		}
-		if comp.RootNode != nil {
-			info.X = comp.RootNode.X
-			info.Y = comp.RootNode.Y
-			info.W = comp.RootNode.W
-			info.H = comp.RootNode.H
+		info := devtools.NodeInfo{
+			Type:    node.Type,
+			X:       node.X,
+			Y:       node.Y,
+			W:       node.W,
+			H:       node.H,
+			BG:      node.Style.Background,
+			FG:      node.Style.Foreground,
+			Content: node.Content,
+			Depth:   depth,
 		}
 		infos = append(infos, info)
+		if depth < maxDepth {
+			for _, child := range node.Children {
+				if len(infos) >= maxNodes {
+					return
+				}
+				walk(child, depth+1)
+			}
+		}
 	}
-	sort.Slice(infos, func(i, j int) bool {
-		return infos[i].ID < infos[j].ID
-	})
-	a.devtools.UpdateComponents(infos)
+	walk(root.RootNode, 0)
+	a.devtools.UpdateNodeTree(infos)
 }
 
 // paintDevToolsV2 paints the devtools panel directly onto the engine's CellBuffer.
@@ -199,29 +220,64 @@ func paintTextLine(cb *render.CellBuffer, row, maxWidth int, text, fg, bg string
 	}
 }
 
-// paintElementsTab renders the Elements tab content.
+// paintElementsTab renders the Elements tab content as a node tree.
 func paintElementsTab(cb *render.CellBuffer, panel *devtools.Panel, startRow, width int, fgColor, bgColor, greenColor, dimColor string) int {
 	row := startRow
 
-	// Get component info from the V2 engine.
-	// For V2, we show the engine's component tree.
-	eng := panel // We don't have direct engine access here, show what panel has.
-	_ = eng
-
-	components := panel.Components()
-	if len(components) == 0 {
-		paintTextLine(cb, row, width, "  No components registered", dimColor, bgColor)
+	nodes := panel.NodeTree()
+	if len(nodes) == 0 {
+		paintTextLine(cb, row, width, "  No nodes", dimColor, bgColor)
 		row++
 		return row
 	}
 
-	for _, comp := range components {
+	scrollY := panel.ElementsScrollY()
+	visibleLines := panel.Height - 3 // tab bar + blank + margin
+	if visibleLines < 1 {
+		visibleLines = 1
+	}
+
+	// Show scroll indicator if scrolled
+	if scrollY > 0 {
+		indicator := fmt.Sprintf("  ↑ %d more above", scrollY)
+		paintTextLine(cb, row, width, indicator, dimColor, bgColor)
+		row++
+		visibleLines--
+	}
+
+	end := scrollY + visibleLines
+	if end > len(nodes) {
+		end = len(nodes)
+	}
+
+	for i := scrollY; i < end; i++ {
 		if row >= cb.Height() {
 			break
 		}
-		header := fmt.Sprintf("  ▸ %s [%s] (%d,%d %dx%d z=%d)",
-			comp.Name, comp.ID, comp.X, comp.Y, comp.W, comp.H, comp.ZIndex)
-		paintTextLine(cb, row, width, header, greenColor, bgColor)
+		node := nodes[i]
+		indent := strings.Repeat("  ", node.Depth)
+		var line string
+		if node.Type == "text" {
+			content := node.Content
+			if len(content) > 30 {
+				content = content[:27] + "..."
+			}
+			line = fmt.Sprintf("%s<text> %q", indent, content)
+		} else {
+			line = fmt.Sprintf("%s▸ <%s> %dx%d", indent, node.Type, node.W, node.H)
+			if node.BG != "" {
+				line += " bg=" + node.BG
+			}
+		}
+		paintTextLine(cb, row, width, "  "+line, greenColor, bgColor)
+		row++
+	}
+
+	// Show scroll indicator if more below
+	if end < len(nodes) {
+		remaining := len(nodes) - end
+		indicator := fmt.Sprintf("  ↓ %d more below", remaining)
+		paintTextLine(cb, row, width, indicator, dimColor, bgColor)
 		row++
 	}
 
