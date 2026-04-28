@@ -420,3 +420,32 @@ test.describe("theme module", function()
         test.assert.contains(node.content, "success:ok")
     end)
 end)
+
+test.describe("defineComponent as direct root return (graftWalk root-level)", function()
+    local app
+
+    test.beforeEach(function()
+        app = test.createApp(80, 24)
+    end)
+
+    test.afterEach(function()
+        app:destroy()
+    end)
+
+    test.it("renders when root render returns defineComponent directly", function()
+        app:loadString([[
+            local MyChild = lumina.defineComponent("DirectChild", function(props)
+                return lumina.createElement("vbox", {id = "child-root"},
+                    lumina.createElement("text", {id = "child-text"}, "hello from direct root")
+                )
+            end)
+            lumina.createComponent({
+                id = "test", name = "Test",
+                render = function()
+                    return MyChild { key = "dr" }
+                end,
+            })
+        ]])
+        test.assert.eq(app:screenContains("hello from direct root"), true)
+    end)
+end)
