@@ -1,4 +1,6 @@
-local lumina = require("lumina")
+-- lua/lux/card.lua
+-- Card component for Lux
+-- Usage: local Card = require("lux.card")
 
 local Card = lumina.defineComponent("Card", function(props)
     return lumina.createElement("box", {

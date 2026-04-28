@@ -39,11 +39,12 @@ func reconcileImpl(node *Node, desc Descriptor, freedRefs *[]int64) bool {
 		changed = true
 	}
 
-	// 2. Update ComponentType (for component placeholder nodes)
+	// 2. Update ComponentType and ComponentProps (for component placeholder nodes)
 	if desc.ComponentType != node.ComponentType {
 		node.ComponentType = desc.ComponentType
 		changed = true
 	}
+	node.ComponentProps = desc.ComponentProps
 
 	// 3. Update style (check each field that affects paint vs layout)
 	if styleChanged := reconcileStyle(node, desc.Style); styleChanged {
@@ -318,6 +319,7 @@ func createNodeFromDesc(desc Descriptor) *Node {
 	}
 	node.Style = desc.Style
 	node.ComponentType = desc.ComponentType
+	node.ComponentProps = desc.ComponentProps
 	node.Focusable = desc.Focusable
 	node.Disabled = desc.Disabled
 	node.OnClick = desc.OnClick
