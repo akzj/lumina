@@ -1023,6 +1023,14 @@ func (e *Engine) DirtyRect() buffer.Rect {
 	return buffer.Rect{X: stats.DirtyX, Y: stats.DirtyY, W: stats.DirtyW, H: stats.DirtyH}
 }
 
+// VNodeTree returns the current render tree as a VNode (JSON-serializable).
+func (e *Engine) VNodeTree() *VNode {
+	if e.root == nil || e.root.RootNode == nil {
+		return nil
+	}
+	return NodeToVNode(e.root.RootNode)
+}
+
 // Width returns the engine width.
 func (e *Engine) Width() int { return e.width }
 
