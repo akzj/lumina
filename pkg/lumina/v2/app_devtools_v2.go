@@ -3,6 +3,7 @@ package v2
 import (
 	"fmt"
 	"runtime"
+	"sort"
 	"time"
 
 	"github.com/akzj/lumina/pkg/lumina/v2/devtools"
@@ -71,6 +72,9 @@ func (a *App) updateDevToolsComponents() {
 		}
 		infos = append(infos, info)
 	}
+	sort.Slice(infos, func(i, j int) bool {
+		return infos[i].ID < infos[j].ID
+	})
 	a.devtools.UpdateComponents(infos)
 }
 
