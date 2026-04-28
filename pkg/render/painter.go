@@ -328,9 +328,51 @@ func paintInput(buf *CellBuffer, node *Node) {
 				x += w
 			}
 		}
+		// Show cursor at start if focused
+		if node.Focused {
+			paintInputCursor(buf, node, node.X, node.Y)
+		}
 		return
 	}
 	paintText(buf, node)
+
+	// Show cursor if focused
+	if node.Focused {
+		cursorX := node.X + inputCursorScreenOffset(node)
+		paintInputCursor(buf, node, cursorX, node.Y)
+	}
+}
+
+// inputCursorScreenOffset calculates the screen X offset for the cursor position.
+func inputCursorScreenOffset(node *Node) int {
+	runes := []rune(node.Content)
+	offset := 0
+	for i := 0; i < node.CursorPos && i < len(runes); i++ {
+		offset += runeWidth(runes[i])
+	}
+	return offset
+}
+
+// paintInputCursor renders a cursor at the given screen position using inverted colors.
+func paintInputCursor(buf *CellBuffer, node *Node, x, y int) {
+	if x >= node.X+node.W || y >= node.Y+node.H {
+		return
+	}
+	existing := buf.Get(x, y)
+	// Invert colors for cursor visibility
+	fg := existing.BG
+	bg := existing.FG
+	if fg == "" {
+		fg = "#1E1E2E" // default dark background
+	}
+	if bg == "" {
+		bg = "#CDD6F4" // default light foreground
+	}
+	ch := existing.Ch
+	if ch == 0 {
+		ch = ' ' // cursor on empty space shows as block
+	}
+	buf.Set(x, y, Cell{Ch: ch, FG: fg, BG: bg})
 }
 
 func paintBorder(buf *CellBuffer, node *Node) {
