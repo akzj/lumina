@@ -1,6 +1,6 @@
 -- Lumina v2 Example: Dual-Scroll Dashboard
--- Demonstrates: two independent scrollable areas, clickable list,
---               mouse wheel scroll dispatch by hit-test, Catppuccin Mocha theme
+-- Demonstrates: lumina.app, useStore, two independent scrollable areas,
+--               clickable list, mouse wheel scroll, Catppuccin Mocha theme
 --
 -- Usage: lumina examples/dashboard.lua
 -- Quit:  q or Ctrl+Q
@@ -54,22 +54,18 @@ for i = 1, 30 do
     }
 end
 
-lumina.createComponent({
+lumina.app {
     id = "dashboard",
-    name = "Dashboard",
+    store = {
+        sel = 1,
+    },
+    keys = {
+        ["q"] = function() lumina.quit() end,
+    },
 
-    render = function(props)
+    render = function()
         local createElement = lumina.createElement
-
-        -- ── State ──
-        local selectedIdx, setSelectedIdx = lumina.useState("sel", 1)
-
-        -- ── Keyboard handler ──
-        local function handleKey(e)
-            if e.key == "q" then
-                lumina.quit()
-            end
-        end
+        local selectedIdx = lumina.useStore("sel")
 
         -- ═══════════════════════════════════════════
         -- Header
@@ -98,7 +94,7 @@ lumina.createComponent({
                 style = {height = 1, background = bg},
                 foreground = fg,
                 onClick = function()
-                    setSelectedIdx(i)
+                    lumina.store.set("sel", i)
                 end,
             }, " " .. item.title)
         end
@@ -173,11 +169,10 @@ lumina.createComponent({
         -- ═══════════════════════════════════════════
         return createElement("vbox", {
             style = {background = theme.bg},
-            onKeyDown = handleKey,
         },
             header,
             mainContent,
             footer
         )
     end,
-})
+}

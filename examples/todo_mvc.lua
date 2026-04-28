@@ -1,5 +1,5 @@
--- Lumina v2 Example: Todo MVC (using Lux component library + theme)
--- Demonstrates: useState, keyboard events, dynamic lists, filtering,
+-- Lumina v2 Example: Todo MVC (using lumina.app + Lux component library + theme)
+-- Demonstrates: lumina.app, useStore, keyboard events, dynamic lists, filtering,
 --               Lux Badge/Divider components, lumina.getTheme()
 --
 -- Usage: lumina examples/todo_mvc.lua
@@ -22,29 +22,35 @@ local Divider = lux.Divider
 -- Avoids stale closure issues: onChange writes here, onSubmit reads from here.
 local _pendingInput = ""
 
-lumina.createComponent({
+lumina.app {
     id = "todo-app",
-    name = "TodoMVC",
-    x = 0, y = 0,
-    w = 80, h = 24,
-    zIndex = 0,
-
-    render = function(state, props)
-        local t = lumina.getTheme()
-
-        -- State
-        local todos, setTodos = lumina.useState("todos", {
+    store = {
+        todos = {
             {id=1, text="Learn Lumina v2", done=true, priority="high"},
             {id=2, text="Build a TUI app", done=false, priority="high"},
             {id=3, text="Add keyboard shortcuts", done=false, priority="medium"},
             {id=4, text="Write documentation", done=false, priority="medium"},
             {id=5, text="Deploy to production", done=false, priority="low"},
-        })
-        local filter, setFilter = lumina.useState("filter", "all")
-        local selectedIdx, setSelectedIdx = lumina.useState("selectedIdx", 1)
-        local inputText, setInputText = lumina.useState("inputText", "")
-        local nextId, setNextId = lumina.useState("nextId", 6)
-        local mode, setMode = lumina.useState("mode", "list")
+        },
+        filter = "all",
+        selectedIdx = 1,
+        inputText = "",
+        nextId = 6,
+        mode = "list",
+    },
+    keys = {
+        ["ctrl+c"] = function() lumina.quit() end,
+    },
+
+    render = function()
+        local t = lumina.getTheme()
+
+        -- State from store
+        local todos = lumina.useStore("todos")
+        local filter = lumina.useStore("filter")
+        local selectedIdx = lumina.useStore("selectedIdx")
+        local mode = lumina.useStore("mode")
+        local nextId = lumina.useStore("nextId")
 
         -- Computed: filtered todos and counts
         local filtered = {}
@@ -74,8 +80,8 @@ lumina.createComponent({
         local function handleKey(e)
             if mode == "input" then
                 if e.key == "Escape" then
-                    setMode("list")
-                    setInputText("")
+                    lumina.store.set("mode", "list")
+                    lumina.store.set("inputText", "")
                     _pendingInput = ""
                 end
                 -- All other keys (chars, backspace, arrows) handled by native input.
@@ -85,11 +91,11 @@ lumina.createComponent({
                 -- List mode
                 if e.key == "j" or e.key == "ArrowDown" then
                     if selectedIdx < #filtered then
-                        setSelectedIdx(selectedIdx + 1)
+                        lumina.store.set("selectedIdx", selectedIdx + 1)
                     end
                 elseif e.key == "k" or e.key == "ArrowUp" then
                     if selectedIdx > 1 then
-                        setSelectedIdx(selectedIdx - 1)
+                        lumina.store.set("selectedIdx", selectedIdx - 1)
                     end
                 elseif e.key == " " then
                     if filtered[selectedIdx] then
@@ -107,7 +113,7 @@ lumina.createComponent({
                                 newTodos[#newTodos + 1] = tt
                             end
                         end
-                        setTodos(newTodos)
+                        lumina.store.set("todos", newTodos)
                     end
                 elseif e.key == "d" then
                     if filtered[selectedIdx] then
@@ -118,28 +124,28 @@ lumina.createComponent({
                                 newTodos[#newTodos + 1] = tt
                             end
                         end
-                        setTodos(newTodos)
+                        lumina.store.set("todos", newTodos)
                         if selectedIdx > #filtered - 1 and selectedIdx > 1 then
-                            setSelectedIdx(selectedIdx - 1)
+                            lumina.store.set("selectedIdx", selectedIdx - 1)
                         end
                     end
                 elseif e.key == "a" or e.key == "i" then
-                    setMode("input")
+                    lumina.store.set("mode", "input")
                 elseif e.key == "f" then
                     if filter == "all" then
-                        setFilter("active")
+                        lumina.store.set("filter", "active")
                     elseif filter == "active" then
-                        setFilter("completed")
+                        lumina.store.set("filter", "completed")
                     else
-                        setFilter("all")
+                        lumina.store.set("filter", "all")
                     end
-                    setSelectedIdx(1)
+                    lumina.store.set("selectedIdx", 1)
                 elseif e.key == "1" then
-                    setFilter("all"); setSelectedIdx(1)
+                    lumina.store.batch({filter = "all", selectedIdx = 1})
                 elseif e.key == "2" then
-                    setFilter("active"); setSelectedIdx(1)
+                    lumina.store.batch({filter = "active", selectedIdx = 1})
                 elseif e.key == "3" then
-                    setFilter("completed"); setSelectedIdx(1)
+                    lumina.store.batch({filter = "completed", selectedIdx = 1})
                 end
             end
         end
@@ -193,7 +199,7 @@ lumina.createComponent({
                                     newTodos[#newTodos + 1] = tt
                                 end
                             end
-                            setTodos(newTodos)
+                            lumina.store.set("todos", newTodos)
                         end,
                     }),
                 }
@@ -252,11 +258,11 @@ lumina.createComponent({
                             done = false,
                             priority = "low",
                         }
-                        setTodos(newTodos)
-                        setNextId(nextId + 1)
-                        setInputText("")
+                        lumina.store.set("todos", newTodos)
+                        lumina.store.set("nextId", nextId + 1)
+                        lumina.store.set("inputText", "")
                         _pendingInput = ""
-                        setMode("list")
+                        lumina.store.set("mode", "list")
                     end
                 end,
             })
@@ -337,4 +343,4 @@ lumina.createComponent({
             }, " [j/k] Navigate  [Space] Toggle  [d] Delete  [a] Add  [f/1-3] Filter")
         )
     end,
-})
+}

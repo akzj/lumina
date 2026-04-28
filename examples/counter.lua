@@ -1,27 +1,26 @@
 -- Lumina v2 Example: Counter
--- Demonstrates: createComponent, useState, createElement, click events
+-- Demonstrates: lumina.app, useStore, global keybindings, click events
 --
 -- Usage: lumina examples/counter.lua
--- Quit:  Ctrl+C or Ctrl+Q
+-- Quit:  q or Ctrl+Q
 
--- "lumina" is a global table registered by the Go runtime.
--- No require() needed.
-
-lumina.createComponent({
+lumina.app {
     id = "counter",
-    name = "Counter",
-    x = 0, y = 0,
-    w = 40, h = 10,
-    zIndex = 0,
+    store = {
+        count = 0,
+    },
+    keys = {
+        ["q"] = function() lumina.quit() end,
+    },
 
-    render = function(state, props)
-        local count, setCount = lumina.useState("count", 0)
+    render = function()
+        local count = lumina.useStore("count")
 
         return lumina.createElement("box", {
             id = "counter-box",
             style = {background = "#1E1E2E"},
             onClick = function()
-                setCount(count + 1)
+                lumina.store.set("count", count + 1)
             end,
         },
             lumina.createElement("text", {
@@ -47,7 +46,7 @@ lumina.createComponent({
 
             lumina.createElement("text", {
                 foreground = "#6C7086",
-            }, "Ctrl+C or Ctrl+Q to quit")
+            }, "q or Ctrl+Q to quit")
         )
     end,
-})
+}
