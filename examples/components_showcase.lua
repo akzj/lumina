@@ -1,7 +1,7 @@
 -- Lumina v2 Example: Component Library Showcase
 -- Demonstrates: ProgressBar, Table, Tabs, Modal, Select
 --
--- Usage: lumina-v2 examples/v2/components_showcase.lua
+-- Usage: lumina examples/components_showcase.lua
 -- Quit:  q or Ctrl+Q
 --
 -- Keyboard:
@@ -12,7 +12,7 @@
 --   q / Ctrl+Q  - Quit
 --
 -- NOTE: Component functions are inlined because v2 does not yet support
--- require() for local Lua files. See examples/v2/lib/components.lua for
+-- require() for local Lua files. See examples/lib/components.lua for
 -- the canonical library source.
 
 -- ═══════════════════════════════════════════════════════════════════

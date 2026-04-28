@@ -1,13 +1,13 @@
 # V2 Package 设计
 
-> 本文档描述 `pkg/lumina/v2/` 包的内部设计和模块职责。
+> 本文档描述 `github.com/akzj/lumina/pkg`（`package v2`）的内部设计和模块职责。
 
 ---
 
 ## 模块架构
 
 ```
-pkg/lumina/v2/
+pkg/
 │
 ├── render/           核心渲染引擎（无外部依赖，纯计算）
 │   ├── engine.go     Engine 结构体 + Lua API + 帧渲染

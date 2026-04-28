@@ -66,23 +66,23 @@ lumina.createComponent({
 ### 安装
 
 ```bash
-go install github.com/akzj/lumina/cmd/lumina-v2@latest
+go install github.com/akzj/lumina/cmd/lumina@latest
 ```
 
 ### 运行示例
 
 ```bash
 # 计数器
-lumina-v2 examples/v2/counter.lua
+lumina examples/counter.lua
 
 # Todo MVC
-lumina-v2 examples/v2/todo_mvc.lua
+lumina examples/todo_mvc.lua
 
 # 压力测试（1840 个独立组件）
-lumina-v2 examples/v2/stress_test.lua
+lumina examples/stress_test.lua
 
 # 系统仪表盘
-lumina-v2 examples/v2/dashboard.lua
+lumina examples/dashboard.lua
 ```
 
 ### 退出
@@ -309,23 +309,23 @@ Output Adapter
 
 ```bash
 # 全部测试
-go test ./pkg/lumina/v2/...
+go test ./pkg/...
 
 # 渲染引擎测试
-go test ./pkg/lumina/v2/render/...
+go test ./pkg/render/...
 
 # 集成测试
-go test ./pkg/lumina/v2/ -run TestE2E
+go test ./pkg/ -run TestE2E
 
 # 压力测试 benchmark
-go test ./pkg/lumina/v2/ -bench BenchmarkStress -benchtime 5s
+go test ./pkg/ -bench BenchmarkStress -benchtime 5s
 ```
 
 ### 项目结构
 
 ```
-cmd/lumina-v2/        — CLI 入口
-pkg/lumina/v2/        — 核心框架
+cmd/lumina/           — CLI 入口
+pkg/                  — 核心框架（package v2）
   render/             — 渲染引擎（Engine, Node, Reconciler, Layout, Painter）
   buffer/             — Buffer 类型
   output/             — 输出适配器（ANSI, TestAdapter）
@@ -336,7 +336,7 @@ pkg/lumina/v2/        — 核心框架
   router/             — 路由
   hotreload/          — 热加载
   store/              — 状态管理
-examples/v2/          — 示例应用
+examples/             — 示例 Lua 应用
 docs/                 — 文档
 ```
 
@@ -346,7 +346,7 @@ docs/                 — 文档
 2. 在 `render/layout.go` 的 `computeFlex()` 中添加布局分支
 3. 在 `render/painter.go` 的 `paintNode()` 中添加绘制分支
 4. 在 `render/engine.go` 的 `readDescriptor()` 中读取特有属性
-5. 写测试，运行 `go test ./pkg/lumina/v2/render/...`
+5. 写测试，运行 `go test ./pkg/render/...`
 
 ---
 

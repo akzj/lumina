@@ -432,7 +432,7 @@ func (c *Component) SetState(key string, value any) {
 ## 12. 模块结构
 
 ```
-pkg/lumina/v2/
+pkg/
 ├── render/           — 核心渲染引擎
 │   ├── engine.go     — Engine 主体 + Lua API 注册
 │   ├── node.go       — Node, Component, Style, Descriptor 类型
