@@ -1,5 +1,7 @@
 package widget
 
+import "github.com/akzj/lumina/pkg/render"
+
 // Widget defines a built-in control with Go-side interaction logic.
 // Widgets integrate into the existing component system: they are registered
 // as factories and rendered by the engine like Lua components, but their
@@ -11,15 +13,8 @@ package widget
 type Widget struct {
 	Name     string
 	Render   func(props map[string]any, state any) any // returns *render.Node (as any to avoid import cycle)
-	OnEvent  func(props map[string]any, state any, event *Event) bool
+	OnEvent  func(props map[string]any, state any, event *render.WidgetEvent) bool
 	NewState func() any
-}
-
-// Event is a widget-level event dispatched by the engine.
-type Event struct {
-	Type string // "click", "mousedown", "mouseup", "mouseenter", "mouseleave", "keydown", "focus", "blur"
-	Key  string
-	X, Y int
 }
 
 // GetName returns the widget name.
@@ -34,9 +29,9 @@ func (w *Widget) DoRender(props map[string]any, state any) any {
 }
 
 // DoOnEvent calls the widget's event handler.
-func (w *Widget) DoOnEvent(props map[string]any, state any, eventType, key string, x, y int) bool {
+func (w *Widget) DoOnEvent(props map[string]any, state any, event *render.WidgetEvent) bool {
 	if w.OnEvent == nil {
 		return false
 	}
-	return w.OnEvent(props, state, &Event{Type: eventType, Key: key, X: x, Y: y})
+	return w.OnEvent(props, state, event)
 }

@@ -444,6 +444,8 @@ func (e *Engine) callLuaRefSimple(ref LuaRef) {
 // dispatchWidgetEvent walks up from node to find an owning Go widget component,
 // then calls WidgetDef.DoOnEvent. If it returns true (state changed), the
 // component is marked dirty for re-render.
+// If the widget sets FireOnChange on the event, the engine fires the onChange
+// Lua callback on the widget's root node.
 func (e *Engine) dispatchWidgetEvent(node *Node, eventType, key string, x, y int) {
 	comp := findOwnerComponent(node)
 	if comp == nil {
@@ -457,9 +459,42 @@ func (e *Engine) dispatchWidgetEvent(node *Node, eventType, key string, x, y int
 	if !ok {
 		return
 	}
-	if w.DoOnEvent(comp.Props, state, eventType, key, x, y) {
+	evt := &WidgetEvent{Type: eventType, Key: key, X: x, Y: y}
+	if w.DoOnEvent(comp.Props, state, evt) {
 		comp.Dirty = true
 		e.needsRender = true
+	}
+
+	// Fire onChange if widget requested it
+	if evt.FireOnChange != nil && comp.RootNode != nil && comp.RootNode.OnChange != 0 {
+		e.callLuaRefWithValue(comp.RootNode.OnChange, evt.FireOnChange)
+	}
+}
+
+// callLuaRefWithValue calls a Lua function by registry ref with a single typed value argument.
+func (e *Engine) callLuaRefWithValue(ref LuaRef, value any) {
+	L := e.L
+	L.RawGetI(lua.RegistryIndex, ref)
+	if !L.IsFunction(-1) {
+		L.Pop(1)
+		return
+	}
+	switch v := value.(type) {
+	case bool:
+		L.PushBoolean(v)
+	case string:
+		L.PushString(v)
+	case float64:
+		L.PushNumber(v)
+	case int:
+		L.PushInteger(int64(v))
+	case int64:
+		L.PushInteger(v)
+	default:
+		L.PushNil()
+	}
+	if status := L.PCall(1, 0, 0); status != lua.OK {
+		L.Pop(1) // pop error message to prevent stack pollution
 	}
 }
 
