@@ -26,6 +26,7 @@ M.Progress = require("lux.progress")
 M.Spinner = require("lux.spinner")
 M.Dialog = require("lux.dialog")
 M.Layout = require("lux.layout")
+M.CommandPalette = require("lux.command_palette")
 return M
 `
 
@@ -422,6 +423,114 @@ return Layout
 
 `
 
+const luxCommandPaletteLua = `
+local CommandPalette = lumina.defineComponent("CommandPalette", function(props)
+    local query, setQuery = lumina.useState("query", "")
+    local selectedIdx, setSelectedIdx = lumina.useState("selectedIdx", 1)
+
+    local commands = props.commands or {}
+    local t = lumina.getTheme and lumina.getTheme() or {}
+
+    -- Filter commands by query (substring match, case-insensitive)
+    local filtered = {}
+    for _, cmd in ipairs(commands) do
+        if query == "" or cmd.title:lower():find(query:lower(), 1, true) then
+            filtered[#filtered + 1] = cmd
+        end
+    end
+
+    -- Clamp selected index
+    if selectedIdx > #filtered then
+        selectedIdx = #filtered
+    end
+    if selectedIdx < 1 then
+        selectedIdx = 1
+    end
+
+    -- Build list items
+    local items = {}
+    for i, cmd in ipairs(filtered) do
+        local isSelected = (i == selectedIdx)
+        local prefix = isSelected and "> " or "  "
+        items[#items + 1] = lumina.createElement("text", {
+            id = "cmd-" .. i,
+            foreground = isSelected and (t.primary or "#89B4FA") or (t.text or "#CDD6F4"),
+            bold = isSelected,
+            style = {
+                height = 1,
+                background = isSelected and (t.surface1 or "#45475A") or "",
+            },
+        }, prefix .. cmd.title)
+    end
+
+    -- Keyboard handler
+    local function handleKey(e)
+        if e.key == "Escape" then
+            if props.onClose then props.onClose() end
+        elseif e.key == "Enter" then
+            if filtered[selectedIdx] and filtered[selectedIdx].action then
+                filtered[selectedIdx].action()
+            end
+            if props.onClose then props.onClose() end
+        elseif e.key == "ArrowUp" or e.key == "k" then
+            setSelectedIdx(math.max(1, selectedIdx - 1))
+        elseif e.key == "ArrowDown" or e.key == "j" then
+            setSelectedIdx(math.min(#filtered, selectedIdx + 1))
+        elseif e.key == "Backspace" then
+            if #query > 0 then
+                setQuery(query:sub(1, -2))
+                setSelectedIdx(1)
+            end
+        elseif #e.key == 1 then
+            -- Single character input
+            setQuery(query .. e.key)
+            setSelectedIdx(1)
+        end
+    end
+
+    local paletteWidth = props.width or 50
+    local maxHeight = props.maxHeight or 15
+    local visibleItems = math.min(#filtered, maxHeight - 3)
+    local paletteHeight = visibleItems + 3
+
+    -- Divider width
+    local divWidth = paletteWidth - 4
+    if divWidth < 1 then divWidth = 1 end
+
+    return lumina.createElement("vbox", {
+        id = "command-palette",
+        style = {
+            border = "rounded",
+            width = paletteWidth,
+            height = paletteHeight,
+            background = t.surface0 or "#313244",
+        },
+        onKeyDown = handleKey,
+        focusable = true,
+    },
+        -- Search input display
+        lumina.createElement("text", {
+            id = "cp-input",
+            foreground = t.text or "#CDD6F4",
+            style = { height = 1 },
+        }, "> " .. query .. "▏"),
+
+        -- Divider
+        lumina.createElement("text", {
+            foreground = t.muted or "#6C7086",
+            dim = true,
+            style = { height = 1 },
+        }, string.rep("─", divWidth)),
+
+        -- Command list
+        table.unpack(items)
+    )
+end)
+
+return CommandPalette
+
+`
+
 const luxThemeLua = `
 local M = {}
 local _fallback = {
@@ -465,6 +574,7 @@ func registerLuxModules(L *lua.State) {
 	preloadLuaSource(L, "lux.spinner", luxSpinnerLua)
 	preloadLuaSource(L, "lux.dialog", luxDialogLua)
 	preloadLuaSource(L, "lux.layout", luxLayoutLua)
+	preloadLuaSource(L, "lux.command_palette", luxCommandPaletteLua)
 
 	// Register the lux umbrella module (requires individual modules)
 	preloadLuaSource(L, "lux", luxInitLua)
