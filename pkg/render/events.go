@@ -318,6 +318,14 @@ func (e *Engine) HandleKeyDown(key string) {
 		}
 	}
 
+	// Dispatch keydown to Go widget that owns the focused node.
+	// dispatchWidgetEvent walks up from the node to find the owning widget
+	// component and calls DoOnEvent("keydown", key). If no widget ancestor
+	// exists, it returns without action.
+	if e.focusedNode != nil {
+		e.dispatchWidgetEvent(e.focusedNode, "keydown", key, 0, 0)
+	}
+
 	// Fall through to onKeyDown handler — search from top layer down
 	var keyHandlerNode *Node
 	for i := len(e.layers) - 1; i >= 0; i-- {
