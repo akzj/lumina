@@ -33,6 +33,9 @@ type Engine struct {
 	// Lua ref cleanup: refs to unref after reconcile
 	pendingUnrefs []int64
 
+	// Async coroutine scheduler
+	scheduler *lua.Scheduler
+
 	// Performance tracking
 	tracker *perf.Tracker
 
@@ -743,7 +746,31 @@ func (e *Engine) RegisterLuaAPI() {
 	L.PushFunction(e.luaUseCallback)
 	L.SetField(tblIdx, "useCallback")
 
+	// lumina.spawn(fn) — start async coroutine
+	L.PushFunction(e.luaSpawn)
+	L.SetField(tblIdx, "spawn")
+
+	// lumina.cancel(handle) — cancel a spawned coroutine
+	L.PushFunction(e.luaCancel)
+	L.SetField(tblIdx, "cancel")
+
+	// lumina.sleep(ms) — returns Future
+	L.PushFunction(e.luaSleep)
+	L.SetField(tblIdx, "sleep")
+
+	// lumina.exec(cmd) — returns Future
+	L.PushFunction(e.luaExec)
+	L.SetField(tblIdx, "exec")
+
+	// lumina.readFile(path) — returns Future
+	L.PushFunction(e.luaReadFile)
+	L.SetField(tblIdx, "readFile")
+
 	L.SetGlobal("lumina")
+
+	// Pre-load the "async" module into package.loaded so coroutines can require it.
+	// (Coroutines created via NewThread don't inherit the global searcher.)
+	e.preloadAsyncModule()
 }
 
 // luaDefineComponent implements lumina.defineComponent(name, renderFn)

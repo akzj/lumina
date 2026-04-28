@@ -497,6 +497,33 @@ func (fw *testFramework) luaCreateApp(L *lua.State) int {
 	})
 	L.SetField(appTblIdx, "render")
 
+	// app:tick() — tick the async scheduler (resume completed coroutines)
+	L.PushFunction(func(L *lua.State) int {
+		if handle.app.scheduler != nil {
+			handle.app.scheduler.Tick()
+		}
+		return 0
+	})
+	L.SetField(appTblIdx, "tick")
+
+	// app:waitAsync(timeoutMs) — wait for all async coroutines to complete
+	// Polls scheduler.Tick() in a loop until all pending coroutines finish.
+	// Returns true on success, false on timeout.
+	L.PushFunction(func(L *lua.State) int {
+		timeoutMs := int64(100) // default 100ms
+		if L.GetTop() >= 2 && !L.IsNoneOrNil(2) {
+			timeoutMs = L.CheckInteger(2)
+		}
+		if handle.app.scheduler == nil {
+			L.PushBoolean(true)
+			return 1
+		}
+		err := handle.app.scheduler.WaitAll(time.Duration(timeoutMs) * time.Millisecond)
+		L.PushBoolean(err == nil)
+		return 1
+	})
+	L.SetField(appTblIdx, "waitAsync")
+
 	// app:destroy()
 	L.PushFunction(func(L *lua.State) int {
 		if !handle.closed {
