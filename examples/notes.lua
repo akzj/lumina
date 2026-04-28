@@ -50,8 +50,8 @@ lumina.app {
         ["ctrl+c"] = function() lumina.quit() end,
         ["q"] = function() lumina.quit() end,
         ["n"] = function()
-            local notes = lumina.useStore("notes")
-            local nextId = lumina.useStore("nextId")
+            local notes = lumina.store.get("notes")
+            local nextId = lumina.store.get("nextId")
             local newNotes = {}
             for _, n in ipairs(notes) do newNotes[#newNotes + 1] = n end
             newNotes[#newNotes + 1] = {
@@ -64,8 +64,8 @@ lumina.app {
             lumina.store.set("selectedIdx", #newNotes)
         end,
         ["d"] = function()
-            local notes = lumina.useStore("notes")
-            local idx = lumina.useStore("selectedIdx")
+            local notes = lumina.store.get("notes")
+            local idx = lumina.store.get("selectedIdx")
             if #notes == 0 then return end
             local newNotes = {}
             for i, n in ipairs(notes) do
@@ -78,16 +78,16 @@ lumina.app {
             lumina.store.set("viewing", false)
         end,
         ["j"] = function()
-            local notes = lumina.useStore("notes")
-            local idx = lumina.useStore("selectedIdx")
+            local notes = lumina.store.get("notes")
+            local idx = lumina.store.get("selectedIdx")
             if idx < #notes then lumina.store.set("selectedIdx", idx + 1) end
         end,
         ["k"] = function()
-            local idx = lumina.useStore("selectedIdx")
+            local idx = lumina.store.get("selectedIdx")
             if idx > 1 then lumina.store.set("selectedIdx", idx - 1) end
         end,
         ["Enter"] = function()
-            local viewing = lumina.useStore("viewing")
+            local viewing = lumina.store.get("viewing")
             lumina.store.set("viewing", not viewing)
         end,
         ["Escape"] = function()
