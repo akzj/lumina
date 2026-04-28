@@ -1,6 +1,9 @@
 package v2
 
 import (
+	"fmt"
+	"os"
+
 	"github.com/akzj/go-lua/pkg/lua"
 )
 
@@ -392,7 +395,11 @@ func (a *App) handleGlobalKeys(key string) bool {
 			L := a.luaState
 			L.RawGetI(lua.RegistryIndex, int64(binding.ref))
 			if L.IsFunction(-1) {
-				L.PCall(0, 0, 0)
+				if status := L.PCall(0, 0, 0); status != lua.OK {
+					errMsg, _ := L.ToString(-1)
+					L.Pop(1)
+					a.setLastError(fmt.Sprintf("key handler [%s]: %s", key, errMsg))
+				}
 			} else {
 				L.Pop(1)
 			}
@@ -400,4 +407,10 @@ func (a *App) handleGlobalKeys(key string) bool {
 		}
 	}
 	return false
+}
+
+// setLastError stores an error message and logs it to stderr.
+func (a *App) setLastError(msg string) {
+	a.lastError = msg
+	fmt.Fprintf(os.Stderr, "lumina: %s\n", msg)
 }
