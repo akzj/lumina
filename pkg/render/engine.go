@@ -1345,9 +1345,14 @@ func (e *Engine) cleanupComponentTree(comp *Component) {
 	}
 	// Cleanup hook refs (effects, memos, refs) — runs effect cleanups
 	e.cleanupComponentHooks(comp)
-	// Unref the component's render function
+	// Unref the component's render function — but only if it's NOT a shared
+	// factory ref. Factory refs (from defineComponent) are shared across all
+	// instances and must not be freed when an individual instance is removed.
 	if comp.RenderFn != 0 {
-		e.L.Unref(lua.RegistryIndex, int(comp.RenderFn))
+		factoryRef, isFactory := e.factories[comp.Type]
+		if !isFactory || comp.RenderFn != factoryRef {
+			e.L.Unref(lua.RegistryIndex, int(comp.RenderFn))
+		}
 		comp.RenderFn = 0
 	}
 	// Collect and unref all node refs from the component's render tree
@@ -1372,23 +1377,30 @@ func (e *Engine) renderInOrder() int {
 		e.renderComponent(e.root)
 		count++
 	}
-	// Collect dirty non-root components, sort by depth (parent before child)
-	var dirty []*Component
-	for _, comp := range e.components {
-		if !comp.Dirty || comp.IsRoot {
-			continue
+	// Loop until no more newly-dirty components remain.
+	// reconcileChildComponents inside renderComponent may create new dirty children,
+	// so a single pass can miss them.
+	for iterations := 0; iterations < 10; iterations++ {
+		var dirty []*Component
+		for _, comp := range e.components {
+			if !comp.Dirty || comp.IsRoot {
+				continue
+			}
+			dirty = append(dirty, comp)
 		}
-		dirty = append(dirty, comp)
-	}
-	sort.Slice(dirty, func(i, j int) bool {
-		return componentDepth(dirty[i]) < componentDepth(dirty[j])
-	})
-	for _, comp := range dirty {
-		if !comp.Dirty {
-			continue // may have been rendered as side effect
+		if len(dirty) == 0 {
+			break
 		}
-		e.renderComponent(comp)
-		count++
+		sort.Slice(dirty, func(i, j int) bool {
+			return componentDepth(dirty[i]) < componentDepth(dirty[j])
+		})
+		for _, comp := range dirty {
+			if !comp.Dirty {
+				continue // may have been rendered as side effect
+			}
+			e.renderComponent(comp)
+			count++
+		}
 	}
 	return count
 }

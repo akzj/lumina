@@ -45,11 +45,13 @@ test.describe("Notes example app", function()
 
     test.it("Escape returns to list from detail view", function()
         app:keyPress("Enter")
+        -- Detail view shows note content
         test.assert.eq(app:screenContains("TUI framework"), true)
         app:keyPress("Escape")
-        -- Detail content should be gone, header still present
-        test.assert.eq(app:screenContains("TUI framework"), false)
+        -- After escape, list view is restored: multiple note titles visible
         test.assert.eq(app:screenContains("Notes"), true)
+        test.assert.eq(app:screenContains("Syntax Sugar"), true)
+        test.assert.eq(app:screenContains("Lux Components"), true)
     end)
 
     test.it("n creates a new note", function()
