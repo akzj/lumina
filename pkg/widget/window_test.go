@@ -43,21 +43,29 @@ func TestWindowRenderBasic(t *testing.T) {
 		t.Errorf("expected height=15, got %d", node.Style.Height)
 	}
 
-	// Should have: title + divider + resize handle = 3 children (no Lua children)
+	// Should have: title hbox + divider + resize handle = 3 children (no Lua children)
 	if len(node.Children) != 3 {
-		t.Fatalf("expected 3 children (title+divider+resize), got %d", len(node.Children))
+		t.Fatalf("expected 3 children (title_hbox+divider+resize), got %d", len(node.Children))
 	}
 
-	// Title bar should contain the title text
-	titleNode := node.Children[0]
-	if !strings.Contains(titleNode.Content, "Test Window") {
-		t.Errorf("title bar should contain 'Test Window', got %q", titleNode.Content)
+	// Title bar is an hbox with title text + close button
+	titleBar := node.Children[0]
+	if titleBar.Type != "hbox" {
+		t.Errorf("expected title bar type 'hbox', got %q", titleBar.Type)
 	}
-	if !strings.Contains(titleNode.Content, "✕") {
-		t.Errorf("title bar should contain close button '✕', got %q", titleNode.Content)
+	if len(titleBar.Children) != 2 {
+		t.Fatalf("title bar should have 2 children (title+close), got %d", len(titleBar.Children))
 	}
-	if !titleNode.Style.Bold {
-		t.Error("title bar should be bold")
+	titleTextNode := titleBar.Children[0]
+	if !strings.Contains(titleTextNode.Content, "Test Window") {
+		t.Errorf("title text should contain 'Test Window', got %q", titleTextNode.Content)
+	}
+	if !titleTextNode.Style.Bold {
+		t.Error("title text should be bold")
+	}
+	closeNode := titleBar.Children[1]
+	if !strings.Contains(closeNode.Content, "✕") {
+		t.Errorf("close button should contain '✕', got %q", closeNode.Content)
 	}
 
 	// Resize handle should contain ◢
