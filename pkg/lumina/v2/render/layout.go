@@ -372,6 +372,8 @@ func layoutVBox(node *Node, contentX, contentY, contentW, contentH int, style St
 		return
 	}
 
+	isScroll := style.Overflow == "scroll"
+
 	type childInfo struct {
 		style      Style
 		fixedH     int
@@ -396,75 +398,104 @@ func layoutVBox(node *Node, contentX, contentY, contentW, contentH int, style St
 	if flowCount > 1 {
 		totalGaps = style.Gap * (flowCount - 1)
 	}
-	availH := contentH - totalGaps
-	if availH < 0 {
-		availH = 0
-	}
 
-	fixedTotal := 0
-	flexTotal := 0
+	if isScroll {
+		// Scroll container: children get natural heights, no flex distribution.
+		// Children may overflow the container's contentH.
+		for i, child := range node.Children {
+			if children[i].positioned {
+				continue
+			}
+			cs := children[i].style
+			marginV := cs.MarginTop + cs.MarginBottom
 
-	for i, child := range node.Children {
-		cs := children[i].style
-		if children[i].positioned {
-			continue
+			if child.Type == "fragment" {
+				fragH := len(child.Children)
+				if fragH < 1 {
+					fragH = 1
+				}
+				children[i].finalH = fragH
+			} else if cs.Height > 0 {
+				children[i].finalH = clamp(cs.Height, cs.MinHeight, cs.MaxHeight) + marginV
+			} else if cs.MinHeight > 0 {
+				children[i].finalH = cs.MinHeight + marginV
+			} else {
+				// Natural height: 1 for all types (flex children get 1, not distributed)
+				children[i].finalH = 1 + marginV
+			}
+		}
+	} else {
+		// Normal (non-scroll) container: distribute available height via flex.
+		availH := contentH - totalGaps
+		if availH < 0 {
+			availH = 0
 		}
 
-		marginV := cs.MarginTop + cs.MarginBottom
+		fixedTotal := 0
+		flexTotal := 0
 
-		// Fragment: natural height = number of children
-		if child.Type == "fragment" {
-			fragH := len(child.Children)
-			if fragH < 1 {
-				fragH = 1
+		for i, child := range node.Children {
+			cs := children[i].style
+			if children[i].positioned {
+				continue
 			}
-			children[i].fixedH = fragH
-			fixedTotal += children[i].fixedH
-		} else if cs.Height > 0 {
-			h := clamp(cs.Height, cs.MinHeight, cs.MaxHeight)
-			children[i].fixedH = h + marginV
-			fixedTotal += children[i].fixedH
-		} else if cs.MinHeight > 0 && cs.Flex == 0 {
-			children[i].fixedH = cs.MinHeight + marginV
-			fixedTotal += children[i].fixedH
-		} else if cs.Flex > 0 {
-			children[i].flexGrow = cs.Flex
-			flexTotal += cs.Flex
-		} else {
-			// No flex, no fixed height.
-			// Leaf types (text, input, textarea) get minimum 1 row.
-			// Container types get implicit flex=1.
-			switch child.Type {
-			case "text", "input", "textarea":
-				children[i].fixedH = 1 + marginV
+
+			marginV := cs.MarginTop + cs.MarginBottom
+
+			// Fragment: natural height = number of children
+			if child.Type == "fragment" {
+				fragH := len(child.Children)
+				if fragH < 1 {
+					fragH = 1
+				}
+				children[i].fixedH = fragH
 				fixedTotal += children[i].fixedH
-			default:
-				children[i].flexGrow = 1
-				flexTotal += 1
+			} else if cs.Height > 0 {
+				h := clamp(cs.Height, cs.MinHeight, cs.MaxHeight)
+				children[i].fixedH = h + marginV
+				fixedTotal += children[i].fixedH
+			} else if cs.MinHeight > 0 && cs.Flex == 0 {
+				children[i].fixedH = cs.MinHeight + marginV
+				fixedTotal += children[i].fixedH
+			} else if cs.Flex > 0 {
+				children[i].flexGrow = cs.Flex
+				flexTotal += cs.Flex
+			} else {
+				// No flex, no fixed height.
+				// Leaf types (text, input, textarea) get minimum 1 row.
+				// Container types get implicit flex=1.
+				switch child.Type {
+				case "text", "input", "textarea":
+					children[i].fixedH = 1 + marginV
+					fixedTotal += children[i].fixedH
+				default:
+					children[i].flexGrow = 1
+					flexTotal += 1
+				}
 			}
 		}
-	}
 
-	// Distribute remaining space to flex children
-	remainH := availH - fixedTotal
-	if remainH < 0 {
-		remainH = 0
-	}
-
-	for i := range children {
-		if children[i].positioned {
-			continue
+		// Distribute remaining space to flex children
+		remainH := availH - fixedTotal
+		if remainH < 0 {
+			remainH = 0
 		}
-		if children[i].flexGrow > 0 {
-			if flexTotal > 0 {
-				children[i].finalH = (remainH * children[i].flexGrow) / flexTotal
+
+		for i := range children {
+			if children[i].positioned {
+				continue
 			}
-			if children[i].finalH < 1 {
-				children[i].finalH = 1
+			if children[i].flexGrow > 0 {
+				if flexTotal > 0 {
+					children[i].finalH = (remainH * children[i].flexGrow) / flexTotal
+				}
+				if children[i].finalH < 1 {
+					children[i].finalH = 1
+				}
+				children[i].finalH = clamp(children[i].finalH, children[i].style.MinHeight, children[i].style.MaxHeight)
+			} else {
+				children[i].finalH = children[i].fixedH
 			}
-			children[i].finalH = clamp(children[i].finalH, children[i].style.MinHeight, children[i].style.MaxHeight)
-		} else {
-			children[i].finalH = children[i].fixedH
 		}
 	}
 
@@ -478,45 +509,48 @@ func layoutVBox(node *Node, contentX, contentY, contentW, contentH int, style St
 	}
 	totalUsed += totalGaps
 
-	// Determine starting Y based on justify
+	// Determine starting Y based on justify (skip for scroll containers)
 	curY := contentY
-	extraSpace := contentH - totalUsed
-	if extraSpace < 0 {
-		extraSpace = 0
-	}
-
 	gapSize := style.Gap
-	switch style.Justify {
-	case "center":
-		curY += extraSpace / 2
-	case "end":
-		curY += extraSpace
-	case "space-between":
-		if flowCount > 1 {
-			gapSize = 0
-			totalBetween := flowCount - 1
-			usedNoGap := totalUsed - totalGaps
-			spaceBetween := contentH - usedNoGap
-			if spaceBetween > 0 && totalBetween > 0 {
-				gapSize = spaceBetween / totalBetween
-			}
+	if !isScroll {
+		extraSpace := contentH - totalUsed
+		if extraSpace < 0 {
+			extraSpace = 0
 		}
-	case "space-around":
-		if flowCount > 0 {
-			gapSize = 0
-			usedNoGap := totalUsed - totalGaps
-			totalSlots := flowCount * 2
-			spaceAround := contentH - usedNoGap
-			if spaceAround > 0 && totalSlots > 0 {
-				halfGap := spaceAround / totalSlots
-				curY += halfGap
-				gapSize = halfGap * 2
+
+		switch style.Justify {
+		case "center":
+			curY += extraSpace / 2
+		case "end":
+			curY += extraSpace
+		case "space-between":
+			if flowCount > 1 {
+				gapSize = 0
+				totalBetween := flowCount - 1
+				usedNoGap := totalUsed - totalGaps
+				spaceBetween := contentH - usedNoGap
+				if spaceBetween > 0 && totalBetween > 0 {
+					gapSize = spaceBetween / totalBetween
+				}
+			}
+		case "space-around":
+			if flowCount > 0 {
+				gapSize = 0
+				usedNoGap := totalUsed - totalGaps
+				totalSlots := flowCount * 2
+				spaceAround := contentH - usedNoGap
+				if spaceAround > 0 && totalSlots > 0 {
+					halfGap := spaceAround / totalSlots
+					curY += halfGap
+					gapSize = halfGap * 2
+				}
 			}
 		}
 	}
 
 	// Position each child (skip absolute/fixed)
 	flowIdx := 0
+	var lastFlowChildNode *Node
 	for i, child := range node.Children {
 		if children[i].positioned {
 			continue
@@ -553,11 +587,17 @@ func layoutVBox(node *Node, contentX, contentY, contentW, contentH int, style St
 
 		computeFlex(child, childX, curY, childW, childH)
 		applyRelativeOffset(child, children[i].style)
+		lastFlowChildNode = child
 		curY += childH
 		flowIdx++
 		if flowIdx < flowCount {
 			curY += gapSize
 		}
+	}
+
+	// For scroll containers, store the total content height
+	if isScroll && lastFlowChildNode != nil {
+		node.ScrollHeight = (lastFlowChildNode.Y + lastFlowChildNode.H) - contentY
 	}
 }
 

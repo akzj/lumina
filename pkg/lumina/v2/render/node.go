@@ -86,7 +86,8 @@ type Node struct {
 	ComponentType string     // factory name for type="component" nodes
 
 	// Scroll state
-	ScrollY int
+	ScrollY      int
+	ScrollHeight int // total content height (set by layout for overflow=scroll containers)
 }
 
 // Component is a stateful UI unit.

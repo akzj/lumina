@@ -888,3 +888,112 @@ func TestHitTest_ScrollOffset(t *testing.T) {
 		t.Errorf("HitTest at bottom: hit Y=%d, want 14", hit.Y)
 	}
 }
+
+func TestHitTest_NestedScroll(t *testing.T) {
+	// Outer scroll container at Y=0, H=20, scrollY=5
+	// Inner scroll container at layout Y=10, H=10, scrollY=3
+	// Inner's child at layout Y=10 (relative to inner's content start)
+
+	outer := NewNode("vbox")
+	outer.X, outer.Y, outer.W, outer.H = 0, 0, 30, 20
+	outer.Style.Overflow = "scroll"
+	outer.ScrollY = 5
+	outer.ScrollHeight = 50
+
+	// Filler child before inner (at layout Y=0, H=10)
+	filler := NewNode("box")
+	filler.X, filler.Y, filler.W, filler.H = 0, 0, 30, 10
+	filler.ID = "filler"
+	filler.Parent = outer
+	outer.Children = append(outer.Children, filler)
+
+	// Inner scroll container at layout Y=10, H=10
+	inner := NewNode("vbox")
+	inner.X, inner.Y, inner.W, inner.H = 0, 10, 30, 10
+	inner.Style.Overflow = "scroll"
+	inner.ScrollY = 3
+	inner.ScrollHeight = 20
+	inner.ID = "inner"
+	inner.Parent = outer
+	outer.Children = append(outer.Children, inner)
+
+	// Inner's children at layout Y=10..29 (20 children, each H=1)
+	for i := 0; i < 20; i++ {
+		child := NewNode("text")
+		child.X = 0
+		child.Y = 10 + i
+		child.W = 30
+		child.H = 1
+		child.Content = "item"
+		child.Parent = inner
+		inner.Children = append(inner.Children, child)
+	}
+
+	// Outer screen position: Y=0 (no parent scroll)
+	// Outer scrollY=5, so children's screen positions:
+	//   filler: screenY = 0 - 5 = -5 (scrolled out of view)
+	//   inner: screenY = 10 - 5 = 5
+
+	// Inner is at screenY=5, H=10 (visible: screenY 5..14)
+	// Inner scrollY=3, so inner's children's cumulative offset = 5 + 3 = 8
+	// Inner's child at layoutY=13: screenY = 13 - 8 = 5
+	// Inner's child at layoutY=14: screenY = 14 - 8 = 6
+
+	// Click at screen (5, 6) should hit inner's child at layoutY=14
+	hit := HitTest(outer, 5, 6)
+	if hit == nil {
+		t.Fatal("expected a hit, got nil")
+	}
+	if hit.Y != 14 {
+		t.Errorf("nested scroll hit: Y=%d, want 14 (screen=6, outerScroll=5, innerScroll=3)", hit.Y)
+	}
+
+	// Click at screen (5, 5) should hit inner's child at layoutY=13
+	hit = HitTest(outer, 5, 5)
+	if hit == nil {
+		t.Fatal("expected a hit at screenY=5, got nil")
+	}
+	if hit.Y != 13 {
+		t.Errorf("nested scroll hit: Y=%d, want 13", hit.Y)
+	}
+
+	// Click at screen (5, 14) should hit inner's child at layoutY=22
+	hit = HitTest(outer, 5, 14)
+	if hit == nil {
+		t.Fatal("expected a hit at screenY=14, got nil")
+	}
+	if hit.Y != 22 {
+		t.Errorf("nested scroll hit: Y=%d, want 22", hit.Y)
+	}
+}
+
+func TestHitTest_ScrollContainer_BorderClipping(t *testing.T) {
+	// Click on border area of scroll container should return the container, not children
+	parent := NewNode("vbox")
+	parent.X, parent.Y, parent.W, parent.H = 0, 0, 20, 10
+	parent.Style.Overflow = "scroll"
+	parent.Style.Border = "single"
+	parent.ScrollY = 0
+	parent.ScrollHeight = 20
+
+	child := NewNode("text")
+	child.X, child.Y, child.W, child.H = 1, 1, 18, 1
+	child.Content = "item"
+	child.Parent = parent
+	parent.Children = append(parent.Children, child)
+
+	// Click on top border (Y=0) — should return parent, not child
+	hit := HitTest(parent, 5, 0)
+	if hit != parent {
+		t.Errorf("click on border should return parent, got node at Y=%d", hit.Y)
+	}
+
+	// Click inside content area (Y=1) — should return child
+	hit = HitTest(parent, 5, 1)
+	if hit == nil {
+		t.Fatal("expected hit inside content area")
+	}
+	if hit != child {
+		t.Errorf("click inside content should return child, got node at Y=%d", hit.Y)
+	}
+}

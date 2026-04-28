@@ -48,6 +48,16 @@ func paintDirtyWalk(buf *CellBuffer, node *Node) {
 	}
 
 	if node.PaintDirty {
+		// If this node is inside a scroll container, escalate to the scroll parent
+		// so that paintBox → paintScrollChildren handles clipping correctly.
+		if node.Parent != nil && node.Parent.Style.Overflow == "scroll" && !node.Parent.PaintDirty {
+			node.Parent.PaintDirty = true
+			buf.ClearRect(node.Parent.X, node.Parent.Y, node.Parent.W, node.Parent.H)
+			paintNode(buf, node.Parent)
+			node.Parent.PaintDirty = false
+			clearPaintDirtyBelow(node.Parent)
+			return
+		}
 		// Clear this node's region first, then repaint
 		buf.ClearRect(node.X, node.Y, node.W, node.H)
 		paintNode(buf, node)
