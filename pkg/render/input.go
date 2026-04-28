@@ -22,6 +22,7 @@ func (e *Engine) setFocus(newNode *Node) {
 
 	// Blur old
 	if old != nil && !old.Removed {
+		old.Focused = false
 		old.PaintDirty = true
 		if old.OnBlur != 0 {
 			e.callLuaRefSimple(old.OnBlur)
@@ -32,6 +33,7 @@ func (e *Engine) setFocus(newNode *Node) {
 
 	// Focus new
 	if newNode != nil {
+		newNode.Focused = true
 		newNode.PaintDirty = true
 		if newNode.OnFocus != 0 {
 			e.callLuaRefSimple(newNode.OnFocus)

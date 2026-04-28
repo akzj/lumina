@@ -69,6 +69,7 @@ type Node struct {
 	// Input/textarea state
 	CursorPos int  // cursor position within Content
 	AutoFocus bool // auto-focus on mount
+	Focused   bool // true when this node has input focus
 
 	// Widget support
 	Focusable bool // true = can receive focus via Tab cycling
