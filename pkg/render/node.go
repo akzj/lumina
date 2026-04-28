@@ -70,16 +70,26 @@ type Node struct {
 	CursorPos int  // cursor position within Content
 	AutoFocus bool // auto-focus on mount
 
+	// Widget support
+	Focusable bool // true = can receive focus via Tab cycling
+	Disabled  bool // true = skip events, skip focus
+
 	// Events (persistent references, not re-registered per frame)
-	OnClick      LuaRef
-	OnMouseEnter LuaRef
-	OnMouseLeave LuaRef
-	OnKeyDown    LuaRef
+	OnClick        LuaRef
+	OnMouseEnter   LuaRef
+	OnMouseLeave   LuaRef
+	OnKeyDown      LuaRef
+	OnMouseDown    LuaRef
+	OnMouseUp      LuaRef
+	OnFocus        LuaRef
+	OnBlur         LuaRef
+	OnSubmit       LuaRef
+	OnOutsideClick LuaRef
 
 	// Lifecycle
-	Removed bool // true when orphaned from tree (stale pointer guard)
-	OnChange     LuaRef
-	OnScroll     LuaRef
+	Removed  bool // true when orphaned from tree (stale pointer guard)
+	OnChange LuaRef
+	OnScroll LuaRef
 
 	// Component (if this is a component root node)
 	Component     *Component // nil for plain elements

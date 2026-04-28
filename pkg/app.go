@@ -220,7 +220,10 @@ func (a *App) HandleEvent(e *event.Event) {
 
 	switch e.Type {
 	case "click", "mousedown":
+		a.engine.HandleMouseDown(e.X, e.Y)
 		a.engine.HandleClick(e.X, e.Y)
+	case "mouseup":
+		a.engine.HandleMouseUp(e.X, e.Y)
 	case "mousemove":
 		a.engine.HandleMouseMove(e.X, e.Y)
 	case "keydown":

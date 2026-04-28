@@ -14,18 +14,26 @@ type Descriptor struct {
 	// Input/textarea specific
 	Placeholder string
 	AutoFocus   bool
+	Focusable   bool
+	Disabled    bool
 
 	// Scroll state
 	ScrollY    int
 	ScrollYSet bool // true only when Lua explicitly sets scrollY
 
 	// Event handler refs (Lua registry refs)
-	OnClick      LuaRef
-	OnMouseEnter LuaRef
-	OnMouseLeave LuaRef
-	OnKeyDown    LuaRef
-	OnChange     LuaRef
-	OnScroll     LuaRef
+	OnClick        LuaRef
+	OnMouseEnter   LuaRef
+	OnMouseLeave   LuaRef
+	OnKeyDown      LuaRef
+	OnChange       LuaRef
+	OnScroll       LuaRef
+	OnMouseDown    LuaRef
+	OnMouseUp      LuaRef
+	OnFocus        LuaRef
+	OnBlur         LuaRef
+	OnSubmit       LuaRef
+	OnOutsideClick LuaRef
 
 	// Component-specific (when Type == "component")
 	ComponentType  string // factory name

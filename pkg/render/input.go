@@ -1,6 +1,11 @@
 package render
 
-import "github.com/akzj/go-lua/pkg/lua"
+import (
+	"unicode"
+	"unicode/utf8"
+
+	"github.com/akzj/go-lua/pkg/lua"
+)
 
 // FocusedNode returns the currently focused node.
 func (e *Engine) FocusedNode() *Node { return e.focusedNode }
@@ -8,7 +13,35 @@ func (e *Engine) FocusedNode() *Node { return e.focusedNode }
 // SetFocusedNode sets the currently focused node.
 func (e *Engine) SetFocusedNode(n *Node) { e.focusedNode = n }
 
-// FocusNext cycles focus to the next focusable node (input/textarea).
+// setFocus changes focus from the current node to newNode, firing onBlur/onFocus.
+func (e *Engine) setFocus(newNode *Node) {
+	old := e.focusedNode
+	if old == newNode {
+		return
+	}
+
+	// Blur old
+	if old != nil && !old.Removed {
+		old.PaintDirty = true
+		if old.OnBlur != 0 {
+			e.callLuaRefSimple(old.OnBlur)
+		}
+	}
+
+	e.focusedNode = newNode
+
+	// Focus new
+	if newNode != nil {
+		newNode.PaintDirty = true
+		if newNode.OnFocus != 0 {
+			e.callLuaRefSimple(newNode.OnFocus)
+		}
+	}
+
+	e.needsRender = true
+}
+
+// FocusNext cycles focus to the next focusable node.
 // If nothing is focused, focuses the first focusable node.
 func (e *Engine) FocusNext() {
 	if e.root == nil || e.root.RootNode == nil {
@@ -31,14 +64,7 @@ func (e *Engine) FocusNext() {
 
 	// Advance to next (wrap around)
 	nextIdx := (idx + 1) % len(focusable)
-	old := e.focusedNode
-	e.focusedNode = focusable[nextIdx]
-
-	if old != nil {
-		old.PaintDirty = true
-	}
-	e.focusedNode.PaintDirty = true
-	e.needsRender = true
+	e.setFocus(focusable[nextIdx])
 }
 
 // FocusAutoFocus focuses the first node with AutoFocus=true.
@@ -99,9 +125,14 @@ func (e *Engine) HandleInputKeyDown(key string) bool {
 			e.fireOnChange(node)
 			return true
 		}
-		// For input, Enter fires onSubmit (via onChange with current value)
-		// The test expects the onChange callback to be called
+		// For input, Enter fires onSubmit (bubble up) and onChange
 		e.fireOnChange(node)
+		for n := node; n != nil; n = n.Parent {
+			if n.OnSubmit != 0 {
+				e.callLuaRefSimple(n.OnSubmit)
+				break
+			}
+		}
 		return true
 
 	case "ArrowLeft", "Left":
@@ -136,8 +167,9 @@ func (e *Engine) HandleInputKeyDown(key string) bool {
 		return false
 
 	default:
-		// Single printable character
-		if len(key) == 1 && key[0] >= 0x20 && key[0] <= 0x7E {
+		// Printable character (ASCII or Unicode/CJK)
+		r, size := utf8.DecodeRuneInString(key)
+		if size == len(key) && r != utf8.RuneError && unicode.IsPrint(r) {
 			runes := []rune(node.Content)
 			if node.CursorPos > len(runes) {
 				node.CursorPos = len(runes)
@@ -240,13 +272,13 @@ func (e *Engine) moveCursorVertical(node *Node, direction int) {
 	e.needsRender = true
 }
 
-// collectFocusable walks the tree and collects all focusable nodes (input/textarea).
+// collectFocusable walks the tree and collects all focusable, non-disabled nodes.
 func collectFocusable(node *Node) []*Node {
 	if node == nil {
 		return nil
 	}
 	var result []*Node
-	if node.Type == "input" || node.Type == "textarea" {
+	if node.Focusable && !node.Disabled {
 		result = append(result, node)
 	}
 	for _, child := range node.Children {
@@ -260,7 +292,7 @@ func findAutoFocus(node *Node) *Node {
 	if node == nil {
 		return nil
 	}
-	if node.AutoFocus && (node.Type == "input" || node.Type == "textarea") {
+	if node.AutoFocus && node.Focusable {
 		return node
 	}
 	for _, child := range node.Children {

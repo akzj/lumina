@@ -356,6 +356,14 @@ func (e *Engine) readDescriptor(L *lua.State, idx int) Descriptor {
 	desc.OnKeyDown = getRefField(L, absIdx, "onKeyDown")
 	desc.OnChange = getRefField(L, absIdx, "onChange")
 	desc.OnScroll = getRefField(L, absIdx, "onScroll")
+	desc.OnMouseDown = getRefField(L, absIdx, "onMouseDown")
+	desc.OnMouseUp = getRefField(L, absIdx, "onMouseUp")
+	desc.OnFocus = getRefField(L, absIdx, "onFocus")
+	desc.OnBlur = getRefField(L, absIdx, "onBlur")
+	desc.OnSubmit = getRefField(L, absIdx, "onSubmit")
+	desc.OnOutsideClick = getRefField(L, absIdx, "onOutsideClick")
+	desc.Focusable = getBoolField(L, absIdx, "focusable")
+	desc.Disabled = getBoolField(L, absIdx, "disabled")
 
 	// Read children
 	L.GetField(absIdx, "children")
@@ -391,6 +399,11 @@ func (e *Engine) readDescriptor(L *lua.State, idx int) Descriptor {
 			desc.ComponentProps = readMapFromTable(L, -1)
 		}
 		L.Pop(1)
+	}
+
+	// Backward compat: input/textarea are always focusable
+	if desc.Type == "input" || desc.Type == "textarea" {
+		desc.Focusable = true
 	}
 
 	return desc
