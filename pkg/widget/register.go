@@ -15,5 +15,8 @@ func All() []*Widget {
 		Table,
 		List,
 		Pagination,
+		Menu,
+		Dropdown,
+		Spacer,
 	}
 }
