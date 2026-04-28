@@ -1,6 +1,7 @@
 package render
 
 import (
+	"sort"
 	"strings"
 
 	"github.com/akzj/go-lua/pkg/lua"
@@ -267,10 +268,13 @@ func (e *Engine) renderComponent(comp *Component) {
 
 	// PCall(1 arg = props, 1 result, 0 error handler)
 	if status := L.PCall(1, 1, 0); status != lua.OK {
+		errMsg, _ := L.ToString(-1)
 		L.Pop(1) // pop error
 		comp.Dirty = false
+		comp.LastError = errMsg
 		return
 	}
+	comp.LastError = "" // clear on success
 
 	// Read descriptor from Lua stack (the returned table)
 	if !L.IsTable(-1) {
@@ -449,8 +453,53 @@ func (e *Engine) readStyleFields(L *lua.State, idx int, s *Style) {
 	if s.Height == 0 {
 		s.Height = int(getIntField(L, absIdx, "height"))
 	}
+	if s.MinWidth == 0 {
+		s.MinWidth = int(getIntField(L, absIdx, "minWidth"))
+	}
+	if s.MinHeight == 0 {
+		s.MinHeight = int(getIntField(L, absIdx, "minHeight"))
+	}
+	if s.MaxWidth == 0 {
+		s.MaxWidth = int(getIntField(L, absIdx, "maxWidth"))
+	}
+	if s.MaxHeight == 0 {
+		s.MaxHeight = int(getIntField(L, absIdx, "maxHeight"))
+	}
 	if s.Flex == 0 {
 		s.Flex = int(getIntField(L, absIdx, "flex"))
+	}
+	if s.Gap == 0 {
+		s.Gap = int(getIntField(L, absIdx, "gap"))
+	}
+	if s.Padding == 0 {
+		s.Padding = int(getIntField(L, absIdx, "padding"))
+	}
+	if s.PaddingTop == 0 {
+		s.PaddingTop = int(getIntField(L, absIdx, "paddingTop"))
+	}
+	if s.PaddingRight == 0 {
+		s.PaddingRight = int(getIntField(L, absIdx, "paddingRight"))
+	}
+	if s.PaddingBottom == 0 {
+		s.PaddingBottom = int(getIntField(L, absIdx, "paddingBottom"))
+	}
+	if s.PaddingLeft == 0 {
+		s.PaddingLeft = int(getIntField(L, absIdx, "paddingLeft"))
+	}
+	if s.Margin == 0 {
+		s.Margin = int(getIntField(L, absIdx, "margin"))
+	}
+	if s.MarginTop == 0 {
+		s.MarginTop = int(getIntField(L, absIdx, "marginTop"))
+	}
+	if s.MarginRight == 0 {
+		s.MarginRight = int(getIntField(L, absIdx, "marginRight"))
+	}
+	if s.MarginBottom == 0 {
+		s.MarginBottom = int(getIntField(L, absIdx, "marginBottom"))
+	}
+	if s.MarginLeft == 0 {
+		s.MarginLeft = int(getIntField(L, absIdx, "marginLeft"))
 	}
 	if s.Foreground == "" {
 		s.Foreground = getStringField(L, absIdx, "foreground")
@@ -467,8 +516,41 @@ func (e *Engine) readStyleFields(L *lua.State, idx int, s *Style) {
 	if s.Border == "" {
 		s.Border = getStringField(L, absIdx, "border")
 	}
+	if s.Justify == "" {
+		s.Justify = getStringField(L, absIdx, "justify")
+	}
+	if s.Align == "" {
+		s.Align = getStringField(L, absIdx, "align")
+	}
+	if s.Overflow == "" {
+		s.Overflow = getStringField(L, absIdx, "overflow")
+	}
+	if s.Position == "" {
+		s.Position = getStringField(L, absIdx, "position")
+	}
 	if !s.Bold {
 		s.Bold = getBoolField(L, absIdx, "bold")
+	}
+	if !s.Dim {
+		s.Dim = getBoolField(L, absIdx, "dim")
+	}
+	if !s.Underline {
+		s.Underline = getBoolField(L, absIdx, "underline")
+	}
+	if s.Top == 0 {
+		s.Top = int(getIntField(L, absIdx, "top"))
+	}
+	if s.Left == 0 {
+		s.Left = int(getIntField(L, absIdx, "left"))
+	}
+	if s.Right == -1 {
+		s.Right = int(getIntFieldDefault(L, absIdx, "right", -1))
+	}
+	if s.Bottom == -1 {
+		s.Bottom = int(getIntFieldDefault(L, absIdx, "bottom", -1))
+	}
+	if s.ZIndex == 0 {
+		s.ZIndex = int(getIntField(L, absIdx, "zIndex"))
 	}
 }
 
@@ -636,15 +718,34 @@ func (e *Engine) renderInOrder() int {
 		e.renderComponent(e.root)
 		count++
 	}
-	// Then render all other dirty components (children)
+	// Collect dirty non-root components, sort by depth (parent before child)
+	var dirty []*Component
 	for _, comp := range e.components {
 		if !comp.Dirty || comp.IsRoot {
 			continue
+		}
+		dirty = append(dirty, comp)
+	}
+	sort.Slice(dirty, func(i, j int) bool {
+		return componentDepth(dirty[i]) < componentDepth(dirty[j])
+	})
+	for _, comp := range dirty {
+		if !comp.Dirty {
+			continue // may have been rendered as side effect
 		}
 		e.renderComponent(comp)
 		count++
 	}
 	return count
+}
+
+// componentDepth returns the depth of a component in the tree (0 = root).
+func componentDepth(c *Component) int {
+	depth := 0
+	for p := c.Parent; p != nil; p = p.Parent {
+		depth++
+	}
+	return depth
 }
 
 // hasAnyDirty returns true if any node in the tree has LayoutDirty or PaintDirty set.
@@ -1010,9 +1111,6 @@ func getIntFieldDefault(L *lua.State, idx int, field string, def int64) int64 {
 	}
 	n, _ := L.ToInteger(-1)
 	L.Pop(1)
-	if n == 0 {
-		return def
-	}
 	return n
 }
 

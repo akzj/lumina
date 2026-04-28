@@ -153,6 +153,11 @@ func paintScrollChildren(buf *CellBuffer, node *Node) {
 
 // shiftNodeTreeY shifts all children (recursively) of a node by dy.
 // Does NOT shift the node itself (only its children).
+//
+// SAFETY: This temporarily mutates node Y positions for scroll painting.
+// This is only safe because the engine is single-threaded. If concurrent
+// access is ever added, this must be replaced with a paint-time offset
+// parameter instead of mutating the tree.
 func shiftNodeTreeY(node *Node, dy int) {
 	for _, child := range node.Children {
 		shiftNodeY(child, dy)
