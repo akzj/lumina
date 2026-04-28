@@ -135,11 +135,17 @@ func (t *tuiAdapter) writeCell(c buffer.Cell, curFg, curBg *string, curBold, cur
 
 // Flush flushes buffered output.
 func (t *tuiAdapter) Flush() error {
+	// Park cursor at top-left to prevent IME composition characters
+	// from corrupting the display. Without this, the cursor remains
+	// at the last-written cell position, and terminal IME overlays
+	// write characters there, causing scrolling/shifting.
+	t.w.WriteString("\033[1;1H")
 	return t.w.Flush()
 }
 
 // Close flushes and is a no-op otherwise (we don't own the writer).
 func (t *tuiAdapter) Close() error {
+	t.w.WriteString("\033[1;1H")
 	return t.w.Flush()
 }
 
