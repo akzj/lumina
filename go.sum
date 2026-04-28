@@ -1,5 +1,7 @@
 github.com/akzj/go-lua v0.3.0 h1:CGe/gp3p93GgRug3yX3PWKmnlRT73LgttSe6dPt3ms0=
 github.com/akzj/go-lua v0.3.0/go.mod h1:WMeZyHJ7bclBp4EKxFgUv5N01pHSxS8jQtxPaA4pcTk=
+github.com/akzj/go-lua v0.5.1 h1:81s4GDgWXkFxbwDMj15q7KoA0vxBsEfEpz+jPcS0xLU=
+github.com/akzj/go-lua v0.5.1/go.mod h1:WMeZyHJ7bclBp4EKxFgUv5N01pHSxS8jQtxPaA4pcTk=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/google/go-cmp v0.7.0 h1:wk8382ETsv4JYUZwIsn6YpYiWiBsYLSJiTsyBybVuN8=

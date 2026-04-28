@@ -32,6 +32,7 @@ type App struct {
 	animMgr   *animation.Manager
 	routerMgr *router.Router
 	timerMgr  *timerManager
+	scheduler *lua.Scheduler
 	quit      chan struct{}
 	running   bool
 
@@ -50,6 +51,14 @@ func NewApp(L *lua.State, w, h int, adapter output.Adapter) *App {
 	eng.RegisterLuaAPI()
 	eng.SetTracker(t)
 
+	sched := lua.NewScheduler(L)
+	sched.OnError = func(err error) {
+		// Log async coroutine errors (non-fatal)
+		_ = err // TODO: wire to proper logger if available
+	}
+
+	eng.SetScheduler(sched)
+
 	a := &App{
 		width:     w,
 		height:    h,
@@ -60,6 +69,7 @@ func NewApp(L *lua.State, w, h int, adapter output.Adapter) *App {
 		animMgr:   animation.NewManager(),
 		routerMgr: router.New(),
 		timerMgr:  newTimerManager(),
+		scheduler: sched,
 		quit:      make(chan struct{}),
 		engine:    eng,
 	}

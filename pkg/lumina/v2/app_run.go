@@ -99,6 +99,10 @@ func (a *App) RunString(code string) error {
 
 // Stop signals the event loop to exit.
 func (a *App) Stop() {
+	// Cancel pending async coroutines.
+	if a.scheduler != nil {
+		a.scheduler.Destroy()
+	}
 	if a.quit != nil {
 		select {
 		case <-a.quit:
@@ -200,6 +204,11 @@ func (a *App) reloadScript(path string) {
 	// Reset timers.
 	if a.timerMgr != nil {
 		a.timerMgr.releaseAll(a.luaState)
+	}
+
+	// Cancel pending async coroutines.
+	if a.scheduler != nil {
+		a.scheduler.Destroy()
 	}
 
 	// Re-set package.path for the reloaded script.
