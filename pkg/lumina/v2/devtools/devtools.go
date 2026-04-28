@@ -42,9 +42,11 @@ type Panel struct {
 	Height    int // panel height (bottom portion of screen)
 
 	// Data sources
-	tracker    *perf.Tracker
-	components []ComponentInfo
-	perfSnap   PerfSnapshot // frozen perf data for display
+	tracker          *perf.Tracker
+	components       []ComponentInfo
+	nodeTree         []NodeInfo   // flattened node tree for Elements tab
+	elementsScrollY  int          // scroll offset for Elements tab
+	perfSnap         PerfSnapshot // frozen perf data for display
 
 	// FPS tracking (updated by TickFPS, called from event loop)
 	fpsFrameCount int
@@ -119,6 +121,47 @@ func (p *Panel) UpdateComponents(infos []ComponentInfo) {
 // Components returns the current component snapshot list.
 func (p *Panel) Components() []ComponentInfo {
 	return p.components
+}
+
+// NodeInfo holds snapshot data about a render node for the Elements tree view.
+type NodeInfo struct {
+	Type    string // "box", "hbox", "vbox", "text", "input", "textarea", "component"
+	X, Y    int
+	W, H    int
+	BG      string
+	FG      string
+	Content string // for text nodes
+	Depth   int    // indentation level
+}
+
+// UpdateNodeTree replaces the node tree snapshot for the Elements tab.
+func (p *Panel) UpdateNodeTree(infos []NodeInfo) {
+	p.nodeTree = infos
+}
+
+// NodeTree returns the current node tree snapshot.
+func (p *Panel) NodeTree() []NodeInfo {
+	return p.nodeTree
+}
+
+// ScrollElements adjusts the Elements tab scroll offset by delta lines.
+func (p *Panel) ScrollElements(delta int) {
+	p.elementsScrollY += delta
+	if p.elementsScrollY < 0 {
+		p.elementsScrollY = 0
+	}
+	maxScroll := len(p.nodeTree) - (p.Height - 3) // 3 for tab bar + margins
+	if maxScroll < 0 {
+		maxScroll = 0
+	}
+	if p.elementsScrollY > maxScroll {
+		p.elementsScrollY = maxScroll
+	}
+}
+
+// ElementsScrollY returns the current Elements tab scroll offset.
+func (p *Panel) ElementsScrollY() int {
+	return p.elementsScrollY
 }
 
 // Snapshot returns the frozen perf snapshot for display.
