@@ -1050,3 +1050,180 @@ func TestLayout_AsymmetricPadding(t *testing.T) {
 		t.Errorf("child.H = %d, want 20", child.H)
 	}
 }
+
+// --- Test: VBox overflow=scroll — children get natural heights, overflow container ---
+
+func TestLayout_VBox_OverflowScroll(t *testing.T) {
+	// Container: height=10, overflow=scroll, 20 children each with height=3
+	s := ds()
+	s.Overflow = "scroll"
+	s.Height = 10
+	s.Width = 20
+
+	var children []*Node
+	for i := 0; i < 20; i++ {
+		children = append(children, makeNode("box", withHeight(3)))
+	}
+
+	root := makeNode("vbox", s, children...)
+	LayoutFull(root, 0, 0, 80, 24)
+
+	// Root should be constrained to its declared size
+	if root.W != 20 || root.H != 10 {
+		t.Errorf("root size: got %dx%d, want 20x10", root.W, root.H)
+	}
+
+	// Children should be positioned sequentially, overflowing the container
+	for i, child := range root.Children {
+		expectedY := i * 3
+		if child.Y != expectedY {
+			t.Errorf("child[%d].Y = %d, want %d", i, child.Y, expectedY)
+		}
+		if child.H != 3 {
+			t.Errorf("child[%d].H = %d, want 3", i, child.H)
+		}
+	}
+
+	// ScrollHeight should be set to total content height
+	expectedScrollH := 20 * 3 // 20 children × 3 height each
+	if root.ScrollHeight != expectedScrollH {
+		t.Errorf("ScrollHeight = %d, want %d", root.ScrollHeight, expectedScrollH)
+	}
+}
+
+func TestLayout_VBox_OverflowScroll_WithGap(t *testing.T) {
+	s := ds()
+	s.Overflow = "scroll"
+	s.Height = 10
+	s.Width = 20
+	s.Gap = 1
+
+	root := makeNode("vbox", s,
+		makeNode("box", withHeight(3)),
+		makeNode("box", withHeight(3)),
+		makeNode("box", withHeight(3)),
+	)
+	LayoutFull(root, 0, 0, 80, 24)
+
+	c0 := root.Children[0]
+	c1 := root.Children[1]
+	c2 := root.Children[2]
+
+	if c0.Y != 0 || c0.H != 3 {
+		t.Errorf("child[0]: Y=%d H=%d, want Y=0 H=3", c0.Y, c0.H)
+	}
+	if c1.Y != 4 || c1.H != 3 {
+		t.Errorf("child[1]: Y=%d H=%d, want Y=4 H=3", c1.Y, c1.H)
+	}
+	if c2.Y != 8 || c2.H != 3 {
+		t.Errorf("child[2]: Y=%d H=%d, want Y=8 H=3", c2.Y, c2.H)
+	}
+
+	// ScrollHeight = last child bottom - contentY = (8+3) - 0 = 11
+	if root.ScrollHeight != 11 {
+		t.Errorf("ScrollHeight = %d, want 11", root.ScrollHeight)
+	}
+}
+
+func TestLayout_VBox_OverflowScroll_FlexChildrenGetHeight1(t *testing.T) {
+	// In scroll containers, flex children should get height 1 (not distributed)
+	s := ds()
+	s.Overflow = "scroll"
+	s.Height = 10
+	s.Width = 20
+
+	root := makeNode("vbox", s,
+		makeNode("box", withFlex(1)),
+		makeNode("box", withFlex(2)),
+		makeNode("box", withHeight(5)),
+	)
+	LayoutFull(root, 0, 0, 80, 24)
+
+	c0 := root.Children[0]
+	c1 := root.Children[1]
+	c2 := root.Children[2]
+
+	// Flex children get natural height 1
+	if c0.H != 1 {
+		t.Errorf("flex=1 child H = %d, want 1 (natural in scroll)", c0.H)
+	}
+	if c1.H != 1 {
+		t.Errorf("flex=2 child H = %d, want 1 (natural in scroll)", c1.H)
+	}
+	// Fixed height child keeps its height
+	if c2.H != 5 {
+		t.Errorf("fixed child H = %d, want 5", c2.H)
+	}
+
+	// Sequential positioning
+	if c0.Y != 0 {
+		t.Errorf("child[0].Y = %d, want 0", c0.Y)
+	}
+	if c1.Y != 1 {
+		t.Errorf("child[1].Y = %d, want 1", c1.Y)
+	}
+	if c2.Y != 2 {
+		t.Errorf("child[2].Y = %d, want 2", c2.Y)
+	}
+}
+
+func TestLayout_VBox_OverflowScroll_WithBorderAndPadding(t *testing.T) {
+	s := ds()
+	s.Overflow = "scroll"
+	s.Height = 20
+	s.Width = 30
+	s.Border = "single"
+	s.PaddingTop = 1
+	s.PaddingBottom = 1
+	s.PaddingLeft = 1
+	s.PaddingRight = 1
+
+	root := makeNode("vbox", s,
+		makeNode("box", withHeight(5)),
+		makeNode("box", withHeight(5)),
+		makeNode("box", withHeight(5)),
+	)
+	LayoutFull(root, 0, 0, 80, 24)
+
+	// Content area: border=1 + padding=1 = 2 on each side
+	// contentX=2, contentY=2, contentW=30-4-1(scrollbar)=25, contentH=20-4=16
+	c0 := root.Children[0]
+	c1 := root.Children[1]
+	c2 := root.Children[2]
+
+	if c0.X != 2 {
+		t.Errorf("child[0].X = %d, want 2", c0.X)
+	}
+	if c0.Y != 2 {
+		t.Errorf("child[0].Y = %d, want 2", c0.Y)
+	}
+	if c1.Y != 7 {
+		t.Errorf("child[1].Y = %d, want 7", c1.Y)
+	}
+	if c2.Y != 12 {
+		t.Errorf("child[2].Y = %d, want 12", c2.Y)
+	}
+
+	// ScrollHeight = (12+5) - 2 = 15
+	if root.ScrollHeight != 15 {
+		t.Errorf("ScrollHeight = %d, want 15", root.ScrollHeight)
+	}
+}
+
+func TestLayout_VBox_OverflowScroll_ScrollbarReservesColumn(t *testing.T) {
+	s := ds()
+	s.Overflow = "scroll"
+	s.Height = 10
+	s.Width = 20
+
+	root := makeNode("vbox", s,
+		makeNode("box", withHeight(3)),
+	)
+	LayoutFull(root, 0, 0, 80, 24)
+
+	// Child width should be 19 (20 - 1 for scrollbar)
+	child := root.Children[0]
+	if child.W != 19 {
+		t.Errorf("child.W = %d, want 19 (scrollbar reserves 1 column)", child.W)
+	}
+}

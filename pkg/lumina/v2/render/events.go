@@ -4,48 +4,70 @@ import "github.com/akzj/go-lua/pkg/lua"
 
 // HitTest finds the deepest Node at screen coordinates (x, y).
 // Returns nil if no node contains the point.
-// For scroll containers, adjusts Y to account for scroll offset.
+// Uses cumulative scroll offset for correct nested scroll handling.
 func HitTest(root *Node, x, y int) *Node {
-	if root == nil {
-		return nil
-	}
-	// Check if point is within this node's bounds
-	if x < root.X || x >= root.X+root.W || y < root.Y || y >= root.Y+root.H {
+	return hitTestWithOffset(root, x, y, 0)
+}
+
+// hitTestWithOffset performs hit testing with a cumulative scroll offset.
+// scrollOffsetY accumulates as we descend through nested scroll containers.
+// Each node's screen position = layout position - cumulativeScrollOffset.
+func hitTestWithOffset(node *Node, x, y int, scrollOffsetY int) *Node {
+	if node == nil {
 		return nil
 	}
 
-	// If this node is a scroll container, adjust y for children:
-	// Children are laid out at original Y positions, but displayed shifted by -scrollY.
-	// Map screen Y to layout Y by adding scrollY.
-	childY := y
-	if root.Style.Overflow == "scroll" && root.ScrollY != 0 {
-		childY = y + root.ScrollY
+	// Node's screen position = layout position - cumulative scroll offset
+	screenX := node.X
+	screenY := node.Y - scrollOffsetY
+
+	// Bounds check using screen coordinates
+	if x < screenX || x >= screenX+node.W || y < screenY || y >= screenY+node.H {
+		return nil
 	}
 
-	// Check children in reverse order (last child is on top / higher z-index)
-	for i := len(root.Children) - 1; i >= 0; i-- {
-		child := root.Children[i]
-		// For scroll containers, skip children outside the visible area
-		if root.Style.Overflow == "scroll" {
+	// Calculate child scroll offset
+	childScrollOffset := scrollOffsetY
+	if node.Style.Overflow == "scroll" {
+		childScrollOffset += node.ScrollY
+
+		// Clip: only process clicks within content area (not border/padding)
+		bw := 0
+		if node.Style.Border != "" && node.Style.Border != "none" {
+			bw = 1
+		}
+		visTop := screenY + bw + node.Style.PaddingTop
+		visBot := screenY + node.H - bw - node.Style.PaddingBottom
+		if y < visTop || y >= visBot {
+			return node // click on border/padding area, return container
+		}
+	}
+
+	// Check children in reverse order (top-most first)
+	for i := len(node.Children) - 1; i >= 0; i-- {
+		child := node.Children[i]
+
+		// For scroll containers, skip children outside visible area
+		if node.Style.Overflow == "scroll" {
+			childScreenY := child.Y - childScrollOffset
+			childScreenBottom := childScreenY + child.H
 			bw := 0
-			if root.Style.Border != "" && root.Style.Border != "none" {
+			if node.Style.Border != "" && node.Style.Border != "none" {
 				bw = 1
 			}
-			visibleTop := root.Y + bw + root.Style.PaddingTop
-			visibleBottom := root.Y + root.H - bw - root.Style.PaddingBottom
-			// Child's visual position = child.Y - scrollY
-			childVisualY := child.Y - root.ScrollY
-			childVisualBottom := childVisualY + child.H
-			if childVisualBottom <= visibleTop || childVisualY >= visibleBottom {
-				continue // child is scrolled out of view
+			visTop := screenY + bw + node.Style.PaddingTop
+			visBot := screenY + node.H - bw - node.Style.PaddingBottom
+			if childScreenBottom <= visTop || childScreenY >= visBot {
+				continue // scrolled out of view
 			}
 		}
-		if hit := HitTest(child, x, childY); hit != nil {
+
+		if hit := hitTestWithOffset(child, x, y, childScrollOffset); hit != nil {
 			return hit
 		}
 	}
-	// No child hit — this node is the target
-	return root
+
+	return node
 }
 
 // HitTestWithHandler finds the deepest Node at (x,y) that has a handler for the given event.
@@ -251,29 +273,18 @@ func (e *Engine) autoScroll(node *Node, delta int) {
 	e.needsRender = true
 }
 
-// computeMaxScrollY calculates total children height minus container content height.
+// computeMaxScrollY calculates the maximum scroll offset for a scroll container.
+// Uses the stored ScrollHeight (set by layout) minus the visible content height.
 func computeMaxScrollY(node *Node) int {
-	// Total children height (sum of all child heights + gaps)
-	totalH := 0
-	gap := node.Style.Gap
-	for i, child := range node.Children {
-		totalH += child.H
-		if i > 0 && gap > 0 {
-			totalH += gap
-		}
-	}
-
-	// Container content height (node.H minus padding and border)
-	borderW := 0
+	bw := 0
 	if node.Style.Border != "" && node.Style.Border != "none" {
-		borderW = 1
+		bw = 1
 	}
-	contentH := node.H - 2*borderW - node.Style.PaddingTop - node.Style.PaddingBottom
+	contentH := node.H - 2*bw - node.Style.PaddingTop - node.Style.PaddingBottom
 	if contentH <= 0 {
 		return 0
 	}
-
-	maxScroll := totalH - contentH
+	maxScroll := node.ScrollHeight - contentH
 	if maxScroll < 0 {
 		maxScroll = 0
 	}
