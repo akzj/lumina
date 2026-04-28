@@ -55,6 +55,9 @@ type App struct {
 
 	// DevTools refresh throttle
 	devtoolsLastRefresh time.Time
+
+	// Last error from key handlers or other async Lua calls
+	lastError string
 }
 
 // NewApp creates a new App with the V2 render engine.

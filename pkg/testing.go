@@ -456,6 +456,14 @@ func (fw *testFramework) luaCreateApp(L *lua.State) int {
 		key := L.CheckString(2)
 		// Check global keybindings first (mirrors handleInputEvent)
 		if handle.app.handleGlobalKeys(key) {
+			// Surface any Lua error from the key handler
+			if handle.app.lastError != "" {
+				err := handle.app.lastError
+				handle.app.lastError = ""
+				L.PushString(err)
+				L.Error()
+				return 0
+			}
 			handle.app.engine.RenderDirty()
 			return 0
 		}
