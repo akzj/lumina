@@ -11,5 +11,6 @@ M.Progress = require("lux.progress")
 M.Spinner = require("lux.spinner")
 M.Dialog = require("lux.dialog")
 M.Layout = require("lux.layout")
+M.CommandPalette = require("lux.command_palette")
 
 return M
