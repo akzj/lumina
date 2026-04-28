@@ -9,5 +9,8 @@ func All() []*Widget {
 		Radio,
 		Label,
 		Select,
+		Dialog,
+		Tooltip,
+		Toast,
 	}
 }
