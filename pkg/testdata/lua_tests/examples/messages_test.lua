@@ -90,4 +90,24 @@ test.describe("Messages example app", function()
         -- Now the end of Alice's message should be visible
         test.assert.eq(app:screenContains("scrolling"), true)
     end)
+
+    -- Test 8: Mouse scroll on inner message stays within bounds
+    test.it("mouse scroll on inner message stays within bounds", function()
+        -- Select Charlie (3rd message)
+        app:keyPress("j")  -- select Bob
+        app:keyPress("j")  -- select Charlie
+
+        local before = app:screenText()
+
+        -- Simulate mouse scroll down on Charlie's message area
+        -- Charlie should be visible around y=8-12 on an 80x24 screen
+        app:scroll(40, 10, 1)  -- scroll down at center of Charlie's message
+
+        local after = app:screenText()
+
+        -- Header should still be visible (not corrupted)
+        test.assert.eq(app:screenContains("Messages"), true)
+        -- Footer should still be visible
+        test.assert.eq(app:screenContains("Select"), true)
+    end)
 end)
