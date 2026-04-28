@@ -108,8 +108,8 @@ func paintBox(buf *CellBuffer, node *Node) {
 	}
 }
 
-// paintScrollChildren paints children with a scroll offset, clipping to the container bounds.
-// It temporarily shifts child Y positions by -scrollY, paints only visible cells, then restores.
+// paintScrollChildren paints children with a scroll offset, clipping to the content area
+// (inside border + padding). Temporarily shifts child Y positions by -scrollY, then restores.
 func paintScrollChildren(buf *CellBuffer, node *Node) {
 	scrollY := node.ScrollY
 
@@ -117,9 +117,18 @@ func paintScrollChildren(buf *CellBuffer, node *Node) {
 	shiftNodeTreeY(node, -scrollY)
 	defer shiftNodeTreeY(node, scrollY) // restore
 
-	// Paint children, but clip to the container bounds
+	// Clip to content area (inside border + padding)
+	bw := 0
+	if node.Style.Border != "" && node.Style.Border != "none" {
+		bw = 1
+	}
+	clipX1 := node.X + bw + node.Style.PaddingLeft
+	clipY1 := node.Y + bw + node.Style.PaddingTop
+	clipX2 := node.X + node.W - bw - node.Style.PaddingRight
+	clipY2 := node.Y + node.H - bw - node.Style.PaddingBottom
+
 	for _, child := range node.Children {
-		paintNodeClipped(buf, child, node.X, node.Y, node.X+node.W, node.Y+node.H)
+		paintNodeClipped(buf, child, clipX1, clipY1, clipX2, clipY2)
 	}
 }
 
