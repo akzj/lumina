@@ -158,7 +158,8 @@ type Component struct {
 	ChildMap map[string]*Component // "type:key" → child
 
 	// Render output
-	RootNode *Node // the RenderNode subtree this component owns
+	RootNode   *Node   // the RenderNode subtree this component owns
+	ChildNodes []*Node // Pre-converted child nodes from createElement children
 
 	// Lifecycle
 	IsRoot    bool

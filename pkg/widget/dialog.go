@@ -77,8 +77,10 @@ var Dialog = &Widget{
 			},
 		})
 
-		// Message
-		if message != "" {
+		// Child nodes from Lua children (via _childNodes), or fallback to message prop
+		if childNodes, ok := props["_childNodes"].([]*render.Node); ok && len(childNodes) > 0 {
+			children = append(children, childNodes...)
+		} else if message != "" {
 			children = append(children, &render.Node{
 				Type:    "text",
 				Content: message,
