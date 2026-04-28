@@ -1569,10 +1569,90 @@ func (e *Engine) luaDefineComponent(L *lua.State) int {
 }
 
 // luaFactoryCall implements the __call metamethod for factory tables.
-// Called when user writes: lumina.Checkbox { label = "hi" }
-// Lua passes: self (the factory table), props, ...children
-// The stack is [self, props, children...] which is exactly what luaCreateElement expects.
+// Supports two calling patterns:
+//
+// Pattern 1 (standard): Factory(props, child1, child2)
+//
+//	__call receives: self, props, child1, child2
+//	→ delegate to createElement(self, props, child1, child2)
+//
+// Pattern 2 (mixed single table): Factory { prop1=v1, Child1{}, Child2{} }
+//
+//	__call receives: self, mixedTable
+//	→ split mixedTable: string keys → props, integer keys → children
+//	→ rebuild stack as createElement(self, extractedProps, child1, child2, ...)
 func (e *Engine) luaFactoryCall(L *lua.State) int {
+	nArgs := L.GetTop()
+
+	// Pattern 1: no args, or multiple args → standard delegation
+	if nArgs != 2 || !L.IsTable(2) {
+		return e.luaCreateElement(L)
+	}
+
+	// nArgs == 2, arg2 is a table. Check for integer keys (children).
+	mixedIdx := 2
+	childCount := int(L.LenI(mixedIdx))
+
+	if childCount == 0 {
+		// No integer keys → pure props table → standard delegation
+		return e.luaCreateElement(L)
+	}
+
+	// Check if integer values are tables (descriptors/children) vs strings (content).
+	// If first integer value is NOT a table, treat as standard (e.g., Text { "hello" }).
+	L.RawGetI(mixedIdx, 1)
+	firstIsTable := L.IsTable(-1)
+	L.Pop(1)
+
+	if !firstIsTable {
+		// Integer values are strings/numbers → not mixed children pattern
+		return e.luaCreateElement(L)
+	}
+
+	// === Pattern 2: mixed table ===
+	// Save self and mixed table as registry refs so we can rebuild the stack.
+	L.PushValue(1) // self
+	selfRef := L.Ref(lua.RegistryIndex)
+
+	L.PushValue(mixedIdx) // mixed table
+	mixedRef := L.Ref(lua.RegistryIndex)
+
+	// Build new props table (string keys only) from mixed table
+	L.NewTable()
+	newPropsIdx := L.AbsIndex(-1)
+	L.PushNil()
+	for L.Next(mixedIdx) {
+		// key at -2, value at -1
+		if L.Type(-2) == lua.TypeString {
+			L.PushValue(-2) // push key copy
+			L.PushValue(-2) // push value copy
+			L.SetTable(newPropsIdx)
+		}
+		L.Pop(1) // pop value, keep key for Next
+	}
+
+	// Save new props as registry ref
+	L.PushValue(newPropsIdx)
+	propsRef := L.Ref(lua.RegistryIndex)
+
+	// Clear entire stack and rebuild: [1]=self, [2]=props, [3..]=children
+	L.SetTop(0)
+
+	L.RawGetI(lua.RegistryIndex, int64(selfRef))  // [1] = self (factory)
+	L.RawGetI(lua.RegistryIndex, int64(propsRef))  // [2] = clean props
+	L.RawGetI(lua.RegistryIndex, int64(mixedRef))   // tmp = mixed table
+	tmpIdx := L.AbsIndex(-1)
+	for i := 1; i <= childCount; i++ {
+		L.RawGetI(tmpIdx, int64(i)) // push child[i]
+	}
+	L.Remove(tmpIdx) // remove the tmp mixed table from stack
+
+	// Clean up registry refs
+	L.Unref(lua.RegistryIndex, selfRef)
+	L.Unref(lua.RegistryIndex, propsRef)
+	L.Unref(lua.RegistryIndex, mixedRef)
+
+	// Stack is now: [1]=factory, [2]=props, [3..N]=children
 	return e.luaCreateElement(L)
 }
 

@@ -153,3 +153,124 @@ func TestFactoryCallSyntax_CreateElementStillWorks(t *testing.T) {
 		t.Error("expected 'Old Syntax' on screen from old createElement syntax")
 	}
 }
+
+// TestFactoryCallSyntax_MixedTableDebug tests Pattern 2 step by step.
+// First verifies children count is passed, then full rendering.
+func TestFactoryCallSyntax_MixedTable(t *testing.T) {
+	app, ta, _ := newLuaApp(t, 80, 10)
+
+	err := app.RunString(`
+		local Panel = lumina.defineComponent("Panel", function(props)
+			local children = props.children or {}
+			local count = 0
+			for _ in ipairs(children) do count = count + 1 end
+			return lumina.createElement("text", {}, "PANEL:" .. tostring(count))
+		end)
+
+		lumina.createComponent({
+			id = "mixed-debug",
+			name = "MixedDebug",
+			x = 0, y = 0, w = 80, h = 10,
+			render = function(props)
+				return lumina.createElement("vbox", {
+					style = {width = 80, height = 10},
+				},
+					Panel {
+						border = "single",
+						lumina.createElement("text", {}, "child1"),
+						lumina.createElement("text", {}, "child2"),
+					}
+				)
+			end,
+		})
+	`)
+	if err != nil {
+		t.Fatalf("RunString failed: %v", err)
+	}
+	app.RenderAll()
+
+	if !screenHasString(ta, "PANEL:2") {
+		// Dump screen for debug
+		for y := 0; y < 10; y++ {
+			line := readScreenLine(ta, y, 80)
+			t.Logf("screen[%d]: %q", y, line)
+		}
+		t.Error("expected 'PANEL:2' on screen — children not passed via mixed table")
+	}
+}
+
+// TestFactoryCallSyntax_MixedTablePropsOnly verifies that a mixed table
+// with ONLY string keys (no integer keys) still works as pure props.
+func TestFactoryCallSyntax_MixedTablePropsOnly(t *testing.T) {
+	app, ta, _ := newLuaApp(t, 80, 10)
+
+	err := app.RunString(`
+		lumina.createComponent({
+			id = "mixed-props-only",
+			name = "MixedPropsOnly",
+			x = 0, y = 0, w = 80, h = 10,
+			render = function(props)
+				return lumina.createElement("vbox", {
+					style = {width = 80, height = 10},
+				},
+					lumina.Checkbox { label = "PropsOnly", checked = false, key = "po1" }
+				)
+			end,
+		})
+	`)
+	if err != nil {
+		t.Fatalf("RunString failed: %v", err)
+	}
+	app.RenderAll()
+
+	if !screenHasString(ta, "[ ]") {
+		t.Error("expected '[ ]' on screen from pure props table")
+	}
+	if !screenHasString(ta, "PropsOnly") {
+		t.Error("expected 'PropsOnly' on screen from pure props table")
+	}
+}
+
+// TestFactoryCallSyntax_MultipleArgs verifies Pattern 1 with explicit children args:
+// Factory(props, child1, child2)
+func TestFactoryCallSyntax_MultipleArgs(t *testing.T) {
+	app, ta, _ := newLuaApp(t, 80, 10)
+
+	err := app.RunString(`
+		local Container = lumina.defineComponent("Container", function(props)
+			local children = props.children or {}
+			return lumina.createElement("vbox", {
+				style = {width = 80, height = 10},
+			}, table.unpack(children))
+		end)
+
+		lumina.createComponent({
+			id = "multi-args-test",
+			name = "MultiArgsTest",
+			x = 0, y = 0, w = 80, h = 10,
+			render = function(props)
+				return lumina.createElement("vbox", {
+					style = {width = 80, height = 10},
+				},
+					-- Pattern 1: explicit args
+					Container(
+						{ border = "single" },
+						lumina.createElement("text", {}, "Arg1Child"),
+						lumina.createElement("text", {}, "Arg2Child")
+					)
+				)
+			end,
+		})
+	`)
+	if err != nil {
+		t.Fatalf("RunString failed: %v", err)
+	}
+	app.RenderAll()
+
+	if !screenHasString(ta, "Arg1Child") {
+		t.Error("expected 'Arg1Child' on screen from Pattern 1 multi-args")
+	}
+	if !screenHasString(ta, "Arg2Child") {
+		t.Error("expected 'Arg2Child' on screen from Pattern 1 multi-args")
+	}
+}
