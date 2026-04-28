@@ -584,8 +584,8 @@ func TestAllWidgetsIncludesLabelAndSelect(t *testing.T) {
 	if !names["Select"] {
 		t.Error("All() should include Select")
 	}
-	if len(all) != 15 {
-		t.Errorf("expected 15 widgets, got %d", len(all))
+	if len(all) != 16 {
+		t.Errorf("expected 16 widgets, got %d", len(all))
 	}
 	if !names["Dialog"] {
 		t.Error("All() should include Dialog")

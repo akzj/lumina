@@ -473,6 +473,37 @@ func (fw *testFramework) luaCreateApp(L *lua.State) int {
 	})
 	L.SetField(appTblIdx, "scroll")
 
+	// app:mouseDown(x, y)
+	L.PushFunction(func(L *lua.State) int {
+		x := int(L.CheckInteger(2))
+		y := int(L.CheckInteger(3))
+		handle.app.engine.HandleMouseDown(x, y)
+		handle.app.engine.RenderDirty()
+		return 0
+	})
+	L.SetField(appTblIdx, "mouseDown")
+
+	// app:mouseMove(x, y)
+	L.PushFunction(func(L *lua.State) int {
+		x := int(L.CheckInteger(2))
+		y := int(L.CheckInteger(3))
+		handle.app.engine.HandleMouseMove(x, y)
+		handle.app.engine.RenderDirty()
+		return 0
+	})
+	L.SetField(appTblIdx, "mouseMove")
+
+	// app:mouseUp(x, y)
+	L.PushFunction(func(L *lua.State) int {
+		x := int(L.CheckInteger(2))
+		y := int(L.CheckInteger(3))
+		handle.app.engine.HandleMouseUp(x, y)
+		handle.app.engine.RenderDirty()
+		return 0
+	})
+	L.SetField(appTblIdx, "mouseUp")
+
+
 	// app:keyPress(key)
 	L.PushFunction(func(L *lua.State) int {
 		key := L.CheckString(2)

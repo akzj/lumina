@@ -23,6 +23,9 @@ type WidgetEvent struct {
 	// Input: Widget's screen bounds (set by engine BEFORE calling OnEvent).
 	WidgetX, WidgetY, WidgetW, WidgetH int
 
+	// Output: Mouse capture (set by widget during mousedown to capture subsequent mouse events).
+	CaptureMouse bool
+
 	// Output: Layer management (set by widget, processed by engine AFTER OnEvent).
 	CreateLayer *LayerRequest // non-nil → engine creates this layer
 	RemoveLayer string        // non-empty → engine removes this layer ID
@@ -89,6 +92,9 @@ type Engine struct {
 
 	// Layer stack: [0] = main app layer, [1..n] = overlay layers
 	layers []*Layer
+
+	// Mouse capture: non-nil = this widget captures all mouse events (for dragging)
+	capturedComp *Component
 
 	// ThemeGetter returns the current theme as a map of color tokens.
 	// Set by the app layer to avoid import cycles (render cannot import widget).

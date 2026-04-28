@@ -234,7 +234,26 @@ func computeFlex(node *Node, x, y, w, h int) {
 	case "component":
 		// Component placeholder: transparent container, passes through to children
 		for _, child := range node.Children {
-			computeFlex(child, x, y, w, h)
+			cs := child.Style
+			if isPositioned(cs) {
+				// Handle absolute/fixed positioned children within component placeholders
+				cx, cy, cw, ch := x+cs.Left, y+cs.Top, w, h
+				if cs.Width > 0 {
+					cw = cs.Width
+				}
+				if cs.Height > 0 {
+					ch = cs.Height
+				}
+				if cs.Right >= 0 && cs.Left == 0 {
+					cx = x + w - cw - cs.Right
+				}
+				if cs.Bottom >= 0 && cs.Top == 0 {
+					cy = y + h - ch - cs.Bottom
+				}
+				computeFlex(child, cx, cy, cw, ch)
+			} else {
+				computeFlex(child, x, y, w, h)
+			}
 		}
 		return
 
