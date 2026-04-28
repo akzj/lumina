@@ -99,7 +99,7 @@ func paintBox(buf *CellBuffer, node *Node) {
 	}
 
 	// 3. Paint children (with scroll offset if applicable)
-	if node.Style.Overflow == "scroll" && node.ScrollY != 0 {
+	if node.Style.Overflow == "scroll" {
 		paintScrollChildren(buf, node)
 	} else {
 		for _, child := range node.Children {
