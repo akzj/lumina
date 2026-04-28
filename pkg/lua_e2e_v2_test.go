@@ -1989,3 +1989,185 @@ func TestV2E2E_ChildMovePositionClearsGhost(t *testing.T) {
 		t.Errorf("expected parent bg '#112233' at old position (0,3), got %q", ghostCell.Background)
 	}
 }
+
+// TestV2E2E_CreateElementFactoryChildren verifies that createElement(Factory, props, child1, child2)
+// correctly passes children through to the component's props.children.
+func TestV2E2E_CreateElementFactoryChildren(t *testing.T) {
+	app, _, L := newV2App(t, 40, 10)
+
+	script := `
+		_G._test_has_children = false
+		_G._test_children_count = 0
+		_G._test_child1_type = ""
+		_G._test_child1_content = ""
+		_G._test_child2_type = ""
+
+		local Wrapper = lumina.defineComponent("Wrapper", function(props)
+			-- Record children info in globals for Go-side verification
+			_G._test_has_children = props.children ~= nil
+			if props.children then
+				_G._test_children_count = #props.children
+				if props.children[1] then
+					_G._test_child1_type = props.children[1].type or ""
+					_G._test_child1_content = props.children[1].content or ""
+				end
+				if props.children[2] then
+					_G._test_child2_type = props.children[2].type or ""
+				end
+			end
+
+			return lumina.createElement("vbox", {},
+				table.unpack(props.children or {}))
+		end)
+
+		lumina.createComponent({
+			id = "test-root",
+			name = "Test",
+			x = 0, y = 0, w = 40, h = 10,
+			render = function(props)
+				return lumina.createElement(Wrapper, {},
+					lumina.createElement("text", {}, "Child One"),
+					lumina.createElement("text", {}, "Child Two")
+				)
+			end,
+		})
+	`
+
+	err := app.RunString(script)
+	if err != nil {
+		t.Fatalf("RunString failed: %v", err)
+	}
+
+	app.RenderAll()
+
+	// Verify children were passed through to the Wrapper component
+	L.GetGlobal("_test_has_children")
+	hasChildren := L.ToBoolean(-1)
+	L.Pop(1)
+	if !hasChildren {
+		t.Fatal("props.children was nil — createElement did not pass children to component")
+	}
+
+	L.GetGlobal("_test_children_count")
+	count, _ := L.ToInteger(-1)
+	L.Pop(1)
+	if count != 2 {
+		t.Errorf("expected 2 children, got %d", count)
+	}
+
+	L.GetGlobal("_test_child1_type")
+	child1Type, _ := L.ToString(-1)
+	L.Pop(1)
+	if child1Type != "text" {
+		t.Errorf("expected child[1].type = 'text', got %q", child1Type)
+	}
+
+	L.GetGlobal("_test_child1_content")
+	child1Content, _ := L.ToString(-1)
+	L.Pop(1)
+	if child1Content != "Child One" {
+		t.Errorf("expected child[1].content = 'Child One', got %q", child1Content)
+	}
+
+	L.GetGlobal("_test_child2_type")
+	child2Type, _ := L.ToString(-1)
+	L.Pop(1)
+	if child2Type != "text" {
+		t.Errorf("expected child[2].type = 'text', got %q", child2Type)
+	}
+}
+
+// TestV2E2E_CreateElementFactoryNoChildren verifies that createElement(Factory, props)
+// without children does NOT inject a children key (backward compatibility).
+func TestV2E2E_CreateElementFactoryNoChildren(t *testing.T) {
+	app, _, L := newV2App(t, 40, 10)
+
+	script := `
+		_G._test_has_children = "unset"
+
+		local Simple = lumina.defineComponent("Simple", function(props)
+			if props.children == nil then
+				_G._test_has_children = "nil"
+			else
+				_G._test_has_children = "present"
+			end
+			return lumina.createElement("text", {}, "hello")
+		end)
+
+		lumina.createComponent({
+			id = "test-root",
+			name = "Test",
+			x = 0, y = 0, w = 40, h = 10,
+			render = function(props)
+				return lumina.createElement(Simple, {})
+			end,
+		})
+	`
+
+	err := app.RunString(script)
+	if err != nil {
+		t.Fatalf("RunString failed: %v", err)
+	}
+
+	app.RenderAll()
+
+	L.GetGlobal("_test_has_children")
+	val, _ := L.ToString(-1)
+	L.Pop(1)
+	if val != "nil" {
+		t.Errorf("expected props.children to be nil when no children passed, got %q", val)
+	}
+}
+
+// TestV2E2E_CreateElementFactorySingleChild verifies a single child is passed correctly.
+func TestV2E2E_CreateElementFactorySingleChild(t *testing.T) {
+	app, _, L := newV2App(t, 40, 10)
+
+	script := `
+		_G._test_children_count = 0
+		_G._test_child_content = ""
+
+		local Container = lumina.defineComponent("Container", function(props)
+			if props.children then
+				_G._test_children_count = #props.children
+				if props.children[1] then
+					_G._test_child_content = props.children[1].content or ""
+				end
+			end
+			return lumina.createElement("vbox", {},
+				table.unpack(props.children or {}))
+		end)
+
+		lumina.createComponent({
+			id = "test-root",
+			name = "Test",
+			x = 0, y = 0, w = 40, h = 10,
+			render = function(props)
+				return lumina.createElement(Container, {},
+					lumina.createElement("text", {}, "Only Child")
+				)
+			end,
+		})
+	`
+
+	err := app.RunString(script)
+	if err != nil {
+		t.Fatalf("RunString failed: %v", err)
+	}
+
+	app.RenderAll()
+
+	L.GetGlobal("_test_children_count")
+	count, _ := L.ToInteger(-1)
+	L.Pop(1)
+	if count != 1 {
+		t.Errorf("expected 1 child, got %d", count)
+	}
+
+	L.GetGlobal("_test_child_content")
+	content, _ := L.ToString(-1)
+	L.Pop(1)
+	if content != "Only Child" {
+		t.Errorf("expected child content 'Only Child', got %q", content)
+	}
+}
