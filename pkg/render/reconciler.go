@@ -19,10 +19,16 @@ func reconcileImpl(node *Node, desc Descriptor, freedRefs *[]int64) bool {
 	changed := false
 
 	// 1. Update content
+	// For input/textarea: only overwrite if descriptor explicitly sets content
+	// (controlled input). Otherwise preserve user-typed content.
 	if desc.Content != node.Content {
-		node.Content = desc.Content
-		node.PaintDirty = true
-		changed = true
+		if !desc.ContentSet && (node.Type == "input" || node.Type == "textarea") {
+			// Uncontrolled input: preserve user-typed content
+		} else {
+			node.Content = desc.Content
+			node.PaintDirty = true
+			changed = true
+		}
 	}
 
 	// 1b. Update placeholder

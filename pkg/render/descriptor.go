@@ -7,7 +7,8 @@ type Descriptor struct {
 	Type     string       // "box", "vbox", "hbox", "text", "component"
 	ID       string
 	Key      string
-	Content  string
+	Content    string
+	ContentSet bool // true when content/value was explicitly set in Lua
 	Style    Style
 	Children []Descriptor
 

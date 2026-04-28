@@ -608,10 +608,14 @@ func (e *Engine) readDescriptor(L *lua.State, idx int) Descriptor {
 	desc.ID = getStringField(L, absIdx, "id")
 	desc.Key = getStringField(L, absIdx, "key")
 	desc.Content = getStringField(L, absIdx, "content")
+	if desc.Content != "" {
+		desc.ContentSet = true
+	}
 	// For input/textarea, also check "value" field
 	if desc.Content == "" {
 		if v := getStringField(L, absIdx, "value"); v != "" {
 			desc.Content = v
+			desc.ContentSet = true
 		}
 	}
 	desc.Placeholder = getStringField(L, absIdx, "placeholder")
