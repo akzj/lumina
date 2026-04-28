@@ -32,7 +32,7 @@ func (t *tuiAdapter) WriteFull(screen *buffer.Buffer) error {
 			c := screen.Get(x, y)
 			t.writeCell(c, &curFg, &curBg, &curBold, &curDim, &curUnderline)
 			if c.Wide {
-				x++ // skip the padding cell — terminal already advanced cursor
+				x++ // skip the next padding cell — terminal already advanced cursor by 2
 			}
 		}
 	}
@@ -58,7 +58,7 @@ func (t *tuiAdapter) WriteDirty(screen *buffer.Buffer, dirtyRects []buffer.Rect)
 				c := screen.Get(x, y)
 				t.writeCell(c, &curFg, &curBg, &curBold, &curDim, &curUnderline)
 				if c.Wide {
-					x++ // skip the padding cell — terminal already advanced cursor
+					x++ // skip the next padding cell — terminal already advanced cursor by 2
 				}
 			}
 		}

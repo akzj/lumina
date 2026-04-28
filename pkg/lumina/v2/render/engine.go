@@ -1138,14 +1138,25 @@ func readMapFromTable(L *lua.State, idx int) map[string]any {
 }
 
 // ToBuffer converts the engine's CellBuffer to a buffer.Buffer for output.
+// Convention translation: in CellBuffer, Wide=true marks the PADDING cell (x+1).
+// In buffer.Buffer, Wide=true marks the MAIN cell (the one with the character).
+// The output adapter uses buffer.Buffer convention to skip padding cells.
 func (e *Engine) ToBuffer() *buffer.Buffer {
 	buf := buffer.New(e.width, e.height)
 	cb := e.buffer
 	for y := 0; y < e.height; y++ {
 		for x := 0; x < e.width; x++ {
 			c := cb.Get(x, y)
-			if c.Ch == 0 && c.FG == "" && c.BG == "" {
-				continue // skip zero cells
+			if c.Ch == 0 && c.FG == "" && c.BG == "" && !c.Wide {
+				continue // skip zero cells (but preserve Wide padding cells)
+			}
+			// Check if the NEXT cell is a Wide padding cell — if so, this is a wide char
+			isWideChar := false
+			if x+1 < e.width {
+				next := cb.Get(x+1, y)
+				if next.Wide {
+					isWideChar = true
+				}
 			}
 			buf.Set(x, y, buffer.Cell{
 				Char:       c.Ch,
@@ -1154,7 +1165,7 @@ func (e *Engine) ToBuffer() *buffer.Buffer {
 				Bold:       c.Bold,
 				Dim:        c.Dim,
 				Underline:  c.Underline,
-				Wide:       c.Wide,
+				Wide:       isWideChar, // Wide on MAIN cell, not padding
 			})
 		}
 	}
