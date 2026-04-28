@@ -2,6 +2,12 @@ package v2
 
 // This file registers Lua modules so that require("lumina"), require("lux"),
 // require("lux.card"), etc. work from any Lua script.
+//
+// Layering (see README + docs/DESIGN-widgets.md):
+//   - Radix-style primitives: Go widgets in pkg/widget/, exposed as lumina.Button,
+//     lumina.Checkbox, lumina.Select, … (registered in NewApp, not here).
+//   - Lux: Lua-only presentation templates below, embedded from lua/lux/*.lua for
+//     require() without shipping those files beside the binary.
 
 import (
 	"github.com/akzj/go-lua/pkg/lua"
@@ -19,6 +25,7 @@ M.Divider = require("lux.divider")
 M.Progress = require("lux.progress")
 M.Spinner = require("lux.spinner")
 M.Dialog = require("lux.dialog")
+M.Layout = require("lux.layout")
 return M
 `
 
@@ -262,6 +269,159 @@ Dialog.Actions = DialogActions
 return Dialog
 `
 
+const luxLayoutLua = `
+local Layout = lumina.defineComponent("Layout", function(props)
+    local children = props.children or {}
+
+    -- Separate children by slot type (marker stored as _layoutSlot prop)
+    local header, footer, sidebar, main
+    local others = {}
+
+    for _, child in ipairs(children) do
+        if child and type(child) == "table" then
+            local slot = child._layoutSlot
+            if slot == "header" then
+                header = child
+            elseif slot == "footer" then
+                footer = child
+            elseif slot == "sidebar" then
+                sidebar = child
+            elseif slot == "main" then
+                main = child
+            else
+                others[#others + 1] = child
+            end
+        else
+            others[#others + 1] = child
+        end
+    end
+
+    -- Extract children from a slot wrapper (vbox with marker props)
+    -- The slot wrappers are vbox elements; we use their children directly
+    local function slotChildren(slot)
+        if not slot then return {} end
+        return slot.children or {}
+    end
+
+    local function slotProp(slot, key, default)
+        if not slot then return default end
+        return slot[key] or default
+    end
+
+    -- Build vertical stack
+    local vboxChildren = {}
+
+    if header then
+        vboxChildren[#vboxChildren + 1] = lumina.createElement("hbox", {
+            style = {
+                height = slotProp(header, "_height", 1),
+                background = slotProp(header, "_bg", ""),
+            },
+        }, table.unpack(slotChildren(header)))
+    end
+
+    -- Middle section
+    local mainChildren
+    if main then
+        mainChildren = slotChildren(main)
+    else
+        mainChildren = others
+    end
+
+    if sidebar then
+        -- Horizontal: sidebar | main
+        vboxChildren[#vboxChildren + 1] = lumina.createElement("hbox", {
+            style = { flex = 1 },
+        },
+            lumina.createElement("vbox", {
+                style = {
+                    width = slotProp(sidebar, "_width", 20),
+                    border = slotProp(sidebar, "_border", "none"),
+                    background = slotProp(sidebar, "_bg", ""),
+                },
+            }, table.unpack(slotChildren(sidebar))),
+            lumina.createElement("vbox", {
+                style = { flex = 1 },
+            }, table.unpack(mainChildren))
+        )
+    else
+        vboxChildren[#vboxChildren + 1] = lumina.createElement("vbox", {
+            style = { flex = 1 },
+        }, table.unpack(mainChildren))
+    end
+
+    if footer then
+        vboxChildren[#vboxChildren + 1] = lumina.createElement("hbox", {
+            style = {
+                height = slotProp(footer, "_height", 1),
+                background = slotProp(footer, "_bg", ""),
+            },
+        }, table.unpack(slotChildren(footer)))
+    end
+
+    return lumina.createElement("vbox", {
+        style = {
+            width = props.width,
+            height = props.height,
+        },
+    }, table.unpack(vboxChildren))
+end)
+
+-- Slot constructors
+-- Return createElement-based descriptors with marker props so they survive
+-- the Go component props pipeline (no raw Lua arrays that panic in propsEqual).
+
+function Layout.Header(props)
+    local children = {}
+    for i, v in ipairs(props) do
+        children[i] = v
+    end
+    return lumina.createElement("vbox", {
+        _layoutSlot = "header",
+        _height = props.height or 1,
+        _bg = props.background or props.bg,
+    }, table.unpack(children))
+end
+
+function Layout.Footer(props)
+    local children = {}
+    for i, v in ipairs(props) do
+        children[i] = v
+    end
+    return lumina.createElement("vbox", {
+        _layoutSlot = "footer",
+        _height = props.height or 1,
+        _bg = props.background or props.bg,
+    }, table.unpack(children))
+end
+
+function Layout.Sidebar(props)
+    local children = {}
+    for i, v in ipairs(props) do
+        children[i] = v
+    end
+    return lumina.createElement("vbox", {
+        _layoutSlot = "sidebar",
+        _width = props.width or 20,
+        _border = props.border,
+        _bg = props.background or props.bg,
+    }, table.unpack(children))
+end
+
+function Layout.Main(props)
+    local children = {}
+    for i, v in ipairs(props) do
+        children[i] = v
+    end
+    return lumina.createElement("vbox", {
+        _layoutSlot = "main",
+    }, table.unpack(children))
+end
+
+return Layout
+
+`
+
 const luxThemeLua = `
 local M = {}
 local _fallback = {
@@ -304,6 +464,7 @@ func registerLuxModules(L *lua.State) {
 	preloadLuaSource(L, "lux.progress", luxProgressLua)
 	preloadLuaSource(L, "lux.spinner", luxSpinnerLua)
 	preloadLuaSource(L, "lux.dialog", luxDialogLua)
+	preloadLuaSource(L, "lux.layout", luxLayoutLua)
 
 	// Register the lux umbrella module (requires individual modules)
 	preloadLuaSource(L, "lux", luxInitLua)

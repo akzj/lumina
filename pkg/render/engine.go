@@ -1,6 +1,7 @@
 package render
 
 import (
+	"reflect"
 	"sort"
 	"strings"
 
@@ -1218,11 +1219,38 @@ func propsEqual(a, b map[string]any) bool {
 		if !ok {
 			return false
 		}
-		if va != vb {
+		if !safeEqual(va, vb) {
 			return false
 		}
 	}
 	return true
+}
+
+// safeEqual compares two values safely, handling uncomparable types like slices and maps.
+func safeEqual(a, b any) bool {
+	// Fast path for common comparable types
+	switch av := a.(type) {
+	case nil:
+		return b == nil
+	case bool:
+		bv, ok := b.(bool)
+		return ok && av == bv
+	case int:
+		bv, ok := b.(int)
+		return ok && av == bv
+	case int64:
+		bv, ok := b.(int64)
+		return ok && av == bv
+	case float64:
+		bv, ok := b.(float64)
+		return ok && av == bv
+	case string:
+		bv, ok := b.(string)
+		return ok && av == bv
+	default:
+		// Uncomparable types (slices, maps): use reflect
+		return reflect.DeepEqual(a, b)
+	}
 }
 
 // cleanupRemovedChildComponents removes child components that are no longer
