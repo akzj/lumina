@@ -115,23 +115,16 @@ func (a *App) RenderDirty() {
 
 	a.engine.RenderDirty()
 
-	// Paint devtools overlay on top of the rendered content if visible.
-	if a.devtools.Visible {
-		panelH := a.devtools.Height
-		panelY := a.height - panelH
-		paintDevToolsOverlay(a.engine.Buffer(), a.devtools, panelY, a.width, panelH)
-	}
-
 	dirtyRect := a.engine.DirtyRect()
-	// When devtools is visible, expand dirty rect to include the panel area.
-	if a.devtools.Visible {
-		panelH := a.devtools.Height
-		panelY := a.height - panelH
-		panelRect := buffer.Rect{X: 0, Y: panelY, W: a.width, H: panelH}
-		dirtyRect = unionRect(dirtyRect, panelRect)
-	}
-
 	if dirtyRect.W > 0 && dirtyRect.H > 0 {
+		// If devtools visible, repaint overlay on dirty frames only
+		if a.devtools.Visible {
+			panelH := a.devtools.Height
+			panelY := a.height - panelH
+			paintDevToolsOverlay(a.engine.Buffer(), a.devtools, panelY, a.width, panelH)
+			panelRect := buffer.Rect{X: 0, Y: panelY, W: a.width, H: panelH}
+			dirtyRect = unionRect(dirtyRect, panelRect)
+		}
 		screen := a.engine.ToBuffer()
 		_ = a.adapter.WriteDirty(screen, []buffer.Rect{dirtyRect})
 		a.tracker.Record(perf.DirtyRectsOut, 1)
@@ -139,6 +132,7 @@ func (a *App) RenderDirty() {
 		_ = a.adapter.Flush()
 		a.tracker.Record(perf.FlushCalls, 1)
 	}
+	// If no dirty rect (idle frame), do NOTHING — no WriteDirty, no Flush
 
 	a.tracker.EndFrame()
 }
