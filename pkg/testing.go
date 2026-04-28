@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -50,18 +51,31 @@ func (r *TestRunner) RunFile(path string) ([]TestResult, error) {
 	return fw.run(), nil
 }
 
-// RunDir executes all *_test.lua files in a directory.
+// RunDir executes all *_test.lua files under dir (recursively).
 func (r *TestRunner) RunDir(dir string) ([]TestResult, error) {
-	var allResults []TestResult
-	entries, err := os.ReadDir(dir)
-	if err != nil {
+	var paths []string
+	if err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		if !strings.HasSuffix(d.Name(), "_test.lua") {
+			return nil
+		}
+		paths = append(paths, path)
+		return nil
+	}); err != nil {
 		return nil, err
 	}
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), "_test.lua") {
-			continue
-		}
-		results, err := r.RunFile(filepath.Join(dir, entry.Name()))
+
+	// Keep execution order stable across filesystems.
+	sort.Strings(paths)
+
+	var allResults []TestResult
+	for _, p := range paths {
+		results, err := r.RunFile(p)
 		if err != nil {
 			return nil, err
 		}
