@@ -114,8 +114,50 @@ func hasHandler(n *Node, eventType string) bool {
 
 // HandleMouseMove processes a mouse move event.
 // Performs hit-test, fires onMouseEnter/onMouseLeave as needed.
+// hitTestLayers performs hit-test across all layers, from top to bottom.
+// Returns the hit node and which layer it belongs to.
+// For modal layers, if the click misses the layer's content, returns (nil, layer).
+func (e *Engine) hitTestLayers(x, y int) (*Node, *Layer) {
+	for i := len(e.layers) - 1; i >= 0; i-- {
+		layer := e.layers[i]
+		if layer.Root == nil {
+			continue
+		}
+		node := HitTest(layer.Root, x, y)
+		if node != nil {
+			return node, layer
+		}
+		if layer.Modal {
+			return nil, layer // Modal miss → block, return layer for onOutsideClick
+		}
+	}
+	return nil, nil
+}
+
+// hitTestLayersWithHandler performs hit-test with handler across all layers.
+func (e *Engine) hitTestLayersWithHandler(x, y int, eventType string) (*Node, *Layer) {
+	for i := len(e.layers) - 1; i >= 0; i-- {
+		layer := e.layers[i]
+		if layer.Root == nil {
+			continue
+		}
+		target := HitTestWithHandler(layer.Root, x, y, eventType)
+		if target != nil {
+			return target, layer
+		}
+		// Even without handler, if we hit this layer's area, don't pass through
+		if HitTest(layer.Root, x, y) != nil {
+			return nil, layer
+		}
+		if layer.Modal {
+			return nil, layer
+		}
+	}
+	return nil, nil
+}
+
 func (e *Engine) HandleMouseMove(x, y int) {
-	if e.root == nil || e.root.RootNode == nil {
+	if len(e.layers) == 0 {
 		return
 	}
 
@@ -124,7 +166,7 @@ func (e *Engine) HandleMouseMove(x, y int) {
 		e.hoveredNode = nil
 	}
 
-	target := HitTest(e.root.RootNode, x, y)
+	target, _ := e.hitTestLayers(x, y)
 
 	if target == e.hoveredNode {
 		return // same node, no change
@@ -160,7 +202,7 @@ func (e *Engine) HandleMouseMove(x, y int) {
 // Finds the deepest node with an onClick handler (bubbling) and dispatches.
 // Also handles focus: clicking a focusable node focuses it.
 func (e *Engine) HandleClick(x, y int) {
-	if e.root == nil || e.root.RootNode == nil {
+	if len(e.layers) == 0 {
 		return
 	}
 
@@ -169,8 +211,17 @@ func (e *Engine) HandleClick(x, y int) {
 		e.focusedNode = nil
 	}
 
-	// Hit-test for the deepest node at this position
-	hitNode := HitTest(e.root.RootNode, x, y)
+	// Hit-test across layers for the deepest node at this position
+	hitNode, hitLayer := e.hitTestLayers(x, y)
+
+	// Modal miss: click outside modal layer content → block event
+	if hitNode == nil && hitLayer != nil && hitLayer.Modal {
+		// Fire onOutsideClick on focused node if present
+		if e.focusedNode != nil && !e.focusedNode.Removed && e.focusedNode.OnOutsideClick != 0 {
+			e.callLuaRef(e.focusedNode.OnOutsideClick, x, y)
+		}
+		return
+	}
 
 	// Focus management: clicking on a focusable node focuses it
 	// Walk up from hitNode to find the nearest focusable ancestor
@@ -202,7 +253,7 @@ func (e *Engine) HandleClick(x, y int) {
 	}
 
 	// Dispatch onClick (bubble up from hit node, skip disabled)
-	target := HitTestWithHandler(e.root.RootNode, x, y, "click")
+	target, _ := e.hitTestLayersWithHandler(x, y, "click")
 	if target != nil && target.OnClick != 0 && !target.Disabled {
 		e.callLuaRef(target.OnClick, x, y)
 	}
@@ -211,15 +262,15 @@ func (e *Engine) HandleClick(x, y int) {
 // HandleMouseDown processes a mousedown event at screen coordinates (x, y).
 // Finds the deepest node with an onMouseDown handler (bubbling) and dispatches.
 func (e *Engine) HandleMouseDown(x, y int) {
-	if e.root == nil || e.root.RootNode == nil {
+	if len(e.layers) == 0 {
 		return
 	}
 	// Dispatch widget mousedown event
-	hitNode := HitTest(e.root.RootNode, x, y)
+	hitNode, _ := e.hitTestLayers(x, y)
 	if hitNode != nil {
 		e.dispatchWidgetEvent(hitNode, "mousedown", "", x, y)
 	}
-	target := HitTestWithHandler(e.root.RootNode, x, y, "mousedown")
+	target, _ := e.hitTestLayersWithHandler(x, y, "mousedown")
 	if target != nil && target.OnMouseDown != 0 && !target.Disabled {
 		e.callLuaRef(target.OnMouseDown, x, y)
 	}
@@ -228,15 +279,15 @@ func (e *Engine) HandleMouseDown(x, y int) {
 // HandleMouseUp processes a mouseup event at screen coordinates (x, y).
 // Finds the deepest node with an onMouseUp handler (bubbling) and dispatches.
 func (e *Engine) HandleMouseUp(x, y int) {
-	if e.root == nil || e.root.RootNode == nil {
+	if len(e.layers) == 0 {
 		return
 	}
 	// Dispatch widget mouseup event
-	hitNode := HitTest(e.root.RootNode, x, y)
+	hitNode, _ := e.hitTestLayers(x, y)
 	if hitNode != nil {
 		e.dispatchWidgetEvent(hitNode, "mouseup", "", x, y)
 	}
-	target := HitTestWithHandler(e.root.RootNode, x, y, "mouseup")
+	target, _ := e.hitTestLayersWithHandler(x, y, "mouseup")
 	if target != nil && target.OnMouseUp != 0 && !target.Disabled {
 		e.callLuaRef(target.OnMouseUp, x, y)
 	}
@@ -245,7 +296,7 @@ func (e *Engine) HandleMouseUp(x, y int) {
 // HandleKeyDown processes a key event.
 // Priority: Tab → focus cycle, focused input editing, then onKeyDown handler.
 func (e *Engine) HandleKeyDown(key string) {
-	if e.root == nil || e.root.RootNode == nil {
+	if len(e.layers) == 0 {
 		return
 	}
 
@@ -267,29 +318,40 @@ func (e *Engine) HandleKeyDown(key string) {
 		}
 	}
 
-	// Fall through to onKeyDown handler
-	node := e.findKeyHandler(e.root.RootNode)
-	if node != nil && node.OnKeyDown != 0 {
-		e.callLuaRefKey(node.OnKeyDown, key)
+	// Fall through to onKeyDown handler — search from top layer down
+	var keyHandlerNode *Node
+	for i := len(e.layers) - 1; i >= 0; i-- {
+		if e.layers[i].Root != nil {
+			keyHandlerNode = e.findKeyHandler(e.layers[i].Root)
+			if keyHandlerNode != nil {
+				break
+			}
+			if e.layers[i].Modal {
+				break // Don't pass through modal
+			}
+		}
+	}
+	if keyHandlerNode != nil && keyHandlerNode.OnKeyDown != 0 {
+		e.callLuaRefKey(keyHandlerNode.OnKeyDown, key)
 	}
 }
 
 // HandleScroll processes a scroll event at screen coordinates (x, y).
 // Priority: custom onScroll Lua handler > built-in auto-scroll for overflow=scroll nodes.
 func (e *Engine) HandleScroll(x, y, delta int) {
-	if e.root == nil || e.root.RootNode == nil {
+	if len(e.layers) == 0 {
 		return
 	}
 
 	// First: check for a custom Lua onScroll handler (takes priority)
-	target := HitTestWithHandler(e.root.RootNode, x, y, "scroll")
+	target, _ := e.hitTestLayersWithHandler(x, y, "scroll")
 	if target != nil && target.OnScroll != 0 {
 		e.callLuaRefScroll(target.OnScroll, delta)
 		return
 	}
 
 	// No custom handler — find nearest overflow=scroll ancestor for auto-scroll
-	hitNode := HitTest(e.root.RootNode, x, y)
+	hitNode, _ := e.hitTestLayers(x, y)
 	scrollNode := findScrollableAncestor(hitNode)
 	if scrollNode != nil {
 		e.autoScroll(scrollNode, delta)

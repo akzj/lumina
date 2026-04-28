@@ -44,11 +44,19 @@ func (e *Engine) setFocus(newNode *Node) {
 // FocusNext cycles focus to the next focusable node.
 // If nothing is focused, focuses the first focusable node.
 func (e *Engine) FocusNext() {
-	if e.root == nil || e.root.RootNode == nil {
+	if len(e.layers) == 0 {
 		return
 	}
 
-	focusable := collectFocusable(e.root.RootNode)
+	// Find active root: topmost modal layer, or main layer
+	activeRoot := e.layers[0].Root
+	for i := len(e.layers) - 1; i >= 0; i-- {
+		if e.layers[i].Root != nil && e.layers[i].Modal {
+			activeRoot = e.layers[i].Root
+			break
+		}
+	}
+	focusable := collectFocusable(activeRoot)
 	if len(focusable) == 0 {
 		return
 	}
@@ -70,12 +78,18 @@ func (e *Engine) FocusNext() {
 // FocusAutoFocus focuses the first node with AutoFocus=true.
 // Called after initial render.
 func (e *Engine) FocusAutoFocus() {
-	if e.root == nil || e.root.RootNode == nil {
+	if len(e.layers) == 0 {
 		return
 	}
-	node := findAutoFocus(e.root.RootNode)
-	if node != nil {
-		e.focusedNode = node
+	// Search all layers for autoFocus node (topmost first)
+	for i := len(e.layers) - 1; i >= 0; i-- {
+		if e.layers[i].Root != nil {
+			node := findAutoFocus(e.layers[i].Root)
+			if node != nil {
+				e.setFocus(node)
+				return
+			}
+		}
 	}
 }
 
