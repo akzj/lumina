@@ -2,7 +2,7 @@ module github.com/akzj/lumina
 
 go 1.26.1
 
-require github.com/akzj/go-lua v0.8.2
+require github.com/akzj/go-lua v0.9.3
 
 require (
 	github.com/mattn/go-runewidth v0.0.23

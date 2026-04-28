@@ -20,6 +20,7 @@ type TestResult struct {
 	Passed   bool
 	Error    string
 	Duration time.Duration
+	Logs     []string // collected log lines from test.log()
 }
 
 // TestRunner executes Lua test files and collects results.
@@ -109,6 +110,9 @@ type testFramework struct {
 
 	// Current suite being defined (set during describe() callback)
 	currentSuite *testSuite
+
+	// Logs collected during the current test case (via test.log())
+	currentLogs []string
 }
 
 func newTestFramework(L *lua.State, w, h int) *testFramework {
@@ -145,6 +149,18 @@ func (fw *testFramework) register() {
 	// test.createApp(w, h) → app table
 	L.PushFunction(fw.luaCreateApp)
 	L.SetField(tblIdx, "createApp")
+
+	// test.log(...) — log values to test output (like Go's t.Log)
+	L.PushFunction(func(L *lua.State) int {
+		n := L.GetTop()
+		parts := make([]string, 0, n)
+		for i := 1; i <= n; i++ {
+			parts = append(parts, fmt.Sprintf("%v", L.ToAny(i)))
+		}
+		fw.currentLogs = append(fw.currentLogs, strings.Join(parts, "\t"))
+		return 0
+	})
+	L.SetField(tblIdx, "log")
 
 	// test.assert table
 	fw.registerAssert(L, tblIdx)
@@ -313,11 +329,15 @@ func (fw *testFramework) run() []TestResult {
 				Passed: true,
 			}
 
+			// Reset log collector for this test
+			fw.currentLogs = nil
+
 			if tc.fn == 0 {
 				// Setup error — already recorded as name
 				result.Passed = false
 				result.Error = tc.name
 				result.Duration = time.Since(start)
+				result.Logs = fw.currentLogs
 				results = append(results, result)
 				continue
 			}
@@ -331,6 +351,7 @@ func (fw *testFramework) run() []TestResult {
 					result.Passed = false
 					result.Error = "beforeEach: " + errMsg
 					result.Duration = time.Since(start)
+					result.Logs = fw.currentLogs
 					results = append(results, result)
 					continue
 				}
@@ -354,6 +375,7 @@ func (fw *testFramework) run() []TestResult {
 			}
 
 			result.Duration = time.Since(start)
+			result.Logs = fw.currentLogs
 			results = append(results, result)
 		}
 	}
