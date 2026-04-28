@@ -262,6 +262,19 @@ func (a *App) handleInputEvent(ie InputEvent) {
 			}
 		}
 
+		// Check global keybindings registered via lumina.app.
+		// Build a modifier-prefixed key for global key matching.
+		if ie.Type == "keydown" {
+			globalKey := key
+			if ie.Modifiers.Ctrl {
+				globalKey = "ctrl+" + key
+			}
+			if a.handleGlobalKeys(globalKey) {
+				a.RenderDirty()
+				return
+			}
+		}
+
 		a.HandleEvent(&event.Event{
 			Type: ie.Type,
 			Key:  key,

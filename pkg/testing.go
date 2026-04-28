@@ -454,6 +454,11 @@ func (fw *testFramework) luaCreateApp(L *lua.State) int {
 	// app:keyPress(key)
 	L.PushFunction(func(L *lua.State) int {
 		key := L.CheckString(2)
+		// Check global keybindings first (mirrors handleInputEvent)
+		if handle.app.handleGlobalKeys(key) {
+			handle.app.engine.RenderDirty()
+			return 0
+		}
 		handle.app.engine.HandleKeyDown(key)
 		handle.app.engine.RenderDirty()
 		return 0

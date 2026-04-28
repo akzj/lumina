@@ -15,6 +15,7 @@ import (
 	"github.com/akzj/lumina/pkg/perf"
 	"github.com/akzj/lumina/pkg/render"
 	"github.com/akzj/lumina/pkg/router"
+	"github.com/akzj/lumina/pkg/store"
 	"github.com/akzj/lumina/pkg/widget"
 )
 
@@ -39,6 +40,18 @@ type App struct {
 
 	// Render engine — the single rendering path.
 	engine *render.Engine
+
+	// Framework: global store
+	store *store.Store
+
+	// Framework: store key → component bindings (for useStore)
+	storeBindings map[string][]storeBinding
+
+	// Framework: components subscribed to route changes (for useRoute)
+	routeBindings []routeBinding
+
+	// Framework: global keybindings registered via lumina.app
+	globalKeys []globalKeyBinding
 
 	// DevTools refresh throttle
 	devtoolsLastRefresh time.Time
@@ -95,11 +108,16 @@ func NewApp(L *lua.State, w, h int, adapter output.Adapter) *App {
 		scheduler: sched,
 		quit:      make(chan struct{}),
 		engine:    eng,
+		store:     store.New(nil),
 	}
 
 	// Register app-level APIs that the engine doesn't provide:
 	// quit, setInterval, setTimeout, clearInterval, clearTimeout
 	a.registerAppLuaAPIs()
+
+	// Register framework APIs: lumina.store, lumina.router, lumina.useStore,
+	// lumina.useRoute, lumina.app
+	a.registerFrameworkAPIs()
 
 	return a
 }
@@ -125,6 +143,11 @@ func (a *App) Engine() *render.Engine {
 // DevTools returns the DevTools panel (for testing/inspection).
 func (a *App) DevTools() *devtools.Panel {
 	return a.devtools
+}
+
+// Store returns the global application store.
+func (a *App) Store() *store.Store {
+	return a.store
 }
 
 // RenderAll performs a full render using the engine.

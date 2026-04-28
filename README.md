@@ -32,8 +32,8 @@ lumina.createComponent({
 - **`createElement`** — 创建 UI 元素（JSX 等价物）
 - **`useState`** — 组件状态管理（React 风格 Hook）
 - **Hooks** — `useEffect`、`useRef`、`useMemo`、`useCallback`（与 `useState` 同一套调用顺序规则）
-- **Go Widget** — `lumina.Button`、`lumina.Checkbox`、`lumina.Select` 等，由引擎随应用注册，可直接 `createElement(lumina.Button, { ... })`
-- **Lua Lux** — `require("lux")` 使用卡片、徽章、分割线等组合组件；主题可通过 `lumina.getTheme()` 或 `require("theme").current()` 读取
+- **Radix 风格控件（Go Widget）** — 在 `pkg/widget/` 实现、以 `lumina.<Name>` 暴露给 Lua（与 Web 里 Radix 那层「无障碍原语 + 交互状态机」同角色）；基元仍是 `box` / `text` / `input` 等，Widget 在其之上组合布局与事件
+- **Lua Lux** — `require("lux")` 的纯 Lua 模板（Card、Dialog 等），偏展示与业务拼装；复杂交互优先用上面的 Go Widget，再用 Lux 包一层样式即可
 
 ### 布局
 - **Flexbox** — `vbox`（垂直）/ `hbox`（水平）
@@ -178,9 +178,31 @@ lumina.createElement(MyComponent, {title = "Panel"},
 | `"input"` | 单行文本输入 |
 | `"textarea"` | 多行文本输入 |
 
-### Go 内置 Widget（`lumina.*`）
+### Radix 风格控件：Go Widget（`lumina.*`）
 
-引擎启动时会注册一组高性能 Widget，在 Lua 中与基元一样通过 `createElement` 使用，例如：
+应用启动时（`pkg/app.go`）会把 `pkg/widget` 里内置控件全部注册进引擎，因此在 Lua 里与基元一样通过 `createElement` 使用，工厂表挂在全局 `lumina` 上（名称与 Go 侧 `Widget.Name` 一致）。
+
+**当前内置控件（Lua 工厂名）**
+
+| `lumina.*` | 说明 |
+|------------|------|
+| `Button` | 按钮（variant、hover/pressed 等） |
+| `Checkbox` | 勾选框，支持 `checked` + `onChange(bool)` |
+| `Switch` | 开关 |
+| `Radio` | 单选 |
+| `Label` | 标签（可与输入控件关联） |
+| `Select` | 下拉选择，`options` + `value` + `onChange(string)` |
+| `Dialog` | 对话框容器 |
+| `Tooltip` | 提示 |
+| `Toast` | 轻提示 |
+| `Table` | 表格 |
+| `List` | 列表 |
+| `Pagination` | 分页 |
+| `Menu` | 菜单 |
+| `Dropdown` | 下拉菜单 |
+| `Spacer` | 占位间距 |
+
+示例：
 
 ```lua
 lumina.createElement(lumina.Button, {
@@ -196,11 +218,13 @@ lumina.createElement(lumina.Checkbox, {
 })
 ```
 
-完整列表与交互说明见 [docs/DESIGN-widgets.md](docs/DESIGN-widgets.md)。
+实现细节、事件与无障碍相关约定见 [docs/DESIGN-widgets.md](docs/DESIGN-widgets.md)；源码目录为 [`pkg/widget/`](pkg/widget/)。
 
 ### Lua Lux 组件库（`require("lux")`）
 
-仓库内嵌了 `lux` 模块（无需把 `lua/` 拷到运行目录），典型用法：
+与上一节的 **Go Radix 风格控件** 区分：`lux` 是 **Lua 侧可热更的 UI 模板**（由 `pkg/lux_modules.go` 内嵌 `lua/lux/*.lua` 到 `package.preload`，运行时 `require` 即可），不负责底层焦点/键盘路由等——那些由引擎 + Go Widget 处理。
+
+典型用法：
 
 ```lua
 local lux = require("lux")
