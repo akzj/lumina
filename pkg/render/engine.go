@@ -377,6 +377,12 @@ func (e *Engine) RenderDirty() {
 
 	// 7. Fire pending useEffect callbacks (after paint, like React)
 	e.firePendingEffects()
+
+	// 8. Auto-focus newly created nodes with autoFocus=true
+	// (only if nothing is currently focused or focused node was removed)
+	if e.focusedNode == nil || e.focusedNode.Removed {
+		e.FocusAutoFocus()
+	}
 }
 
 // RenderAll does a full render of everything (initial mount).
