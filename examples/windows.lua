@@ -1,4 +1,4 @@
--- examples/windows.lua — Multi-Window Manager
+-- examples/windows.lua — Multi-Window Manager (keyboard-only)
 --
 -- Demonstrates overlapping windows with z-order management:
 --   • Absolute positioning for window placement
@@ -6,6 +6,9 @@
 --   • Click to bring window to front
 --   • Keyboard movement of active window
 --   • Per-window click counters
+--
+-- See also: examples/windows_widget.lua for the Window widget version
+-- with mouse drag-to-move and drag-to-resize support.
 --
 -- Features showcased:
 --   • position = "absolute" with left/top/width/height

@@ -67,6 +67,13 @@ func hitTestWithOffset(node *Node, x, y int, scrollOffsetY int) *Node {
 		}
 	}
 
+	// Component placeholders are transparent containers — if no child matched
+	// the click position, the click is "through" the placeholder (not on it).
+	// This prevents overlapping placeholders from blocking clicks to siblings.
+	if node.Type == "component" {
+		return nil
+	}
+
 	return node
 }
 

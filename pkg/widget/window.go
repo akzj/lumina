@@ -2,7 +2,6 @@ package widget
 
 import (
 	"strings"
-	"unicode/utf8"
 
 	"github.com/akzj/lumina/pkg/render"
 )
@@ -42,25 +41,37 @@ var Window = &Widget{
 
 		children := make([]*render.Node, 0, 4)
 
-		// Title bar (height=1, full width, colored background)
-		closeBtn := "✕"
+		// Title bar: use hbox with title on left, close button on right
 		// Content width inside border = w - 2 (border left + right)
 		contentW := w - 2
-		// Use rune count for display width calculation (closeBtn is multi-byte UTF-8)
-		titlePad := contentW - utf8.RuneCountInString(title) - utf8.RuneCountInString(closeBtn)
-		if titlePad < 1 {
-			titlePad = 1
-		}
-		titleText := title + strings.Repeat(" ", titlePad) + closeBtn
 		children = append(children, &render.Node{
-			Type:    "text",
-			Content: titleText,
+			Type: "hbox",
 			Style: render.Style{
 				Background: t.Primary,
-				Foreground: t.PrimaryDark,
-				Bold:       true,
 				Height:     1,
+				Width:      contentW,
 				Right:      -1, Bottom: -1,
+			},
+			Children: []*render.Node{
+				{
+					Type:    "text",
+					Content: title,
+					Style: render.Style{
+						Foreground: t.PrimaryDark,
+						Bold:       true,
+						Flex:       1,
+						Right:      -1, Bottom: -1,
+					},
+				},
+				{
+					Type:    "text",
+					Content: "✕",
+					Style: render.Style{
+						Foreground: t.PrimaryDark,
+						Width:      1,
+						Right:      -1, Bottom: -1,
+					},
+				},
 			},
 		})
 
