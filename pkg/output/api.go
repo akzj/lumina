@@ -2,7 +2,7 @@
 package output
 
 import (
-	"github.com/akzj/lumina/pkg/lumina/v2/buffer"
+	"github.com/akzj/lumina/pkg/buffer"
 )
 
 // Adapter writes a screen buffer to an output target.

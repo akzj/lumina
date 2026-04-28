@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/akzj/go-lua/pkg/lua"
-	"github.com/akzj/lumina/pkg/lumina/v2/output"
+	"github.com/akzj/lumina/pkg/output"
 )
 
 // --- timerManager unit tests ---

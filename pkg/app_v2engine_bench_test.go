@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	"github.com/akzj/go-lua/pkg/lua"
-	"github.com/akzj/lumina/pkg/lumina/v2/event"
-	"github.com/akzj/lumina/pkg/lumina/v2/output"
+	"github.com/akzj/lumina/pkg/event"
+	"github.com/akzj/lumina/pkg/output"
 )
 
 func BenchmarkAppV2Engine_HoverCycle(b *testing.B) {

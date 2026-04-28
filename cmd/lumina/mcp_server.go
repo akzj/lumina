@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/akzj/lumina/pkg/lumina/v2/mcp"
+	"github.com/akzj/lumina/pkg/mcp"
 )
 
 // jsonrpcRequest is a JSON-RPC 2.0 request envelope.

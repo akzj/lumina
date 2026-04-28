@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/akzj/lumina/pkg/lumina/v2/perf"
+	"github.com/akzj/lumina/pkg/perf"
 )
 
 func TestPanel_Toggle(t *testing.T) {

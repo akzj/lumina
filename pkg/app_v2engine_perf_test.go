@@ -3,8 +3,8 @@ package v2
 import (
 	"testing"
 
-	"github.com/akzj/lumina/pkg/lumina/v2/event"
-	"github.com/akzj/lumina/pkg/lumina/v2/perf"
+	"github.com/akzj/lumina/pkg/event"
+	"github.com/akzj/lumina/pkg/perf"
 )
 
 // --- V2 Engine Perf Integration Tests ---

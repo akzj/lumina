@@ -6,7 +6,7 @@ import (
 	"io"
 	"strconv"
 
-	"github.com/akzj/lumina/pkg/lumina/v2/buffer"
+	"github.com/akzj/lumina/pkg/buffer"
 )
 
 // tuiAdapter renders a buffer to an ANSI terminal.

@@ -5,8 +5,8 @@ import (
 	"strings"
 
 	"github.com/akzj/go-lua/pkg/lua"
-	"github.com/akzj/lumina/pkg/lumina/v2/buffer"
-	"github.com/akzj/lumina/pkg/lumina/v2/perf"
+	"github.com/akzj/lumina/pkg/buffer"
+	"github.com/akzj/lumina/pkg/perf"
 )
 
 // Engine is the new render engine that manages persistent RenderNode trees.

@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	"github.com/akzj/go-lua/pkg/lua"
-	"github.com/akzj/lumina/pkg/lumina/v2/buffer"
-	"github.com/akzj/lumina/pkg/lumina/v2/output"
+	"github.com/akzj/lumina/pkg/buffer"
+	"github.com/akzj/lumina/pkg/output"
 )
 
 // nopAdapter is a no-op output adapter for benchmarks (avoids output overhead).
