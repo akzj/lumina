@@ -18,6 +18,10 @@ local lux = require("lux")
 local Badge = lux.Badge
 local Divider = lux.Divider
 
+-- Module-level variable to track pending input text.
+-- Avoids stale closure issues: onChange writes here, onSubmit reads from here.
+local _pendingInput = ""
+
 lumina.createComponent({
     id = "todo-app",
     name = "TodoMVC",
@@ -72,35 +76,11 @@ lumina.createComponent({
                 if e.key == "Escape" then
                     setMode("list")
                     setInputText("")
-                elseif e.key == "Enter" then
-                    if #inputText > 0 then
-                        local newTodos = {}
-                        for _, tt in ipairs(todos) do
-                            newTodos[#newTodos + 1] = tt
-                        end
-                        newTodos[#newTodos + 1] = {
-                            id = nextId,
-                            text = inputText,
-                            done = false,
-                            priority = "low",
-                        }
-                        setTodos(newTodos)
-                        setNextId(nextId + 1)
-                        setInputText("")
-                        setMode("list")
-                    end
-                elseif e.key == "Backspace" then
-                    if #inputText > 0 then
-                        local bytePos = utf8.offset(inputText, -1)
-                        if bytePos then
-                            setInputText(string.sub(inputText, 1, bytePos - 1))
-                        else
-                            setInputText("")
-                        end
-                    end
-                elseif utf8.len(e.key) == 1 then
-                    setInputText(inputText .. e.key)
+                    _pendingInput = ""
                 end
+                -- All other keys (chars, backspace, arrows) handled by native input.
+                -- Enter is handled by onSubmit on the input element.
+                return
             else
                 -- List mode
                 if e.key == "j" or e.key == "ArrowDown" then
@@ -225,12 +205,46 @@ lumina.createComponent({
             end
         end
 
-        -- Input bar
-        local inputContent
+        -- Input bar: native input element (handles CJK, cursor movement)
+        -- or placeholder text when not in input mode
+        local inputBar
         if mode == "input" then
-            inputContent = " + " .. inputText .. "_"
+            inputBar = lumina.createElement("input", {
+                id = "todo-input",
+                style = {width = 76, height = 1, background = t.surface0},
+                foreground = t.text,
+                placeholder = "Type a new todo and press Enter...",
+                autoFocus = true,
+                focusable = true,
+                onChange = function(text)
+                    _pendingInput = text
+                end,
+                onSubmit = function()
+                    local text = _pendingInput
+                    if #text > 0 then
+                        local newTodos = {}
+                        for _, tt in ipairs(todos) do
+                            newTodos[#newTodos + 1] = tt
+                        end
+                        newTodos[#newTodos + 1] = {
+                            id = nextId,
+                            text = text,
+                            done = false,
+                            priority = "low",
+                        }
+                        setTodos(newTodos)
+                        setNextId(nextId + 1)
+                        setInputText("")
+                        _pendingInput = ""
+                        setMode("list")
+                    end
+                end,
+            })
         else
-            inputContent = " + [a] Add new todo"
+            inputBar = lumina.createElement("text", {
+                foreground = t.muted,
+                style = {background = t.surface0, height = 1},
+            }, " + [a] Add new todo")
         end
 
         -- Completion progress bar
@@ -261,11 +275,8 @@ lumina.createComponent({
                 style = {background = t.surface0, height = 1},
             }, " Todo MVC  " .. totalCount .. " items, " .. activeCount .. " active"),
 
-            -- Input bar
-            lumina.createElement("text", {
-                foreground = mode == "input" and t.text or t.muted,
-                style = {background = t.surface0, height = 1},
-            }, inputContent),
+            -- Input bar (native input in input mode, or placeholder text)
+            inputBar,
 
             -- Divider (Lux component)
             lumina.createElement(Divider, {width = 78}),
