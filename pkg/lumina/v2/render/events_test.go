@@ -562,3 +562,143 @@ func BenchmarkEngine_RenderDirty_NoChange(b *testing.B) {
 		e.RenderDirty() // no-op — nothing dirty
 	}
 }
+
+// --- Auto-scroll tests ---
+
+func TestEngine_AutoScroll(t *testing.T) {
+	e, L := newTestEngine(t)
+
+	// Create a vbox with overflow=scroll, height=5, containing 20 text children (each h=1)
+	err := L.DoString(`
+		local children = {}
+		for i = 1, 20 do
+			children[i] = lumina.createElement("text", {style = {height = 1}}, "Line " .. i)
+		end
+		lumina.createComponent({
+			id = "auto_scroll",
+			name = "AutoScroll",
+			render = function(props)
+				return lumina.createElement("vbox", {
+					style = {overflow = "scroll", height = 5, width = 20},
+					children = children,
+				})
+			end,
+		})
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	e.RenderAll()
+
+	root := e.Root()
+	if root == nil || root.RootNode == nil {
+		t.Fatal("no root node")
+	}
+
+	// Find the scroll container (root's child with overflow=scroll)
+	scrollNode := root.RootNode
+	if scrollNode.Style.Overflow != "scroll" {
+		// It might be nested
+		if len(scrollNode.Children) > 0 {
+			scrollNode = scrollNode.Children[0]
+		}
+	}
+	if scrollNode.Style.Overflow != "scroll" {
+		t.Fatal("could not find scroll container")
+	}
+
+	// Initial scrollY should be 0
+	if scrollNode.ScrollY != 0 {
+		t.Errorf("initial ScrollY = %d, want 0", scrollNode.ScrollY)
+	}
+
+	// Scroll down (delta=1 means scroll down)
+	e.HandleScroll(5, 2, 1)
+
+	if scrollNode.ScrollY <= 0 {
+		t.Errorf("after scroll down: ScrollY = %d, want > 0", scrollNode.ScrollY)
+	}
+
+	savedY := scrollNode.ScrollY
+
+	// Scroll up (delta=-1 means scroll up)
+	e.HandleScroll(5, 2, -1)
+
+	if scrollNode.ScrollY >= savedY {
+		t.Errorf("after scroll up: ScrollY = %d, want < %d", scrollNode.ScrollY, savedY)
+	}
+
+	// Scroll up past 0 — should clamp at 0
+	for i := 0; i < 20; i++ {
+		e.HandleScroll(5, 2, -1)
+	}
+	if scrollNode.ScrollY != 0 {
+		t.Errorf("after many scroll ups: ScrollY = %d, want 0", scrollNode.ScrollY)
+	}
+
+	// Scroll down past max — should clamp
+	for i := 0; i < 100; i++ {
+		e.HandleScroll(5, 2, 1)
+	}
+	maxScroll := computeMaxScrollY(scrollNode)
+	if scrollNode.ScrollY != maxScroll {
+		t.Errorf("after many scroll downs: ScrollY = %d, want maxScroll=%d", scrollNode.ScrollY, maxScroll)
+	}
+}
+
+func TestEngine_AutoScroll_CustomHandlerPriority(t *testing.T) {
+	e, L := newTestEngine(t)
+
+	// Create a node with BOTH overflow=scroll AND onScroll handler
+	err := L.DoString(`
+		scroll_called = false
+		local children = {}
+		for i = 1, 20 do
+			children[i] = lumina.createElement("text", {style = {height = 1}}, "Line " .. i)
+		end
+		lumina.createComponent({
+			id = "priority_test",
+			name = "PriorityTest",
+			render = function(props)
+				return lumina.createElement("vbox", {
+					style = {overflow = "scroll", height = 5, width = 20},
+					onScroll = function(e)
+						scroll_called = true
+					end,
+					children = children,
+				})
+			end,
+		})
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	e.RenderAll()
+
+	root := e.Root()
+	if root == nil || root.RootNode == nil {
+		t.Fatal("no root node")
+	}
+
+	// Scroll — custom handler should be called, NOT auto-scroll
+	e.HandleScroll(5, 2, 1)
+
+	// Verify Lua handler was called
+	L.GetGlobal("scroll_called")
+	called := L.ToBoolean(-1)
+	L.Pop(1)
+	if !called {
+		t.Error("expected custom onScroll handler to be called")
+	}
+
+	// Verify auto-scroll did NOT change ScrollY
+	scrollNode := root.RootNode
+	if len(scrollNode.Children) > 0 && scrollNode.Children[0].Style.Overflow == "scroll" {
+		scrollNode = scrollNode.Children[0]
+	}
+	if scrollNode.ScrollY != 0 {
+		t.Errorf("auto-scroll should NOT have fired; ScrollY = %d, want 0", scrollNode.ScrollY)
+	}
+}

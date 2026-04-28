@@ -63,23 +63,11 @@ lumina.createComponent({
 
         -- ── State ──
         local selectedIdx, setSelectedIdx = lumina.useState("sel", 1)
-        local leftScrollY, setLeftScrollY = lumina.useState("leftScroll", 0)
-        local rightScrollY, setRightScrollY = lumina.useState("rightScroll", 0)
-
-        local scrollStep = 3
 
         -- ── Keyboard handler ──
         local function handleKey(e)
             if e.key == "q" then
                 lumina.quit()
-            elseif e.key == "j" or e.key == "ArrowDown" then
-                setRightScrollY(math.max(0, rightScrollY + scrollStep))
-            elseif e.key == "k" or e.key == "ArrowUp" then
-                setRightScrollY(math.max(0, rightScrollY - scrollStep))
-            elseif e.key == "J" then
-                setLeftScrollY(math.max(0, leftScrollY + scrollStep))
-            elseif e.key == "K" then
-                setLeftScrollY(math.max(0, leftScrollY - scrollStep))
             end
         end
 
@@ -111,7 +99,6 @@ lumina.createComponent({
                 foreground = fg,
                 onClick = function()
                     setSelectedIdx(i)
-                    setRightScrollY(0) -- reset right scroll when changing item
                 end,
             }, " " .. item.title)
         end
@@ -119,14 +106,6 @@ lumina.createComponent({
         local leftPanel = {
             type = "vbox",
             id = "left-list",
-            scrollY = leftScrollY,
-            onScroll = function(e)
-                if e.key == "down" then
-                    setLeftScrollY(math.max(0, leftScrollY + scrollStep))
-                elseif e.key == "up" then
-                    setLeftScrollY(math.max(0, leftScrollY - scrollStep))
-                end
-            end,
             style = {
                 width = 30,
                 overflow = "scroll",
@@ -165,14 +144,6 @@ lumina.createComponent({
         local rightPanel = {
             type = "vbox",
             id = "right-detail",
-            scrollY = rightScrollY,
-            onScroll = function(e)
-                if e.key == "down" then
-                    setRightScrollY(math.max(0, rightScrollY + scrollStep))
-                elseif e.key == "up" then
-                    setRightScrollY(math.max(0, rightScrollY - scrollStep))
-                end
-            end,
             style = {
                 flex = 1,
                 overflow = "scroll",
@@ -195,7 +166,7 @@ lumina.createComponent({
         local footer = createElement("text", {
             foreground = theme.muted,
             style = {background = theme.headerBg, height = 1},
-        }, " [Click] Select  [Scroll] Wheel  [j/k] Right  [J/K] Left  [q] Quit")
+        }, " [Click] Select  [Mouse Wheel] Scroll  [q] Quit")
 
         -- ═══════════════════════════════════════════
         -- Root layout
