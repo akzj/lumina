@@ -1,27 +1,34 @@
 # Lumina Widget System Design
 
-> Go 提供高性能原生组件内核（Radix），Lua 提供可复制、可定制、可热更的组件模板和设计系统（lux）。
+> Go 提供 **Radix 风格**原生控件（`pkg/widget/`，Lua 里为 `lumina.*`）；Lua 提供可复制、可热更的展示模板 **Lux**（源码在 `lua/lux/`，运行时由 `pkg/lux_modules.go` 内嵌到 `require("lux")`）。
+
+**与仓库同步**：内置控件列表以 [`pkg/widget/register.go`](../pkg/widget/register.go) 的 `widget.All()` 为准；Lux 子模块以 [`pkg/lux_modules.go`](../pkg/lux_modules.go) 的 `registerLuxModules` 为准；应用侧注册见 [`pkg/app.go`](../pkg/app.go) 中 `NewApp` 对 `eng.RegisterWidget` 的循环。
 
 ## 架构总览
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│  Lua 用户代码 / lua/lux/ 组件模板                   │
-│  Card, Badge, Alert, Tabs, Progress, Spinner, ...   │
+│  Lua 用户脚本                                        │
+│  lumina.createElement + require("lux") / "theme"    │
 ├─────────────────────────────────────────────────────┤
-│  Go Widget 层 (pkg/widget/)                          │
-│  Button, Checkbox, Radio, Switch, Select,           │
-│  Label, Form, Dialog, Menu, Dropdown, Tooltip, ...  │
-│  每个 Widget: Render() → *Node, OnEvent(), NewState()│
+│  Lua Lux（内嵌 preload，无随盘 lua/ 亦可 require）   │
+│  Card, Badge, Divider, Progress, Spinner, Dialog,   │
+│  Layout, CommandPalette, …                          │
+├─────────────────────────────────────────────────────┤
+│  Go Radix 控件层 (pkg/widget/)                       │
+│  Button Checkbox Switch Radio Label Select Dialog    │
+│  Tooltip Toast Table List Pagination Menu Dropdown   │
+│  Spacer …                                            │
+│  Render → *Node，OnEvent → 状态 + FireOnChange/Layer │
 ├─────────────────────────────────────────────────────┤
 │  引擎层 (pkg/render/)                                │
-│  基元: box/vbox/hbox, text, input, textarea         │
-│  事件: 鼠标/键盘/焦点/滚动/表单/覆盖层               │
-│  布局: flexbox, absolute, overflow=scroll           │
-│  绘制: 增量脏区绘制, CJK 宽字符                      │
+│  基元: box/vbox/hbox, text, input, textarea          │
+│  事件: 见下文 §1；WidgetEvent 含 Layer 输出          │
+│  布局: flexbox, absolute, overflow=scroll            │
+│  绘制: 增量脏区、宽字符                              │
 ├─────────────────────────────────────────────────────┤
 │  输出层 (pkg/output/)                                │
-│  TUI (ANSI) / WebSocket                             │
+│  TUI (ANSI) / WebSocket（CLI --web）                 │
 └─────────────────────────────────────────────────────┘
 ```
 
@@ -32,342 +39,132 @@
 | 浏览器引擎（DOM+渲染） | pkg/render/ Engine  | 节点树、布局、绘制、事件   |
 | HTML 原生标签          | 基元 box/text/input | 最小渲染单元，Go 硬编码   |
 | Radix UI（无障碍原语） | pkg/widget/         | 交互行为、焦点、状态机     |
-| lux/ui（组件模板）  | lua/lux/         | 样式组合、主题、业务定制   |
-| Tailwind CSS          | lua/theme/          | 颜色、间距、边框预设      |
+| 组件模板 / shadcn 类   | Lux（`require("lux")`） | 样式组合、槽位、业务拼装（**非** Go 控件替代品） |
+| Tailwind / tokens      | `lumina.getTheme()`、`require("theme")` | 与 Go `widget.CurrentTheme` 对齐的色板 |
 
 ---
 
-## Part 1: 事件系统
+## Part 1: 事件系统（当前实现）
 
-### 1.1 当前状态
+### 1.1 基元 / 描述符上的 Lua 回调
 
-已实现 6 个事件：
+对应 `pkg/render/node.go`、`readDescriptor` 已支持的字段（节选）：
 
-| 事件          | Node 字段       | 触发时机                    |
-|---------------|-----------------|----------------------------|
-| onClick       | OnClick         | 鼠标点击（mousedown 映射）   |
-| onMouseEnter  | OnMouseEnter    | 鼠标进入节点区域             |
-| onMouseLeave  | OnMouseLeave    | 鼠标离开节点区域             |
-| onKeyDown     | OnKeyDown       | 键盘按下                    |
-| onChange      | OnChange        | input/textarea 内容变化      |
-| onScroll      | OnScroll        | 鼠标滚轮                    |
+| 回调 | 说明 |
+|------|------|
+| `onClick` | 点击 |
+| `onMouseDown` / `onMouseUp` | 按下 / 抬起（Button pressed 态等） |
+| `onMouseEnter` / `onMouseLeave` | 悬停 |
+| `onKeyDown` | 键盘 |
+| `onChange` | `input` / `textarea` 文本变化；以及引擎在 Widget 设置 `FireOnChange` 后桥接到节点 `onChange` |
+| `onScroll` | 滚轮 |
+| `onFocus` / `onBlur` | 焦点进出 |
+| `onSubmit` | 如 input 内 Enter 向上冒泡到带 `onSubmit` 的容器 |
+| `onOutsideClick` | 点击组件区域外（下拉、菜单等关闭语义） |
 
-### 1.2 新增事件
+另有 **`focusable`**、**`disabled`** 控制是否参与 Tab 焦点与是否屏蔽事件。
 
-#### 鼠标事件：onMouseDown + onMouseUp
+### 1.2 Widget：`render.WidgetEvent`（`pkg/render/engine.go`）
 
-**目的**：Button pressed 态、拖拽。当前 mousedown 直接映射为 onClick，丢失了 press/release 语义。
+Go Widget 的 `OnEvent` 收到的结构体除 `Type` / `Key` / `X,Y` 外，还包括：
 
-**修改点**：
+| 字段 | 方向 | 含义 |
+|------|------|------|
+| `FireOnChange` | 输出 | Widget 设置后，引擎对节点调用 `onChange`（值由 Widget 决定，如 Checkbox 的 bool） |
+| `WidgetX/Y/W/H` | 输入 | 引擎在调用 `OnEvent` **前**填入的控件屏幕包围盒 |
+| `CreateLayer` | 输出 | 非 nil 时引擎创建叠加层（`LayerRequest`：`ID`、`Root` 子树、`Modal`） |
+| `RemoveLayer` | 输出 | 非空时移除对应层 ID |
 
-1. `pkg/render/node.go` — 新增字段：
-```go
-OnMouseDown LuaRef
-OnMouseUp   LuaRef
-```
-
-2. `pkg/render/descriptor.go` — 新增字段（同上）
-
-3. `pkg/render/engine.go` → `readDescriptor` — 新增读取：
-```go
-desc.OnMouseDown = getRefField(L, absIdx, "onMouseDown")
-desc.OnMouseUp   = getRefField(L, absIdx, "onMouseUp")
-```
-
-4. `pkg/render/reconciler.go` → `reconcileImpl` — 新增 updateRef
-
-5. `pkg/render/events.go` — 新增：
-```go
-func (e *Engine) HandleMouseDown(x, y int)  // hit-test → 触发 onMouseDown
-func (e *Engine) HandleMouseUp(x, y int)    // hit-test → 触发 onMouseUp
-```
-
-6. `pkg/app.go` → `HandleEvent` — 拆分 mousedown/mouseup：
-```go
-case "mousedown":
-    a.engine.HandleMouseDown(e.X, e.Y)  // 触发 onMouseDown
-    a.engine.HandleClick(e.X, e.Y)      // 保持 onClick 兼容
-case "mouseup":
-    a.engine.HandleMouseUp(e.X, e.Y)
-```
-
-**Lua API**：
-```lua
-lumina.createElement("box", {
-    onMouseDown = function(e) ... end,
-    onMouseUp   = function(e) ... end,
-})
-```
-
-#### 焦点事件：onFocus + onBlur
-
-**目的**：input 获焦高亮、Select 获焦准备键盘交互、失焦验证。
-
-**修改点**：
-
-1. `pkg/render/node.go` — 新增字段：
-```go
-OnFocus LuaRef
-OnBlur  LuaRef
-```
-
-2. `pkg/render/node.go` — 新增 Focusable 字段：
-```go
-Focusable bool  // 替代 hardcoded type == "input" || type == "textarea"
-Disabled  bool  // 禁用状态（事件屏蔽 + 视觉）
-```
-
-3. `pkg/render/input.go` — 修改 `collectFocusable`：
-```go
-func collectFocusable(node *Node) []*Node {
-    if node.Focusable && !node.Disabled {
-        result = append(result, node)
-    }
-    // ...
-}
-```
-
-4. `pkg/render/input.go` — 焦点切换时触发事件：
-```go
-func (e *Engine) setFocus(newNode *Node) {
-    old := e.focusedNode
-    if old == newNode { return }
-
-    // Blur old
-    if old != nil && !old.Removed && old.OnBlur != 0 {
-        e.callLuaRefSimple(old.OnBlur)
-    }
-
-    e.focusedNode = newNode
-
-    // Focus new
-    if newNode != nil && newNode.OnFocus != 0 {
-        e.callLuaRefSimple(newNode.OnFocus)
-    }
-
-    // Paint dirty
-    if old != nil && !old.Removed { old.PaintDirty = true }
-    if newNode != nil { newNode.PaintDirty = true }
-    e.needsRender = true
-}
-```
-
-5. `FocusNext()`, `HandleClick` 中的焦点切换改为调用 `setFocus()`
-
-6. `readDescriptor` 读取 focusable / disabled / onFocus / onBlur
-
-**Lua API**：
-```lua
-lumina.createElement("box", {
-    focusable = true,
-    onFocus = function() ... end,
-    onBlur  = function() ... end,
-})
-```
-
-#### 表单事件：onSubmit
-
-**目的**：Form 提交。
-
-**修改点**：
-
-1. `pkg/render/node.go` — 新增：`OnSubmit LuaRef`
-2. `pkg/render/descriptor.go` — 同上
-3. `readDescriptor` / `reconciler` — 同上
-4. `input.go` — Enter 键在 input 上时，向上冒泡查找 OnSubmit 处理器
-
-**Lua API**：
-```lua
-lumina.createElement("box", {
-    onSubmit = function(values) ... end,
-},
-    lumina.createElement("input", {id = "name"}),
-    lumina.createElement("input", {id = "email"}),
-)
-```
-
-#### 覆盖层事件：onOutsideClick
-
-**目的**：Select/Menu/Dialog 的「点击外部关闭」。
-
-**设计**：作为 Overlay 系统的一部分实现。
-
-1. `pkg/render/node.go` — 新增：`OnOutsideClick LuaRef`
-2. `pkg/render/engine.go` — 维护 overlay 栈
-3. HandleClick 时：如果有 overlay 激活，检查点击是否在 overlay 节点树内。不在则触发 onOutsideClick。
-
-**Lua API**：
-```lua
-lumina.createElement("box", {
-    style = {position = "absolute", zIndex = 100},
-    onOutsideClick = function() setOpen(false) end,
-})
-```
-
-### 1.3 不支持的事件
+### 1.3 不支持的回调（终端 / 产品取舍）
 
 | 事件    | 原因                                  |
 |---------|---------------------------------------|
-| onKeyUp | 终端协议（VT100）无按键释放事件        |
-| onOpen  | 业务语义，Lua 自己管理 open 状态       |
-| onClose | 业务语义，Lua 自己管理 open 状态       |
+| onKeyUp | 常见终端协议无可靠 key-up            |
+| onOpen / onClose | 由业务状态（Lua `useState`）表达即可 |
 
-### 1.4 完整事件清单（实施后）
+### 1.4 历史：分步落地说明
 
-```
-鼠标:    onClick, onMouseDown, onMouseUp, onMouseEnter, onMouseLeave
-键盘:    onKeyDown
-焦点:    onFocus, onBlur
-输入:    onChange
-滚动:    onScroll
-表单:    onSubmit
-覆盖层:  onOutsideClick
-```
-
-共 12 个事件。
+早期文档中的「新增事件」分步清单已合入主干；字段与分发逻辑以 **`pkg/render/node.go`**、**`descriptor.go`**、**`events.go`**、**`input.go`** 为准，不再在此重复大段伪代码。
 
 ---
 
 ## Part 2: Widget 系统（Radix 控件）
 
-### 2.1 Widget 接口
+### 2.1 Widget 接口（`pkg/widget/widget.go`）
 
 ```go
-// pkg/widget/widget.go
-
-package widget
-
-import "github.com/akzj/lumina/pkg/render"
-
-// Widget 定义一个内置控件的行为。
-// 每个 Widget 是一个 Go 实现的 defineComponent：
-// - 有自己的状态（每个实例独立）
-// - 渲染时组合引擎基元（box/text/input）返回 *Node 树
-// - 处理事件时更新内部状态
 type Widget struct {
     Name     string
-    Render   func(props map[string]any, state any) *render.Node
-    OnEvent  func(props map[string]any, state any, event *render.WidgetEvent)
+    Render   func(props map[string]any, state any) any // *render.Node
+    OnEvent  func(props map[string]any, state any, event *render.WidgetEvent) bool
     NewState func() any
 }
-
-// WidgetEvent 是 Widget 接收的事件。
-type WidgetEvent struct {
-    Type string // "click", "mousedown", "mouseup", "keydown", "focus", "blur", ...
-    Key  string // 键盘事件的按键
-    X, Y int    // 鼠标事件的坐标
-}
 ```
 
-### 2.2 状态设计（每个 Widget 独立 struct）
+- **`Render`**：返回 `*render.Node` 树（在接口里用 `any` 避免与 `render` 包循环引用）。
+- **`OnEvent`**：返回 `true` 表示 Widget 消费了事件并可能改了内部状态，需要重绘。
+- **`WidgetEvent`**：定义在 **`pkg/render/engine.go`**（见 §1.2），不是 `widget` 包内重复定义。
+
+### 2.2 已注册的 Go Radix 控件（`widget.All()` → `lumina.<Name>`）
+
+下列控件在 [`register.go`](../pkg/widget/register.go) 中导出，并由 `NewApp` 逐个 `RegisterWidget`。**Lua 工厂名与 `Widget.Name` 一致**（如 `lumina.Button`）。
+
+| `lumina.*` | 典型状态 / 职责 |
+|------------|-----------------|
+| `Button` | `Hovered` / `Pressed`；`variant`、点击 |
+| `Checkbox` | `Checked` + `Hovered`；`checked` 受控、`onChange(bool)` |
+| `Switch` | 开关态 |
+| `Radio` | 单选组 |
+| `Label` | 文案 + 关联聚焦 |
+| `Select` | `Open` / `Selected` / `Highlighted`；下拉与键盘导航 |
+| `Dialog` | `Open`；`open`/`title`/`message` 等 props |
+| `Tooltip` | 悬停提示 |
+| `Toast` | 轻提示 |
+| `Table` | 表格数据展示 |
+| `List` | 列表 |
+| `Pagination` | 分页控件 |
+| `Menu` | 菜单 |
+| `Dropdown` | 下拉菜单 |
+| `Spacer` | 布局占位 |
+
+> **未实现**：文档早期草稿中的 **`Form`**、**`Popover`** 等 **不在** 当前 `widget.All()`；表单提交可组合 `input` + 容器 `onSubmit`，或由业务 Lua 收集字段。
+
+### 2.3 Lux（Lua 模板，内嵌 preload）
+
+源码目录为 **`lua/lux/`**；运行时由 **`pkg/lux_modules.go`** 写入 `package.preload`（与二进制同发，无需随盘携带 `lua/`）。
+
+当前 umbrella **`require("lux")`** 暴露的子模块包括（与 `luxInitLua` 一致）：
+
+| 模块 | 说明 |
+|------|------|
+| `lux.Card` | 圆角边框容器 + 可选 `title` + `props.children` |
+| `lux.Badge` | 彩色标签 |
+| `lux.Divider` | 水平分割线字符 |
+| `lux.Progress` | 文本进度条 |
+| `lux.Spinner` | `useEffect` + `setInterval` 帧动画 |
+| `lux.Dialog` | 槽位 API（`Dialog.Title` / `Content` / `Actions`）的对话框模板（与 Go `lumina.Dialog` 不同层） |
+| `lux.Layout` | 布局辅助 |
+| `lux.CommandPalette` | 命令面板模板 |
+
+主题：`require("theme")` 与 `lumina.getTheme()` / Go `widget.CurrentTheme` 对齐。
+
+### 2.4 注册到引擎（实际代码路径）
 
 ```go
-// widget/button.go
-type ButtonState struct {
-    Hovered bool
-    Pressed bool
+// pkg/app.go（节选）
+eng := render.NewEngine(L, w, h)
+for _, wgt := range widget.All() {
+    eng.RegisterWidget(wgt)
 }
-
-// widget/checkbox.go
-type CheckboxState struct {
-    Checked bool
-}
-
-// widget/radio.go
-type RadioState struct {
-    Checked bool
-}
-
-// widget/switch_widget.go
-type SwitchState struct {
-    Checked bool
-}
-
-// widget/select_widget.go
-type SelectState struct {
-    Open        bool
-    Selected    int  // 当前选中索引
-    Highlighted int  // 键盘高亮索引
-}
-
-// widget/dialog.go
-type DialogState struct {
-    Open bool
-}
+eng.RegisterLuaAPI()
 ```
 
-### 2.3 控件分类
-
-#### Go Widget 层实现（pkg/widget/ — 有交互状态机）
-
-| 控件     | 状态              | 关键交互                        |
-|----------|-------------------|---------------------------------|
-| Button   | hovered, pressed  | hover 变色, press 态, click 触发 |
-| Checkbox | checked           | 点击/Space 切换, onChange        |
-| Radio    | checked           | 点击/Space 选中, 组互斥, onChange |
-| Switch   | checked           | 点击/Space 切换, onChange        |
-| Select   | open, selected, highlighted | 展开/收起, ↑↓选择, Enter确认, Escape取消 |
-| Label    | —                 | 点击聚焦关联控件                 |
-| Form     | —                 | 收集子控件值, onSubmit           |
-
-#### Lua 组件层实现（lua/lux/ — 纯组合 + 样式）
-
-| 组件       | 组合方式                                    |
-|------------|---------------------------------------------|
-| Card       | box[border=rounded] + text[title] + children |
-| Badge      | text[bold, colored]                          |
-| Alert      | box[border] + text[icon] + text[message]     |
-| Avatar     | box[border=rounded, w=3, h=1] + text[initials] |
-| Divider    | text["─" × width]                           |
-| Spacer     | box[flex=1]                                  |
-| Tabs       | hbox[tab headers] + useState + conditional children |
-| Progress   | hbox[text["████░░░░"] + text["60%"]]         |
-| Spinner    | text + setInterval[cycle "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"]  |
-| Toast      | overlay + setTimeout auto-dismiss            |
-| Pagination | hbox[text[页码] + onClick]                   |
-| ScrollView | box[overflow="scroll"] （已有基元）           |
-| Table      | vbox[hbox[header cells] + vbox[row cells]]   |
-| List       | vbox[children]                               |
-
-#### 需要 Overlay 系统后实现（Go Widget）
-
-| 控件     | 依赖                              |
-|----------|-----------------------------------|
-| Dialog   | overlay + focus trap + onOutsideClick |
-| Tooltip  | overlay + 锚定定位 + 延迟显隐      |
-| Popover  | overlay + 锚定定位 + onOutsideClick |
-| Menu     | overlay + 键盘导航 + onOutsideClick |
-| Dropdown | overlay + 键盘导航 + onOutsideClick |
-
-### 2.4 Widget 注册到引擎
-
-```go
-// pkg/widget/register.go
-
-func RegisterAll(e *render.Engine) {
-    e.RegisterWidget(Button)
-    e.RegisterWidget(Checkbox)
-    e.RegisterWidget(Radio)
-    e.RegisterWidget(Switch)
-    e.RegisterWidget(Select)
-    e.RegisterWidget(Label)
-    e.RegisterWidget(Form)
-}
-```
-
-```go
-// pkg/render/engine.go — 新增
-
-func (e *Engine) RegisterWidget(w *widget.Widget) {
-    // 将 Widget 注册为 Lua 可调用的 defineComponent
-    // lumina.Button, lumina.Checkbox, ... 自动可用
-}
-```
+`RegisterWidget` 在 **`pkg/render/engine.go`**：把每个 `Widget.Name` 注册为 Lua 全局表 `lumina` 上的可调用工厂（与 `defineComponent` 工厂同一套 `createElement` 路径）。
 
 ### 2.5 Lua 使用方式
 
 ```lua
--- 使用 Go 内置 Widget
+-- Go Radix 控件
 lumina.createElement(lumina.Button, {
     label = "Submit",
     variant = "primary",
@@ -389,7 +186,7 @@ lumina.createElement(lumina.Select, {
     onChange = function(value) print(value) end,
 })
 
--- 使用 Lua lux 组件
+-- Lux：子节点写在第 3 参数起，引擎会注入为 props.children（数组）
 local lux = require("lux")
 
 lumina.createElement(lux.Card, {
@@ -437,7 +234,7 @@ Select (expanded):
   └─────────────┘
 
 Label:
-  Username:          (点击聚焦关联 input)
+  Username:          (纯文本；与 input 的关联在 Lua 里用布局 + onClick 等自行实现)
 
 Progress:
   ████████░░░░░░░ 60%
@@ -448,75 +245,20 @@ Spinner:
 
 ---
 
-## 实施路线
+## 实施路线（里程碑 ↔ 当前仓库）
 
-### Phase 0: 引擎事件扩展
+下表对照本文早期 **Phase** 规划与**主干现状**，便于查阅；细节以代码为准。
 
-**目标**：为 Widget 系统提供底层事件支持。
+| 阶段 | 规划要点 | 当前状态 |
+|------|-----------|----------|
+| Phase 0 | 引擎事件：`mousedown`/`mouseup`、`focus`/`blur`、`onSubmit`、`onOutsideClick`、`Focusable`/`Disabled` | **已合入** `pkg/render/`（见 §1） |
+| Phase 1 | `RegisterWidget` + Button | **已完成** |
+| Phase 2 | Checkbox、Switch、Radio | **已完成** |
+| Phase 3 | Select、Label；草稿中的 **Form** | Select、Label **已完成**；**无** `pkg/widget/form.go` |
+| Phase 4 | Lua Lux + 主题 | **已完成**；Lux 以 **`pkg/lux_modules.go` 内嵌**为主，`lua/lux/` 为权威源码 |
+| Phase 5 | Overlay、Dialog、Menu、Dropdown… | **部分完成**：上述控件已在 `widget.All()`；**Layer**（`WidgetEvent.CreateLayer` 等）与全局 overlay 策略仍在 **迭代**；**Popover**、独立 **`lua/lux/toast.lua`** 等**未**按原清单落地 |
 
-**修改文件**：
-- `pkg/render/node.go` — 新增字段: Focusable, Disabled, OnMouseDown, OnMouseUp, OnFocus, OnBlur, OnSubmit
-- `pkg/render/descriptor.go` — 同步新增字段
-- `pkg/render/engine.go` — readDescriptor 读取新字段, readStyleFields 读取 focusable/disabled
-- `pkg/render/reconciler.go` — updateRef 新事件
-- `pkg/render/events.go` — HandleMouseDown, HandleMouseUp, hasHandler 扩展
-- `pkg/render/input.go` — setFocus() 提取, collectFocusable 改用 Focusable 字段, input 兼容设置 Focusable=true
-- `pkg/app.go` — HandleEvent 拆分 mousedown/mouseup
+**后续工作（方向性，非排期承诺）**
 
-**Input CJK 修复**：
-- `pkg/render/input.go` — 将 `len(key)==1 && key[0]>=0x20 && key[0]<=0x7E` 改为 `utf8.RuneCountInString(key)==1 && unicode.IsPrint(firstRune)`
-
-### Phase 1: Widget 基础设施 + Button
-
-**目标**：建立 Widget 注册机制，用 Button 验证整个流程。
-
-**新增文件**：
-- `pkg/widget/widget.go` — Widget 接口定义
-- `pkg/widget/button.go` — Button 实现
-- `pkg/widget/register.go` — RegisterAll
-
-**修改文件**：
-- `pkg/render/engine.go` — RegisterWidget 方法
-
-### Phase 2: Checkbox + Switch + Radio
-
-**新增文件**：
-- `pkg/widget/checkbox.go`
-- `pkg/widget/switch_widget.go`（避免 Go 关键字）
-- `pkg/widget/radio.go`
-
-### Phase 3: Select + Label + Form
-
-**新增文件**：
-- `pkg/widget/select_widget.go`（避免 Go 关键字）
-- `pkg/widget/label.go`
-- `pkg/widget/form.go`
-
-### Phase 4: Lua lux 组件 + 主题
-
-**新增文件**：
-- `lua/theme/init.lua`
-- `lua/theme/catppuccin.lua`
-- `lua/lux/init.lua`
-- `lua/lux/card.lua`
-- `lua/lux/badge.lua`
-- `lua/lux/alert.lua`
-- `lua/lux/divider.lua`
-- `lua/lux/tabs.lua`
-- `lua/lux/progress.lua`
-- `lua/lux/spinner.lua`
-
-### Phase 5: Overlay 系统 + 覆盖层控件
-
-**修改文件**：
-- `pkg/render/engine.go` — overlay 栈管理
-- `pkg/render/painter.go` — zIndex 排序绘制
-- `pkg/render/events.go` — onOutsideClick 分发
-
-**新增文件**：
-- `pkg/widget/dialog.go`
-- `pkg/widget/tooltip.go`
-- `pkg/widget/popover.go`
-- `pkg/widget/menu.go`
-- `pkg/widget/dropdown.go`
-- `lua/lux/toast.lua`
+- 统一 overlay / layer / `zIndex` 与焦点陷阱的文档与行为边界。
+- 若需要 **`Form`**：或新增 Go Widget，或保持 Lua 组合 + `onSubmit` 模式并在 README/API 中给标准范式。
