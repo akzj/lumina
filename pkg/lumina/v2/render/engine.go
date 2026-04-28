@@ -35,11 +35,25 @@ type Engine struct {
 
 	// Performance tracking
 	tracker *perf.Tracker
+
+	// Render flag: true when any component is dirty or any node needs layout/paint
+	needsRender bool
 }
 
 // SetTracker sets the performance tracker for recording V2 engine metrics.
 func (e *Engine) SetTracker(t *perf.Tracker) {
 	e.tracker = t
+}
+
+// NeedsRender returns true when there is pending dirty work (components, layout, or paint).
+func (e *Engine) NeedsRender() bool {
+	return e.needsRender
+}
+
+// MarkNeedsRender sets the needsRender flag so the next RenderDirty call does work.
+// Call this after externally marking a component dirty or modifying node dirty flags.
+func (e *Engine) MarkNeedsRender() {
+	e.needsRender = true
 }
 
 // drainPendingUnrefs frees all Lua registry refs collected during reconcile.
@@ -89,6 +103,7 @@ func (e *Engine) Resize(width, height int) {
 	e.buffer.Resize(width, height)
 	if e.root != nil && e.root.RootNode != nil {
 		e.root.RootNode.MarkLayoutDirty()
+		e.needsRender = true
 	}
 }
 
@@ -106,6 +121,7 @@ func (e *Engine) CreateRootComponent(id, name string, renderFnRef int64) {
 	comp.Dirty = true
 	e.components[id] = comp
 	e.root = comp
+	e.needsRender = true
 }
 
 // SetState sets a state value on a component and marks it dirty.
@@ -114,14 +130,23 @@ func (e *Engine) SetState(compID, key string, value any) {
 	if comp == nil {
 		return
 	}
+	oldDirty := comp.Dirty
 	comp.SetState(key, value)
+	if !oldDirty && comp.Dirty {
+		e.needsRender = true
+	}
 }
 
 // RenderDirty renders all dirty components, reconciles, layouts, and paints.
 // This is the main frame function.
 func (e *Engine) RenderDirty() {
-	// Reset CellBuffer stats for this frame.
+	// Always reset stats so callers see accurate per-frame numbers.
 	e.buffer.ResetStats()
+
+	if !e.needsRender {
+		return // Nothing dirty — skip all tree walks
+	}
+	e.needsRender = false
 
 	// 1. Render dirty components in dependency order (parents first)
 	rendered := e.renderInOrder()
@@ -173,6 +198,7 @@ func (e *Engine) RenderAll() {
 	for _, comp := range e.components {
 		comp.Dirty = true
 	}
+	e.needsRender = false // RenderAll handles everything inline; clear the flag
 
 	// Render all components in dependency order (parents first)
 	rendered := e.renderInOrder()

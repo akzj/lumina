@@ -4,6 +4,8 @@
 package v2
 
 import (
+	"time"
+
 	"github.com/akzj/go-lua/pkg/lua"
 	"github.com/akzj/lumina/pkg/lumina/v2/animation"
 	"github.com/akzj/lumina/pkg/lumina/v2/buffer"
@@ -35,6 +37,9 @@ type App struct {
 
 	// Render engine — the single rendering path.
 	engine *render.Engine
+
+	// DevTools refresh throttle
+	devtoolsLastRefresh time.Time
 }
 
 // NewApp creates a new App with the V2 render engine.

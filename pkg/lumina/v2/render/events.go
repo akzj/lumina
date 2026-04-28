@@ -118,10 +118,13 @@ func (e *Engine) HandleClick(x, y int) {
 	if hitNode != nil && (hitNode.Type == "input" || hitNode.Type == "textarea") {
 		old := e.focusedNode
 		e.focusedNode = hitNode
-		if old != nil && old != hitNode && !old.Removed {
-			old.PaintDirty = true
+		if old != hitNode { // Only repaint if focus actually changed
+			if old != nil && !old.Removed {
+				old.PaintDirty = true
+			}
+			hitNode.PaintDirty = true
+			e.needsRender = true
 		}
-		hitNode.PaintDirty = true
 	}
 
 	// Dispatch onClick (bubble up from hit node)
