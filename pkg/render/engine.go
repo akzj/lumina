@@ -85,6 +85,10 @@ type Engine struct {
 
 	// Layer stack: [0] = main app layer, [1..n] = overlay layers
 	layers []*Layer
+
+	// ThemeGetter returns the current theme as a map of color tokens.
+	// Set by the app layer to avoid import cycles (render cannot import widget).
+	ThemeGetter func() map[string]string
 }
 
 // SetTracker sets the performance tracker for recording V2 engine metrics.
@@ -859,12 +863,17 @@ func (e *Engine) reconcileChildComponents(parent *Component, node *Node) {
 			child = NewComponent(childID, factoryName, factoryName)
 			child.RenderFn = renderRef
 			child.Parent = parent
+			child.Props = node.ComponentProps
 			parent.AddChild(child, lookupKey)
 			e.components[childID] = child
 			child.Dirty = true
+		} else {
+			// Existing child: update props and mark dirty if changed.
+			if !propsEqual(child.Props, node.ComponentProps) {
+				child.Props = node.ComponentProps
+				child.Dirty = true
+			}
 		}
-		// Existing child: do NOT mark dirty unless props changed.
-		// Child state changes (hover, click) mark themselves dirty via setState.
 		node.Component = child
 		return
 	}
@@ -873,6 +882,23 @@ func (e *Engine) reconcileChildComponents(parent *Component, node *Node) {
 	for _, ch := range node.Children {
 		e.reconcileChildComponents(parent, ch)
 	}
+}
+
+// propsEqual returns true if two props maps are equal (shallow comparison).
+func propsEqual(a, b map[string]any) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for k, va := range a {
+		vb, ok := b[k]
+		if !ok {
+			return false
+		}
+		if va != vb {
+			return false
+		}
+	}
+	return true
 }
 
 // cleanupRemovedChildComponents removes child components that are no longer
@@ -1158,7 +1184,27 @@ func (e *Engine) RegisterLuaAPI() {
 		L.SetField(tblIdx, name) // lumina.Button = {_isFactory=true, _name="Button"}
 	}
 
+	// lumina.getTheme() → returns theme color table
+	L.PushFunction(e.luaGetTheme)
+	L.SetField(tblIdx, "getTheme")
+
 	L.SetGlobal("lumina")
+}
+
+// luaGetTheme implements lumina.getTheme() → returns theme color table.
+// Uses Engine.ThemeGetter to avoid import cycles (render cannot import widget).
+func (e *Engine) luaGetTheme(L *lua.State) int {
+	if e.ThemeGetter == nil {
+		L.NewTable()
+		return 1
+	}
+	theme := e.ThemeGetter()
+	L.NewTable()
+	for k, v := range theme {
+		L.PushString(v)
+		L.SetField(-2, k)
+	}
+	return 1
 }
 
 // luaDefineComponent implements lumina.defineComponent(name, renderFn)

@@ -1,6 +1,9 @@
-local lumina = require("lumina")
+-- lua/lux/spinner.lua
+-- Spinner component for Lux
+-- Usage: local Spinner = require("lux.spinner")
 
 local Spinner = lumina.defineComponent("Spinner", function(props)
+    local t = lumina.getTheme and lumina.getTheme() or {}
     local frames = {"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
     local frame, setFrame = lumina.useState("frame", 1)
     local label = props.label or "Loading..."
@@ -14,10 +17,10 @@ local Spinner = lumina.defineComponent("Spinner", function(props)
 
     return lumina.createElement("hbox", {},
         lumina.createElement("text", {
-            foreground = "#89B4FA",
+            foreground = t.primary or "#89B4FA",
         }, frames[frame] .. " "),
         lumina.createElement("text", {
-            foreground = "#CDD6F4",
+            foreground = t.text or "#CDD6F4",
         }, label)
     )
 end)

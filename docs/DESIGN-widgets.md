@@ -1,12 +1,12 @@
 # Lumina Widget System Design
 
-> Go 提供高性能原生组件内核（Radix），Lua 提供可复制、可定制、可热更的组件模板和设计系统（Shadcn）。
+> Go 提供高性能原生组件内核（Radix），Lua 提供可复制、可定制、可热更的组件模板和设计系统（lux）。
 
 ## 架构总览
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│  Lua 用户代码 / lua/shadcn/ 组件模板                   │
+│  Lua 用户代码 / lua/lux/ 组件模板                   │
 │  Card, Badge, Alert, Tabs, Progress, Spinner, ...   │
 ├─────────────────────────────────────────────────────┤
 │  Go Widget 层 (pkg/widget/)                          │
@@ -32,7 +32,7 @@
 | 浏览器引擎（DOM+渲染） | pkg/render/ Engine  | 节点树、布局、绘制、事件   |
 | HTML 原生标签          | 基元 box/text/input | 最小渲染单元，Go 硬编码   |
 | Radix UI（无障碍原语） | pkg/widget/         | 交互行为、焦点、状态机     |
-| Shadcn/ui（组件模板）  | lua/shadcn/         | 样式组合、主题、业务定制   |
+| lux/ui（组件模板）  | lua/lux/         | 样式组合、主题、业务定制   |
 | Tailwind CSS          | lua/theme/          | 颜色、间距、边框预设      |
 
 ---
@@ -310,7 +310,7 @@ type DialogState struct {
 | Label    | —                 | 点击聚焦关联控件                 |
 | Form     | —                 | 收集子控件值, onSubmit           |
 
-#### Lua 组件层实现（lua/shadcn/ — 纯组合 + 样式）
+#### Lua 组件层实现（lua/lux/ — 纯组合 + 样式）
 
 | 组件       | 组合方式                                    |
 |------------|---------------------------------------------|
@@ -389,10 +389,10 @@ lumina.createElement(lumina.Select, {
     onChange = function(value) print(value) end,
 })
 
--- 使用 Lua Shadcn 组件
-local shadcn = require("shadcn")
+-- 使用 Lua lux 组件
+local lux = require("lux")
 
-lumina.createElement(shadcn.Card, {
+lumina.createElement(lux.Card, {
     title = "User Info",
 },
     lumina.createElement(lumina.Label, {text = "Name:"}),
@@ -492,19 +492,19 @@ Spinner:
 - `pkg/widget/label.go`
 - `pkg/widget/form.go`
 
-### Phase 4: Lua Shadcn 组件 + 主题
+### Phase 4: Lua lux 组件 + 主题
 
 **新增文件**：
 - `lua/theme/init.lua`
 - `lua/theme/catppuccin.lua`
-- `lua/shadcn/init.lua`
-- `lua/shadcn/card.lua`
-- `lua/shadcn/badge.lua`
-- `lua/shadcn/alert.lua`
-- `lua/shadcn/divider.lua`
-- `lua/shadcn/tabs.lua`
-- `lua/shadcn/progress.lua`
-- `lua/shadcn/spinner.lua`
+- `lua/lux/init.lua`
+- `lua/lux/card.lua`
+- `lua/lux/badge.lua`
+- `lua/lux/alert.lua`
+- `lua/lux/divider.lua`
+- `lua/lux/tabs.lua`
+- `lua/lux/progress.lua`
+- `lua/lux/spinner.lua`
 
 ### Phase 5: Overlay 系统 + 覆盖层控件
 
@@ -519,4 +519,4 @@ Spinner:
 - `pkg/widget/popover.go`
 - `pkg/widget/menu.go`
 - `pkg/widget/dropdown.go`
-- `lua/shadcn/toast.lua`
+- `lua/lux/toast.lua`

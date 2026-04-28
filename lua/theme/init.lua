@@ -1,5 +1,5 @@
 -- lua/theme/init.lua
--- Theme system for Lua Shadcn components
+-- Theme system for Lua UI components
 -- Reads from Go widget theme via lumina.getTheme()
 
 local M = {}

@@ -1,16 +1,19 @@
-local lumina = require("lumina")
+-- lua/lux/badge.lua
+-- Badge component for Lux
+-- Usage: local Badge = require("lux.badge")
 
 local Badge = lumina.defineComponent("Badge", function(props)
     local variant = props.variant or "default"
+    local t = lumina.getTheme and lumina.getTheme() or {}
     local fg, bg
     if variant == "success" then
-        fg = "#A6E3A1"; bg = "#313244"
+        fg = t.success or "#A6E3A1"; bg = t.surface0 or "#313244"
     elseif variant == "warning" then
-        fg = "#F9E2AF"; bg = "#313244"
+        fg = t.warning or "#F9E2AF"; bg = t.surface0 or "#313244"
     elseif variant == "error" then
-        fg = "#F38BA8"; bg = "#313244"
+        fg = t.error or "#F38BA8"; bg = t.surface0 or "#313244"
     else
-        fg = "#89B4FA"; bg = "#313244"
+        fg = t.primary or "#89B4FA"; bg = t.surface0 or "#313244"
     end
 
     return lumina.createElement("text", {

@@ -53,6 +53,25 @@ func NewApp(L *lua.State, w, h int, adapter output.Adapter) *App {
 		eng.RegisterWidget(wgt)
 	}
 	eng.RegisterLuaAPI()
+	eng.ThemeGetter = func() map[string]string {
+		t := widget.CurrentTheme
+		return map[string]string{
+			"base":        t.Base,
+			"surface0":    t.Surface0,
+			"surface1":    t.Surface1,
+			"surface2":    t.Surface2,
+			"text":        t.Text,
+			"muted":       t.Muted,
+			"primary":     t.Primary,
+			"primaryDark": t.PrimaryDark,
+			"hover":       t.Hover,
+			"pressed":     t.Pressed,
+			"success":     t.Success,
+			"warning":     t.Warning,
+			"error":       t.Error,
+		}
+	}
+	registerLuxModules(L)
 	eng.SetTracker(t)
 
 	sched := lua.NewScheduler(L)
