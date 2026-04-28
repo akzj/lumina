@@ -16,7 +16,8 @@ type Descriptor struct {
 	AutoFocus   bool
 
 	// Scroll state
-	ScrollY int
+	ScrollY    int
+	ScrollYSet bool // true only when Lua explicitly sets scrollY
 
 	// Event handler refs (Lua registry refs)
 	OnClick      LuaRef

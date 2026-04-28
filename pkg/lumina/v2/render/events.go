@@ -4,6 +4,7 @@ import "github.com/akzj/go-lua/pkg/lua"
 
 // HitTest finds the deepest Node at screen coordinates (x, y).
 // Returns nil if no node contains the point.
+// For scroll containers, adjusts Y to account for scroll offset.
 func HitTest(root *Node, x, y int) *Node {
 	if root == nil {
 		return nil
@@ -12,9 +13,34 @@ func HitTest(root *Node, x, y int) *Node {
 	if x < root.X || x >= root.X+root.W || y < root.Y || y >= root.Y+root.H {
 		return nil
 	}
+
+	// If this node is a scroll container, adjust y for children:
+	// Children are laid out at original Y positions, but displayed shifted by -scrollY.
+	// Map screen Y to layout Y by adding scrollY.
+	childY := y
+	if root.Style.Overflow == "scroll" && root.ScrollY != 0 {
+		childY = y + root.ScrollY
+	}
+
 	// Check children in reverse order (last child is on top / higher z-index)
 	for i := len(root.Children) - 1; i >= 0; i-- {
-		if hit := HitTest(root.Children[i], x, y); hit != nil {
+		child := root.Children[i]
+		// For scroll containers, skip children outside the visible area
+		if root.Style.Overflow == "scroll" {
+			bw := 0
+			if root.Style.Border != "" && root.Style.Border != "none" {
+				bw = 1
+			}
+			visibleTop := root.Y + bw + root.Style.PaddingTop
+			visibleBottom := root.Y + root.H - bw - root.Style.PaddingBottom
+			// Child's visual position = child.Y - scrollY
+			childVisualY := child.Y - root.ScrollY
+			childVisualBottom := childVisualY + child.H
+			if childVisualBottom <= visibleTop || childVisualY >= visibleBottom {
+				continue // child is scrolled out of view
+			}
+		}
+		if hit := HitTest(child, x, childY); hit != nil {
 			return hit
 		}
 	}

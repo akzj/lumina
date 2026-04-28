@@ -315,7 +315,13 @@ func (e *Engine) readDescriptor(L *lua.State, idx int) Descriptor {
 	}
 	desc.Placeholder = getStringField(L, absIdx, "placeholder")
 	desc.AutoFocus = getBoolField(L, absIdx, "autoFocus")
-	desc.ScrollY = int(getIntField(L, absIdx, "scrollY"))
+	L.GetField(absIdx, "scrollY")
+	if !L.IsNoneOrNil(-1) {
+		n, _ := L.ToInteger(-1)
+		desc.ScrollY = int(n)
+		desc.ScrollYSet = true
+	}
+	L.Pop(1)
 
 	// Read style — check for nested "style" table first, then top-level style fields
 	L.GetField(absIdx, "style")

@@ -702,3 +702,189 @@ func TestEngine_AutoScroll_CustomHandlerPriority(t *testing.T) {
 		t.Errorf("auto-scroll should NOT have fired; ScrollY = %d, want 0", scrollNode.ScrollY)
 	}
 }
+
+func TestEngine_AutoScroll_PreservedAcrossReRender(t *testing.T) {
+	e, L := newTestEngine(t)
+
+	// Create a scroll container with re-render trigger (useState counter)
+	err := L.DoString(`
+		lumina.createComponent({
+			id = "scroll_preserve",
+			name = "ScrollPreserve",
+			render = function(props)
+				local count, setCount = lumina.useState("count", 0)
+				local children = {}
+				for i = 1, 20 do
+					children[i] = lumina.createElement("text", {style = {height = 1}}, "Line " .. i)
+				end
+				return lumina.createElement("vbox", {
+					style = {overflow = "scroll", height = 5, width = 20},
+					onKeyDown = function(e)
+						if e.key == "r" then setCount(count + 1) end
+					end,
+					children = children,
+				})
+			end,
+		})
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	e.RenderAll()
+
+	root := e.Root()
+	if root == nil || root.RootNode == nil {
+		t.Fatal("no root node")
+	}
+
+	// Find the scroll container
+	scrollNode := root.RootNode
+	if scrollNode.Style.Overflow != "scroll" {
+		if len(scrollNode.Children) > 0 {
+			scrollNode = scrollNode.Children[0]
+		}
+	}
+	if scrollNode.Style.Overflow != "scroll" {
+		t.Fatal("could not find scroll container")
+	}
+
+	// Auto-scroll down
+	e.HandleScroll(5, 2, 1)
+	e.HandleScroll(5, 2, 1)
+	scrollYBefore := scrollNode.ScrollY
+	if scrollYBefore <= 0 {
+		t.Fatalf("expected scrollY > 0 after scrolling, got %d", scrollYBefore)
+	}
+
+	// Trigger a re-render via setState (simulated by key event)
+	e.HandleKeyDown("r")
+	e.RenderDirty()
+
+	// scrollY should be preserved (Lua doesn't set scrollY, so reconciler should not reset it)
+	if scrollNode.ScrollY != scrollYBefore {
+		t.Errorf("scrollY changed after re-render: got %d, want %d", scrollNode.ScrollY, scrollYBefore)
+	}
+}
+
+func TestEngine_AutoScroll_ClampWhenContentShrinks(t *testing.T) {
+	e, L := newTestEngine(t)
+
+	// Create a scroll container whose content count depends on state
+	err := L.DoString(`
+		lumina.createComponent({
+			id = "scroll_clamp",
+			name = "ScrollClamp",
+			render = function(props)
+				local small, setSmall = lumina.useState("small", false)
+				local count = 20
+				if small then count = 3 end
+				local children = {}
+				for i = 1, count do
+					children[i] = lumina.createElement("text", {style = {height = 1}}, "Line " .. i)
+				end
+				return lumina.createElement("vbox", {
+					style = {overflow = "scroll", height = 5, width = 20},
+					onKeyDown = function(e)
+						if e.key == "s" then setSmall(true) end
+					end,
+					children = children,
+				})
+			end,
+		})
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	e.RenderAll()
+
+	root := e.Root()
+	if root == nil || root.RootNode == nil {
+		t.Fatal("no root node")
+	}
+
+	// Find the scroll container
+	scrollNode := root.RootNode
+	if scrollNode.Style.Overflow != "scroll" {
+		if len(scrollNode.Children) > 0 {
+			scrollNode = scrollNode.Children[0]
+		}
+	}
+	if scrollNode.Style.Overflow != "scroll" {
+		t.Fatal("could not find scroll container")
+	}
+
+	// Scroll down a lot
+	for i := 0; i < 20; i++ {
+		e.HandleScroll(5, 2, 1)
+	}
+	if scrollNode.ScrollY <= 0 {
+		t.Fatalf("expected scrollY > 0 after scrolling, got %d", scrollNode.ScrollY)
+	}
+
+	// Shrink content: trigger setState to reduce children from 20 to 3
+	e.HandleKeyDown("s")
+	e.RenderDirty()
+
+	// After paint, scrollY should be clamped to new maxScroll (3 - 5 = 0 since content fits)
+	e.RenderAll() // ensure layout + paint runs
+	maxScroll := computeMaxScrollY(scrollNode)
+	if scrollNode.ScrollY > maxScroll {
+		t.Errorf("scrollY not clamped: got %d, maxScroll=%d", scrollNode.ScrollY, maxScroll)
+	}
+	if maxScroll == 0 && scrollNode.ScrollY != 0 {
+		t.Errorf("content fits in container, scrollY should be 0, got %d", scrollNode.ScrollY)
+	}
+}
+
+func TestHitTest_ScrollOffset(t *testing.T) {
+	// Build a scroll container manually with children at known positions
+	parent := NewNode("vbox")
+	parent.X = 0
+	parent.Y = 0
+	parent.W = 20
+	parent.H = 5
+	parent.Style.Overflow = "scroll"
+	parent.ScrollY = 10 // scrolled down 10 rows
+
+	// 20 children, each height=1, at Y=0..19
+	for i := 0; i < 20; i++ {
+		child := NewNode("text")
+		child.X = 0
+		child.Y = i
+		child.W = 20
+		child.H = 1
+		child.Content = "item"
+		child.Parent = parent
+		parent.Children = append(parent.Children, child)
+	}
+
+	// Screen Y=2 with scrollY=10 should hit child at layout Y=12 (item index 12)
+	hit := HitTest(parent, 5, 2)
+	if hit == nil {
+		t.Fatal("expected a hit, got nil")
+	}
+	// The hit should be the child at Y=12 (index 12)
+	if hit.Y != 12 {
+		t.Errorf("HitTest with scroll offset: hit Y=%d, want 12", hit.Y)
+	}
+
+	// Screen Y=0 with scrollY=10 should hit child at layout Y=10
+	hit = HitTest(parent, 5, 0)
+	if hit == nil {
+		t.Fatal("expected a hit at Y=0, got nil")
+	}
+	if hit.Y != 10 {
+		t.Errorf("HitTest at top: hit Y=%d, want 10", hit.Y)
+	}
+
+	// Screen Y=4 with scrollY=10 should hit child at layout Y=14
+	hit = HitTest(parent, 5, 4)
+	if hit == nil {
+		t.Fatal("expected a hit at Y=4, got nil")
+	}
+	if hit.Y != 14 {
+		t.Errorf("HitTest at bottom: hit Y=%d, want 14", hit.Y)
+	}
+}
