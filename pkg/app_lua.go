@@ -38,7 +38,39 @@ func (a *App) registerAppLuaAPIs() {
 	L.PushFunction(a.luaClearTimer)
 	L.SetField(tblIdx, "clearTimeout")
 
+	// lumina.reload(moduleName) → result table or nil, error string
+	L.PushFunction(a.luaReload)
+	L.SetField(tblIdx, "reload")
+
 	L.SetGlobal("lumina")
+}
+
+// luaReload implements lumina.reload(moduleName) → result table or nil, error.
+// Performs a module-level hot reload that preserves state.
+func (a *App) luaReload(L *lua.State) int {
+	name := L.CheckString(1)
+	result, err := L.ReloadModule(name)
+	if err != nil {
+		L.PushNil()
+		L.PushString(err.Error())
+		return 2
+	}
+	// Push result table
+	L.NewTable()
+	tbl := L.AbsIndex(-1)
+	L.PushInteger(int64(result.Replaced))
+	L.SetField(tbl, "replaced")
+	L.PushInteger(int64(result.Skipped))
+	L.SetField(tbl, "skipped")
+	L.PushInteger(int64(result.Added))
+	L.SetField(tbl, "added")
+	L.PushInteger(int64(result.Removed))
+	L.SetField(tbl, "removed")
+
+	// Mark all components dirty so they re-render with new code.
+	a.engine.MarkAllComponentsDirty()
+
+	return 1
 }
 
 // luaQuit implements lumina.quit().

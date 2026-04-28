@@ -107,6 +107,18 @@ func (e *Engine) MarkNeedsRender() {
 	e.needsRender = true
 }
 
+// MarkAllComponentsDirty marks all components as needing re-render.
+// Used after hot reload when function prototypes have been swapped in-place.
+func (e *Engine) MarkAllComponentsDirty() {
+	for _, comp := range e.components {
+		comp.Dirty = true
+	}
+	if e.root != nil {
+		e.root.Dirty = true
+	}
+	e.needsRender = true
+}
+
 // drainPendingUnrefs frees all Lua registry refs collected during reconcile.
 func (e *Engine) drainPendingUnrefs() {
 	if len(e.pendingUnrefs) == 0 {
