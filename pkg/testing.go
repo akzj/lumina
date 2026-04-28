@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/akzj/go-lua/pkg/lua"
-	"github.com/akzj/lumina/pkg/lumina/v2/output"
-	"github.com/akzj/lumina/pkg/lumina/v2/render"
+	"github.com/akzj/lumina/pkg/output"
+	"github.com/akzj/lumina/pkg/render"
 )
 
 // TestResult holds the outcome of a single Lua test case.

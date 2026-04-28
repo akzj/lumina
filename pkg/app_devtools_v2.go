@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/akzj/lumina/pkg/lumina/v2/devtools"
-	"github.com/akzj/lumina/pkg/lumina/v2/perf"
-	"github.com/akzj/lumina/pkg/lumina/v2/render"
+	"github.com/akzj/lumina/pkg/devtools"
+	"github.com/akzj/lumina/pkg/perf"
+	"github.com/akzj/lumina/pkg/render"
 )
 
 // toggleDevToolsV2 shows or hides the DevTools panel in V2 engine mode.

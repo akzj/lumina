@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/akzj/go-lua/pkg/lua"
-	"github.com/akzj/lumina/pkg/lumina/v2/event"
-	"github.com/akzj/lumina/pkg/lumina/v2/output"
+	"github.com/akzj/lumina/pkg/event"
+	"github.com/akzj/lumina/pkg/output"
 )
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -361,7 +361,7 @@ func TestStressPerf_ClickCycle(t *testing.T) {
 func TestStressPerf_ActualScript(t *testing.T) {
 	app, ta, _ := newLuaApp(t, stressCols, stressRows+1)
 
-	err := app.RunScript("../../../examples/v2/stress_test.lua")
+	err := app.RunScript("../examples/v2/stress_test.lua")
 	if err != nil {
 		// stress_test.lua now uses V2 APIs (defineComponent) — skip for V1 pipeline
 		t.Skipf("Skipping V1 actual script test (script uses V2 APIs): %v", err)
@@ -560,7 +560,7 @@ func TestStressPerfV2_ActualScript(t *testing.T) {
 	ta := output.NewTestAdapter()
 	app := NewApp(L, stressCols, stressRows+1, ta)
 
-	err := app.RunScript("../../../examples/v2/stress_test.lua")
+	err := app.RunScript("../examples/v2/stress_test.lua")
 	if err != nil {
 		t.Fatalf("RunScript failed: %v", err)
 	}

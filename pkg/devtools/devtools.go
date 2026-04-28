@@ -6,7 +6,7 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/akzj/lumina/pkg/lumina/v2/perf"
+	"github.com/akzj/lumina/pkg/perf"
 )
 
 // Tab identifies a DevTools tab.

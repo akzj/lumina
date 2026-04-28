@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/akzj/lumina/pkg/lumina/v2/event"
-	"github.com/akzj/lumina/pkg/lumina/v2/mcp"
+	"github.com/akzj/lumina/pkg/event"
+	"github.com/akzj/lumina/pkg/mcp"
 )
 
 // Verify at compile time that *App implements mcp.AppInspector.

@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"io"
 
-	"github.com/akzj/lumina/pkg/lumina/v2/buffer"
+	"github.com/akzj/lumina/pkg/buffer"
 )
 
 // RenderResult is the JSON representation of a rendered screen.

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/akzj/lumina/pkg/lumina/v2/buffer"
+	"github.com/akzj/lumina/pkg/buffer"
 )
 
 func makeTestBuffer() *buffer.Buffer {

@@ -7,14 +7,14 @@ import (
 	"time"
 
 	"github.com/akzj/go-lua/pkg/lua"
-	"github.com/akzj/lumina/pkg/lumina/v2/animation"
-	"github.com/akzj/lumina/pkg/lumina/v2/buffer"
-	"github.com/akzj/lumina/pkg/lumina/v2/devtools"
-	"github.com/akzj/lumina/pkg/lumina/v2/event"
-	"github.com/akzj/lumina/pkg/lumina/v2/output"
-	"github.com/akzj/lumina/pkg/lumina/v2/perf"
-	"github.com/akzj/lumina/pkg/lumina/v2/render"
-	"github.com/akzj/lumina/pkg/lumina/v2/router"
+	"github.com/akzj/lumina/pkg/animation"
+	"github.com/akzj/lumina/pkg/buffer"
+	"github.com/akzj/lumina/pkg/devtools"
+	"github.com/akzj/lumina/pkg/event"
+	"github.com/akzj/lumina/pkg/output"
+	"github.com/akzj/lumina/pkg/perf"
+	"github.com/akzj/lumina/pkg/render"
+	"github.com/akzj/lumina/pkg/router"
 )
 
 // App is the composition root — ties all v2 modules together.

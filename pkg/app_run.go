@@ -8,10 +8,10 @@ import (
 	"time"
 
 	"github.com/akzj/go-lua/pkg/lua"
-	"github.com/akzj/lumina/pkg/lumina/v2/animation"
-	"github.com/akzj/lumina/pkg/lumina/v2/event"
-	"github.com/akzj/lumina/pkg/lumina/v2/hotreload"
-	"github.com/akzj/lumina/pkg/lumina/v2/router"
+	"github.com/akzj/lumina/pkg/animation"
+	"github.com/akzj/lumina/pkg/event"
+	"github.com/akzj/lumina/pkg/hotreload"
+	"github.com/akzj/lumina/pkg/router"
 )
 
 // InputEvent represents a terminal input event. This is the interface that

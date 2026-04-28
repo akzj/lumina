@@ -9,10 +9,10 @@ import (
 	"strings"
 
 	"github.com/akzj/go-lua/pkg/lua"
-	v2 "github.com/akzj/lumina/pkg/lumina/v2"
-	"github.com/akzj/lumina/pkg/lumina/v2/mcp"
-	"github.com/akzj/lumina/pkg/lumina/v2/output"
-	"github.com/akzj/lumina/pkg/lumina/v2/terminal"
+	v2 "github.com/akzj/lumina/pkg"
+	"github.com/akzj/lumina/pkg/mcp"
+	"github.com/akzj/lumina/pkg/output"
+	"github.com/akzj/lumina/pkg/terminal"
 )
 
 func main() {
