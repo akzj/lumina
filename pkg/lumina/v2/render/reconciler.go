@@ -137,6 +137,8 @@ func reconcileChildrenImpl(parent *Node, descs []Descriptor, freedRefs *[]int64)
 	for i, child := range oldChildren {
 		key := childKey(child)
 		if key != "" {
+			// Note: duplicate keys silently overwrite (last one wins).
+			// This matches React behavior but may cause unexpected reconciliation.
 			oldByKey[key] = i
 		}
 	}

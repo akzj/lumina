@@ -149,8 +149,9 @@ type Component struct {
 	RootNode *Node // the RenderNode subtree this component owns
 
 	// Lifecycle
-	IsRoot  bool
-	Mounted bool
+	IsRoot    bool
+	Mounted   bool
+	LastError string // last render error (empty = no error)
 
 	// Hooks (React-style positional)
 	hookIdx   int         // current hook call index (reset each render)

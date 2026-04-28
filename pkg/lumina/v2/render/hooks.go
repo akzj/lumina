@@ -2,6 +2,7 @@ package render
 
 import (
 	"fmt"
+	"sort"
 
 	"github.com/akzj/go-lua/pkg/lua"
 )
@@ -263,7 +264,22 @@ func (e *Engine) luaUseCallback(L *lua.State) int {
 // Called after paint in RenderDirty/RenderAll.
 func (e *Engine) firePendingEffects() {
 	L := e.L
+
+	// Collect components with pending effects, sorted by depth (parent before child)
+	var comps []*Component
 	for _, comp := range e.components {
+		for _, slot := range comp.hookSlots {
+			if slot.kind == hookEffect && slot.effect != nil && slot.effect.pending {
+				comps = append(comps, comp)
+				break
+			}
+		}
+	}
+	sort.Slice(comps, func(i, j int) bool {
+		return componentDepth(comps[i]) < componentDepth(comps[j])
+	})
+
+	for _, comp := range comps {
 		for _, slot := range comp.hookSlots {
 			if slot.kind != hookEffect || slot.effect == nil || !slot.effect.pending {
 				continue
