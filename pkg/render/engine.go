@@ -68,6 +68,9 @@ type Engine struct {
 
 	// Go widget state: component.ID → widget state
 	widgetStates map[string]any
+
+	// Layer stack: [0] = main app layer, [1..n] = overlay layers
+	layers []*Layer
 }
 
 // SetTracker sets the performance tracker for recording V2 engine metrics.
@@ -110,6 +113,7 @@ func NewEngine(L *lua.State, width, height int) *Engine {
 		buffer:       NewCellBuffer(width, height),
 		widgets:      make(map[string]WidgetDef),
 		widgetStates: make(map[string]any),
+		layers:       make([]*Layer, 0, 4),
 	}
 }
 
@@ -144,11 +148,84 @@ func (e *Engine) Resize(width, height int) {
 	e.width = width
 	e.height = height
 	e.buffer.Resize(width, height)
+	// Mark all layers for re-layout
+	for _, layer := range e.layers {
+		if layer.Root != nil {
+			layer.Root.MarkLayoutDirty()
+		}
+	}
 	if e.root != nil && e.root.RootNode != nil {
 		e.root.RootNode.MarkLayoutDirty()
-		e.needsRender = true
+	}
+	e.needsRender = true
+}
+
+// syncMainLayer ensures layers[0] points to the root component's RootNode.
+// Called after rendering to keep the main layer in sync.
+func (e *Engine) syncMainLayer() {
+	var mainRoot *Node
+	if e.root != nil {
+		mainRoot = e.root.RootNode
+	}
+	if len(e.layers) == 0 {
+		e.layers = append(e.layers, &Layer{ID: "_main", Root: mainRoot})
+	} else {
+		e.layers[0].Root = mainRoot
 	}
 }
+
+// CreateLayer creates a new overlay layer and pushes it onto the stack.
+// The root node should have position/size set via its Style (Left, Top, Width, Height).
+func (e *Engine) CreateLayer(id string, root *Node, modal bool) *Layer {
+	layer := &Layer{ID: id, Root: root, Modal: modal}
+	e.layers = append(e.layers, layer)
+	if root != nil {
+		root.LayoutDirty = true
+		root.PaintDirty = true
+	}
+	e.needsRender = true
+	return layer
+}
+
+// RemoveLayer removes a layer by ID and marks the covered area for repaint.
+func (e *Engine) RemoveLayer(id string) {
+	for i, l := range e.layers {
+		if l.ID == id && i > 0 { // Never remove layer 0 (main app)
+			// Mark the area this layer covered as dirty on layers below
+			if l.Root != nil && l.Root.W > 0 && l.Root.H > 0 {
+				for j := 0; j < i; j++ {
+					if e.layers[j].Root != nil {
+						markOverlappingDirty(e.layers[j].Root, l.Root.X, l.Root.Y, l.Root.W, l.Root.H)
+					}
+				}
+			}
+			e.layers = append(e.layers[:i], e.layers[i+1:]...)
+			e.needsRender = true
+			return
+		}
+	}
+}
+
+// BringToFront moves a layer to the top of the stack.
+func (e *Engine) BringToFront(id string) {
+	for i, l := range e.layers {
+		if l.ID == id && i > 0 { // Don't move layer 0
+			e.layers = append(e.layers[:i], e.layers[i+1:]...)
+			e.layers = append(e.layers, l)
+			if l.Root != nil {
+				l.Root.PaintDirty = true
+			}
+			e.needsRender = true
+			return
+		}
+	}
+}
+
+// Layers returns the current layer stack (read-only view).
+func (e *Engine) Layers() []*Layer {
+	return e.layers
+}
+
 
 // DefineComponent registers a component factory.
 // Called from Lua: lumina.defineComponent("Cell", renderFn)
@@ -200,8 +277,18 @@ func (e *Engine) RenderDirty() {
 	// 2. Graft child component RootNodes into parent tree
 	e.graftChildComponents()
 
-	// 3. Early exit: if nothing rendered and no dirty nodes, skip layout/paint
-	if rendered == 0 && e.root != nil && e.root.RootNode != nil && !hasAnyDirty(e.root.RootNode) {
+	// Sync main layer
+	e.syncMainLayer()
+
+	// 3. Early exit: check all layers for dirty nodes
+	anyDirty := false
+	for _, layer := range e.layers {
+		if layer.Root != nil && hasAnyDirty(layer.Root) {
+			anyDirty = true
+			break
+		}
+	}
+	if rendered == 0 && !anyDirty {
 		if e.tracker != nil {
 			e.tracker.Record(perf.V2PaintCells, 0)
 			e.tracker.Record(perf.V2PaintClearCells, 0)
@@ -210,18 +297,44 @@ func (e *Engine) RenderDirty() {
 		return
 	}
 
-	// 4. Layout: only the root tree (which now contains grafted children)
-	if e.root != nil && e.root.RootNode != nil {
-		if e.root.RootNode.LayoutDirty {
-			LayoutFull(e.root.RootNode, 0, 0, e.width, e.height)
+	// 4. Layout all layers
+	for i, layer := range e.layers {
+		if layer.Root == nil {
+			continue
+		}
+		if layer.Root.LayoutDirty {
+			if i == 0 {
+				LayoutFull(layer.Root, 0, 0, e.width, e.height)
+			} else {
+				// Overlay layers: use their root node's style for position/size
+				lx := layer.Root.Style.Left
+				ly := layer.Root.Style.Top
+				lw := layer.Root.Style.Width
+				lh := layer.Root.Style.Height
+				if lw <= 0 {
+					lw = layer.Root.W
+				}
+				if lh <= 0 {
+					lh = layer.Root.H
+				}
+				if lw <= 0 {
+					lw = e.width
+				}
+				if lh <= 0 {
+					lh = e.height
+				}
+				LayoutFull(layer.Root, lx, ly, lw, lh)
+			}
 		} else {
-			LayoutIncremental(e.root.RootNode)
+			LayoutIncremental(layer.Root)
 		}
 	}
 
-	// 5. Paint: only the root tree (grafted children are painted in-tree)
-	if e.root != nil && e.root.RootNode != nil {
-		PaintDirty(e.buffer, e.root.RootNode)
+	// 5. Paint all layers (bottom to top)
+	for _, layer := range e.layers {
+		if layer.Root != nil {
+			PaintDirty(e.buffer, layer.Root)
+		}
 	}
 
 	// 6. Record paint stats from CellBuffer.
@@ -255,10 +368,35 @@ func (e *Engine) RenderAll() {
 	// Graft child component RootNodes into parent tree
 	e.graftChildComponents()
 
-	// Force full layout + paint on root (which now includes grafted children)
-	if e.root != nil && e.root.RootNode != nil {
-		LayoutFull(e.root.RootNode, 0, 0, e.width, e.height)
-		PaintFull(e.buffer, e.root.RootNode)
+	// Sync main layer and do full layout + paint for all layers
+	e.syncMainLayer()
+	e.buffer.Clear()
+	for i, layer := range e.layers {
+		if layer.Root == nil {
+			continue
+		}
+		if i == 0 {
+			LayoutFull(layer.Root, 0, 0, e.width, e.height)
+		} else {
+			lx := layer.Root.Style.Left
+			ly := layer.Root.Style.Top
+			lw := layer.Root.Style.Width
+			lh := layer.Root.Style.Height
+			if lw <= 0 {
+				lw = layer.Root.W
+			}
+			if lh <= 0 {
+				lh = layer.Root.H
+			}
+			if lw <= 0 {
+				lw = e.width
+			}
+			if lh <= 0 {
+				lh = e.height
+			}
+			LayoutFull(layer.Root, lx, ly, lw, lh)
+		}
+		paintNode(e.buffer, layer.Root)
 	}
 
 	// Auto-focus first node with autoFocus=true
