@@ -106,7 +106,15 @@ lumina.app {
         if dialogOpen then
             -- Fixed overlay must set height: without it, layout defaults h=1 and hit-test
             -- misses the OK row (only the top line receives pointer events).
+            --
+            -- key: while dialog is open, clicking another row dirties the ListView scroll
+            -- subtree; PaintDirty escalates to ClearRect+repaint the whole list rect, which
+            -- overlaps this fixed overlay. repaintOverlappingSiblings only revives absolute
+            -- "windows", not fixed — so without remounting the overlay, dialog pixels in
+            -- that rect are replaced by list and the UI looks mixed. A new key forces a
+            -- fresh overlay subtree (full-area dirty) after the list pass.
             body[#body + 1] = lumina.createElement("vbox", {
+                key = "list-dlg-overlay-" .. tostring(selectedIdx),
                 style = {
                     position = "fixed",
                     left = 14,
