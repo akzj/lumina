@@ -90,9 +90,19 @@ var Window = &Widget{
 			},
 		})
 
-		// Content area: insert Lua children (via _childNodes prop)
+		// Content area: wrap Lua children in a flex box with overflow hidden
+		// so content is clipped to available space and resize handle stays at bottom
 		if childNodes, ok := props["_childNodes"].([]*render.Node); ok {
-			children = append(children, childNodes...)
+			contentBox := &render.Node{
+				Type:     "vbox",
+				Children: childNodes,
+				Style: render.Style{
+					Flex:     1,
+					Overflow: "hidden",
+					Right:    -1, Bottom: -1,
+				},
+			}
+			children = append(children, contentBox)
 		}
 
 		// Resize handle at bottom-right

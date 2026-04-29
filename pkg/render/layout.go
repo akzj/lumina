@@ -1,6 +1,10 @@
 package render
 
-import "github.com/mattn/go-runewidth"
+import (
+	"strings"
+
+	"github.com/mattn/go-runewidth"
+)
 
 // LayoutFull computes layout for the entire Node tree.
 // Used for initial render and after structural changes.
@@ -347,17 +351,25 @@ func layoutText(node *Node, availW int) {
 		node.H = 1
 		return
 	}
-	contentW := stringWidth(node.Content)
-	if contentW == 0 {
+	if node.Content == "" {
 		node.H = 1
 		return
 	}
-	// Calculate wrapped height based on display width
-	lines := (contentW + availW - 1) / availW // ceiling division
-	if lines < 1 {
-		lines = 1
+	// Split by newlines and calculate height for each line (with wrapping)
+	lines := strings.Split(node.Content, "\n")
+	totalH := 0
+	for _, line := range lines {
+		lineW := stringWidth(line)
+		if lineW == 0 {
+			totalH += 1 // empty line still takes 1 row
+		} else {
+			totalH += (lineW + availW - 1) / availW // ceiling division for wrapping
+		}
 	}
-	node.H = lines
+	if totalH < 1 {
+		totalH = 1
+	}
+	node.H = totalH
 }
 
 // layoutVBox lays out children in a vertical stack with flex distribution.
