@@ -74,6 +74,19 @@ func paintDirtyWalk(buf *CellBuffer, node *Node) {
 	}
 
 	if node.PaintDirty {
+		// If this node has siblings with fixed/absolute positioning,
+		// escalate to parent for full repaint to maintain correct z-order.
+		if parent := findRepaintParent(node); parent != nil {
+			if parentHasOverlayChildren(parent) && !parent.PaintDirty {
+				parent.PaintDirty = true
+				buf.ClearRect(parent.X, parent.Y, parent.W, parent.H)
+				paintNode(buf, parent)
+				parent.PaintDirty = false
+				clearPaintDirtyBelow(parent)
+				return
+			}
+		}
+
 		// If this node is inside a scroll container (at any ancestor level),
 		// escalate to that scroll ancestor so paintScrollChildren handles
 		// coordinate transformation and clipping correctly.
@@ -280,6 +293,23 @@ func findAbsoluteOrFixedChild(node *Node) *Node {
 // rectsOverlap returns true if two rectangles overlap.
 func rectsOverlap(x1, y1, w1, h1, x2, y2, w2, h2 int) bool {
 	return x1 < x2+w2 && x1+w1 > x2 && y1 < y2+h2 && y1+h1 > y2
+}
+
+// parentHasOverlayChildren returns true if the node has any child (direct or through
+// component wrappers) with position:fixed or position:absolute.
+func parentHasOverlayChildren(node *Node) bool {
+	for _, child := range node.Children {
+		if child.Style.Position == "fixed" || child.Style.Position == "absolute" {
+			return true
+		}
+		// Check through component wrappers
+		if child.Type == "component" {
+			if findAbsoluteOrFixedChild(child) != nil {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // findRepaintParent walks up from node to find the first non-component ancestor.
