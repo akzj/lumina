@@ -371,9 +371,15 @@ func (e *Engine) RenderDirty() {
 	}
 
 	// 5. Paint all layers (bottom to top)
-	for _, layer := range e.layers {
+	for i, layer := range e.layers {
 		if layer.Root != nil {
-			PaintDirty(e.buffer, layer.Root)
+			if i == 0 {
+				// Main layer: full clear + repaint when dirty
+				PaintDirty(e.buffer, layer.Root)
+			} else {
+				// Overlay layers: repaint without clearing (paint on top)
+				PaintDirtyOverlay(e.buffer, layer.Root)
+			}
 		}
 	}
 
