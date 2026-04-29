@@ -13,6 +13,7 @@ M.Dialog = require("lux.dialog")
 M.Layout = require("lux.layout")
 M.CommandPalette = require("lux.command_palette")
 M.ListView = require("lux.list")
+M.DataGrid = require("lux.data_grid")
 M.WM = require("lux.wm")
 
 return M

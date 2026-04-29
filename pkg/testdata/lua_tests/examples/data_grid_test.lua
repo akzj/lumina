@@ -1,0 +1,44 @@
+-- data_grid_test.lua — Acceptance tests for examples/data_grid_demo.lua
+
+test.describe("DataGrid example", function()
+	local app
+
+	test.beforeEach(function()
+		app = test.createApp(80, 24)
+		app:loadFile("../examples/data_grid_demo.lua")
+	end)
+
+	test.afterEach(function()
+		app:destroy()
+	end)
+
+	test.it("loads and shows title and column headers", function()
+		test.assert.eq(app:screenContains("DataGrid demo"), true)
+		test.assert.eq(app:screenContains("Code"), true)
+		test.assert.eq(app:screenContains("Name"), true)
+		test.assert.eq(app:screenContains("Note"), true)
+		test.assert.eq(app:screenContains("Alpha"), true)
+	end)
+
+	test.it("j moves selection to next row (footer shows name)", function()
+		test.assert.eq(app:screenContains("Selected: Alpha"), true)
+		app:keyPress("j")
+		test.assert.eq(app:screenContains("Selected: Bravo"), true)
+		app:keyPress("j")
+		test.assert.eq(app:screenContains("Selected: Charlie"), true)
+	end)
+
+	test.it("k moves selection up", function()
+		app:keyPress("j")
+		app:keyPress("j")
+		test.assert.eq(app:screenContains("Selected: Charlie"), true)
+		app:keyPress("k")
+		test.assert.eq(app:screenContains("Selected: Bravo"), true)
+	end)
+
+	test.it("Enter sets last activate line", function()
+		app:keyPress("j")
+		app:keyPress("Enter")
+		test.assert.eq(app:screenContains("Last Enter: Bravo@2"), true)
+	end)
+end)
