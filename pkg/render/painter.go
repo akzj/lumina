@@ -150,20 +150,28 @@ func paintDirtyWalk(buf *CellBuffer, node *Node) {
 	}
 }
 
-// repaintOverlappingSiblings finds the absolute-positioned ancestor of node
+// repaintOverlappingSiblings finds the absolute/fixed-positioned ancestor of node
 // (the window), then repaints any later siblings in z-order that overlap the
 // repainted area. This prevents scroll repaints from leaking over windows above.
+// If the node is a normal flow child (not inside absolute/fixed), it falls back
+// to checking later siblings for any fixed/absolute overlays that need repainting.
 func repaintOverlappingSiblings(buf *CellBuffer, node *Node) {
-	// Walk up to find the absolute-positioned ancestor (the window node)
+	// Walk up to find the absolute/fixed-positioned ancestor (the window node)
 	var absNode *Node
 	for n := node; n != nil; n = n.Parent {
-		if n.Style.Position == "absolute" {
+		if n.Style.Position == "absolute" || n.Style.Position == "fixed" {
 			absNode = n
 			break
 		}
 	}
-	if absNode == nil || absNode.Parent == nil {
-		return // not inside a window
+	if absNode == nil {
+		// Not inside an absolute/fixed node — this is a normal flow child.
+		// Check later siblings for fixed/absolute overlays that overlap.
+		repaintFixedOverlappingSiblings(buf, node)
+		return
+	}
+	if absNode.Parent == nil {
+		return
 	}
 
 	// Find the container that holds all windows as children.
@@ -187,7 +195,7 @@ func repaintOverlappingSiblings(buf *CellBuffer, node *Node) {
 		return
 	}
 
-	// Use the ACTUAL absolute-positioned window bounds for overlap check
+	// Use the ACTUAL absolute/fixed-positioned window bounds for overlap check
 	rx, ry, rw, rh := absNode.X, absNode.Y, absNode.W, absNode.H
 	if rw <= 0 || rh <= 0 {
 		rx, ry, rw, rh = node.X, node.Y, node.W, node.H
@@ -196,8 +204,8 @@ func repaintOverlappingSiblings(buf *CellBuffer, node *Node) {
 	// Repaint later siblings (higher z-order) that overlap
 	for i := idx + 1; i < len(parent.Children); i++ {
 		sibling := parent.Children[i]
-		// Find the absolute-positioned child INSIDE the sibling (component wrapper)
-		sibAbs := findAbsoluteChild(sibling)
+		// Find the absolute/fixed-positioned child INSIDE the sibling (component wrapper)
+		sibAbs := findAbsoluteOrFixedChild(sibling)
 		if sibAbs != nil {
 			if rectsOverlap(rx, ry, rw, rh, sibAbs.X, sibAbs.Y, sibAbs.W, sibAbs.H) {
 				paintNode(buf, sibAbs)
@@ -211,14 +219,55 @@ func repaintOverlappingSiblings(buf *CellBuffer, node *Node) {
 	}
 }
 
-// findAbsoluteChild finds the first absolute-positioned descendant within a node.
-// This traverses through component wrappers to find the actual window vbox.
-func findAbsoluteChild(node *Node) *Node {
-	if node.Style.Position == "absolute" {
+// repaintFixedOverlappingSiblings handles the case where a normal flow child
+// is repainted and needs to check if any later siblings with position:fixed
+// or position:absolute overlap and need repainting.
+func repaintFixedOverlappingSiblings(buf *CellBuffer, node *Node) {
+	parent := node.Parent
+	if parent == nil {
+		return
+	}
+	// Walk through component wrappers to find the actual parent container
+	target := node
+	for parent != nil && parent.Type == "component" && parent.Parent != nil {
+		target = parent
+		parent = parent.Parent
+	}
+
+	// Find our index in parent's children
+	idx := -1
+	for i, ch := range parent.Children {
+		if ch == target {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		return
+	}
+
+	rx, ry, rw, rh := node.X, node.Y, node.W, node.H
+
+	// Repaint later siblings that are fixed/absolute and overlap
+	for i := idx + 1; i < len(parent.Children); i++ {
+		sibling := parent.Children[i]
+		sibFixed := findAbsoluteOrFixedChild(sibling)
+		if sibFixed != nil {
+			if rectsOverlap(rx, ry, rw, rh, sibFixed.X, sibFixed.Y, sibFixed.W, sibFixed.H) {
+				paintNode(buf, sibFixed)
+			}
+		}
+	}
+}
+
+// findAbsoluteOrFixedChild finds the first absolute/fixed-positioned descendant within a node.
+// This traverses through component wrappers to find the actual window/overlay vbox.
+func findAbsoluteOrFixedChild(node *Node) *Node {
+	if node.Style.Position == "absolute" || node.Style.Position == "fixed" {
 		return node
 	}
 	for _, ch := range node.Children {
-		if found := findAbsoluteChild(ch); found != nil {
+		if found := findAbsoluteOrFixedChild(ch); found != nil {
 			return found
 		}
 	}
