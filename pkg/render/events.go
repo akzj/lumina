@@ -176,7 +176,11 @@ func (e *Engine) HandleMouseMove(x, y int) {
 	// If a widget has captured the mouse (dragging), dispatch directly to it
 	if e.capturedComp != nil {
 		w, ok := e.widgets[e.capturedComp.Type]
-		if ok {
+		if !ok {
+			// Widget type unregistered (component removed/rebuilt) — release capture
+			// and fall through to normal dispatch below.
+			e.capturedComp = nil
+		} else {
 			state := e.widgetStates[e.capturedComp.ID]
 			evt := &WidgetEvent{Type: "mousemove", X: x, Y: y}
 			if e.capturedComp.RootNode != nil {
@@ -193,8 +197,8 @@ func (e *Engine) HandleMouseMove(x, y int) {
 			if evt.FireOnChange != nil && e.capturedComp.RootNode != nil && e.capturedComp.RootNode.OnChange != 0 {
 				e.callLuaRefWithValue(e.capturedComp.RootNode.OnChange, evt.FireOnChange)
 			}
+			return // captured widget gets ALL mouse events, skip normal dispatch
 		}
-		return // captured widget gets ALL mouse events, skip normal dispatch
 	}
 
 	// Clear stale hovered pointer if node was removed from tree
@@ -246,6 +250,10 @@ func (e *Engine) HandleMouseMove(x, y int) {
 func (e *Engine) HandleClick(x, y int) {
 	if len(e.layers) == 0 {
 		return
+	}
+	// During widget capture (drag), all mouse events go to the captured widget
+	if e.capturedComp != nil {
+		return // captured widget only receives mousemove/mouseup
 	}
 
 	// Clear stale focused pointer if node was removed from tree
@@ -306,6 +314,10 @@ func (e *Engine) HandleClick(x, y int) {
 func (e *Engine) HandleMouseDown(x, y int) {
 	if len(e.layers) == 0 {
 		return
+	}
+	// During widget capture (drag), all mouse events go to the captured widget
+	if e.capturedComp != nil {
+		return // captured widget only receives mousemove/mouseup
 	}
 	// Dispatch widget mousedown event
 	hitNode, _ := e.hitTestLayers(x, y)
@@ -417,6 +429,10 @@ func (e *Engine) HandleKeyDown(key string) {
 func (e *Engine) HandleScroll(x, y, delta int) {
 	if len(e.layers) == 0 {
 		return
+	}
+	// During widget capture (drag), all mouse events go to the captured widget
+	if e.capturedComp != nil {
+		return // captured widget only receives mousemove/mouseup
 	}
 
 	// First: check for a custom Lua onScroll handler (takes priority)
