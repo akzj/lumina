@@ -8,6 +8,7 @@ import (
 	"github.com/akzj/go-lua/pkg/lua"
 	"github.com/akzj/lumina/pkg/event"
 	"github.com/akzj/lumina/pkg/output"
+	"github.com/akzj/lumina/pkg/perf"
 )
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -323,8 +324,8 @@ func TestStressPerf_HoverCycle(t *testing.T) {
 
 	// Sanity check: each hover should trigger exactly 1 render.
 	lastFrame := tracker.LastFrame()
-	if lastFrame.Get(1) < 1 { // perf.Renders
-		t.Logf("  WARNING: last frame had 0 renders")
+	if lastFrame.Get(perf.ComponentsRendered) < 1 {
+		t.Logf("  WARNING: last frame had 0 component renders")
 	}
 }
 

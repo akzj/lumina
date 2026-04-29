@@ -145,7 +145,7 @@ func TestPanel_SnapshotPerf(t *testing.T) {
 	tracker := perf.NewTracker(10)
 	tracker.Enable()
 	tracker.BeginFrame()
-	tracker.Record(perf.Renders, 5)
+	tracker.Record(perf.PaintCells, 5)
 	tracker.EndFrame()
 
 	p := NewPanel(tracker)
@@ -153,8 +153,11 @@ func TestPanel_SnapshotPerf(t *testing.T) {
 
 	p.SnapshotPerf()
 
-	if p.perfSnap.Last.Get(perf.Renders) != 5 {
-		t.Errorf("snapshot last renders = %d, want 5", p.perfSnap.Last.Get(perf.Renders))
+	if p.perfSnap.Last.Get(perf.PaintCells) != 5 {
+		t.Errorf("snapshot last PaintCells = %d, want 5", p.perfSnap.Last.Get(perf.PaintCells))
+	}
+	if p.perfSnap.Total.Get(perf.PaintCells) != 5 {
+		t.Errorf("snapshot total PaintCells = %d, want 5", p.perfSnap.Total.Get(perf.PaintCells))
 	}
 	if p.perfSnap.FPS != 60 {
 		t.Errorf("snapshot FPS = %d, want 60", p.perfSnap.FPS)

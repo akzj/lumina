@@ -413,19 +413,23 @@ func paintPerfTab(cb *render.CellBuffer, panel *devtools.Panel, startRow, width 
 	total := snap.Total
 	fps := snap.FPS
 
+	perfTL := func(m perf.Metric) string {
+		return fmt.Sprintf("total %d  last %d", total.Get(m), last.Get(m))
+	}
+
 	lines := []struct{ label, value string }{
 		{"FPS", fmt.Sprintf("%d", fps)},
 		{"Frame Duration", fmt.Sprintf("%v", last.Duration)},
 		{"Max Frame", fmt.Sprintf("%v", total.MaxFrameDuration)},
 		{"Total Frames", fmt.Sprintf("%d", total.Frames)},
-		{"Renders", fmt.Sprintf("%d (total: %d)", last.Get(perf.Renders), total.Get(perf.Renders))},
-		{"Layouts", fmt.Sprintf("%d (total: %d)", last.Get(perf.Layouts), total.Get(perf.Layouts))},
-		{"Paints", fmt.Sprintf("%d (total: %d)", last.Get(perf.Paints), total.Get(perf.Paints))},
-		{"V2 Rendered", fmt.Sprintf("%d", last.Get(perf.V2ComponentsRendered))},
-		{"V2 Paint Cells", fmt.Sprintf("%d", last.Get(perf.V2PaintCells))},
-		{"DirtyRects", fmt.Sprintf("%d", last.Get(perf.DirtyRectsOut))},
-		{"Events Hit", fmt.Sprintf("%d", last.Get(perf.EventsDispatched))},
-		{"Events Missed", fmt.Sprintf("%d", last.Get(perf.EventsMissed))},
+		{"Render Count", perfTL(perf.ComponentsRendered)},
+		{"Paint Cells", perfTL(perf.PaintCells)},
+		{"Paint Clear Cells", perfTL(perf.PaintClearCells)},
+		{"Dirty Rect Area", perfTL(perf.DirtyRectArea)},
+		{"DirtyRects Out", perfTL(perf.DirtyRectsOut)},
+		{"WriteDirty", perfTL(perf.WriteDirtyCalls)},
+		{"WriteFull", perfTL(perf.WriteFullCalls)},
+		{"Flush", perfTL(perf.FlushCalls)},
 	}
 
 	for _, l := range lines {

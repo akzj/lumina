@@ -183,9 +183,9 @@ Elements 向「Chrome 程度」体验的 **MVP 与阶段规划** 见 **[DESIGN-d
 app.Tracker().Enable()
 // ... 运行 ...
 f := app.Tracker().LastFrame()
-_ = f.Get(perf.V2ComponentsRendered)
-_ = f.Get(perf.V2PaintCells)
-_ = f.Get(perf.V2DirtyRectArea)
+_ = f.Get(perf.ComponentsRendered) // renderComponent invocations per frame
+_ = f.Get(perf.PaintCells)
+_ = f.Get(perf.DirtyRectArea)
 // 或 app.Tracker().Report() / TotalReport()
 ```
 

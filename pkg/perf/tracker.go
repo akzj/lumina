@@ -2,52 +2,20 @@ package perf
 
 import "time"
 
-// Metric identifies a performance counter.
+// Metric identifies a performance counter (render engine + adapter output only).
 type Metric int
 
 const (
-	// Render pipeline.
-	Renders  Metric = iota // renderFn calls
-	Layouts                // ComputeLayout calls (includes re-layout for moves)
-	Paints                 // Paint calls
+	DirtyRectsOut Metric = iota // number of dirty rects passed to WriteDirty this frame
+	WriteDirtyCalls
+	WriteFullCalls
+	FlushCalls
 
-	// Compositor.
-	OcclusionBuilds  // OcclusionMap.Build (SetLayers) calls
-	OcclusionUpdates // UpdateDirtyRegions calls
-	ComposeFull      // ComposeAll calls
-	ComposeDirty     // ComposeDirty calls
-	ComposeRects     // ComposeRects calls (for moves)
-	DirtyRectsOut    // number of dirty rects output
-
-	// Structure.
-	HitTesterRebuilds // rebuildHitTester calls
-	HandlerFullSyncs  // syncHandlers (full) calls
-	HandlerDirtySyncs // syncDirtyHandlers calls
-
-	// Events.
-	EventsDispatched // events that hit a handler
-	EventsMissed     // events with no handler target
-
-	// Component operations.
-	ComponentsRegistered   // RegisterComponent calls
-	ComponentsUnregistered // UnregisterComponent calls
-	MovesPositionOnly      // Move with same size
-	MovesWithResize        // Move with size change
-	StateSets              // SetState calls
-
-	// Screen output.
-	WriteDirtyCalls // adapter.WriteDirty calls
-	WriteFullCalls  // adapter.WriteFull calls
-	FlushCalls      // adapter.Flush calls
-
-	// V2 Render Engine metrics.
-	V2ComponentsRendered // number of components whose render function was called
-	V2LayoutNodes        // number of nodes that had layout computed
-	V2PaintNodes         // number of nodes that were painted
-	V2PaintCells         // number of cells written to CellBuffer
-	V2PaintClearCells    // number of cells cleared (ClearRect) before repaint
-	V2DirtyRectArea      // total area of dirty rects (W×H sum)
-	V2ReconcileChanges   // number of nodes that changed during reconcile
+	// Render engine (from engine.RenderAll / RenderDirty after paint).
+	ComponentsRendered // render count: renderComponent calls this frame
+	PaintCells         // CellBuffer cell writes (SetChar / Set, etc.)
+	PaintClearCells    // cells cleared (ClearRect / Clear) before repaint
+	DirtyRectArea      // paint dirty bbox area: Stats.DirtyW * DirtyH
 
 	metricCount // sentinel for array sizing
 )
@@ -155,45 +123,37 @@ func (t *Tracker) Record(m Metric, delta int) {
 	}
 }
 
-// RecordComponent records a render for a specific component.
+// RecordComponent records a test/instrumentation hook: increments ComponentsRendered
+// and appends compID to RenderComponents (same slice shape as before; not used by the engine).
 func (t *Tracker) RecordComponent(compID string) {
 	if !t.enabled {
 		return
 	}
 	if t.inFrame {
-		t.current.Counters[Renders]++
+		t.current.Counters[ComponentsRendered]++
 		t.current.RenderComponents = append(t.current.RenderComponents, compID)
 	} else {
-		t.pending.Counters[Renders]++
+		t.pending.Counters[ComponentsRendered]++
 		t.pending.RenderComponents = append(t.pending.RenderComponents, compID)
 	}
 }
 
-// RecordEvent records an event by type.
+// RecordEvent records an event type for debugging (EventsByType map only; no separate counters).
 func (t *Tracker) RecordEvent(eventType string, dispatched bool) {
 	if !t.enabled {
 		return
 	}
+	_ = dispatched
 	if t.inFrame {
 		if t.current.EventsByType == nil {
 			t.current.EventsByType = make(map[string]int)
 		}
 		t.current.EventsByType[eventType]++
-		if dispatched {
-			t.current.Counters[EventsDispatched]++
-		} else {
-			t.current.Counters[EventsMissed]++
-		}
 	} else {
 		if t.pending.EventsByType == nil {
 			t.pending.EventsByType = make(map[string]int)
 		}
 		t.pending.EventsByType[eventType]++
-		if dispatched {
-			t.pending.Counters[EventsDispatched]++
-		} else {
-			t.pending.Counters[EventsMissed]++
-		}
 	}
 }
 
@@ -215,7 +175,7 @@ func (t *Tracker) CurrentFrame() FrameStats {
 	return t.current
 }
 
-// TotalStats returns cumulative stats across all frames.
+// TotalStats returns cumulative stats across all frames since Enable (or last Reset).
 func (t *Tracker) TotalStats() FrameStats {
 	return t.total
 }

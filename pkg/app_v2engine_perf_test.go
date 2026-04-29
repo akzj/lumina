@@ -35,20 +35,20 @@ func TestV2Perf_RenderAll_Metrics(t *testing.T) {
 
 	f := tracker.LastFrame()
 	// Should have rendered 1 component
-	if f.Get(perf.V2ComponentsRendered) != 1 {
-		t.Errorf("V2ComponentsRendered: got %d, want 1", f.Get(perf.V2ComponentsRendered))
+	if f.Get(perf.ComponentsRendered) != 1 {
+		t.Errorf("render count: got %d, want 1", f.Get(perf.ComponentsRendered))
 	}
 	// Should have painted cells (background fill + text)
-	if f.Get(perf.V2PaintCells) == 0 {
-		t.Error("V2PaintCells should be > 0 after RenderAll")
+	if f.Get(perf.PaintCells) == 0 {
+		t.Error("PaintCells should be > 0 after RenderAll")
 	}
 	// Clear cells should be > 0 (PaintFull calls Clear)
-	if f.Get(perf.V2PaintClearCells) == 0 {
-		t.Error("V2PaintClearCells should be > 0 after RenderAll (PaintFull clears)")
+	if f.Get(perf.PaintClearCells) == 0 {
+		t.Error("PaintClearCells should be > 0 after RenderAll (PaintFull clears)")
 	}
 	// DirtyRectArea should cover the full screen (full render)
-	if f.Get(perf.V2DirtyRectArea) != 40*10 {
-		t.Errorf("V2DirtyRectArea: got %d, want %d", f.Get(perf.V2DirtyRectArea), 40*10)
+	if f.Get(perf.DirtyRectArea) != 40*10 {
+		t.Errorf("DirtyRectArea: got %d, want %d", f.Get(perf.DirtyRectArea), 40*10)
 	}
 	// Output metrics
 	if f.Get(perf.WriteFullCalls) != 1 {
@@ -83,11 +83,11 @@ func TestV2Perf_RenderDirty_NothingDirty(t *testing.T) {
 	app.RenderDirty()
 
 	f := tracker.LastFrame()
-	if f.Get(perf.V2ComponentsRendered) != 0 {
-		t.Errorf("V2ComponentsRendered: got %d, want 0 (nothing dirty)", f.Get(perf.V2ComponentsRendered))
+	if f.Get(perf.ComponentsRendered) != 0 {
+		t.Errorf("render count: got %d, want 0 (nothing dirty)", f.Get(perf.ComponentsRendered))
 	}
-	if f.Get(perf.V2PaintCells) != 0 {
-		t.Errorf("V2PaintCells: got %d, want 0 (nothing dirty)", f.Get(perf.V2PaintCells))
+	if f.Get(perf.PaintCells) != 0 {
+		t.Errorf("PaintCells: got %d, want 0 (nothing dirty)", f.Get(perf.PaintCells))
 	}
 	if f.Get(perf.WriteDirtyCalls) != 0 {
 		t.Errorf("WriteDirtyCalls: got %d, want 0 (nothing to output)", f.Get(perf.WriteDirtyCalls))
@@ -127,12 +127,12 @@ func TestV2Perf_ClickStateChange_Metrics(t *testing.T) {
 
 	f := tracker.LastFrame()
 	// Should re-render 1 component
-	if f.Get(perf.V2ComponentsRendered) != 1 {
-		t.Errorf("V2ComponentsRendered: got %d, want 1", f.Get(perf.V2ComponentsRendered))
+	if f.Get(perf.ComponentsRendered) != 1 {
+		t.Errorf("render count: got %d, want 1", f.Get(perf.ComponentsRendered))
 	}
 	// Should paint some cells
-	if f.Get(perf.V2PaintCells) == 0 {
-		t.Error("V2PaintCells should be > 0 after state change")
+	if f.Get(perf.PaintCells) == 0 {
+		t.Error("PaintCells should be > 0 after state change")
 	}
 	// Should have dirty output
 	if f.Get(perf.WriteDirtyCalls) != 1 {
@@ -142,8 +142,8 @@ func TestV2Perf_ClickStateChange_Metrics(t *testing.T) {
 		t.Errorf("DirtyRectsOut: got %d, want 1", f.Get(perf.DirtyRectsOut))
 	}
 
-	t.Logf("After click: V2PaintCells=%d, V2PaintClearCells=%d, V2DirtyRectArea=%d",
-		f.Get(perf.V2PaintCells), f.Get(perf.V2PaintClearCells), f.Get(perf.V2DirtyRectArea))
+	t.Logf("After click: PaintCells=%d, PaintClearCells=%d, DirtyRectArea=%d",
+		f.Get(perf.PaintCells), f.Get(perf.PaintClearCells), f.Get(perf.DirtyRectArea))
 }
 
 func TestV2Perf_DirtyRect_Accurate(t *testing.T) {
@@ -176,7 +176,7 @@ func TestV2Perf_DirtyRect_Accurate(t *testing.T) {
 	app.RenderDirty()
 
 	f := tracker.LastFrame()
-	dirtyArea := f.Get(perf.V2DirtyRectArea)
+	dirtyArea := f.Get(perf.DirtyRectArea)
 	totalArea := 80 * 24
 
 	t.Logf("DirtyRectArea=%d, TotalArea=%d, ratio=%.1f%%",
@@ -213,9 +213,8 @@ func TestV2Perf_Report_IncludesV2Section(t *testing.T) {
 	if len(report) < 50 {
 		t.Errorf("Report too short: %q", report)
 	}
-	// Should contain V2 Engine section
-	if !containsString(report, "V2 Engine") {
-		t.Errorf("Report should contain 'V2 Engine' section, got:\n%s", report)
+	if !containsString(report, "Render:") {
+		t.Errorf("Report should contain Render line, got:\n%s", report)
 	}
 }
 
@@ -240,8 +239,8 @@ func TestV2Perf_AssertHelpers(t *testing.T) {
 	app.RenderAll()
 
 	tracker.AssertLastFrame(t,
-		perf.CheckV2ComponentsRendered(1),
-		perf.CheckV2PaintCellsMax(200), // 20*5=100 cells max for full screen
+		perf.CheckComponentsRendered(1),
+		perf.CheckPaintCellsMax(200), // 20*5=100 cells max for full screen
 	)
 }
 
