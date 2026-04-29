@@ -404,6 +404,19 @@ func TestTableMouseleaveResetsHover(t *testing.T) {
 	}
 }
 
+func TestTableRenderAutoFocusProp(t *testing.T) {
+	props := map[string]any{
+		"columns":    []any{map[string]any{"header": "A", "key": "a", "width": 5.0}},
+		"rows":       []any{map[string]any{"a": "x"}},
+		"selectable": true,
+		"autoFocus":  true,
+	}
+	node := Table.Render(props, Table.NewState()).(*render.Node)
+	if !node.Focusable || !node.AutoFocus {
+		t.Errorf("root Focusable=%v AutoFocus=%v (want both true)", node.Focusable, node.AutoFocus)
+	}
+}
+
 func TestTableWidgetDefInterface(t *testing.T) {
 	var w interface {
 		GetName() string

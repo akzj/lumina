@@ -367,3 +367,84 @@ func TestAppV2Engine_DevToolsTabSwitch(t *testing.T) {
 		t.Errorf("expected Elements tab, got %d", app.DevTools().ActiveTab)
 	}
 }
+
+func TestAppV2Engine_TableAutoFocusKeyboard(t *testing.T) {
+	app, _, _ := newEngineApp(t, 80, 24)
+
+	err := app.RunString(`
+		lumina.app({
+			id = "table-key-app",
+			store = { tblIdx = -1 },
+			render = function()
+				return lumina.createElement("vbox", {
+					style = { width = 80, height = 24, background = "#1E1E2E" },
+				},
+					lumina.createElement("Table", {
+						id = "t1",
+						columns = {
+							{ header = "Name", key = "name", width = 12 },
+							{ header = "Role", key = "role", width = 10 },
+						},
+						rows = {
+							{ name = "Alice", role = "Admin" },
+							{ name = "Bob", role = "Dev" },
+						},
+						selectable = true,
+						striped = true,
+						autoFocus = true,
+						onChange = function(i)
+							lumina.store.set("tblIdx", i)
+						end,
+					})
+				)
+			end,
+		})
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	app.RenderAll()
+
+	if app.Engine().FocusedNode() == nil {
+		t.Fatal("expected Table to receive focus via autoFocus")
+	}
+
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "j"})
+	app.RenderDirty()
+
+	v, ok := app.Store().Get("tblIdx")
+	if !ok {
+		t.Fatal("onChange should have set tblIdx")
+	}
+	var idx int
+	switch x := v.(type) {
+	case int:
+		idx = x
+	case int64:
+		idx = int(x)
+	case float64:
+		idx = int(x)
+	default:
+		t.Fatalf("tblIdx type %T value %v", v, v)
+	}
+	if idx != 0 {
+		t.Fatalf("first j from SelectedRow=-1 should select row 0, store got %d", idx)
+	}
+
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "j"})
+	app.RenderDirty()
+	v, _ = app.Store().Get("tblIdx")
+	switch x := v.(type) {
+	case int:
+		idx = x
+	case int64:
+		idx = int(x)
+	case float64:
+		idx = int(x)
+	default:
+		t.Fatalf("tblIdx type %T", v)
+	}
+	if idx != 1 {
+		t.Fatalf("second j should select row 1, got %d", idx)
+	}
+}
