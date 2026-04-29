@@ -17,6 +17,18 @@ func hitTestWithOffset(node *Node, x, y int, scrollOffsetY int) *Node {
 		return nil
 	}
 
+	// Component placeholders are transparent containers — their bounds from
+	// parent layout don't reflect absolute-positioned children's actual positions.
+	// Skip bounds check and go straight to checking children.
+	if node.Type == "component" {
+		for i := len(node.Children) - 1; i >= 0; i-- {
+			if hit := hitTestWithOffset(node.Children[i], x, y, scrollOffsetY); hit != nil {
+				return hit
+			}
+		}
+		return nil // component placeholder is transparent — no match
+	}
+
 	// Node's screen position = layout position - cumulative scroll offset
 	screenX := node.X
 	screenY := node.Y - scrollOffsetY
@@ -65,13 +77,6 @@ func hitTestWithOffset(node *Node, x, y int, scrollOffsetY int) *Node {
 		if hit := hitTestWithOffset(child, x, y, childScrollOffset); hit != nil {
 			return hit
 		}
-	}
-
-	// Component placeholders are transparent containers — if no child matched
-	// the click position, the click is "through" the placeholder (not on it).
-	// This prevents overlapping placeholders from blocking clicks to siblings.
-	if node.Type == "component" {
-		return nil
 	}
 
 	return node
