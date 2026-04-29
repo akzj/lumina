@@ -36,4 +36,70 @@ test.describe("DataGrid paginated example", function()
 		app:keyPress("j")
 		test.assert.eq(app:screenContains("Item-003"), true)
 	end)
+
+	-- Sort tests: use loadString to set the global store
+	test.it("sorting by name desc shows Item-100 first", function()
+		test.assert.eq(app:screenContains("Item-001"), true)
+		app:loadString([[
+			lumina.store.set("sortColumnId", "name")
+			lumina.store.set("sortDirection", "desc")
+			lumina.store.set("page", 1)
+			lumina.store.set("selectedIdx", 1)
+		]])
+		test.assert.eq(app:screenContains("Item-100"), true)
+	end)
+
+	test.it("sorting by name asc shows Item-001 first", function()
+		app:loadString([[
+			lumina.store.set("sortColumnId", "name")
+			lumina.store.set("sortDirection", "asc")
+			lumina.store.set("page", 1)
+			lumina.store.set("selectedIdx", 1)
+		]])
+		test.assert.eq(app:screenContains("Item-001"), true)
+	end)
+
+	test.it("sort indicator shows asc arrow after sorting", function()
+		app:loadString([[
+			lumina.store.set("sortColumnId", "name")
+			lumina.store.set("sortDirection", "asc")
+		]])
+		test.assert.eq(app:screenContains("\226\150\178"), true) -- ▲
+	end)
+
+	test.it("sort indicator shows desc arrow after sorting", function()
+		app:loadString([[
+			lumina.store.set("sortColumnId", "value")
+			lumina.store.set("sortDirection", "desc")
+		]])
+		test.assert.eq(app:screenContains("\226\150\188"), true) -- ▼
+	end)
+
+	-- Pagination tests
+	test.it("page 2 shows different items than page 1", function()
+		test.assert.eq(app:screenContains("Item-001"), true)
+		app:loadString('lumina.store.set("page", 2) lumina.store.set("selectedIdx", 1)')
+		test.assert.eq(app:screenContains("Item-011"), true)
+		test.assert.eq(app:screenContains("Item-001"), false)
+	end)
+
+	test.it("last page shows remaining items", function()
+		app:loadString('lumina.store.set("page", 10) lumina.store.set("selectedIdx", 1)')
+		test.assert.eq(app:screenContains("Item-100"), true)
+		test.assert.eq(app:screenContains("Page 10/"), true)
+	end)
+
+	test.it("sort + pagination combo: sort desc then page 2", function()
+		app:loadString([[
+			lumina.store.set("sortColumnId", "name")
+			lumina.store.set("sortDirection", "desc")
+			lumina.store.set("page", 1)
+			lumina.store.set("selectedIdx", 1)
+		]])
+		test.assert.eq(app:screenContains("Item-100"), true)
+
+		app:loadString('lumina.store.set("page", 2) lumina.store.set("selectedIdx", 1)')
+		test.assert.eq(app:screenContains("Item-090"), true)
+		test.assert.eq(app:screenContains("Item-100"), false)
+	end)
 end)
