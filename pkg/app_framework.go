@@ -320,9 +320,9 @@ func (a *App) registerAppLuaEntry(L *lua.State, tblIdx int) {
 		// Initialize store from config
 		L.GetField(cfgIdx, "store")
 		if L.IsTable(-1) {
-			storeIdx := L.AbsIndex(-1)
+			storeIdx2 := L.AbsIndex(-1)
 			L.PushNil()
-			for L.Next(storeIdx) {
+			for L.Next(storeIdx2) {
 				key, _ := L.ToString(-2)
 				val := L.ToAny(-1)
 				a.store.Set(key, val)
