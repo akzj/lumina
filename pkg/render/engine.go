@@ -597,6 +597,8 @@ func (e *Engine) renderGoWidget(comp *Component, w WidgetDef) {
 		comp.RootNode.PaintDirty = true
 	} else {
 		// Update: replace the root node tree entirely
+		// Preserve scroll positions from old tree to new tree
+		preserveScrollState(comp.RootNode, newRoot)
 		parent := comp.RootNode.Parent
 		markRemovedRecursive(comp.RootNode)
 		newRoot.Parent = parent
@@ -608,6 +610,26 @@ func (e *Engine) renderGoWidget(comp *Component, w WidgetDef) {
 
 	comp.Dirty = false
 	comp.Mounted = true
+}
+
+// preserveScrollState copies ScrollY from the old node tree to the new node tree
+// for matching scroll containers. This prevents scroll position from resetting
+// when a Go widget re-renders (e.g., when a sibling window gets focus).
+func preserveScrollState(oldNode, newNode *Node) {
+	if oldNode == nil || newNode == nil {
+		return
+	}
+	if oldNode.Style.Overflow == "scroll" && newNode.Style.Overflow == "scroll" {
+		newNode.ScrollY = oldNode.ScrollY
+	}
+	// Recurse into children (match by index since Go widgets produce deterministic trees)
+	minLen := len(oldNode.Children)
+	if len(newNode.Children) < minLen {
+		minLen = len(newNode.Children)
+	}
+	for i := 0; i < minLen; i++ {
+		preserveScrollState(oldNode.Children[i], newNode.Children[i])
+	}
 }
 
 // copyWidgetEventHandlers copies Lua event refs from the component placeholder
