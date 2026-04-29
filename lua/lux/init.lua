@@ -20,5 +20,6 @@ M.Tabs = require("lux.tabs")
 M.Alert = require("lux.alert")
 M.Accordion = require("lux.accordion")
 M.Breadcrumb = require("lux.breadcrumb")
+M.TextInput = require("lux.text_input")
 
 return M
