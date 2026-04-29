@@ -1,8 +1,11 @@
 package render
 
 import (
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/akzj/go-lua/pkg/lua"
@@ -128,6 +131,103 @@ func (e *Engine) luaReadFile(L *lua.State) int {
 			future.Resolve(string(data))
 		}
 	}()
+	L.PushUserdata(future)
+	return 1
+}
+
+// --- Lua API: lumina.fetch(url [, options]) ---
+
+// luaFetch implements lumina.fetch(url [, options]) — returns a Future that resolves
+// with {status=int, body=string, headers={...}} or rejects on error.
+// options: { method="GET", body="", headers={}, timeout=30 }
+func (e *Engine) luaFetch(L *lua.State) int {
+	url := L.CheckString(1)
+
+	method := "GET"
+	var body string
+	var headers map[string]string
+	timeout := 30 * time.Second
+
+	if L.GetTop() >= 2 && L.IsTable(2) {
+		// Extract method
+		L.GetField(2, "method")
+		if L.IsString(-1) {
+			method, _ = L.ToString(-1)
+		}
+		L.Pop(1)
+
+		// Extract body
+		L.GetField(2, "body")
+		if L.IsString(-1) {
+			body, _ = L.ToString(-1)
+		}
+		L.Pop(1)
+
+		// Extract timeout
+		L.GetField(2, "timeout")
+		if L.IsNumber(-1) {
+			t, _ := L.ToNumber(-1)
+			if t > 0 {
+				timeout = time.Duration(t * float64(time.Second))
+			}
+		}
+		L.Pop(1)
+
+		// Extract headers
+		L.GetField(2, "headers")
+		if L.IsTable(-1) {
+			headers = make(map[string]string)
+			L.PushNil()
+			for L.Next(-2) {
+				k, _ := L.ToString(-2)
+				v, _ := L.ToString(-1)
+				headers[k] = v
+				L.Pop(1)
+			}
+		}
+		L.Pop(1)
+	}
+
+	future := lua.NewFuture()
+	go func() {
+		var bodyReader io.Reader
+		if body != "" {
+			bodyReader = strings.NewReader(body)
+		}
+		req, err := http.NewRequest(method, url, bodyReader)
+		if err != nil {
+			future.Reject(err)
+			return
+		}
+		for k, v := range headers {
+			req.Header.Set(k, v)
+		}
+		client := &http.Client{Timeout: timeout}
+		resp, err := client.Do(req)
+		if err != nil {
+			future.Reject(err)
+			return
+		}
+		defer resp.Body.Close()
+		respBody, err := io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024))
+		if err != nil {
+			future.Reject(err)
+			return
+		}
+
+		// Build result as map[string]any for PushAny
+		respHeaders := make(map[string]any)
+		for k, v := range resp.Header {
+			respHeaders[strings.ToLower(k)] = strings.Join(v, ", ")
+		}
+		result := map[string]any{
+			"status":  resp.StatusCode,
+			"body":    string(respBody),
+			"headers": respHeaders,
+		}
+		future.Resolve(result)
+	}()
+
 	L.PushUserdata(future)
 	return 1
 }

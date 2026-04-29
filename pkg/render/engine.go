@@ -1620,6 +1620,10 @@ func (e *Engine) RegisterLuaAPI() {
 	L.PushFunction(e.luaReadFile)
 	L.SetField(tblIdx, "readFile")
 
+	// lumina.fetch(url [, options]) — returns Future
+	L.PushFunction(e.luaFetch)
+	L.SetField(tblIdx, "fetch")
+
 	// Create shared callable metatable for factory tables (__call → createElement)
 	L.NewTable()
 	L.PushFunction(e.luaFactoryCall)
