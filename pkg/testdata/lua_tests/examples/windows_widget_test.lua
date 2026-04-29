@@ -32,8 +32,8 @@ test.describe("Window widget example", function()
         test.assert.eq(app:screenContains("Color palette"), true)
     end)
 
-    -- Test 4: Drag title bar moves window (Editor at x=2, y=1)
-    test.it("drag title bar moves window", function()
+    -- Test 4: Drag title bar keeps window visible
+    test.it("drag title bar keeps window visible", function()
         -- Win1 (Editor) at x=2, y=1, title bar at y=2
         app:mouseDown(15, 2)
         app:mouseMove(25, 5)
