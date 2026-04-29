@@ -192,7 +192,8 @@ func (e *Engine) HandleMouseMove(x, y int) {
 			if !stateOk {
 				e.capturedComp = nil
 			} else {
-				evt := &WidgetEvent{Type: "mousemove", X: x, Y: y, ScreenW: e.width, ScreenH: e.height}
+				appW, appH := e.appBounds()
+				evt := &WidgetEvent{Type: "mousemove", X: x, Y: y, ScreenW: appW, ScreenH: appH}
 				if e.capturedComp.RootNode != nil {
 					evt.WidgetX = e.capturedComp.RootNode.X
 					evt.WidgetY = e.capturedComp.RootNode.Y
@@ -365,7 +366,8 @@ func (e *Engine) HandleMouseUp(x, y int) {
 		if ok {
 			state, stateOk := e.widgetStates[e.capturedComp.ID]
 			if stateOk {
-				evt := &WidgetEvent{Type: "mouseup", X: x, Y: y, ScreenW: e.width, ScreenH: e.height}
+				appW, appH := e.appBounds()
+				evt := &WidgetEvent{Type: "mouseup", X: x, Y: y, ScreenW: appW, ScreenH: appH}
 				if e.capturedComp.RootNode != nil {
 					evt.WidgetX = e.capturedComp.RootNode.X
 					evt.WidgetY = e.capturedComp.RootNode.Y
@@ -525,6 +527,15 @@ func (e *Engine) autoScroll(node *Node, delta int) {
 }
 
 // scrollNodeBy adjusts a node's ScrollY by the given number of lines (positive=down, negative=up).
+// appBounds returns the app's logical dimensions (root component's rendered size).
+// Falls back to engine dimensions (terminal size) if root is not available.
+func (e *Engine) appBounds() (int, int) {
+	if e.root != nil && e.root.RootNode != nil && e.root.RootNode.W > 0 && e.root.RootNode.H > 0 {
+		return e.root.RootNode.W, e.root.RootNode.H
+	}
+	return e.width, e.height
+}
+
 // Unlike autoScroll, this does NOT multiply by a step factor — the caller provides the exact delta.
 // The node must have overflow:"scroll" style and valid ScrollHeight from layout.
 func (e *Engine) scrollNodeBy(node *Node, lines int) {
@@ -696,7 +707,8 @@ func (e *Engine) dispatchWidgetEvent(node *Node, eventType, key string, x, y int
 	if !ok {
 		return false
 	}
-	evt := &WidgetEvent{Type: eventType, Key: key, X: x, Y: y, ScreenW: e.width, ScreenH: e.height}
+	appW, appH := e.appBounds()
+	evt := &WidgetEvent{Type: eventType, Key: key, X: x, Y: y, ScreenW: appW, ScreenH: appH}
 	// Populate widget screen bounds so widgets know their position
 	if comp.RootNode != nil {
 		evt.WidgetX = comp.RootNode.X
