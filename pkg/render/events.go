@@ -187,7 +187,7 @@ func (e *Engine) HandleMouseMove(x, y int) {
 				// and fall through to normal dispatch below.
 				e.capturedComp = nil
 			} else {
-				evt := &WidgetEvent{Type: "mousemove", X: x, Y: y}
+				evt := &WidgetEvent{Type: "mousemove", X: x, Y: y, ScreenW: e.width, ScreenH: e.height}
 				if e.capturedComp.RootNode != nil {
 					evt.WidgetX = e.capturedComp.RootNode.X
 					evt.WidgetY = e.capturedComp.RootNode.Y
@@ -349,7 +349,7 @@ func (e *Engine) HandleMouseUp(x, y int) {
 		if ok {
 			state, stateOk := e.widgetStates[e.capturedComp.ID]
 			if stateOk {
-				evt := &WidgetEvent{Type: "mouseup", X: x, Y: y}
+				evt := &WidgetEvent{Type: "mouseup", X: x, Y: y, ScreenW: e.width, ScreenH: e.height}
 				if e.capturedComp.RootNode != nil {
 					evt.WidgetX = e.capturedComp.RootNode.X
 					evt.WidgetY = e.capturedComp.RootNode.Y
@@ -625,7 +625,7 @@ func (e *Engine) dispatchWidgetEvent(node *Node, eventType, key string, x, y int
 	if !ok {
 		return false
 	}
-	evt := &WidgetEvent{Type: eventType, Key: key, X: x, Y: y}
+	evt := &WidgetEvent{Type: eventType, Key: key, X: x, Y: y, ScreenW: e.width, ScreenH: e.height}
 	// Populate widget screen bounds so widgets know their position
 	if comp.RootNode != nil {
 		evt.WidgetX = comp.RootNode.X

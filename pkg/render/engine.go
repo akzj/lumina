@@ -23,6 +23,9 @@ type WidgetEvent struct {
 	// Input: Widget's screen bounds (set by engine BEFORE calling OnEvent).
 	WidgetX, WidgetY, WidgetW, WidgetH int
 
+	// Input: Screen dimensions (set by engine BEFORE calling OnEvent).
+	ScreenW, ScreenH int
+
 	// Output: Mouse capture (set by widget during mousedown to capture subsequent mouse events).
 	CaptureMouse bool
 
