@@ -208,11 +208,13 @@ func repaintOverlappingSiblings(buf *CellBuffer, node *Node) {
 		sibAbs := findAbsoluteOrFixedChild(sibling)
 		if sibAbs != nil {
 			if rectsOverlap(rx, ry, rw, rh, sibAbs.X, sibAbs.Y, sibAbs.W, sibAbs.H) {
+				buf.ClearRect(sibAbs.X, sibAbs.Y, sibAbs.W, sibAbs.H)
 				paintNode(buf, sibAbs)
 			}
 		} else {
 			// Fallback: use sibling's own bounds
 			if rectsOverlap(rx, ry, rw, rh, sibling.X, sibling.Y, sibling.W, sibling.H) {
+				buf.ClearRect(sibling.X, sibling.Y, sibling.W, sibling.H)
 				paintNode(buf, sibling)
 			}
 		}
@@ -254,6 +256,7 @@ func repaintFixedOverlappingSiblings(buf *CellBuffer, node *Node) {
 		sibFixed := findAbsoluteOrFixedChild(sibling)
 		if sibFixed != nil {
 			if rectsOverlap(rx, ry, rw, rh, sibFixed.X, sibFixed.Y, sibFixed.W, sibFixed.H) {
+				buf.ClearRect(sibFixed.X, sibFixed.Y, sibFixed.W, sibFixed.H)
 				paintNode(buf, sibFixed)
 			}
 		}
