@@ -29,19 +29,20 @@ lumina.app {
                 style = { height = 1 },
             }, "  r=restore dismissed  q=quit"),
             lumina.createElement("text", { style = { height = 1 } }, ""),
-            Alert { variant = "info", title = "Info", message = "This is an informational message.", width = 50 },
+            Alert { key = "alert-info", variant = "info", title = "Info", message = "This is an informational message.", width = 50 },
             lumina.createElement("text", { style = { height = 1 } }, ""),
-            Alert { variant = "success", title = "Done", message = "Operation completed successfully.", width = 50 },
+            Alert { key = "alert-success", variant = "success", title = "Done", message = "Operation completed successfully.", width = 50 },
             lumina.createElement("text", { style = { height = 1 } }, ""),
-            Alert { variant = "warning", message = "Disk space running low.", width = 50 },
+            Alert { key = "alert-warning", variant = "warning", message = "Disk space running low.", width = 50 },
             lumina.createElement("text", { style = { height = 1 } }, ""),
-            Alert { variant = "error", title = "Error", message = "Connection failed.", width = 50 },
+            Alert { key = "alert-error", variant = "error", title = "Error", message = "Connection failed.", width = 50 },
         }
 
         -- Dismissible alert
         if showDismissible then
             children[#children + 1] = lumina.createElement("text", { style = { height = 1 } }, "")
             children[#children + 1] = Alert {
+                key = "alert-dismiss",
                 variant = "info",
                 title = "Dismissible",
                 message = "Click the X to dismiss this alert.",

@@ -17,5 +17,8 @@ M.DataGrid = require("lux.data_grid")
 M.WM = require("lux.wm")
 M.Pagination = require("lux.pagination")
 M.Tabs = require("lux.tabs")
+M.Alert = require("lux.alert")
+M.Accordion = require("lux.accordion")
+M.Breadcrumb = require("lux.breadcrumb")
 
 return M
