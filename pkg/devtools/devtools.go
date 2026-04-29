@@ -23,6 +23,15 @@ const (
 	ElementsWalkMaxNodes = 4000
 )
 
+// Tab bar + blank after tab bar (see paintDevToolsOverlay).
+const elementsPanelOverheadLines = 3
+
+// Full selection block: separator + detail lines (see paintElementsTab).
+const elementsDetailIdealLines = 7
+
+// When a row is selected, keep at least this many lines for the tree before giving space to detail.
+const elementsTreeMinLinesWhenDetail = 2
+
 // ComponentInfo holds snapshot data about a registered component.
 type ComponentInfo struct {
 	ID     string
@@ -167,7 +176,17 @@ func (p *Panel) NodeTree() []NodeInfo {
 	return p.nodeTree
 }
 
+// elementsPanelContentLines is rows available under the tab bar for Elements (tree + optional detail).
+func (p *Panel) elementsPanelContentLines() int {
+	n := p.Height - elementsPanelOverheadLines
+	if n < 0 {
+		return 0
+	}
+	return n
+}
+
 // elementsDetailReserved returns extra lines reserved below the tree when a node is selected.
+// On short panels it shrinks so the tree keeps at least elementsTreeMinLinesWhenDetail rows.
 func (p *Panel) elementsDetailReserved() int {
 	if p.ActiveTab != TabElements {
 		return 0
@@ -175,12 +194,26 @@ func (p *Panel) elementsDetailReserved() int {
 	if p.elementsSelectedIdx < 0 || p.elementsSelectedIdx >= len(p.nodeTree) {
 		return 0
 	}
-	return 7 // separator + up to 5 detail lines + gap
+	avail := p.elementsPanelContentLines()
+	if avail <= 0 {
+		return 0
+	}
+	maxDetail := avail - elementsTreeMinLinesWhenDetail
+	if maxDetail < 0 {
+		maxDetail = 0
+	}
+	if maxDetail == 0 {
+		return 0
+	}
+	if maxDetail > elementsDetailIdealLines {
+		return elementsDetailIdealLines
+	}
+	return maxDetail
 }
 
 // elementsTreeVisibleLines is how many tree lines fit in the panel (excluding tab bar and detail block).
 func (p *Panel) elementsTreeVisibleLines() int {
-	lines := p.Height - 3 - p.elementsDetailReserved()
+	lines := p.Height - elementsPanelOverheadLines - p.elementsDetailReserved()
 	if lines < 1 {
 		lines = 1
 	}

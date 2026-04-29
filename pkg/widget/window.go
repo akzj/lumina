@@ -75,20 +75,25 @@ var Window = &Widget{
 			},
 		})
 
-		// Divider
+		// Divider (skip if window too short for content)
+		// Available content rows = h - 2 (border) - 1 (title) = h-3
+		// Need: divider(1) + content(>=1) + handle(1) = 3 minimum
+		availableRows := h - 3 // rows inside border minus title
 		divW := contentW
 		if divW < 1 {
 			divW = 1
 		}
-		children = append(children, &render.Node{
-			Type:    "text",
-			Content: strings.Repeat("─", divW),
-			Style: render.Style{
-				Foreground: t.Surface1,
-				Dim:        true,
-				Right:      -1, Bottom: -1,
-			},
-		})
+		if availableRows >= 3 {
+			children = append(children, &render.Node{
+				Type:    "text",
+				Content: strings.Repeat("─", divW),
+				Style: render.Style{
+					Foreground: t.Surface1,
+					Dim:        true,
+					Right:      -1, Bottom: -1,
+				},
+			})
+		}
 
 		// Content area: wrap Lua children in a flex box
 		// overflow:"hidden" by default, "scroll" when scrollable=true
@@ -115,19 +120,21 @@ var Window = &Widget{
 			children = append(children, contentBox)
 		}
 
-		// Resize handle at bottom-right
-		handlePad := contentW - 1
-		if handlePad < 0 {
-			handlePad = 0
+		// Resize handle at bottom-right (skip if window too short)
+		if availableRows >= 2 {
+			handlePad := contentW - 1
+			if handlePad < 0 {
+				handlePad = 0
+			}
+			children = append(children, &render.Node{
+				Type:    "text",
+				Content: strings.Repeat(" ", handlePad) + "◢",
+				Style: render.Style{
+					Foreground: t.Muted,
+					Right:      -1, Bottom: -1,
+				},
+			})
 		}
-		children = append(children, &render.Node{
-			Type:    "text",
-			Content: strings.Repeat(" ", handlePad) + "◢",
-			Style: render.Style{
-				Foreground: t.Muted,
-				Right:      -1, Bottom: -1,
-			},
-		})
 
 		root := &render.Node{
 			Type:     "vbox",
@@ -233,8 +240,9 @@ var Window = &Widget{
 			if s.Resizing {
 				dx := event.X - s.DragStartX
 				dy := event.Y - s.DragStartY
+				// Minimum size: border(2) + title(1) + divider(1) + content(1) + handle(1) = 6 rows
 				newW := max(10, s.OrigW+dx)
-				newH := max(5, s.OrigH+dy)
+				newH := max(6, s.OrigH+dy)
 				event.FireOnChange = map[string]any{
 					"type":   "resize",
 					"width":  newW,
