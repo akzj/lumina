@@ -13,7 +13,8 @@
 ├─────────────────────────────────────────────────────┤
 │  Lua Lux（内嵌 preload，无随盘 lua/ 亦可 require）   │
 │  Card, Badge, Divider, Progress, Spinner, Dialog,   │
-│  Layout, CommandPalette, …                          │
+│  Layout, CommandPalette, ListView, …                │
+│  （高级多列表格设计稿：lua/lux/data_grid.md）        │
 ├─────────────────────────────────────────────────────┤
 │  Go Radix 控件层 (pkg/widget/)                       │
 │  Button Checkbox Switch Radio Label Select Dialog    │
