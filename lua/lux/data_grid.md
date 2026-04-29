@@ -1,6 +1,6 @@
 # Lux DataGrid — 高级表格设计（对标 Web 复杂场景）
 
-> **状态**：设计稿（尚未实现）。实现后预计为 `lua/lux/data_grid.lua`，`require("lux.data_grid")` 或 `require("lux").DataGrid`；与 `pkg/lux_modules.go` 内嵌同步。  
+> **状态**：已实现为 `lua/lux/data_grid.lua`，`require("lux.data_grid")` 或 `require("lux").DataGrid`；与 `lua/lux/embed.go` / `pkg/lux_modules.go` 注册一致。  
 > **命名**：**`DataGrid`**，与 Go `lumina.createElement("Table", …)` 的 **纯文本、固定列宽** widget 明确区分。  
 > **相关**：行级富 UI 参考 **`list.md` / `ListView`**；简单矩阵参考 **`pkg/widget/table.go`**。
 
