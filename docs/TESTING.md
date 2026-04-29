@@ -68,15 +68,41 @@ end)
 
 **说明**：`click` / `mouse*` / `keyPress` / `scroll` 在 harness 内已跟 **`RenderDirty()`**（与真实 `handleInputEvent` 不完全相同，但多数用例足够）。若依赖 **多帧 ticker**，可额外 `app:render()`。
 
-运行全部 Lua 用例：
+### 2.3 运行方式（全量 / 单文件 / 子用例）
+
+**全量**（递归跑 `pkg/testdata/lua_tests/**/*_test.lua`）：
 
 ```bash
 go test ./pkg/ -run TestLuaTestFramework -count=1
+# 或（仓库根目录）
+./scripts/lua-test.sh
+./scripts/lua-test.sh -- -v
 ```
 
-单文件调试：可临时改 `lua_test.go` 指向 `RunFile`，或加 `-run` 无法筛单个 lua 文件时在本机用短 Go 片段调 `RunFile`。
+**只跑一个 Lua 文件**（改测迭代最快；路径相对于 **`pkg/`** 包目录）：
+
+```bash
+LUMINA_LUA_TEST=testdata/lua_tests/examples/scrollview_test.lua go test ./pkg/ -run TestLuaTestFramework -count=1
+```
+
+**封装脚本**（在仓库根执行；自动 `cd pkg`；支持路径子串唯一匹配）：
+
+```bash
+./scripts/lua-test.sh examples/scrollview_test.lua
+./scripts/lua-test.sh scrollview                    # 唯一匹配 *_test.lua*scrollview*
+./scripts/lua-test.sh examples/wm_test.lua -- -v  # 额外 go test 参数放在 -- 之后
+```
+
+实现：`pkg/lua_test.go` 读取环境变量 **`LUMINA_LUA_TEST`**；未设置时行为与原来一致（`RunDir`）。
+
+**只跑套件里的某几条（Go 子测试名过滤）**：`TestLuaTestFramework` 会为每个 `it` 注册子测试 `Suite/itName`，可用正则过滤，例如只跑描述块名里带 `ScrollView` 的用例：
+
+```bash
+go test ./pkg/ -run 'TestLuaTestFramework/ScrollView' -count=1
+```
 
 ---
+
 
 ## 3. 开发 Lua 组件时如何测「正确性」
 
@@ -169,7 +195,8 @@ go test ./pkg/ -run TestLuaTestFramework -count=1
 在 pkg/testdata/lua_tests/<子目录>/ 新增或修改 *_test.lua；
 使用 test.describe / test.it / test.createApp；
 交互后依赖 app:render() 时用 app:render()；
-跑 go test ./pkg/ -run TestLuaTestFramework -count=1 必须通过。
+迭代时优先：./scripts/lua-test.sh <路径或子串> -- -count=1
+全量回归：./scripts/lua-test.sh
 ```
 
 ---

@@ -71,6 +71,9 @@ go test ./pkg/ -run TestE2E
 
 # Lua 测试框架（pkg/testdata/lua_tests/**/*_test.lua）
 go test ./pkg/ -run TestLuaTestFramework -count=1
+# 单文件（路径相对 pkg/）或封装脚本
+LUMINA_LUA_TEST=testdata/lua_tests/examples/scrollview_test.lua go test ./pkg/ -run TestLuaTestFramework -count=1
+./scripts/lua-test.sh scrollview
 
 # 性能测试
 go test ./pkg/ -run TestPerf
@@ -188,6 +191,116 @@ stats := app.Tracker().Stats()
 ```bash
 lumina --watch examples/counter.lua
 ```
+
+---
+
+## 协议字符串速查（Lua ↔ 引擎）
+
+以下为 **代码与脚本里出现的约定字符串**（非穷举每个分支值），含义与典型使用场景。实现细节以 `pkg/render/engine.go`（`readDescriptor` / `readStyle`）、`pkg/render/events.go`、`pkg/render/node.go` 为准；对外 API 摘要见 **[API.md](./API.md)**。
+
+### 应用输入 `event.Event.Type`（`pkg/app.go` → `Engine`）
+
+| 字符串 | 含义 | 场景 |
+|--------|------|------|
+| `mousedown` / `mouseup` / `mousemove` | 指针事件 | 终端 / WebSocket 适配器上报 |
+| `click` | 点击（或引擎在 mouseup 同格合成） | 路由到 `HandleClick` |
+| `keydown` / `keyup` | 键盘 | `HandleKeyDown` 等 |
+| `scroll` | 滚轮 | `HandleScroll`；`Event.Key` 常承载 `"up"`/`"down"` |
+| `resize` | 终端尺寸变化 | `Resize` + 全量重绘 |
+
+### 元素描述符表字段（`lumina.createElement` / `render` 返回的表）
+
+Lua 表 **键名**（字符串）与 Go 侧 `readDescriptor` 读取一致。
+
+| 字符串 | 含义 | 场景 |
+|--------|------|------|
+| `type` | 节点种类 | 见下表「节点 `type`」；省略时默认 **`box`** |
+| `id` | 节点标识 | 测试 `app:click("id")`、调试、部分 MCP 查询 |
+| `key` | 稳定键 | 列表/reconciler；子 **组件** 占位映射到 `ChildMap` |
+| `content` | 主文本内容 | `text`；`input`/`textarea` 受控内容 |
+| `value` | 与 `content` 等价（输入） | 受控 `input` / `textarea` |
+| `placeholder` | 占位文案 | `input` / `textarea` |
+| `scrollY` | 垂直滚动偏移（整数） | 带 `overflow: scroll` 的容器初始/受控滚动 |
+| `style` | 嵌套样式子表 | 任意元素 |
+| `children` | 子元素数组 | 容器；元素可为表或字符串（字符串→**`text`** 子节点） |
+| `focusable` / `disabled` / `autoFocus` | 布尔 | 焦点环、禁用、首焦 |
+| `onClick` / `onMouseEnter` / … | Lua 回调（registry ref） | 见下表「节点事件名」 |
+| `_factoryName` / `_props` | 组件工厂 | `lumina.Button` 等返回的占位；`type` 在内部变为 **`component`** |
+
+### 样式子表 `style = { ... }` 常用键名
+
+数值多为 **cell 单位**（整数或 Lua number）。字符串键在 `readStyle` / `readStyleFromMap` / `readStyleFields` 中读取。
+
+| 字符串 | 含义 | 场景 |
+|--------|------|------|
+| `width` / `height` / `flex` | 尺寸与伸缩 | 布局、`flex` 子分配 |
+| `padding` / `paddingTop` / `paddingBottom` / `paddingLeft` / `paddingRight` | 内边距 | 文本区、滚动可视区 |
+| `margin` / `marginTop` / … | 外边距 | 与 flex gap 等组合 |
+| `gap` | 主轴间隙 | `vbox`/`hbox` |
+| `minWidth` / `maxWidth` / `minHeight` / `maxHeight` | 约束 | 防止撑破/收缩 |
+| `justify` / `align` | flex 对齐 | `start`/`end`/`center`/`stretch` 等（以 `layout.go` 解析为准） |
+| `border` | 边框样式 | **`none`** / **`single`** / **`rounded`** 等；影响占位与裁剪 |
+| `foreground` / `background` | 颜色 | **`fg`** / **`bg`** 为别名 |
+| `bold` / `dim` / `underline` | 文本样式 | 布尔 |
+| `overflow` | 溢出行为 | 见下表「`overflow` 取值」 |
+| `position` | 定位模式 | 见下表「`position` 取值」 |
+| `top` / `left` / `right` / `bottom` | 偏移 | 与 `position` 配合；`right`/`bottom` 常用 **`-1`** 表「贴边」约定 |
+| `zIndex` | 叠放（有限使用） | 层内顺序辅助 |
+
+### 节点 `type`（基元与占位）
+
+| 字符串 | 含义 | 场景 |
+|--------|------|------|
+| `box` | 通用块 | **默认**；无 `type` 时 |
+| `vbox` / `hbox` | 纵向/横向 flex | 布局、Go Widget 根节点常用 `vbox` |
+| `text` | 文本叶 | `content` 或 `children` 字符串简写 |
+| `input` / `textarea` | 可编辑 | 键盘由 `HandleInputKeyDown` 优先处理 |
+| `component` | 子组件占位 | 工厂节点；真实类型在 `ComponentType` + Lua `_props` |
+
+### 样式语义值（字符串，常用）
+
+| 字符串 | 字段 | 含义 | 场景 |
+|--------|------|------|------|
+| `scroll` | `overflow` | 可滚动容器 | 裁剪内容、`ScrollY`、`autoScroll`、滚动条列 |
+| `hidden` | `overflow` | 裁剪、不滚动 | 如 Window 内容区默认 |
+| `none` / `single` / `rounded` | `border` | 边框绘制与占位 | `hitTest` 内可视区裁剪 |
+| `fixed` / `absolute` | `position` | 定位 | 与 `top`/`left` 等配合 |
+
+### Lua 节点事件属性名 ↔ 引擎 `hasHandler` / 分发
+
+Lua 表字段 **`onXxx`**（小驼峰）对应节点上 `OnXxx` ref。  
+**`HitTestWithHandler` / `hasHandler` 的 `eventType` 字符串**（用于带 handler 的命中）：
+
+| eventType | 对应 Lua 字段 | 场景 |
+|-----------|----------------|------|
+| `click` | `onClick` | 点击冒泡 |
+| `mousedown` / `mouseup` | `onMouseDown` / `onMouseUp` | 按下/抬起 |
+| `mouseenter` / `mouseleave` | `onMouseEnter` / `onMouseLeave` | 悬停（引擎 + Widget 协同） |
+| `keydown` | `onKeyDown` | 未被子组件消费时的 Lua 快捷键 |
+| `scroll` | `onScroll` | 自定义滚轮处理（优先于 `autoScroll`） |
+| `submit` | `onSubmit` | 如输入框内 Enter 向上冒泡 |
+| `outsideclick` | `onOutsideClick` | 设计上有此分支；Modal 外点击等见 `events.go` |
+
+### `dispatchWidgetEvent` → Go Widget 的 `WidgetEvent.Type`
+
+引擎向 **`WidgetDef.OnEvent`** 传入的 **`event.Type`**（与 Lua 节点 `onXxx` 不是同一套名字）：
+
+| Type | 场景 |
+|------|------|
+| `mousemove` / `mouseenter` / `mouseleave` | 指针与悬停 |
+| `mousedown` / `mouseup` / `click` | 按键与点击 |
+| `keydown` | 焦点在组件子树内时的键盘（`event.Key` 为键名） |
+
+部分 Widget 在单元测试或内部还会使用 **`focus` / `blur`**（见 `WidgetEvent` 注释）；与 **Lua 节点 `onFocus`/`onBlur`**（由 `setFocus` 直接 `callLuaRefSimple`）路径不同，勿混用。
+
+### 其它约定
+
+| 字符串 | 含义 | 场景 |
+|--------|------|------|
+| `_childNodes` | Go Widget 子节点切片 | 引擎在渲染 Lua 子树时注入 `props` |
+| `ScrollHeight` | 非 Lua 字符串；为 **Node 字段** | layout 写入，供 `computeMaxScrollY` |
+
+**说明**：未在表中列出的键仍可能存在于扩展样式或未来字段；加新协议时建议同步本表与 **API.md**。
 
 ---
 
