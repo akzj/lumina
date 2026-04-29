@@ -20,96 +20,8 @@ func CheckMetric(m Metric, expected int) FrameCheck {
 	}
 }
 
-// CheckRenders asserts the Renders counter equals expected.
-func CheckRenders(expected int) FrameCheck {
-	return func(f FrameStats) (bool, string) {
-		got := f.Get(Renders)
-		if got != expected {
-			return false, fmt.Sprintf("Renders: got %d, want %d", got, expected)
-		}
-		return true, ""
-	}
-}
-
-// CheckLayouts asserts the Layouts counter equals expected.
-func CheckLayouts(expected int) FrameCheck {
-	return func(f FrameStats) (bool, string) {
-		got := f.Get(Layouts)
-		if got != expected {
-			return false, fmt.Sprintf("Layouts: got %d, want %d", got, expected)
-		}
-		return true, ""
-	}
-}
-
-// CheckPaints asserts the Paints counter equals expected.
-func CheckPaints(expected int) FrameCheck {
-	return func(f FrameStats) (bool, string) {
-		got := f.Get(Paints)
-		if got != expected {
-			return false, fmt.Sprintf("Paints: got %d, want %d", got, expected)
-		}
-		return true, ""
-	}
-}
-
-// CheckOcclusionBuilds asserts the OcclusionBuilds counter equals expected.
-func CheckOcclusionBuilds(expected int) FrameCheck {
-	return func(f FrameStats) (bool, string) {
-		got := f.Get(OcclusionBuilds)
-		if got != expected {
-			return false, fmt.Sprintf("OcclusionBuilds: got %d, want %d", got, expected)
-		}
-		return true, ""
-	}
-}
-
-// CheckOcclusionUpdates asserts the OcclusionUpdates counter equals expected.
-func CheckOcclusionUpdates(expected int) FrameCheck {
-	return func(f FrameStats) (bool, string) {
-		got := f.Get(OcclusionUpdates)
-		if got != expected {
-			return false, fmt.Sprintf("OcclusionUpdates: got %d, want %d", got, expected)
-		}
-		return true, ""
-	}
-}
-
-// CheckHitTesterRebuilds asserts the HitTesterRebuilds counter equals expected.
-func CheckHitTesterRebuilds(expected int) FrameCheck {
-	return func(f FrameStats) (bool, string) {
-		got := f.Get(HitTesterRebuilds)
-		if got != expected {
-			return false, fmt.Sprintf("HitTesterRebuilds: got %d, want %d", got, expected)
-		}
-		return true, ""
-	}
-}
-
-// CheckEventsDispatched asserts the EventsDispatched counter equals expected.
-func CheckEventsDispatched(expected int) FrameCheck {
-	return func(f FrameStats) (bool, string) {
-		got := f.Get(EventsDispatched)
-		if got != expected {
-			return false, fmt.Sprintf("EventsDispatched: got %d, want %d", got, expected)
-		}
-		return true, ""
-	}
-}
-
-// CheckEventsMissed asserts the EventsMissed counter equals expected.
-func CheckEventsMissed(expected int) FrameCheck {
-	return func(f FrameStats) (bool, string) {
-		got := f.Get(EventsMissed)
-		if got != expected {
-			return false, fmt.Sprintf("EventsMissed: got %d, want %d", got, expected)
-		}
-		return true, ""
-	}
-}
-
-// CheckRenderComponents asserts that exactly the given component IDs were rendered
-// (order-independent).
+// CheckRenderComponents asserts that exactly the given component IDs were recorded
+// via RecordComponent (order-independent).
 func CheckRenderComponents(expected ...string) FrameCheck {
 	return func(f FrameStats) (bool, string) {
 		got := make([]string, len(f.RenderComponents))
@@ -130,107 +42,82 @@ func CheckRenderComponents(expected ...string) FrameCheck {
 	}
 }
 
-// CheckHandlerFullSyncs asserts the HandlerFullSyncs counter equals expected.
-func CheckHandlerFullSyncs(expected int) FrameCheck {
+// CheckComponentsRendered asserts the render-count counter (ComponentsRendered) equals expected.
+func CheckComponentsRendered(expected int) FrameCheck {
 	return func(f FrameStats) (bool, string) {
-		got := f.Get(HandlerFullSyncs)
+		got := f.Get(ComponentsRendered)
 		if got != expected {
-			return false, fmt.Sprintf("HandlerFullSyncs: got %d, want %d", got, expected)
+			return false, fmt.Sprintf("render count: got %d, want %d", got, expected)
 		}
 		return true, ""
 	}
 }
 
-// CheckHandlerDirtySyncs asserts the HandlerDirtySyncs counter equals expected.
-func CheckHandlerDirtySyncs(expected int) FrameCheck {
+// CheckPaintCells asserts the PaintCells counter equals expected.
+func CheckPaintCells(expected int) FrameCheck {
 	return func(f FrameStats) (bool, string) {
-		got := f.Get(HandlerDirtySyncs)
+		got := f.Get(PaintCells)
 		if got != expected {
-			return false, fmt.Sprintf("HandlerDirtySyncs: got %d, want %d", got, expected)
+			return false, fmt.Sprintf("PaintCells: got %d, want %d", got, expected)
 		}
 		return true, ""
 	}
 }
 
-// --- V2 Render Engine checks ---
-
-// CheckV2ComponentsRendered asserts the V2ComponentsRendered counter equals expected.
-func CheckV2ComponentsRendered(expected int) FrameCheck {
+// CheckPaintCellsMax asserts the PaintCells counter is at most max.
+func CheckPaintCellsMax(max int) FrameCheck {
 	return func(f FrameStats) (bool, string) {
-		got := f.Get(V2ComponentsRendered)
-		if got != expected {
-			return false, fmt.Sprintf("V2ComponentsRendered: got %d, want %d", got, expected)
-		}
-		return true, ""
-	}
-}
-
-// CheckV2PaintCells asserts the V2PaintCells counter equals expected.
-func CheckV2PaintCells(expected int) FrameCheck {
-	return func(f FrameStats) (bool, string) {
-		got := f.Get(V2PaintCells)
-		if got != expected {
-			return false, fmt.Sprintf("V2PaintCells: got %d, want %d", got, expected)
-		}
-		return true, ""
-	}
-}
-
-// CheckV2PaintCellsMax asserts the V2PaintCells counter is at most max.
-func CheckV2PaintCellsMax(max int) FrameCheck {
-	return func(f FrameStats) (bool, string) {
-		got := f.Get(V2PaintCells)
+		got := f.Get(PaintCells)
 		if got > max {
-			return false, fmt.Sprintf("V2PaintCells: got %d, want ≤%d (overdraw!)", got, max)
+			return false, fmt.Sprintf("PaintCells: got %d, want ≤%d (overdraw!)", got, max)
 		}
 		return true, ""
 	}
 }
 
-// CheckV2PaintClearCells asserts the V2PaintClearCells counter equals expected.
-func CheckV2PaintClearCells(expected int) FrameCheck {
+// CheckPaintClearCells asserts the PaintClearCells counter equals expected.
+func CheckPaintClearCells(expected int) FrameCheck {
 	return func(f FrameStats) (bool, string) {
-		got := f.Get(V2PaintClearCells)
+		got := f.Get(PaintClearCells)
 		if got != expected {
-			return false, fmt.Sprintf("V2PaintClearCells: got %d, want %d", got, expected)
+			return false, fmt.Sprintf("PaintClearCells: got %d, want %d", got, expected)
 		}
 		return true, ""
 	}
 }
 
-// CheckV2DirtyRectArea asserts the V2DirtyRectArea counter equals expected.
-func CheckV2DirtyRectArea(expected int) FrameCheck {
+// CheckDirtyRectArea asserts the DirtyRectArea counter equals expected.
+func CheckDirtyRectArea(expected int) FrameCheck {
 	return func(f FrameStats) (bool, string) {
-		got := f.Get(V2DirtyRectArea)
+		got := f.Get(DirtyRectArea)
 		if got != expected {
-			return false, fmt.Sprintf("V2DirtyRectArea: got %d, want %d", got, expected)
+			return false, fmt.Sprintf("DirtyRectArea: got %d, want %d", got, expected)
 		}
 		return true, ""
 	}
 }
 
-// CheckV2DirtyRectAreaMax asserts the V2DirtyRectArea counter is at most max.
-func CheckV2DirtyRectAreaMax(max int) FrameCheck {
+// CheckDirtyRectAreaMax asserts the DirtyRectArea counter is at most max.
+func CheckDirtyRectAreaMax(max int) FrameCheck {
 	return func(f FrameStats) (bool, string) {
-		got := f.Get(V2DirtyRectArea)
+		got := f.Get(DirtyRectArea)
 		if got > max {
-			return false, fmt.Sprintf("V2DirtyRectArea: got %d, want ≤%d (overdraw!)", got, max)
+			return false, fmt.Sprintf("DirtyRectArea: got %d, want ≤%d (overdraw!)", got, max)
 		}
 		return true, ""
 	}
 }
 
-// CheckV2ComponentsRenderedMax asserts the V2ComponentsRendered counter is at most max.
-func CheckV2ComponentsRenderedMax(max int) FrameCheck {
+// CheckComponentsRenderedMax asserts the render-count counter is at most max.
+func CheckComponentsRenderedMax(max int) FrameCheck {
 	return func(f FrameStats) (bool, string) {
-		got := f.Get(V2ComponentsRendered)
+		got := f.Get(ComponentsRendered)
 		if got > max {
-			return false, fmt.Sprintf("V2ComponentsRendered: got %d, want ≤%d", got, max)
+			return false, fmt.Sprintf("render count: got %d, want ≤%d", got, max)
 		}
 		return true, ""
 	}
 }
-
 
 // AssertLastFrame asserts all checks against the last completed frame.
 func (t *Tracker) AssertLastFrame(tb testing.TB, checks ...FrameCheck) {

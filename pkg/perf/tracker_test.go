@@ -6,18 +6,17 @@ import (
 
 func TestTracker_Disabled_NoOp(t *testing.T) {
 	tr := NewTracker(10)
-	// Not enabled — all calls should be no-ops.
 	tr.BeginFrame()
-	tr.Record(Renders, 5)
+	tr.Record(PaintCells, 5)
 	tr.RecordComponent("comp1")
 	tr.RecordEvent("click", true)
 	tr.EndFrame()
 
 	f := tr.LastFrame()
-	if f.Get(Renders) != 0 {
-		t.Errorf("disabled tracker should not record: Renders=%d", f.Get(Renders))
+	if f.Get(PaintCells) != 0 {
+		t.Errorf("disabled tracker should not record: PaintCells=%d", f.Get(PaintCells))
 	}
-	if f.Get(EventsDispatched) != 0 {
+	if f.EventsByType["click"] != 0 {
 		t.Errorf("disabled tracker should not record events")
 	}
 }
@@ -27,12 +26,12 @@ func TestTracker_BeginEndFrame(t *testing.T) {
 	tr.Enable()
 
 	tr.BeginFrame()
-	tr.Record(Renders, 1)
+	tr.Record(FlushCalls, 1)
 	tr.EndFrame()
 
 	f := tr.LastFrame()
-	if f.Get(Renders) != 1 {
-		t.Errorf("Renders: got %d, want 1", f.Get(Renders))
+	if f.Get(FlushCalls) != 1 {
+		t.Errorf("FlushCalls: got %d, want 1", f.Get(FlushCalls))
 	}
 	if f.Duration <= 0 {
 		t.Errorf("Duration should be positive, got %v", f.Duration)
@@ -47,15 +46,14 @@ func TestTracker_Record_Counters(t *testing.T) {
 	tr.Enable()
 
 	tr.BeginFrame()
-	tr.Record(Renders, 2)
-	tr.Record(Layouts, 3)
-	tr.Record(Paints, 1)
-	tr.Record(OcclusionBuilds, 1)
-	tr.Record(ComposeFull, 1)
-	tr.Record(HitTesterRebuilds, 1)
-	tr.Record(HandlerFullSyncs, 1)
-	tr.Record(WriteDirtyCalls, 4)
+	tr.Record(DirtyRectsOut, 2)
+	tr.Record(WriteDirtyCalls, 3)
+	tr.Record(WriteFullCalls, 1)
 	tr.Record(FlushCalls, 2)
+	tr.Record(ComponentsRendered, 4)
+	tr.Record(PaintCells, 10)
+	tr.Record(PaintClearCells, 5)
+	tr.Record(DirtyRectArea, 100)
 	tr.EndFrame()
 
 	f := tr.LastFrame()
@@ -63,15 +61,14 @@ func TestTracker_Record_Counters(t *testing.T) {
 		m    Metric
 		want int
 	}{
-		{Renders, 2},
-		{Layouts, 3},
-		{Paints, 1},
-		{OcclusionBuilds, 1},
-		{ComposeFull, 1},
-		{HitTesterRebuilds, 1},
-		{HandlerFullSyncs, 1},
-		{WriteDirtyCalls, 4},
+		{DirtyRectsOut, 2},
+		{WriteDirtyCalls, 3},
+		{WriteFullCalls, 1},
 		{FlushCalls, 2},
+		{ComponentsRendered, 4},
+		{PaintCells, 10},
+		{PaintClearCells, 5},
+		{DirtyRectArea, 100},
 	}
 	for _, c := range checks {
 		if got := f.Get(c.m); got != c.want {
@@ -90,8 +87,8 @@ func TestTracker_RecordComponent(t *testing.T) {
 	tr.EndFrame()
 
 	f := tr.LastFrame()
-	if f.Get(Renders) != 2 {
-		t.Errorf("Renders: got %d, want 2", f.Get(Renders))
+	if f.Get(ComponentsRendered) != 2 {
+		t.Errorf("render count: got %d, want 2", f.Get(ComponentsRendered))
 	}
 	if len(f.RenderComponents) != 2 {
 		t.Fatalf("RenderComponents len: got %d, want 2", len(f.RenderComponents))
@@ -112,12 +109,6 @@ func TestTracker_RecordEvent(t *testing.T) {
 	tr.EndFrame()
 
 	f := tr.LastFrame()
-	if f.Get(EventsDispatched) != 2 {
-		t.Errorf("EventsDispatched: got %d, want 2", f.Get(EventsDispatched))
-	}
-	if f.Get(EventsMissed) != 1 {
-		t.Errorf("EventsMissed: got %d, want 1", f.Get(EventsMissed))
-	}
 	if f.EventsByType["click"] != 1 {
 		t.Errorf("EventsByType[click]: got %d, want 1", f.EventsByType["click"])
 	}
@@ -133,10 +124,9 @@ func TestTracker_History_RingBuffer(t *testing.T) {
 	tr := NewTracker(3)
 	tr.Enable()
 
-	// Record 5 frames in a ring buffer of size 3.
 	for i := 1; i <= 5; i++ {
 		tr.BeginFrame()
-		tr.Record(Renders, i)
+		tr.Record(FlushCalls, i)
 		tr.EndFrame()
 	}
 
@@ -144,11 +134,10 @@ func TestTracker_History_RingBuffer(t *testing.T) {
 	if len(hist) != 3 {
 		t.Fatalf("History len: got %d, want 3", len(hist))
 	}
-	// Should contain frames 3, 4, 5 (oldest first).
 	expected := []int{3, 4, 5}
 	for i, h := range hist {
-		if got := h.Get(Renders); got != expected[i] {
-			t.Errorf("History[%d].Renders: got %d, want %d", i, got, expected[i])
+		if got := h.Get(FlushCalls); got != expected[i] {
+			t.Errorf("History[%d].FlushCalls: got %d, want %d", i, got, expected[i])
 		}
 	}
 }
@@ -159,8 +148,8 @@ func TestTracker_TotalStats_Accumulates(t *testing.T) {
 
 	for i := 0; i < 3; i++ {
 		tr.BeginFrame()
-		tr.Record(Renders, 2)
-		tr.Record(Layouts, 1)
+		tr.Record(PaintCells, 2)
+		tr.Record(WriteDirtyCalls, 1)
 		tr.EndFrame()
 	}
 
@@ -168,11 +157,11 @@ func TestTracker_TotalStats_Accumulates(t *testing.T) {
 	if total.Frames != 3 {
 		t.Errorf("Frames: got %d, want 3", total.Frames)
 	}
-	if total.Get(Renders) != 6 {
-		t.Errorf("Total Renders: got %d, want 6", total.Get(Renders))
+	if total.Get(PaintCells) != 6 {
+		t.Errorf("Total PaintCells: got %d, want 6", total.Get(PaintCells))
 	}
-	if total.Get(Layouts) != 3 {
-		t.Errorf("Total Layouts: got %d, want 3", total.Get(Layouts))
+	if total.Get(WriteDirtyCalls) != 3 {
+		t.Errorf("Total WriteDirtyCalls: got %d, want 3", total.Get(WriteDirtyCalls))
 	}
 	if total.TotalDuration <= 0 {
 		t.Error("TotalDuration should be positive")
@@ -184,7 +173,7 @@ func TestTracker_Reset(t *testing.T) {
 	tr.Enable()
 
 	tr.BeginFrame()
-	tr.Record(Renders, 5)
+	tr.Record(FlushCalls, 5)
 	tr.EndFrame()
 
 	tr.Reset()
@@ -193,8 +182,8 @@ func TestTracker_Reset(t *testing.T) {
 	if total.Frames != 0 {
 		t.Errorf("after reset, Frames: got %d, want 0", total.Frames)
 	}
-	if total.Get(Renders) != 0 {
-		t.Errorf("after reset, Renders: got %d, want 0", total.Get(Renders))
+	if total.Get(FlushCalls) != 0 {
+		t.Errorf("after reset, FlushCalls: got %d, want 0", total.Get(FlushCalls))
 	}
 }
 
@@ -210,14 +199,14 @@ func TestTracker_Alert(t *testing.T) {
 	})
 
 	tr.BeginFrame()
-	tr.Record(Renders, 7)
+	tr.Record(PaintCells, 7)
 	tr.EndFrame()
 
 	if alertCalled != 1 {
 		t.Errorf("alert called %d times, want 1", alertCalled)
 	}
-	if alertFrame.Get(Renders) != 7 {
-		t.Errorf("alert frame Renders: got %d, want 7", alertFrame.Get(Renders))
+	if alertFrame.Get(PaintCells) != 7 {
+		t.Errorf("alert frame PaintCells: got %d, want 7", alertFrame.Get(PaintCells))
 	}
 }
 
@@ -226,7 +215,7 @@ func TestTracker_Report_NotEmpty(t *testing.T) {
 	tr.Enable()
 
 	tr.BeginFrame()
-	tr.Record(Renders, 1)
+	tr.Record(FlushCalls, 1)
 	tr.RecordComponent("test-comp")
 	tr.RecordEvent("click", true)
 	tr.EndFrame()
@@ -245,7 +234,7 @@ func TestTracker_TotalReport_NotEmpty(t *testing.T) {
 	tr.Enable()
 
 	tr.BeginFrame()
-	tr.Record(Renders, 1)
+	tr.Record(FlushCalls, 1)
 	tr.EndFrame()
 
 	report := tr.TotalReport()
@@ -259,15 +248,14 @@ func TestTracker_AssertLastFrame(t *testing.T) {
 	tr.Enable()
 
 	tr.BeginFrame()
-	tr.Record(Layouts, 3)
+	tr.Record(WriteDirtyCalls, 3)
 	tr.RecordComponent("c1")
 	tr.RecordComponent("c2")
 	tr.EndFrame()
 
-	// RecordComponent increments Renders, so 2 calls = Renders=2.
 	tr.AssertLastFrame(t,
-		CheckRenders(2),
-		CheckLayouts(3),
+		CheckComponentsRendered(2),
+		CheckMetric(WriteDirtyCalls, 3),
 		CheckRenderComponents("c1", "c2"),
 	)
 }
@@ -281,7 +269,6 @@ func TestTracker_AssertLastFrame_RenderComponents_OrderIndependent(t *testing.T)
 	tr.RecordComponent("a")
 	tr.EndFrame()
 
-	// Order should not matter.
 	tr.AssertLastFrame(t,
 		CheckRenderComponents("a", "b"),
 	)
@@ -295,7 +282,6 @@ func TestTracker_MaxFrameDuration(t *testing.T) {
 	tr.EndFrame()
 
 	tr.BeginFrame()
-	// The second frame should also have a duration.
 	tr.EndFrame()
 
 	total := tr.TotalStats()
@@ -308,25 +294,23 @@ func TestTracker_FrameResets_BetweenFrames(t *testing.T) {
 	tr := NewTracker(10)
 	tr.Enable()
 
-	// Frame 1: record some counters.
 	tr.BeginFrame()
-	tr.Record(Renders, 5)
+	tr.Record(PaintCells, 5)
 	tr.RecordEvent("click", true)
 	tr.EndFrame()
 
-	// Frame 2: record different counters.
 	tr.BeginFrame()
-	tr.Record(Layouts, 1)
+	tr.Record(WriteDirtyCalls, 1)
 	tr.EndFrame()
 
 	f := tr.LastFrame()
-	if f.Get(Renders) != 0 {
-		t.Errorf("Frame 2 Renders should be 0, got %d", f.Get(Renders))
+	if f.Get(PaintCells) != 0 {
+		t.Errorf("Frame 2 PaintCells should be 0, got %d", f.Get(PaintCells))
 	}
-	if f.Get(Layouts) != 1 {
-		t.Errorf("Frame 2 Layouts should be 1, got %d", f.Get(Layouts))
+	if f.Get(WriteDirtyCalls) != 1 {
+		t.Errorf("Frame 2 WriteDirtyCalls should be 1, got %d", f.Get(WriteDirtyCalls))
 	}
-	if f.Get(EventsDispatched) != 0 {
-		t.Errorf("Frame 2 EventsDispatched should be 0, got %d", f.Get(EventsDispatched))
+	if f.EventsByType["click"] != 0 {
+		t.Errorf("Frame 2 EventsByType should be fresh, got click=%d", f.EventsByType["click"])
 	}
 }

@@ -265,9 +265,9 @@ func TestTestAdapter_DirtyRects(t *testing.T) {
 
 func TestTUI_CJKAlignment_WriteFull(t *testing.T) {
 	// Buffer: 6 columns wide, 1 row.
-	// Layout: '中'(wide) at col 0, padding at col 1, 'A' at col 2, '│' at col 3, ' ' at 4, ' ' at 5
+	// Layout: U+4E2D wide ideograph at col 0, padding at col 1, 'A' at col 2, '│' at col 3, ' ' at 4, ' ' at 5
 	screen := buffer.New(6, 1)
-	screen.Set(0, 0, buffer.Cell{Char: '中', Wide: true, Foreground: "#ffffff"})
+	screen.Set(0, 0, buffer.Cell{Char: '\u4e2d', Wide: true, Foreground: "#ffffff"})
 	screen.Set(1, 0, buffer.Cell{Char: 0, Foreground: "#ffffff"}) // padding cell
 	screen.Set(2, 0, buffer.Cell{Char: 'A', Foreground: "#ffffff"})
 	screen.Set(3, 0, buffer.Cell{Char: '│', Foreground: "#ffffff"})
@@ -285,21 +285,16 @@ func TestTUI_CJKAlignment_WriteFull(t *testing.T) {
 
 	out := buf.String()
 
-	// The output should contain '中' followed by 'A' then '│'.
-	// It should NOT contain a space between '中' and 'A' (the padding cell must be skipped).
-	// Count the visible characters after stripping ANSI escapes.
+	// Visible order: wide ideograph (2 cols) + 'A' + vertical line; no space between ideograph and 'A'.
 	stripped := stripANSI(out)
 
-	// Should be: 中A│  (with spaces at end)
-	// The wide char '中' occupies 2 columns, so terminal cursor is at col 3 after it.
-	// Then 'A' at col 3, '│' at col 4, spaces at 5-6.
-	if !strings.Contains(stripped, "中A│") {
-		t.Errorf("expected '中A│' in output, got stripped=%q", stripped)
+	wantSeq := "\u4e2dA\u2502" // ideograph + A + BOX DRAWINGS LIGHT VERTICAL
+	if !strings.Contains(stripped, wantSeq) {
+		t.Errorf("expected %q in output, got stripped=%q", wantSeq, stripped)
 	}
 
-	// The padding cell (Char=0 → ' ') should NOT appear between 中 and A.
-	// If padding cell was written, we'd see "中 A│" instead of "中A│".
-	if strings.Contains(stripped, "中 A") {
+	// Padding cell must not appear as a space between ideograph and 'A'.
+	if strings.Contains(stripped, "\u4e2d A\u2502") {
 		t.Error("padding cell was written as space — CJK alignment is broken")
 	}
 }
@@ -307,10 +302,10 @@ func TestTUI_CJKAlignment_WriteFull(t *testing.T) {
 func TestTUI_CJKAlignment_WriteDirty(t *testing.T) {
 	// Same as above but via WriteDirty.
 	screen := buffer.New(6, 1)
-	screen.Set(0, 0, buffer.Cell{Char: '中', Wide: true, Foreground: "#ffffff"})
+	screen.Set(0, 0, buffer.Cell{Char: '\u4e2d', Wide: true, Foreground: "#ffffff"})
 	screen.Set(1, 0, buffer.Cell{Char: 0, Foreground: "#ffffff"})
 	screen.Set(2, 0, buffer.Cell{Char: 'A', Foreground: "#ffffff"})
-	screen.Set(3, 0, buffer.Cell{Char: '│', Foreground: "#ffffff"})
+	screen.Set(3, 0, buffer.Cell{Char: '\u2502', Foreground: "#ffffff"})
 	screen.Set(4, 0, buffer.Cell{Char: ' '})
 	screen.Set(5, 0, buffer.Cell{Char: ' '})
 
@@ -327,19 +322,20 @@ func TestTUI_CJKAlignment_WriteDirty(t *testing.T) {
 	out := buf.String()
 	stripped := stripANSI(out)
 
-	if !strings.Contains(stripped, "中A│") {
-		t.Errorf("expected '中A│' in dirty output, got stripped=%q", stripped)
+	wantSeq := "\u4e2dA\u2502"
+	if !strings.Contains(stripped, wantSeq) {
+		t.Errorf("expected %q in dirty output, got stripped=%q", wantSeq, stripped)
 	}
-	if strings.Contains(stripped, "中 A") {
+	if strings.Contains(stripped, "\u4e2d A") {
 		t.Error("padding cell was written as space in WriteDirty — CJK alignment is broken")
 	}
 }
 
 func TestTUI_MixedCJKASCII(t *testing.T) {
-	// "A中B" → A at col 0, 中 at col 1 (wide), padding at col 2, B at col 3
+	// A + wide ideograph (U+4E2D) + padding + B
 	screen := buffer.New(4, 1)
 	screen.Set(0, 0, buffer.Cell{Char: 'A'})
-	screen.Set(1, 0, buffer.Cell{Char: '中', Wide: true})
+	screen.Set(1, 0, buffer.Cell{Char: '\u4e2d', Wide: true})
 	screen.Set(2, 0, buffer.Cell{Char: 0}) // padding
 	screen.Set(3, 0, buffer.Cell{Char: 'B'})
 
@@ -354,9 +350,9 @@ func TestTUI_MixedCJKASCII(t *testing.T) {
 
 	stripped := stripANSI(buf.String())
 
-	// Should be "A中B" — no extra space from padding cell
-	if !strings.Contains(stripped, "A中B") {
-		t.Errorf("expected 'A中B' in output, got stripped=%q", stripped)
+	want := "A\u4e2dB"
+	if !strings.Contains(stripped, want) {
+		t.Errorf("expected %q in output, got stripped=%q", want, stripped)
 	}
 }
 

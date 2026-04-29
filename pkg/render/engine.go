@@ -114,7 +114,7 @@ type Engine struct {
 	ThemeGetter func() map[string]string
 }
 
-// SetTracker sets the performance tracker for recording V2 engine metrics.
+// SetTracker sets the performance tracker for recording render-engine metrics.
 func (e *Engine) SetTracker(t *perf.Tracker) {
 	e.tracker = t
 }
@@ -324,7 +324,7 @@ func (e *Engine) RenderDirty() {
 	// 1. Render dirty components in dependency order (parents first)
 	rendered := e.renderInOrder()
 	if e.tracker != nil {
-		e.tracker.Record(perf.V2ComponentsRendered, rendered)
+		e.tracker.Record(perf.ComponentsRendered, rendered)
 	}
 
 	// 2. Graft child component RootNodes into parent tree
@@ -343,9 +343,9 @@ func (e *Engine) RenderDirty() {
 	}
 	if rendered == 0 && !anyDirty {
 		if e.tracker != nil {
-			e.tracker.Record(perf.V2PaintCells, 0)
-			e.tracker.Record(perf.V2PaintClearCells, 0)
-			e.tracker.Record(perf.V2DirtyRectArea, 0)
+			e.tracker.Record(perf.PaintCells, 0)
+			e.tracker.Record(perf.PaintClearCells, 0)
+			e.tracker.Record(perf.DirtyRectArea, 0)
 		}
 		return
 	}
@@ -399,9 +399,9 @@ func (e *Engine) RenderDirty() {
 	// 6. Record paint stats from CellBuffer.
 	if e.tracker != nil {
 		stats := e.buffer.Stats()
-		e.tracker.Record(perf.V2PaintCells, stats.WriteCount)
-		e.tracker.Record(perf.V2PaintClearCells, stats.ClearCount)
-		e.tracker.Record(perf.V2DirtyRectArea, stats.DirtyW*stats.DirtyH)
+		e.tracker.Record(perf.PaintCells, stats.WriteCount)
+		e.tracker.Record(perf.PaintClearCells, stats.ClearCount)
+		e.tracker.Record(perf.DirtyRectArea, stats.DirtyW*stats.DirtyH)
 	}
 
 	// 7. Fire pending useEffect callbacks (after paint, like React)
@@ -427,7 +427,7 @@ func (e *Engine) RenderAll() {
 	// Render all components in dependency order (parents first)
 	rendered := e.renderInOrder()
 	if e.tracker != nil {
-		e.tracker.Record(perf.V2ComponentsRendered, rendered)
+		e.tracker.Record(perf.ComponentsRendered, rendered)
 	}
 
 	// Graft child component RootNodes into parent tree
@@ -471,9 +471,9 @@ func (e *Engine) RenderAll() {
 	// Record paint stats from CellBuffer.
 	if e.tracker != nil {
 		stats := e.buffer.Stats()
-		e.tracker.Record(perf.V2PaintCells, stats.WriteCount)
-		e.tracker.Record(perf.V2PaintClearCells, stats.ClearCount)
-		e.tracker.Record(perf.V2DirtyRectArea, stats.DirtyW*stats.DirtyH)
+		e.tracker.Record(perf.PaintCells, stats.WriteCount)
+		e.tracker.Record(perf.PaintClearCells, stats.ClearCount)
+		e.tracker.Record(perf.DirtyRectArea, stats.DirtyW*stats.DirtyH)
 	}
 
 	// Fire pending useEffect callbacks (after paint, like React)

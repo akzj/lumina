@@ -174,14 +174,14 @@ assert(cell.Char == 'H')
 
 ```go
 const (
-    V2ComponentsRendered  // 本帧渲染的组件数
-    V2PaintCells          // 本帧写入的 cell 数
-    V2PaintClearCells     // 本帧清除的 cell 数
-    V2DirtyRectArea       // 脏区面积
-    WriteFullCalls        // WriteFull 调用次数
-    WriteDirtyCalls       // WriteDirty 调用次数
-    DirtyRectsOut         // 输出的脏区数
-    FlushCalls            // Flush 调用次数
+    DirtyRectsOut
+    WriteDirtyCalls
+    WriteFullCalls
+    FlushCalls
+    ComponentsRendered    // renderComponent invocations this frame
+    PaintCells            // 本帧写入的 cell 数
+    PaintClearCells       // 本帧清除的 cell 数
+    DirtyRectArea         // 脏区面积 (DirtyW*DirtyH)
 )
 ```
 
