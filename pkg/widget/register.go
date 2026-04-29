@@ -19,5 +19,6 @@ func All() []*Widget {
 		Dropdown,
 		Spacer,
 		Window,
+		ScrollView,
 	}
 }
