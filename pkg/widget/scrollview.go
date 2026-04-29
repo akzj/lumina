@@ -11,7 +11,8 @@ type ScrollViewState struct {
 
 // ScrollView is the built-in scrollable container widget.
 // It wraps children in a vbox with overflow:"scroll", provides keyboard scrolling
-// (↑/↓/PageUp/PageDown/Home/End), and the engine paints a scrollbar in the
+// (ArrowUp/ArrowDown/Up/Down/j/k, PageUp/PageDown, Home/End), and the engine paints
+// a scrollbar in the
 // reserved right column.
 //
 // Props:
@@ -67,10 +68,10 @@ var ScrollView = &Widget{
 		}
 
 		switch event.Key {
-		case "Up", "k":
+		case "ArrowUp", "Up", "k":
 			event.ScrollBy = -1
 			return true
-		case "Down", "j":
+		case "ArrowDown", "Down", "j":
 			event.ScrollBy = 1
 			return true
 		case "PageUp":
