@@ -286,6 +286,11 @@ func computeFlex(node *Node, x, y, w, h int) {
 
 	case "text":
 		layoutText(node, layoutW)
+		// Respect explicit height constraint — layoutText computes natural height
+		// but explicit style.Height should override (clamp/truncate text)
+		if style.Height > 0 {
+			node.H = clamp(style.Height, style.MinHeight, style.MaxHeight)
+		}
 
 	case "vbox":
 		layoutVBox(node, contentX, contentY, layoutW, contentH, style)
