@@ -246,9 +246,17 @@ func (a *App) HandleEvent(e *event.Event) {
 				a.refreshDevToolsV2()
 				return
 			}
-			// Elements tab scroll: arrow keys and page up/down
+			// Elements tab: inspect pick, clear selection, scroll
 			if a.devtools.ActiveTab == devtools.TabElements {
 				switch e.Key {
+				case "i":
+					a.devtools.ArmElementsPick()
+					a.refreshDevToolsV2()
+					return
+				case "0", "Escape":
+					a.devtools.ClearElementsSelection()
+					a.refreshDevToolsV2()
+					return
 				case "ArrowUp", "Up":
 					a.devtools.ScrollElements(-1)
 					a.refreshDevToolsV2()
@@ -258,16 +266,37 @@ func (a *App) HandleEvent(e *event.Event) {
 					a.refreshDevToolsV2()
 					return
 				case "PageUp":
-					a.devtools.ScrollElements(-(a.devtools.Height - 3))
+					a.devtools.ScrollElements(-a.devtools.ElementsPageScrollLines())
 					a.refreshDevToolsV2()
 					return
 				case "PageDown":
-					a.devtools.ScrollElements(a.devtools.Height - 3)
+					a.devtools.ScrollElements(a.devtools.ElementsPageScrollLines())
 					a.refreshDevToolsV2()
 					return
 				}
 			}
 		}
+	}
+
+	// Elements inspect: one-shot mousedown pick above the panel (no engine mousedown).
+	if e.Type == "mousedown" && a.devtools.Visible && a.devtools.ElementsPickArmed() {
+		a.devtools.ClearElementsPickArm()
+		panelY := a.height - a.devtools.Height
+		// Prevent spurious click synthesis on the following mouseup.
+		a.mouseDownX = -1
+		a.mouseDownY = -1
+		if a.devtools.ActiveTab == devtools.TabElements && e.Y < panelY {
+			r := a.engine.Root()
+			if r != nil && r.RootNode != nil {
+				if hit := a.engine.HitTestScreen(e.X, e.Y); hit != nil {
+					if idx := preorderIndexOfHit(r.RootNode, hit); idx >= 0 {
+						a.devtools.SetElementsSelection(idx)
+					}
+				}
+			}
+		}
+		a.refreshDevToolsV2()
+		return
 	}
 
 	switch e.Type {

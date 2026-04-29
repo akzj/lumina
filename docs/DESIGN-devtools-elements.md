@@ -8,7 +8,7 @@
 ## MVP（建议第一版）
 
 1. **树**：提高或取消过严的 `maxDepth` / `maxNodes`，或改为可配置；支持 **折叠状态**（存在 `devtools.Panel`）。
-2. **选中**：**Inspect 模式**（如 Shift+点击或快捷键）→ `HitTest` → 记录 `selectedId`，树 **滚动到该项** 并展开祖先路径。
+2. **选中**：**Inspect 模式** — Elements 下按 **`i`** 武装，下一次 **在面板上方** 的 **mousedown** 用 `Engine.HitTestScreen` 命中节点，与快照 **同一前序 walk** 对齐为扁平下标；树 **滚动到该项**。未改 `event.Event`（无 Shift 等修饰字段）。清除选中：**`0`** 或 **`Escape`**。
 3. **详情**：选中节点展示 **几何（x,y,w,h）+ 主要 `Style` 字段 + `type` / `id` / `content` / `Component`**（第二列或下半屏）。
 
 ---

@@ -31,13 +31,46 @@ func TestPanel_SetTab(t *testing.T) {
 	if p.ActiveTab != TabElements {
 		t.Errorf("default tab should be Elements, got %d", p.ActiveTab)
 	}
+	p.ArmElementsPick()
 	p.SetTab(TabPerf)
 	if p.ActiveTab != TabPerf {
 		t.Errorf("expected TabPerf, got %d", p.ActiveTab)
 	}
+	if p.ElementsPickArmed() {
+		t.Error("switching away from Elements should disarm inspect pick")
+	}
 	p.SetTab(TabElements)
 	if p.ActiveTab != TabElements {
 		t.Errorf("expected TabElements, got %d", p.ActiveTab)
+	}
+}
+
+func TestPanel_ElementsScrollClamp(t *testing.T) {
+	tracker := perf.NewTracker(10)
+	p := NewPanel(tracker)
+	p.Height = 24
+	p.Width = 80
+	tree := make([]NodeInfo, 50)
+	for i := range tree {
+		tree[i] = NodeInfo{Type: "box", Depth: 0}
+	}
+	p.UpdateNodeTree(tree)
+	p.elementsScrollY = 1000
+	p.ScrollElements(0)
+	if p.elementsScrollY < 0 || p.elementsScrollY > len(tree) {
+		t.Errorf("scroll should clamp into valid range, got scrollY=%d", p.elementsScrollY)
+	}
+}
+
+func TestPanel_OnElementsTreeRebuiltClampsSelection(t *testing.T) {
+	tracker := perf.NewTracker(10)
+	p := NewPanel(tracker)
+	p.UpdateNodeTree([]NodeInfo{{Type: "box"}, {Type: "box"}, {Type: "box"}})
+	p.SetElementsSelection(2)
+	p.UpdateNodeTree([]NodeInfo{{Type: "box"}})
+	p.OnElementsTreeRebuilt(1)
+	if p.ElementsSelectedIdx() != 0 {
+		t.Errorf("selection should clamp to last index, got %d", p.ElementsSelectedIdx())
 	}
 }
 

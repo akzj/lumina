@@ -3,6 +3,7 @@ package v2
 import (
 	"fmt"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -25,12 +26,17 @@ func (a *App) toggleDevToolsV2() {
 		}
 		a.devtools.Width = a.width
 		a.devtools.Height = panelH
+	} else {
+		a.devtools.ResetElementsInspect()
 	}
 	a.paintDevToolsV2()
 }
 
 // refreshDevToolsV2 repaints the DevTools panel immediately (for tab switching).
 func (a *App) refreshDevToolsV2() {
+	if a.devtools.ActiveTab == devtools.TabElements {
+		a.updateDevToolsElements()
+	}
 	a.devtools.SnapshotPerf()
 	a.paintDevToolsV2()
 }
@@ -61,42 +67,91 @@ func (a *App) updateDevToolsElements() {
 	root := a.engine.Root()
 	if root == nil || root.RootNode == nil {
 		a.devtools.UpdateNodeTree(nil)
+		a.devtools.OnElementsTreeRebuilt(0)
 		return
 	}
 
-	// Cap total nodes to avoid huge slices; depth limit keeps tree readable
-	const maxNodes = 500
-	const maxDepth = 5
+	infos := buildElementsNodeInfos(root.RootNode)
+	a.devtools.UpdateNodeTree(infos)
+	a.devtools.OnElementsTreeRebuilt(len(infos))
+}
 
+// buildElementsNodeInfos performs a preorder walk (same order as preorderIndexOfHit).
+func buildElementsNodeInfos(root *render.Node) []devtools.NodeInfo {
 	var infos []devtools.NodeInfo
-	var walk func(node *render.Node, depth int)
-	walk = func(node *render.Node, depth int) {
-		if len(infos) >= maxNodes {
+	var walk func(n *render.Node, depth int, path string)
+	walk = func(n *render.Node, depth int, path string) {
+		if len(infos) >= devtools.ElementsWalkMaxNodes {
 			return
 		}
+		cid, cfactory := "", ""
+		if n.Component != nil {
+			cid = n.Component.ID
+			cfactory = n.Component.Type
+		}
 		info := devtools.NodeInfo{
-			Type:    node.Type,
-			X:       node.X,
-			Y:       node.Y,
-			W:       node.W,
-			H:       node.H,
-			BG:      node.Style.Background,
-			FG:      node.Style.Foreground,
-			Content: node.Content,
-			Depth:   depth,
+			Type:             n.Type,
+			X:                n.X,
+			Y:                n.Y,
+			W:                n.W,
+			H:                n.H,
+			BG:               n.Style.Background,
+			FG:               n.Style.Foreground,
+			Content:          n.Content,
+			Depth:            depth,
+			ID:               n.ID,
+			Key:              n.Key,
+			Path:             path,
+			ScrollY:          n.ScrollY,
+			Overflow:         n.Style.Overflow,
+			Border:           n.Style.Border,
+			Flex:             n.Style.Flex,
+			ComponentID:      cid,
+			ComponentFactory: cfactory,
 		}
 		infos = append(infos, info)
-		if depth < maxDepth {
-			for _, child := range node.Children {
-				if len(infos) >= maxNodes {
-					return
-				}
-				walk(child, depth+1)
+		if depth >= devtools.ElementsWalkMaxDepth {
+			return
+		}
+		for i, ch := range n.Children {
+			childPath := path + "/" + strconv.Itoa(i)
+			walk(ch, depth+1, childPath)
+			if len(infos) >= devtools.ElementsWalkMaxNodes {
+				return
 			}
 		}
 	}
-	walk(root.RootNode, 0)
-	a.devtools.UpdateNodeTree(infos)
+	walk(root, 0, "0")
+	return infos
+}
+
+// preorderIndexOfHit returns the flat preorder index of hit in root's subtree, or -1.
+// Must use the same depth/node limits as buildElementsNodeInfos.
+func preorderIndexOfHit(root, hit *render.Node) int {
+	result := -1
+	idx := 0
+	var walk func(n *render.Node, depth int) bool
+	walk = func(n *render.Node, depth int) bool {
+		if idx >= devtools.ElementsWalkMaxNodes {
+			return false
+		}
+		if n == hit {
+			result = idx
+			return true
+		}
+		idx++
+		if depth >= devtools.ElementsWalkMaxDepth {
+			return false
+		}
+		for _, ch := range n.Children {
+			if walk(ch, depth+1) {
+				return true
+			}
+		}
+		return false
+	}
+	walk(root, 0)
+	return result
 }
 
 // paintDevToolsV2 paints the devtools panel directly onto the engine's CellBuffer.
@@ -161,7 +216,7 @@ func paintDevToolsOverlay(cb *render.CellBuffer, panel *devtools.Panel, startY, 
 
 	switch panel.ActiveTab {
 	case devtools.TabElements:
-		row = paintElementsTab(cb, panel, row, width, fgColor, bgColor, greenColor, dimColor)
+		row = paintElementsTab(cb, panel, row, width, fgColor, bgColor, greenColor, dimColor, activeColor, titleColor)
 	case devtools.TabPerf:
 		row = paintPerfTab(cb, panel, row, width, fgColor, bgColor, titleColor)
 	}
@@ -178,7 +233,7 @@ func buildTabBar(panel *devtools.Panel) string {
 	if panel.ActiveTab == devtools.TabPerf {
 		perfMark = "▸"
 	}
-	return fmt.Sprintf(" %sElements  %sPerf   %d FPS  [F12 close] [1 Elements] [2 Perf]",
+	return fmt.Sprintf(" %sElements  %sPerf   %d FPS  [F12] [1/2 tab] [i pick] [0/Esc clr]",
 		elemMark, perfMark, panel.FPS())
 }
 
@@ -220,8 +275,21 @@ func paintTextLine(cb *render.CellBuffer, row, maxWidth int, text, fg, bg string
 	}
 }
 
+func truncateElementsLine(s string, maxW int) string {
+	if maxW <= 0 {
+		return ""
+	}
+	if len(s) <= maxW {
+		return s
+	}
+	if maxW <= 3 {
+		return s[:maxW]
+	}
+	return s[:maxW-3] + "..."
+}
+
 // paintElementsTab renders the Elements tab content as a node tree.
-func paintElementsTab(cb *render.CellBuffer, panel *devtools.Panel, startRow, width int, fgColor, bgColor, greenColor, dimColor string) int {
+func paintElementsTab(cb *render.CellBuffer, panel *devtools.Panel, startRow, width int, fgColor, bgColor, greenColor, dimColor, activeColor, titleColor string) int {
 	row := startRow
 
 	nodes := panel.NodeTree()
@@ -232,7 +300,7 @@ func paintElementsTab(cb *render.CellBuffer, panel *devtools.Panel, startRow, wi
 	}
 
 	scrollY := panel.ElementsScrollY()
-	visibleLines := panel.Height - 3 // tab bar + blank + margin
+	visibleLines := panel.ElementsTreeVisibleLines()
 	if visibleLines < 1 {
 		visibleLines = 1
 	}
@@ -243,6 +311,9 @@ func paintElementsTab(cb *render.CellBuffer, panel *devtools.Panel, startRow, wi
 		paintTextLine(cb, row, width, indicator, dimColor, bgColor)
 		row++
 		visibleLines--
+		if visibleLines < 1 {
+			visibleLines = 1
+		}
 	}
 
 	end := scrollY + visibleLines
@@ -250,6 +321,7 @@ func paintElementsTab(cb *render.CellBuffer, panel *devtools.Panel, startRow, wi
 		end = len(nodes)
 	}
 
+	sel := panel.ElementsSelectedIdx()
 	for i := scrollY; i < end; i++ {
 		if row >= cb.Height() {
 			break
@@ -269,7 +341,11 @@ func paintElementsTab(cb *render.CellBuffer, panel *devtools.Panel, startRow, wi
 				line += " bg=" + node.BG
 			}
 		}
-		paintTextLine(cb, row, width, "  "+line, greenColor, bgColor)
+		lineFg := greenColor
+		if i == sel {
+			lineFg = activeColor
+		}
+		paintTextLine(cb, row, width, "  "+line, lineFg, bgColor)
 		row++
 	}
 
@@ -279,6 +355,32 @@ func paintElementsTab(cb *render.CellBuffer, panel *devtools.Panel, startRow, wi
 		indicator := fmt.Sprintf("  ↓ %d more below", remaining)
 		paintTextLine(cb, row, width, indicator, dimColor, bgColor)
 		row++
+	}
+
+	// Selection detail strip
+	if sel >= 0 && sel < len(nodes) && panel.ElementsDetailReservedLines() > 0 {
+		n := nodes[sel]
+		if row < cb.Height() {
+			paintTextLine(cb, row, width, "  ── selection ──", titleColor, bgColor)
+			row++
+		}
+		detail := []string{
+			fmt.Sprintf("  geom   %d,%d  %dx%d", n.X, n.Y, n.W, n.H),
+			fmt.Sprintf("  id=%s key=%s", n.ID, n.Key),
+			fmt.Sprintf("  path   %s", n.Path),
+			fmt.Sprintf("  scrollY=%d overflow=%s border=%s flex=%d", n.ScrollY, n.Overflow, n.Border, n.Flex),
+			fmt.Sprintf("  fg=%s bg=%s", n.FG, n.BG),
+		}
+		if n.ComponentID != "" || n.ComponentFactory != "" {
+			detail = append(detail, fmt.Sprintf("  component id=%s type=%s", n.ComponentID, n.ComponentFactory))
+		}
+		for _, s := range detail {
+			if row >= cb.Height() {
+				break
+			}
+			paintTextLine(cb, row, width, truncateElementsLine(s, width), fgColor, bgColor)
+			row++
+		}
 	}
 
 	return row

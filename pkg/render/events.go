@@ -148,6 +148,13 @@ func (e *Engine) hitTestLayers(x, y int) (*Node, *Layer) {
 	return nil, nil
 }
 
+// HitTestScreen returns the deepest node at (x, y) across all layers, top layer first.
+// Used by DevTools inspect picker; same semantics as pointer hit-testing.
+func (e *Engine) HitTestScreen(x, y int) *Node {
+	n, _ := e.hitTestLayers(x, y)
+	return n
+}
+
 // hitTestLayersWithHandler performs hit-test with handler across all layers.
 func (e *Engine) hitTestLayersWithHandler(x, y int, eventType string) (*Node, *Layer) {
 	for i := len(e.layers) - 1; i >= 0; i-- {
