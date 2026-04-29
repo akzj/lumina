@@ -18,6 +18,7 @@ func clearPaintDirty(node *Node) {
 		return
 	}
 	node.PaintDirty = false
+	node.PositionChanged = false
 	for _, child := range node.Children {
 		clearPaintDirty(child)
 	}
@@ -27,16 +28,26 @@ func clearPaintDirty(node *Node) {
 func clearPaintDirtyBelow(node *Node) {
 	for _, child := range node.Children {
 		child.PaintDirty = false
+		child.PositionChanged = false
 		clearPaintDirtyBelow(child)
 	}
 }
 
-
 // PaintDirty paints only PaintDirty nodes into the buffer.
 // Does NOT clear the buffer — only overwrites dirty regions.
 // Clears PaintDirty flags after painting.
+// If the root node itself is dirty, does a full repaint — this handles
+// the case where the root component re-rendered (e.g., bringToFront
+// reordered children). Full repaint ensures all absolute-positioned
+// children are correctly painted in z-order.
 func PaintDirty(buf *CellBuffer, root *Node) {
 	if buf == nil || root == nil {
+		return
+	}
+	if root.PaintDirty {
+		buf.ClearRect(root.X, root.Y, root.W, root.H)
+		paintNode(buf, root)
+		clearPaintDirty(root)
 		return
 	}
 	paintDirtyWalk(buf, root)
