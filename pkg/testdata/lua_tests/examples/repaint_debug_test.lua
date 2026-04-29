@@ -2,16 +2,13 @@ test.describe("Repaint debug", function()
     local app
     test.beforeEach(function()
         app = test.createApp(80, 24)
-        app:loadFile("../examples/windows_widget.lua")
     end)
     test.afterEach(function() app:destroy() end)
 
     test.it("simple move without bringToFront", function()
-        -- Modify example to NOT call bringToFront during drag
-        -- Actually, let's just test with a simpler setup
         app:loadString([[
-            lumina.store.set("w1", {x = 5, y = 1, w = 30, h = 8})
-            lumina.store.set("w2", {x = 15, y = 5, w = 30, h = 8})
+            lumina.store.set("w1", {x = 5, y = 1, w = 20, h = 6})
+            lumina.store.set("w2", {x = 15, y = 5, w = 20, h = 6})
             lumina.createComponent({
                 id = "test", name = "Test",
                 render = function()
@@ -41,18 +38,68 @@ test.describe("Repaint debug", function()
                 end,
             })
         ]])
-        
-        test.log("INITIAL (2 windows):")
-        test.log(app:screenText())
-        
+
         -- Drag WIN-A down (away from WIN-B overlap)
         app:mouseDown(15, 2)  -- WIN-A title bar
         app:mouseMove(15, 10) -- move down
         app:mouseUp(15, 10)
-        test.log("After WIN-A moved down:")
-        test.log(app:screenText())
-        
+
         -- Both should be visible
+        test.assert.eq(app:screenContains("WIN-A"), true)
+        test.assert.eq(app:screenContains("WIN-B"), true)
+    end)
+
+    test.it("drag with bringToFront preserves all windows", function()
+        app:loadString([[
+            local windows = {
+                {title = "WIN-A", x = 5, y = 1, w = 20, h = 6, open = true},
+                {title = "WIN-B", x = 15, y = 10, w = 20, h = 6, open = true},
+            }
+            lumina.store.set("windows", windows)
+
+            local function bringToFront(idx)
+                local wins = lumina.store.get("windows")
+                local w = table.remove(wins, idx)
+                wins[#wins + 1] = w
+                lumina.store.set("windows", wins)
+            end
+
+            lumina.createComponent({
+                id = "test", name = "Test",
+                render = function()
+                    local wins = lumina.useStore("windows")
+                    local children = {}
+                    for i, win in ipairs(wins) do
+                        if win.open then
+                            local winIdx = i
+                            children[#children + 1] = lumina.createElement(lumina.Window, {
+                                title = win.title, x = win.x, y = win.y,
+                                width = win.w, height = win.h, key = win.title,
+                                onChange = function(e)
+                                    if type(e) == "table" and e.type == "move" then
+                                        bringToFront(winIdx)
+                                        local ws = lumina.store.get("windows")
+                                        ws[#ws].x = e.x
+                                        ws[#ws].y = e.y
+                                        lumina.store.set("windows", ws)
+                                    end
+                                end,
+                            })
+                        end
+                    end
+                    return lumina.createElement("box", {
+                        style = {width = 80, height = 24}},
+                        table.unpack(children))
+                end,
+            })
+        ]])
+
+        -- Drag WIN-A right by 3
+        app:mouseDown(10, 2)
+        app:mouseMove(13, 2)
+        app:mouseUp(13, 2)
+
+        -- Both should be visible (non-overlapping titles)
         test.assert.eq(app:screenContains("WIN-A"), true)
         test.assert.eq(app:screenContains("WIN-B"), true)
     end)
