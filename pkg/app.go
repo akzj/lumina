@@ -58,6 +58,9 @@ type App struct {
 
 	// Last error from key handlers or other async Lua calls
 	lastError string
+
+	// Mouse click tracking: synthesize click only when mouseup at same position
+	mouseDownX, mouseDownY int
 }
 
 // NewApp creates a new App with the V2 render engine.
@@ -268,11 +271,19 @@ func (a *App) HandleEvent(e *event.Event) {
 	}
 
 	switch e.Type {
-	case "click", "mousedown":
+	case "mousedown":
+		a.mouseDownX = e.X
+		a.mouseDownY = e.Y
 		a.engine.HandleMouseDown(e.X, e.Y)
-		a.engine.HandleClick(e.X, e.Y)
 	case "mouseup":
 		a.engine.HandleMouseUp(e.X, e.Y)
+		// Synthesize click only if mouseup at same position as mousedown
+		if e.X == a.mouseDownX && e.Y == a.mouseDownY {
+			a.engine.HandleClick(e.X, e.Y)
+		}
+	case "click":
+		// Explicit click event (e.g. from WebSocket adapter)
+		a.engine.HandleClick(e.X, e.Y)
 	case "mousemove":
 		a.engine.HandleMouseMove(e.X, e.Y)
 	case "keydown":

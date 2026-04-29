@@ -308,8 +308,9 @@ func TestV2E2E_ClickEvent(t *testing.T) {
 		t.Fatal("expected 'Clicks:0' on initial render")
 	}
 
-	// Click on the component area.
+	// Click on the component area (mousedown + mouseup at same position = click).
 	app.HandleEvent(&event.Event{Type: "mousedown", X: 0, Y: 0})
+	app.HandleEvent(&event.Event{Type: "mouseup", X: 0, Y: 0})
 	app.RenderDirty()
 
 	if !screenHasString(ta, "Clicks:1") {
@@ -343,9 +344,10 @@ func TestV2E2E_MultiClick(t *testing.T) {
 		t.Fatal("expected 'N:0' on initial render")
 	}
 
-	// Click 3 times.
+	// Click 3 times (mousedown + mouseup at same position = click).
 	for i := 1; i <= 3; i++ {
 		app.HandleEvent(&event.Event{Type: "mousedown", X: 0, Y: 0})
+		app.HandleEvent(&event.Event{Type: "mouseup", X: 0, Y: 0})
 		app.RenderDirty()
 	}
 
@@ -384,8 +386,9 @@ func TestV2E2E_CounterWithClick(t *testing.T) {
 		t.Fatal("expected 'Count: 0' on initial render")
 	}
 
-	// Step 2: Click → Count: 1
+	// Step 2: Click → Count: 1 (mousedown + mouseup at same position = click)
 	app.HandleEvent(&event.Event{Type: "mousedown", X: 5, Y: 2})
+	app.HandleEvent(&event.Event{Type: "mouseup", X: 5, Y: 2})
 	app.RenderDirty()
 	if !screenHasString(ta, "Count: 1") {
 		t.Errorf("expected 'Count: 1' after 1st click, got line: %q", readScreenLine(ta, 0, 40))
@@ -393,6 +396,7 @@ func TestV2E2E_CounterWithClick(t *testing.T) {
 
 	// Step 3: Click again → Count: 2
 	app.HandleEvent(&event.Event{Type: "mousedown", X: 5, Y: 2})
+	app.HandleEvent(&event.Event{Type: "mouseup", X: 5, Y: 2})
 	app.RenderDirty()
 	if !screenHasString(ta, "Count: 2") {
 		t.Errorf("expected 'Count: 2' after 2nd click, got line: %q", readScreenLine(ta, 0, 40))
@@ -400,6 +404,7 @@ func TestV2E2E_CounterWithClick(t *testing.T) {
 
 	// Step 4: Click a third time → Count: 3
 	app.HandleEvent(&event.Event{Type: "mousedown", X: 5, Y: 2})
+	app.HandleEvent(&event.Event{Type: "mouseup", X: 5, Y: 2})
 	app.RenderDirty()
 	if !screenHasString(ta, "Count: 3") {
 		t.Errorf("expected 'Count: 3' after 3rd click, got line: %q", readScreenLine(ta, 0, 40))

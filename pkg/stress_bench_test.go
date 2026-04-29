@@ -343,6 +343,7 @@ func TestStressPerf_ClickCycle(t *testing.T) {
 		x := i % stressCols
 		y := i % stressRows
 		app.HandleEvent(&event.Event{Type: "mousedown", X: x, Y: y})
+		app.HandleEvent(&event.Event{Type: "mouseup", X: x, Y: y})
 		app.RenderDirty()
 	}
 	totalClick := time.Since(start)
