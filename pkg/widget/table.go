@@ -84,9 +84,12 @@ func padRight(s string, width int) string {
 // Table is the built-in Table widget.
 // Props: columns ([]map[string]any with "header"/"key"/"width"), rows ([]map[string]any),
 //
-//	selectable (bool), striped (bool)
+//	selectable (bool), striped (bool), autoFocus (bool, optional)
 //
-// onChange fires with the selected row index (int).
+// When selectable and autoFocus are true, the table root requests initial keyboard
+// focus after mount (see Engine.FocusAutoFocus). Otherwise click the table first.
+//
+// onChange fires with the selected row index (int, 0-based).
 var Table = &Widget{
 	Name: "Table",
 	NewState: func() any {
@@ -99,6 +102,7 @@ var Table = &Widget{
 		rows := readRows(props)
 		selectable, _ := props["selectable"].(bool)
 		striped, _ := props["striped"].(bool)
+		autoFocus, _ := props["autoFocus"].(bool)
 
 		children := make([]*render.Node, 0, len(rows)+2)
 
@@ -188,6 +192,7 @@ var Table = &Widget{
 		root := &render.Node{
 			Type:      "vbox",
 			Focusable: selectable,
+			AutoFocus: selectable && autoFocus,
 			Children:  children,
 			Style: render.Style{
 				Border: "rounded",

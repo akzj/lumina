@@ -1794,6 +1794,21 @@ func (e *Engine) luaCreateElement(L *lua.State) int {
 	// Normal element: type is a string
 	nodeType := L.CheckString(1)
 
+	// Registered Go widgets must use the component placeholder shape so graftWalk,
+	// hit-testing, and focus traversal see the widget's rendered RootNode.
+	if _, isWidget := e.widgets[nodeType]; isWidget {
+		L.NewTable()
+		resultIdx := L.AbsIndex(-1)
+		propsArg := 0
+		firstChildArg := 2
+		if nArgs >= 2 && L.IsTable(2) {
+			propsArg = 2
+			firstChildArg = 3
+		}
+		e.finishComponentPlaceholderDescriptor(L, resultIdx, nodeType, propsArg, firstChildArg, nArgs)
+		return 1
+	}
+
 	// Create result table
 	L.NewTable()
 	resultIdx := L.AbsIndex(-1)
@@ -1851,31 +1866,24 @@ func (e *Engine) luaCreateElement(L *lua.State) int {
 	return 1
 }
 
-// luaCreateComponentElement handles createElement(Factory, props)
-func (e *Engine) luaCreateComponentElement(L *lua.State, nArgs int) int {
-	// Get factory name
-	L.GetField(1, "_name")
-	factoryName, _ := L.ToString(-1)
-	L.Pop(1)
-
-	// Create a component descriptor table
-	L.NewTable()
-	resultIdx := L.AbsIndex(-1)
-
+// finishComponentPlaceholderDescriptor fills resultIdx as a component placeholder for
+// a Lua-defined factory or a registered Go widget (same shape readDescriptor expects).
+// propsArg is the stack index of the props table, or 0 if none. firstChildArg is the
+// first stack index of optional varargs children (typically propsArg+1).
+// When there is no props table, _props is still set to an empty Lua table so readDescriptor
+// always sees a table (and later code injecting children never reads a nil _props).
+func (e *Engine) finishComponentPlaceholderDescriptor(L *lua.State, resultIdx int, factoryName string, propsArg, firstChildArg, nArgs int) {
 	L.PushString("component")
 	L.SetField(resultIdx, "type")
 
 	L.PushString(factoryName)
 	L.SetField(resultIdx, "_factoryName")
 
-	// Copy props (including key)
-	if nArgs >= 2 && L.IsTable(2) {
-		// Store full props table
-		L.PushValue(2)
+	if propsArg > 0 && nArgs >= propsArg && L.IsTable(propsArg) {
+		L.PushValue(propsArg)
 		L.SetField(resultIdx, "_props")
 
-		// Extract key for reconciliation
-		L.GetField(2, "key")
+		L.GetField(propsArg, "key")
 		if L.IsString(-1) {
 			s, _ := L.ToString(-1)
 			L.Pop(1)
@@ -1885,8 +1893,7 @@ func (e *Engine) luaCreateComponentElement(L *lua.State, nArgs int) int {
 			L.Pop(1)
 		}
 
-		// Extract id for reconciliation
-		L.GetField(2, "id")
+		L.GetField(propsArg, "id")
 		if L.IsString(-1) {
 			s, _ := L.ToString(-1)
 			L.Pop(1)
@@ -1896,78 +1903,82 @@ func (e *Engine) luaCreateComponentElement(L *lua.State, nArgs int) int {
 			L.Pop(1)
 		}
 
-		// Copy event handler functions to top level so readDescriptor picks them up.
-		// This allows onClick etc. to be set on the placeholder Node and fire via
-		// the normal event bubbling system.
 		eventKeys := []string{
 			"onClick", "onMouseEnter", "onMouseLeave", "onKeyDown",
 			"onChange", "onScroll", "onMouseDown", "onMouseUp",
 			"onFocus", "onBlur", "onSubmit", "onOutsideClick",
 		}
 		for _, key := range eventKeys {
-			L.GetField(2, key)
+			L.GetField(propsArg, key)
 			if L.IsFunction(-1) {
-				L.SetField(resultIdx, key) // pops the function
+				L.SetField(resultIdx, key)
 			} else {
 				L.Pop(1)
 			}
 		}
 
-		// Copy disabled/focusable fields if present
-		L.GetField(2, "disabled")
+		L.GetField(propsArg, "disabled")
 		if L.IsBoolean(-1) {
 			L.SetField(resultIdx, "disabled")
 		} else {
 			L.Pop(1)
 		}
-		L.GetField(2, "focusable")
+		L.GetField(propsArg, "focusable")
 		if L.IsBoolean(-1) {
 			L.SetField(resultIdx, "focusable")
 		} else {
 			L.Pop(1)
 		}
+	} else {
+		// No props arg: empty _props keeps the descriptor shape consistent for readDescriptor
+		// and for the optional vararg-children block below (L.GetField(resultIdx, "_props")).
+		L.NewTable()
+		L.SetField(resultIdx, "_props")
 	}
 
-	// Collect children (args 3+) and inject into _props.children
-	if nArgs > 2 {
-		// Count non-nil children
+	if nArgs >= firstChildArg {
 		childCount := 0
-		for i := 3; i <= nArgs; i++ {
+		for i := firstChildArg; i <= nArgs; i++ {
 			if !L.IsNoneOrNil(i) {
 				childCount++
 			}
 		}
-
 		if childCount > 0 {
-			// Ensure we have a _props table
 			L.GetField(resultIdx, "_props")
 			if L.IsNil(-1) {
 				L.Pop(1)
 				L.NewTable()
-				L.PushValue(-1) // dup for SetField
+				L.PushValue(-1)
 				L.SetField(resultIdx, "_props")
 			}
 			propsIdx := L.AbsIndex(-1)
 
-			// Create children array
 			L.CreateTable(childCount, 0)
 			childrenIdx := L.AbsIndex(-1)
 			idx := int64(1)
-			for i := 3; i <= nArgs; i++ {
+			for i := firstChildArg; i <= nArgs; i++ {
 				if !L.IsNoneOrNil(i) {
 					L.PushValue(i)
 					L.RawSetI(childrenIdx, idx)
 					idx++
 				}
 			}
-
-			// Set props.children = childrenArray
 			L.SetField(propsIdx, "children")
-
-			L.Pop(1) // pop _props
+			L.Pop(1)
 		}
 	}
+}
 
+// luaCreateComponentElement handles createElement(Factory, props)
+func (e *Engine) luaCreateComponentElement(L *lua.State, nArgs int) int {
+	// Get factory name
+	L.GetField(1, "_name")
+	factoryName, _ := L.ToString(-1)
+	L.Pop(1)
+
+	L.NewTable()
+	resultIdx := L.AbsIndex(-1)
+	e.finishComponentPlaceholderDescriptor(L, resultIdx, factoryName, 2, 3, nArgs)
 	return 1
 }
 
