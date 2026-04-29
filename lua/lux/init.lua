@@ -15,5 +15,6 @@ M.CommandPalette = require("lux.command_palette")
 M.ListView = require("lux.list")
 M.DataGrid = require("lux.data_grid")
 M.WM = require("lux.wm")
+M.Pagination = require("lux.pagination")
 
 return M
