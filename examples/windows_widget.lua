@@ -1,106 +1,96 @@
--- examples/windows_widget.lua — Window Widget Demo
+-- examples/windows_widget.lua — Window Widget Demo (using WM module)
 --
--- Demonstrates the lux Window widget with:
+-- Demonstrates the Window widget with WindowManager:
 --   • Drag title bar to move
 --   • Drag bottom-right corner (◢) to resize
 --   • Close button (✕)
 --   • Click/drag brings window to front (z-order)
 --   • Multiple overlapping windows
+--   • Press 'r' to reset, 'o' to reopen closed windows
 --
 -- See also: examples/windows.lua for the pure Lua keyboard-only version.
 
 local Window = lumina.Window
+local WM = require("lux.wm")
 
 lumina.app {
     id = "window-widget-demo",
-    store = {
-        windows = {
-            { id = "win1", title = "📝 Editor",  x = 2,  y = 1, w = 35, h = 12, open = true,
-              content = "Welcome to the editor.\nDrag the title bar to move.\nDrag ◢ to resize.\nClick ✕ to close." },
-            { id = "win2", title = "📊 Monitor", x = 20, y = 5, w = 35, h = 12, open = true,
-              content = "System monitor.\nCPU: 42%  Memory: 68%\nProcesses: 142" },
-            { id = "win3", title = "🎨 Palette", x = 10, y = 3, w = 30, h = 10, open = true,
-              content = "Color palette.\nRed Green Blue\nBrush: Round 3px" },
-        },
-    },
     keys = {
         ["ctrl+c"] = function() lumina.quit() end,
         ["q"] = function() lumina.quit() end,
         ["r"] = function()
-            -- Reset all windows
-            lumina.store.set("windows", {
-                { id = "win1", title = "📝 Editor",  x = 2,  y = 1, w = 35, h = 12, open = true,
-                  content = "Welcome to the editor.\nDrag the title bar to move.\nDrag ◢ to resize.\nClick ✕ to close." },
-                { id = "win2", title = "📊 Monitor", x = 20, y = 5, w = 35, h = 12, open = true,
-                  content = "System monitor.\nCPU: 42%  Memory: 68%\nProcesses: 142" },
-                { id = "win3", title = "🎨 Palette", x = 10, y = 3, w = 30, h = 10, open = true,
-                  content = "Color palette.\nRed Green Blue\nBrush: Round 3px" },
-            })
+            -- Reset: clear store so WM.create re-initializes
+            lumina.store.set("wm", nil)
+        end,
+        ["o"] = function()
+            -- Reopen all closed windows
+            local s = lumina.store.get("wm")
+            if s and s.frames then
+                for id, f in pairs(s.frames) do
+                    if not f.open then
+                        -- Inline reopen (can't use mgr here since it's in render scope)
+                        f.open = true
+                        s.order[#s.order + 1] = id
+                        s.activeId = id
+                    end
+                end
+                lumina.store.set("wm", s)
+            end
         end,
     },
     render = function()
         local t = lumina.getTheme()
-        local windows = lumina.useStore("windows")
 
-        -- Helper: bring window with given id to front (end of array = on top)
-        local function bringToFront(winId)
-            local wins = lumina.store.get("windows")
-            for j, w in ipairs(wins) do
-                if w.id == winId then
-                    table.remove(wins, j)
-                    wins[#wins + 1] = w
-                    break
-                end
-            end
-            lumina.store.set("windows", wins)
-        end
+        -- Create WM instance (idempotent — only initializes on first call)
+        local mgr = WM.create("wm", {
+            { id = "win1", title = "📝 Editor",  x = 2,  y = 1, w = 35, h = 12 },
+            { id = "win2", title = "📊 Monitor", x = 20, y = 5, w = 35, h = 12 },
+            { id = "win3", title = "🎨 Palette", x = 10, y = 3, w = 30, h = 10 },
+        })
+
+        -- Get ordered open windows (bottom to top) — reactive via useStore
+        local windows = mgr.getWindows()
+
+        -- Window content (could be dynamic per-window)
+        local content = {
+            win1 = "Welcome to the editor.\nDrag the title bar to move.\nDrag ◢ to resize.\nClick ✕ to close.",
+            win2 = "System monitor.\nCPU: 42%  Memory: 68%\nProcesses: 142",
+            win3 = "Color palette.\nRed Green Blue\nBrush: Round 3px",
+        }
 
         local children = {}
 
-        for i, win in ipairs(windows) do
-            if win.open then
-                local winId = win.id  -- stable across array reorders
-                children[#children + 1] = Window {
-                    title = win.title,
-                    x = win.x, y = win.y,
-                    width = win.w, height = win.h,
-                    key = win.id,
-                    onChange = function(e)
-                        if e == "close" then
-                            local wins = lumina.store.get("windows")
-                            for j, w in ipairs(wins) do
-                                if w.id == winId then
-                                    w.open = false
-                                    break
-                                end
-                            end
-                            lumina.store.set("windows", wins)
-                        elseif e == "activate" then
-                            bringToFront(winId)
-                        elseif type(e) == "table" then
-                            bringToFront(winId)
-                            local wins = lumina.store.get("windows")
-                            -- After bringToFront, this window is now at end
-                            local w = wins[#wins]
-                            if e.type == "move" then
-                                w.x = e.x
-                                w.y = e.y
-                            elseif e.type == "resize" then
-                                w.w = e.width
-                                w.h = e.height
-                            end
-                            lumina.store.set("windows", wins)
+        for _, win in ipairs(windows) do
+            local winId = win.id  -- stable id, never an array index
+            children[#children + 1] = Window {
+                title = win.title,
+                x = win.x, y = win.y,
+                width = win.w, height = win.h,
+                key = winId,
+                onChange = function(e)
+                    if e == "close" then
+                        mgr.close(winId)
+                    elseif e == "activate" then
+                        mgr.activate(winId)
+                    elseif type(e) == "table" then
+                        -- move/resize: only update frame, do NOT activate
+                        if e.type == "move" then
+                            mgr.setFrame(winId, { x = e.x, y = e.y })
+                        elseif e.type == "resize" then
+                            mgr.setFrame(winId, { w = e.width, h = e.height })
                         end
-                    end,
-                    lumina.createElement("text", { style = { foreground = t.text } }, win.content),
-                }
-            end
+                    end
+                end,
+                lumina.createElement("text", {
+                    style = { foreground = t.text },
+                }, content[winId] or ""),
+            }
         end
 
         -- Status bar at bottom
         children[#children + 1] = lumina.createElement("text", {
             style = { foreground = t.muted, position = "fixed", left = 0, top = 23, height = 1 },
-        }, " [Drag title=move] [Drag ◢=resize] [✕=close] [r=reset] [q=quit]")
+        }, " [Drag title=move] [Drag ◢=resize] [✕=close] [r=reset] [o=reopen] [q=quit]")
 
         return lumina.createElement("box", {
             style = { width = 80, height = 24, background = t.base },

@@ -27,6 +27,7 @@ M.Spinner = require("lux.spinner")
 M.Dialog = require("lux.dialog")
 M.Layout = require("lux.layout")
 M.CommandPalette = require("lux.command_palette")
+M.WM = require("lux.wm")
 return M
 `
 
@@ -531,6 +532,117 @@ return CommandPalette
 
 `
 
+const luxWMLua = `
+local M = {}
+
+function M.create(storeKey, initialWindows)
+    local existing = lumina.store.get(storeKey)
+    if existing == nil then
+        local state = { order = {}, frames = {}, activeId = nil }
+        for _, win in ipairs(initialWindows) do
+            state.frames[win.id] = {
+                x = win.x, y = win.y,
+                w = win.w, h = win.h,
+                title = win.title,
+                open = true,
+            }
+            state.order[#state.order + 1] = win.id
+        end
+        if #state.order > 0 then
+            state.activeId = state.order[#state.order]
+        end
+        lumina.store.set(storeKey, state)
+    end
+
+    local mgr = {}
+
+    function mgr.register(id, frame)
+        local s = lumina.store.get(storeKey)
+        s.frames[id] = {
+            x = frame.x or 0, y = frame.y or 0,
+            w = frame.w or 30, h = frame.h or 10,
+            title = frame.title or id,
+            open = true,
+        }
+        s.order[#s.order + 1] = id
+        s.activeId = id
+        lumina.store.set(storeKey, s)
+    end
+
+    function mgr.close(id)
+        local s = lumina.store.get(storeKey)
+        for i, oid in ipairs(s.order) do
+            if oid == id then
+                table.remove(s.order, i)
+                break
+            end
+        end
+        if s.frames[id] then
+            s.frames[id].open = false
+        end
+        if s.activeId == id then
+            s.activeId = s.order[#s.order] or nil
+        end
+        lumina.store.set(storeKey, s)
+    end
+
+    function mgr.reopen(id)
+        local s = lumina.store.get(storeKey)
+        if not s.frames[id] then return end
+        s.frames[id].open = true
+        s.order[#s.order + 1] = id
+        s.activeId = id
+        lumina.store.set(storeKey, s)
+    end
+
+    function mgr.activate(id)
+        local s = lumina.store.get(storeKey)
+        for i, oid in ipairs(s.order) do
+            if oid == id then
+                table.remove(s.order, i)
+                break
+            end
+        end
+        s.order[#s.order + 1] = id
+        s.activeId = id
+        lumina.store.set(storeKey, s)
+    end
+
+    function mgr.setFrame(id, patch)
+        local s = lumina.store.get(storeKey)
+        if not s.frames[id] then return end
+        for k, v in pairs(patch) do
+            s.frames[id][k] = v
+        end
+        lumina.store.set(storeKey, s)
+    end
+
+    function mgr.getWindows()
+        local s = lumina.useStore(storeKey)
+        local result = {}
+        for _, id in ipairs(s.order) do
+            local f = s.frames[id]
+            if f and f.open then
+                result[#result + 1] = {
+                    id = id, title = f.title,
+                    x = f.x, y = f.y, w = f.w, h = f.h,
+                }
+            end
+        end
+        return result
+    end
+
+    function mgr.getActiveId()
+        local s = lumina.useStore(storeKey)
+        return s.activeId
+    end
+
+    return mgr
+end
+
+return M
+`
+
 const luxThemeLua = `
 local M = {}
 local _fallback = {
@@ -575,6 +687,7 @@ func registerLuxModules(L *lua.State) {
 	preloadLuaSource(L, "lux.dialog", luxDialogLua)
 	preloadLuaSource(L, "lux.layout", luxLayoutLua)
 	preloadLuaSource(L, "lux.command_palette", luxCommandPaletteLua)
+	preloadLuaSource(L, "lux.wm", luxWMLua)
 
 	// Register the lux umbrella module (requires individual modules)
 	preloadLuaSource(L, "lux", luxInitLua)

@@ -21,7 +21,7 @@ test.describe("ScrollView", function()
         app:click(10, 5)
         -- Press Down multiple times to scroll
         for i = 1, 10 do
-            app:keyPress("Down")
+            app:keyPress("ArrowDown")
         end
         local s = app:screenText()
         -- After scrolling 10 lines down, Line 1 should no longer be visible

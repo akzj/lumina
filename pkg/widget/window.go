@@ -166,13 +166,14 @@ var Window = &Widget{
 					event.FireOnChange = "close"
 					return false
 				}
-				// Start drag
+				// Start drag — also fire activate to bring window to front
 				s.Dragging = true
 				s.DragStartX = event.X
 				s.DragStartY = event.Y
 				s.OrigX = event.WidgetX
 				s.OrigY = event.WidgetY
 				event.CaptureMouse = true
+				event.FireOnChange = "activate"
 				return true
 			}
 
@@ -184,6 +185,7 @@ var Window = &Widget{
 				s.OrigW = w
 				s.OrigH = h
 				event.CaptureMouse = true
+				event.FireOnChange = "activate"
 				return true
 			}
 
