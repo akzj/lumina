@@ -42,11 +42,16 @@ lumina.app {
         local t = lumina.getTheme()
         local windows = lumina.useStore("windows")
 
-        -- Helper: bring window at index to front (end of array = on top)
-        local function bringToFront(idx)
+        -- Helper: bring window with given id to front (end of array = on top)
+        local function bringToFront(winId)
             local wins = lumina.store.get("windows")
-            local win = table.remove(wins, idx)
-            wins[#wins + 1] = win
+            for j, w in ipairs(wins) do
+                if w.id == winId then
+                    table.remove(wins, j)
+                    wins[#wins + 1] = w
+                    break
+                end
+            end
             lumina.store.set("windows", wins)
         end
 
@@ -54,7 +59,7 @@ lumina.app {
 
         for i, win in ipairs(windows) do
             if win.open then
-                local winIdx = i  -- capture for closure
+                local winId = win.id  -- stable across array reorders
                 children[#children + 1] = Window {
                     title = win.title,
                     x = win.x, y = win.y,
@@ -63,12 +68,17 @@ lumina.app {
                     onChange = function(e)
                         if e == "close" then
                             local wins = lumina.store.get("windows")
-                            wins[winIdx].open = false
+                            for j, w in ipairs(wins) do
+                                if w.id == winId then
+                                    w.open = false
+                                    break
+                                end
+                            end
                             lumina.store.set("windows", wins)
                         elseif e == "activate" then
-                            bringToFront(winIdx)
+                            bringToFront(winId)
                         elseif type(e) == "table" then
-                            bringToFront(winIdx)
+                            bringToFront(winId)
                             local wins = lumina.store.get("windows")
                             -- After bringToFront, this window is now at end
                             local w = wins[#wins]
