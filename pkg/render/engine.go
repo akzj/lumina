@@ -1692,15 +1692,14 @@ func (e *Engine) luaFactoryCall(L *lua.State) int {
 	}
 
 	// === Pattern 2: mixed table ===
-	// Save self and mixed table as registry refs so we can rebuild the stack.
-	L.PushValue(1) // self
-	selfRef := L.Ref(lua.RegistryIndex)
+	// Split mixed table into props (string keys) and children (integer keys).
+	// Build new stack: [1]=self, [2]=cleanProps, [3..]=children
+	// without using registry refs (avoids go-lua Ref slot reuse bug).
 
-	L.PushValue(mixedIdx) // mixed table
-	mixedRef := L.Ref(lua.RegistryIndex)
+	// Stack: [1]=self, [2]=mixed
 
-	// Build new props table (string keys only) from mixed table
-	L.NewTable()
+	// Step 1: Build clean props table (string keys only) on top of stack
+	L.NewTable() // [3] = newProps
 	newPropsIdx := L.AbsIndex(-1)
 	L.PushNil()
 	for L.Next(mixedIdx) {
@@ -1712,27 +1711,17 @@ func (e *Engine) luaFactoryCall(L *lua.State) int {
 		}
 		L.Pop(1) // pop value, keep key for Next
 	}
+	// Stack: [1]=self, [2]=mixed, [3]=newProps
 
-	// Save new props as registry ref
-	L.PushValue(newPropsIdx)
-	propsRef := L.Ref(lua.RegistryIndex)
-
-	// Clear entire stack and rebuild: [1]=self, [2]=props, [3..]=children
-	L.SetTop(0)
-
-	L.RawGetI(lua.RegistryIndex, int64(selfRef))  // [1] = self (factory)
-	L.RawGetI(lua.RegistryIndex, int64(propsRef))  // [2] = clean props
-	L.RawGetI(lua.RegistryIndex, int64(mixedRef))   // tmp = mixed table
-	tmpIdx := L.AbsIndex(-1)
+	// Step 2: Push children from mixed table
 	for i := 1; i <= childCount; i++ {
-		L.RawGetI(tmpIdx, int64(i)) // push child[i]
+		L.RawGetI(mixedIdx, int64(i)) // push child[i]
 	}
-	L.Remove(tmpIdx) // remove the tmp mixed table from stack
+	// Stack: [1]=self, [2]=mixed, [3]=newProps, [4..3+childCount]=children
 
-	// Clean up registry refs
-	L.Unref(lua.RegistryIndex, selfRef)
-	L.Unref(lua.RegistryIndex, propsRef)
-	L.Unref(lua.RegistryIndex, mixedRef)
+	// Step 3: Remove mixed table at [2], shifting everything down
+	L.Remove(2)
+	// Stack: [1]=self, [2]=newProps, [3..2+childCount]=children
 
 	// Stack is now: [1]=factory, [2]=props, [3..N]=children
 	return e.luaCreateElement(L)

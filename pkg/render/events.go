@@ -1,6 +1,8 @@
 package render
 
-import "github.com/akzj/go-lua/pkg/lua"
+import (
+	"github.com/akzj/go-lua/pkg/lua"
+)
 
 // HitTest finds the deepest Node at screen coordinates (x, y).
 // Returns nil if no node contains the point.
@@ -177,14 +179,10 @@ func (e *Engine) HandleMouseMove(x, y int) {
 	if e.capturedComp != nil {
 		w, ok := e.widgets[e.capturedComp.Type]
 		if !ok {
-			// Widget type unregistered (component removed/rebuilt) — release capture
-			// and fall through to normal dispatch below.
 			e.capturedComp = nil
 		} else {
 			state, stateOk := e.widgetStates[e.capturedComp.ID]
 			if !stateOk {
-				// Widget state missing (component rebuilt) — release capture
-				// and fall through to normal dispatch below.
 				e.capturedComp = nil
 			} else {
 				evt := &WidgetEvent{Type: "mousemove", X: x, Y: y, ScreenW: e.width, ScreenH: e.height}
@@ -194,7 +192,8 @@ func (e *Engine) HandleMouseMove(x, y int) {
 					evt.WidgetW = e.capturedComp.RootNode.W
 					evt.WidgetH = e.capturedComp.RootNode.H
 				}
-				if w.DoOnEvent(e.capturedComp.Props, state, evt) {
+				consumed := w.DoOnEvent(e.capturedComp.Props, state, evt)
+				if consumed {
 					e.capturedComp.Dirty = true
 					e.needsRender = true
 				}
