@@ -213,20 +213,27 @@ var Window = &Widget{
 				newX := s.OrigX + dx
 				newY := s.OrigY + dy
 
-				// Clamp position: keep at least 5 columns of title bar on screen
-				minVisible := 5
+				// Strict: keep entire window within app bounds
 				if event.ScreenW > 0 && event.ScreenH > 0 {
-					if newX < -w+minVisible {
-						newX = -w + minVisible
+					maxX := event.ScreenW - w
+					maxY := event.ScreenH - h
+					if maxX < 0 {
+						maxX = 0
 					}
-					if newX > event.ScreenW-minVisible {
-						newX = event.ScreenW - minVisible
+					if maxY < 0 {
+						maxY = 0
+					}
+					if newX < 0 {
+						newX = 0
+					}
+					if newX > maxX {
+						newX = maxX
 					}
 					if newY < 0 {
-						newY = 0 // don't let title bar go above screen
+						newY = 0
 					}
-					if newY > event.ScreenH-2 {
-						newY = event.ScreenH - 2 // keep at least title bar visible
+					if newY > maxY {
+						newY = maxY
 					}
 				}
 
