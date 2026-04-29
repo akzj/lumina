@@ -1358,6 +1358,15 @@ func (e *Engine) cleanupComponentTree(comp *Component) {
 		delete(e.components, child.ID)
 		e.cleanupComponentTree(child)
 	}
+
+	// Clear capturedComp if it points to this component (prevent zombie capture)
+	if e.capturedComp == comp {
+		e.capturedComp = nil
+	}
+
+	// Clean up widget state for this component (prevent memory leak + stale state)
+	delete(e.widgetStates, comp.ID)
+
 	// Cleanup hook refs (effects, memos, refs) — runs effect cleanups
 	e.cleanupComponentHooks(comp)
 	// Unref the component's render function — but only if it's NOT a shared
