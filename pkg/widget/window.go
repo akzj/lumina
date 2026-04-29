@@ -142,6 +142,9 @@ var Window = &Widget{
 				event.FireOnChange = "close"
 				return false
 			}
+			// Any other click activates the window (bring to front)
+			event.FireOnChange = "activate"
+			return false
 
 		case "mousedown":
 			relY := event.Y - event.WidgetY

@@ -62,6 +62,22 @@ func paintDirtyWalk(buf *CellBuffer, node *Node) {
 			clearPaintDirtyBelow(scrollAncestor)
 			return
 		}
+		// For absolute-positioned nodes that moved, escalate to parent container
+		// so all overlapping siblings (other windows) get repainted too.
+		if node.PositionChanged && node.Style.Position == "absolute" {
+			parent := findRepaintParent(node)
+			if parent != nil && !parent.PaintDirty {
+				buf.ClearRect(node.OldX, node.OldY, node.OldW, node.OldH)
+				node.PositionChanged = false
+				node.PaintDirty = false
+				parent.PaintDirty = true
+				buf.ClearRect(parent.X, parent.Y, parent.W, parent.H)
+				paintNode(buf, parent)
+				parent.PaintDirty = false
+				clearPaintDirtyBelow(parent)
+				return
+			}
+		}
 		// If node moved/resized, clear the old region to avoid ghost artifacts
 		if node.PositionChanged {
 			buf.ClearRect(node.OldX, node.OldY, node.OldW, node.OldH)
@@ -80,6 +96,17 @@ func paintDirtyWalk(buf *CellBuffer, node *Node) {
 	for _, child := range node.Children {
 		paintDirtyWalk(buf, child)
 	}
+}
+
+// findRepaintParent walks up from node to find the first non-component ancestor.
+// This is the container that holds all overlapping windows.
+func findRepaintParent(node *Node) *Node {
+	for n := node.Parent; n != nil; n = n.Parent {
+		if n.Type != "component" {
+			return n
+		}
+	}
+	return nil
 }
 
 func paintNode(buf *CellBuffer, node *Node) {

@@ -65,6 +65,8 @@ lumina.app {
                             local wins = lumina.store.get("windows")
                             wins[winIdx].open = false
                             lumina.store.set("windows", wins)
+                        elseif e == "activate" then
+                            bringToFront(winIdx)
                         elseif type(e) == "table" then
                             bringToFront(winIdx)
                             local wins = lumina.store.get("windows")
