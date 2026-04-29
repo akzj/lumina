@@ -16,5 +16,6 @@ M.ListView = require("lux.list")
 M.DataGrid = require("lux.data_grid")
 M.WM = require("lux.wm")
 M.Pagination = require("lux.pagination")
+M.Tabs = require("lux.tabs")
 
 return M
