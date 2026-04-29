@@ -62,6 +62,27 @@ func paintDirtyWalk(buf *CellBuffer, node *Node) {
 			clearPaintDirtyBelow(scrollAncestor)
 			return
 		}
+		// Component placeholders have stacked bounds that may overlap siblings'
+		// absolute-positioned children. Escalate to parent so all siblings
+		// get repainted after ClearRect.
+		if node.Type == "component" {
+			parent := findRepaintParent(node)
+			if parent != nil {
+				if node.PositionChanged {
+					buf.ClearRect(node.OldX, node.OldY, node.OldW, node.OldH)
+					node.PositionChanged = false
+				}
+				node.PaintDirty = false
+				if !parent.PaintDirty {
+					parent.PaintDirty = true
+					buf.ClearRect(parent.X, parent.Y, parent.W, parent.H)
+					paintNode(buf, parent)
+					parent.PaintDirty = false
+					clearPaintDirtyBelow(parent)
+				}
+				return
+			}
+		}
 		// For absolute-positioned nodes that moved, escalate to parent container
 		// so all overlapping siblings (other windows) get repainted too.
 		if node.PositionChanged && node.Style.Position == "absolute" {
