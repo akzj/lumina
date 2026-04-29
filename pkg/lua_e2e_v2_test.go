@@ -939,6 +939,56 @@ func TestV2E2E_CounterScript(t *testing.T) {
 	}
 }
 
+func TestV2E2E_ListDialogScript(t *testing.T) {
+	app, ta, _ := newV2App(t, 80, 24)
+	err := app.RunScript("../examples/list_dialog.lua")
+	if err != nil {
+		t.Fatalf("RunScript failed: %v", err)
+	}
+	app.RenderAll()
+	if !screenHasString(ta, "List + Dialog") {
+		t.Error("expected list dialog demo header on screen")
+	}
+	if !screenHasString(ta, "Apple") || !screenHasString(ta, "Banana") {
+		t.Error("expected list rows from list_dialog.lua")
+	}
+}
+
+func TestV2E2E_ListDialogOKCloses(t *testing.T) {
+	app, ta, _ := newV2App(t, 80, 24)
+	err := app.RunScript("../examples/list_dialog.lua")
+	if err != nil {
+		t.Fatalf("RunScript failed: %v", err)
+	}
+	app.RenderAll()
+
+	err = app.RunString(`
+		lumina.store.set("dialogOpen", true)
+		lumina.store.set("dialogTitle", "Pick me")
+		lumina.store.set("dialogBody", "Click OK to close.")
+	`)
+	if err != nil {
+		t.Fatalf("open dialog via store: %v", err)
+	}
+	app.RenderAll()
+	if !screenHasString(ta, "[ OK ]") {
+		t.Fatal("expected [ OK ] with dialog open")
+	}
+	x, y, ok := screenSubstringOrigin(ta, "[ OK ]")
+	if !ok {
+		t.Fatal("[ OK ] cell not found for click")
+	}
+	app.HandleEvent(&event.Event{Type: "mousedown", X: x, Y: y})
+	app.HandleEvent(&event.Event{Type: "mouseup", X: x, Y: y})
+	app.RenderDirty()
+	if screenHasString(ta, "[ OK ]") {
+		t.Error("expected dialog closed after OK click (no [ OK ] on screen)")
+	}
+	if screenHasString(ta, "Pick me") {
+		t.Error("expected dialog title removed after OK click")
+	}
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // Input Element Tests
 // ═══════════════════════════════════════════════════════════════════
