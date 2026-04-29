@@ -74,17 +74,15 @@ func paintDirtyWalk(buf *CellBuffer, node *Node) {
 	}
 
 	if node.PaintDirty {
-		// If this node has siblings with fixed/absolute positioning,
-		// escalate to parent for full repaint to maintain correct z-order.
-		if parent := findRepaintParent(node); parent != nil {
-			if parentHasOverlayChildren(parent) && !parent.PaintDirty {
-				parent.PaintDirty = true
-				buf.ClearRect(parent.X, parent.Y, parent.W, parent.H)
-				paintNode(buf, parent)
-				parent.PaintDirty = false
-				clearPaintDirtyBelow(parent)
-				return
-			}
+		// If any ancestor has children with fixed/absolute positioning,
+		// escalate to that ancestor for full repaint to maintain correct z-order.
+		if overlayParent := findOverlayAncestor(node); overlayParent != nil && !overlayParent.PaintDirty {
+			overlayParent.PaintDirty = true
+			buf.ClearRect(overlayParent.X, overlayParent.Y, overlayParent.W, overlayParent.H)
+			paintNode(buf, overlayParent)
+			overlayParent.PaintDirty = false
+			clearPaintDirtyBelow(overlayParent)
+			return
 		}
 
 		// If this node is inside a scroll container (at any ancestor level),
@@ -297,6 +295,22 @@ func rectsOverlap(x1, y1, w1, h1, x2, y2, w2, h2 int) bool {
 
 // parentHasOverlayChildren returns true if the node has any child (direct or through
 // component wrappers) with position:fixed or position:absolute.
+// findOverlayAncestor walks up from node to find the nearest ancestor that has
+// children with position:fixed or position:absolute. Returns that ancestor.
+// This is used to escalate dirty painting to ensure correct z-order when
+// overlays are present.
+func findOverlayAncestor(node *Node) *Node {
+	for n := node.Parent; n != nil; n = n.Parent {
+		if n.Type == "component" {
+			continue // skip component wrappers
+		}
+		if parentHasOverlayChildren(n) {
+			return n
+		}
+	}
+	return nil
+}
+
 func parentHasOverlayChildren(node *Node) bool {
 	for _, child := range node.Children {
 		if child.Style.Position == "fixed" || child.Style.Position == "absolute" {
