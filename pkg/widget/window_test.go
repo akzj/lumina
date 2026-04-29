@@ -91,12 +91,20 @@ func TestWindowRenderWithChildren(t *testing.T) {
 	result := Window.Render(props, state)
 	node := result.(*render.Node)
 
-	// Should have: title + divider + child + resize handle = 4 children
+	// Should have: title + divider + content_box + resize handle = 4 children
 	if len(node.Children) != 4 {
-		t.Fatalf("expected 4 children (title+divider+child+resize), got %d", len(node.Children))
+		t.Fatalf("expected 4 children (title+divider+content_box+resize), got %d", len(node.Children))
 	}
-	if node.Children[2].Content != "Hello from child" {
-		t.Errorf("child content: got %q, want 'Hello from child'", node.Children[2].Content)
+	// Children are wrapped in a content box (vbox with flex=1, overflow=hidden)
+	contentBox := node.Children[2]
+	if contentBox.Type != "vbox" {
+		t.Fatalf("expected content box to be vbox, got %q", contentBox.Type)
+	}
+	if len(contentBox.Children) != 1 {
+		t.Fatalf("expected 1 child in content box, got %d", len(contentBox.Children))
+	}
+	if contentBox.Children[0].Content != "Hello from child" {
+		t.Errorf("child content: got %q, want 'Hello from child'", contentBox.Children[0].Content)
 	}
 }
 
