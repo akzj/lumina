@@ -30,8 +30,9 @@ test.describe("Window widget example", function()
     test.it("window content renders", function()
         -- Palette is topmost (last in array), its content is always visible
         test.assert.eq(app:screenContains("Color palette"), true)
-        -- Editor content may be partially visible
-        test.assert.eq(app:screenContains("Welcome"), true)
+        -- Editor content is partially occluded; activate it to bring to front
+        app:click(10, 2)
+        test.assert.eq(app:screenContains("editor line"), true)
     end)
 
     -- Test 4: Drag title bar keeps window visible

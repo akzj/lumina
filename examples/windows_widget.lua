@@ -52,8 +52,16 @@ lumina.app {
         local windows = mgr.getWindows()
 
         -- Window content (could be dynamic per-window)
-        local content = {
-            win1 = "Welcome to the editor.\nDrag the title bar to move.\nDrag ◢ to resize.\nClick ✕ to close.",
+        -- Build content for each window
+        -- Editor gets scrollable content (30 lines to demonstrate overflow)
+        local editorContent = {}
+        for i = 1, 30 do
+            editorContent[#editorContent + 1] = lumina.createElement("text", {
+                style = { foreground = (i % 2 == 0) and t.text or t.subtext1 },
+            }, string.format("  %2d │ %s", i, "editor line " .. i))
+        end
+
+        local staticContent = {
             win2 = "System monitor.\nCPU: 42%  Memory: 68%\nProcesses: 142",
             win3 = "Color palette.\nRed Green Blue\nBrush: Round 3px",
         }
@@ -62,35 +70,51 @@ lumina.app {
 
         for _, win in ipairs(windows) do
             local winId = win.id  -- stable id, never an array index
-            children[#children + 1] = Window {
-                title = win.title,
-                x = win.x, y = win.y,
-                width = win.w, height = win.h,
-                key = winId,
-                onChange = function(e)
-                    if e == "close" then
-                        mgr.close(winId)
-                    elseif e == "activate" then
-                        mgr.activate(winId)
-                    elseif type(e) == "table" then
-                        -- move/resize: only update frame, do NOT activate
-                        if e.type == "move" then
-                            mgr.setFrame(winId, { x = e.x, y = e.y })
-                        elseif e.type == "resize" then
-                            mgr.setFrame(winId, { w = e.width, h = e.height })
-                        end
+            local onChange = function(e)
+                if e == "close" then
+                    mgr.close(winId)
+                elseif e == "activate" then
+                    mgr.activate(winId)
+                elseif type(e) == "table" then
+                    -- move/resize: only update frame, do NOT activate
+                    if e.type == "move" then
+                        mgr.setFrame(winId, { x = e.x, y = e.y })
+                    elseif e.type == "resize" then
+                        mgr.setFrame(winId, { w = e.width, h = e.height })
                     end
-                end,
-                lumina.createElement("text", {
-                    style = { foreground = t.text },
-                }, content[winId] or ""),
-            }
+                end
+            end
+
+            if winId == "win1" then
+                -- Editor: scrollable with 30 lines of content
+                children[#children + 1] = Window {
+                    title = win.title,
+                    x = win.x, y = win.y,
+                    width = win.w, height = win.h,
+                    scrollable = true,
+                    key = winId,
+                    onChange = onChange,
+                    table.unpack(editorContent),
+                }
+            else
+                -- Other windows: simple text content
+                children[#children + 1] = Window {
+                    title = win.title,
+                    x = win.x, y = win.y,
+                    width = win.w, height = win.h,
+                    key = winId,
+                    onChange = onChange,
+                    lumina.createElement("text", {
+                        style = { foreground = t.text },
+                    }, staticContent[winId] or ""),
+                }
+            end
         end
 
         -- Status bar at bottom
         children[#children + 1] = lumina.createElement("text", {
             style = { foreground = t.muted, position = "fixed", left = 0, top = 23, height = 1 },
-        }, " [Drag title=move] [Drag ◢=resize] [✕=close] [r=reset] [o=reopen] [q=quit]")
+        }, " [Drag=move] [◢=resize] [✕=close] [↑↓=scroll Editor] [r=reset] [o=reopen] [q=quit]")
 
         return lumina.createElement("box", {
             style = { width = 80, height = 24, background = t.base },

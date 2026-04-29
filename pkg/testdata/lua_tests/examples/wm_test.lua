@@ -28,7 +28,7 @@ test.describe("WindowManager", function()
         app:mouseUp(10, 2)
         -- Editor should now be on top (visible)
         test.assert.eq(app:screenContains("Editor"), true)
-        test.assert.eq(app:screenContains("Welcome"), true)
+        test.assert.eq(app:screenContains("editor line"), true)
     end)
 
     -- Test 3: close removes window, preserves others
@@ -72,5 +72,15 @@ test.describe("WindowManager", function()
         -- Press 'o' to reopen all closed windows
         app:keyPress("o")
         test.assert.eq(app:screenContains("Palette"), true)
+    end)
+
+    -- Test 7: Editor window has scrollbar (scrollable=true with 30 lines)
+    test.it("scrollable window shows scrollbar", function()
+        -- Activate Editor (bring to front) so scrollbar is visible
+        app:mouseDown(10, 2)
+        app:mouseUp(10, 2)
+        local s = app:screenText()
+        -- Scrollbar uses █ (thumb) and ░ (track) characters
+        test.assert.eq(s:find("█") ~= nil, true)
     end)
 end)
