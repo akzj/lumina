@@ -89,7 +89,7 @@ func padRight(s string, width int) string {
 // When selectable and autoFocus are true, the table root requests initial keyboard
 // focus after mount (see Engine.FocusAutoFocus). Otherwise click the table first.
 //
-// onChange fires with the selected row index (int, 0-based).
+// onChange fires with the selected row index (int, 1-based, Lua convention).
 var Table = &Widget{
 	Name: "Table",
 	NewState: func() any {
@@ -220,18 +220,18 @@ var Table = &Widget{
 				if s.SelectedRow >= len(rows) {
 					s.SelectedRow = 0
 				}
-				event.FireOnChange = s.SelectedRow
+				event.FireOnChange = s.SelectedRow + 1
 				return true
 			case "ArrowUp", "k":
 				s.SelectedRow--
 				if s.SelectedRow < 0 {
 					s.SelectedRow = len(rows) - 1
 				}
-				event.FireOnChange = s.SelectedRow
+				event.FireOnChange = s.SelectedRow + 1
 				return true
 			case "Enter":
 				if s.SelectedRow >= 0 && s.SelectedRow < len(rows) {
-					event.FireOnChange = s.SelectedRow
+					event.FireOnChange = s.SelectedRow + 1
 				}
 				return false
 			}

@@ -173,8 +173,8 @@ func TestDropdownClickOnItem(t *testing.T) {
 	if state.Open {
 		t.Error("expected Open=false after selecting item")
 	}
-	if evt.FireOnChange != 1 {
-		t.Errorf("FireOnChange: got %v, want 1", evt.FireOnChange)
+	if evt.FireOnChange != 2 {
+		t.Errorf("FireOnChange: got %v, want 2 (1-based)", evt.FireOnChange)
 	}
 }
 
@@ -313,8 +313,8 @@ func TestDropdownKeydownEnterSelects(t *testing.T) {
 	if state.Open {
 		t.Error("expected Open=false after Enter select")
 	}
-	if evt.FireOnChange != 1 {
-		t.Errorf("FireOnChange: got %v, want 1", evt.FireOnChange)
+	if evt.FireOnChange != 2 {
+		t.Errorf("FireOnChange: got %v, want 2 (1-based)", evt.FireOnChange)
 	}
 }
 
