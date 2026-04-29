@@ -1,5 +1,7 @@
 package render
 
+import "github.com/mattn/go-runewidth"
+
 // Cell represents a single terminal cell.
 type Cell struct {
 	Ch        rune
@@ -112,7 +114,18 @@ func (cb *CellBuffer) Get(x, y int) Cell {
 // Set writes a cell at (x, y). Out-of-bounds is silently ignored.
 func (cb *CellBuffer) Set(x, y int, c Cell) {
 	if x >= 0 && x < cb.width && y >= 0 && y < cb.height {
-		cb.cells[y*cb.width+x] = c
+		idx := y*cb.width + x
+		old := cb.cells[idx]
+		// Clean up wide character orphans:
+		// If overwriting the first cell of a wide char, clear its padding cell
+		if !old.Wide && old.Ch != 0 && runewidth.RuneWidth(old.Ch) == 2 && x+1 < cb.width {
+			cb.cells[idx+1] = Cell{BG: c.BG}
+		}
+		// If overwriting the padding cell of a wide char, clear the first half
+		if old.Wide && x-1 >= 0 {
+			cb.cells[idx-1] = Cell{BG: cb.cells[idx-1].BG}
+		}
+		cb.cells[idx] = c
 		cb.writeCount++
 		cb.trackDirty(x, y)
 	}
@@ -121,7 +134,18 @@ func (cb *CellBuffer) Set(x, y int, c Cell) {
 // SetChar writes a character with colors at (x, y).
 func (cb *CellBuffer) SetChar(x, y int, ch rune, fg, bg string, bold bool) {
 	if x >= 0 && x < cb.width && y >= 0 && y < cb.height {
-		cb.cells[y*cb.width+x] = Cell{Ch: ch, FG: fg, BG: bg, Bold: bold}
+		idx := y*cb.width + x
+		old := cb.cells[idx]
+		// Clean up wide character orphans:
+		// If overwriting the first cell of a wide char, clear its padding cell
+		if !old.Wide && old.Ch != 0 && runewidth.RuneWidth(old.Ch) == 2 && x+1 < cb.width {
+			cb.cells[idx+1] = Cell{BG: bg}
+		}
+		// If overwriting the padding cell of a wide char, clear the first half
+		if old.Wide && x-1 >= 0 {
+			cb.cells[idx-1] = Cell{BG: cb.cells[idx-1].BG}
+		}
+		cb.cells[idx] = Cell{Ch: ch, FG: fg, BG: bg, Bold: bold}
 		cb.writeCount++
 		cb.trackDirty(x, y)
 	}
