@@ -36,6 +36,11 @@ type WidgetEvent struct {
 	// Output: Scroll request (set by widget, processed by engine AFTER OnEvent).
 	// Non-zero → engine adjusts ScrollY on the widget's root node by this many lines.
 	ScrollBy int
+
+	// Input: Current scroll state of the widget's scroll container (set by engine).
+	// Populated from the first overflow:"scroll" node in the widget's tree.
+	ScrollY       int // current scroll offset
+	ContentHeight int // total content height (ScrollHeight)
 }
 
 // LayerRequest describes a layer to create.
@@ -456,6 +461,7 @@ func (e *Engine) RenderAll() {
 			LayoutFull(layer.Root, lx, ly, lw, lh)
 		}
 		paintNode(e.buffer, layer.Root)
+		clearPaintDirty(layer.Root)
 	}
 
 	// Auto-focus first node with autoFocus=true

@@ -6,7 +6,9 @@ import (
 
 // ScrollViewState is the internal state for a ScrollView widget.
 type ScrollViewState struct {
-	// Reserved for future use (scrollbar dragging, etc.)
+	DraggingScrollbar bool // true while user is dragging the scrollbar thumb
+	DragStartMouseY   int  // mouse Y at drag start
+	DragStartScrollY  int  // ScrollY at drag start
 }
 
 // ScrollView is the built-in scrollable container widget.
@@ -53,41 +55,96 @@ var ScrollView = &Widget{
 			Focusable: true,
 		}
 
+		// Apply programmatic scrollY if set
+		if v, ok := props["scrollY"]; ok {
+			root.ScrollY = intFromAny(v)
+		}
+
 		setParents(root)
 		return root
 	},
 	OnEvent: func(props map[string]any, state any, event *render.WidgetEvent) bool {
-		if event.Type != "keydown" {
-			return false
-		}
+		s := state.(*ScrollViewState)
 
-		// Calculate visible height for page scrolling
-		visibleH := event.WidgetH
-		if visibleH < 1 {
-			visibleH = 1
-		}
+		switch event.Type {
+		case "keydown":
+			// Calculate visible height for page scrolling
+			visibleH := event.WidgetH
+			if visibleH < 1 {
+				visibleH = 1
+			}
 
-		switch event.Key {
-		case "ArrowUp", "Up", "k":
-			event.ScrollBy = -1
-			return true
-		case "ArrowDown", "Down", "j":
-			event.ScrollBy = 1
-			return true
-		case "PageUp":
-			event.ScrollBy = -visibleH
-			return true
-		case "PageDown":
-			event.ScrollBy = visibleH
-			return true
-		case "Home":
-			// Scroll to top: use a large negative value, engine will clamp to 0
-			event.ScrollBy = -999999
-			return true
-		case "End":
-			// Scroll to bottom: use a large positive value, engine will clamp to max
-			event.ScrollBy = 999999
-			return true
+			switch event.Key {
+			case "ArrowUp", "Up", "k":
+				event.ScrollBy = -1
+				return true
+			case "ArrowDown", "Down", "j":
+				event.ScrollBy = 1
+				return true
+			case "PageUp":
+				event.ScrollBy = -visibleH
+				return true
+			case "PageDown":
+				event.ScrollBy = visibleH
+				return true
+			case "Home":
+				event.ScrollBy = -999999
+				return true
+			case "End":
+				event.ScrollBy = 999999
+				return true
+			}
+
+		case "mousedown":
+			// Check if click is on scrollbar column (rightmost column of widget)
+			relX := event.X - event.WidgetX
+			if relX >= event.WidgetW-2 && event.ContentHeight > event.WidgetH {
+				// Start scrollbar drag
+				s.DraggingScrollbar = true
+				s.DragStartMouseY = event.Y
+				s.DragStartScrollY = event.ScrollY
+				event.CaptureMouse = true
+
+				// Also jump to clicked position
+				trackH := event.WidgetH
+				if trackH < 1 {
+					trackH = 1
+				}
+				maxScroll := event.ContentHeight - trackH
+				if maxScroll < 1 {
+					maxScroll = 1
+				}
+				relY := event.Y - event.WidgetY
+				targetScrollY := relY * maxScroll / trackH
+				event.ScrollBy = targetScrollY - event.ScrollY
+				return true
+			}
+
+		case "mousemove":
+			if s.DraggingScrollbar {
+				trackH := event.WidgetH
+				if trackH < 1 {
+					trackH = 1
+				}
+				maxScroll := event.ContentHeight - trackH
+				if maxScroll < 1 {
+					maxScroll = 1
+				}
+				// Convert mouse delta to scroll delta
+				mouseDelta := event.Y - s.DragStartMouseY
+				scrollDelta := mouseDelta * maxScroll / trackH
+				targetScrollY := s.DragStartScrollY + scrollDelta
+				event.ScrollBy = targetScrollY - event.ScrollY
+				return true
+			}
+
+		case "mouseup":
+			if s.DraggingScrollbar {
+				s.DraggingScrollbar = false
+				// Return false: no visual change, so engine should NOT mark dirty.
+				// The scroll position is already correct from the last mousemove.
+				return false
+			}
 		}
 
 		return false

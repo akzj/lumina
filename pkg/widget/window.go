@@ -108,6 +108,10 @@ var Window = &Widget{
 					Right:    -1, Bottom: -1,
 				},
 			}
+			// Apply programmatic scrollY if set
+			if _, ok := props["scrollY"]; ok {
+				contentBox.ScrollY = intProp(props, "scrollY", 0)
+			}
 			children = append(children, contentBox)
 		}
 

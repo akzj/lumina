@@ -175,14 +175,21 @@ assert.Equal(t, "#89B4FA", cell.Foreground)
 - **Elements** — 组件树结构
 - **Perf** — 实时性能指标
 
+Elements 向「Chrome 程度」体验的 **MVP 与阶段规划** 见 **[DESIGN-devtools-elements.md](./DESIGN-devtools-elements.md)**。
+
 ### 性能追踪
 
 ```go
 app.Tracker().Enable()
 // ... 运行 ...
-stats := app.Tracker().Stats()
-// V2ComponentsRendered, V2PaintCells, V2DirtyRectArea, ...
+f := app.Tracker().LastFrame()
+_ = f.Get(perf.V2ComponentsRendered)
+_ = f.Get(perf.V2PaintCells)
+_ = f.Get(perf.V2DirtyRectArea)
+// 或 app.Tracker().Report() / TotalReport()
 ```
+
+**设计说明（指标是否接线、DevTools 展示缺口、演进阶段）** 见 **[DESIGN-perf.md](./DESIGN-perf.md)**。
 
 ### 热加载
 
