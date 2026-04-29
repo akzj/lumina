@@ -53,6 +53,21 @@ func PaintDirty(buf *CellBuffer, root *Node) {
 	paintDirtyWalk(buf, root)
 }
 
+// PaintDirtyOverlay paints dirty nodes for overlay layers.
+// Does NOT clear regions — overlays paint on top of the main layer.
+// This prevents overlay layer ClearRect from wiping main layer content.
+func PaintDirtyOverlay(buf *CellBuffer, root *Node) {
+	if buf == nil || root == nil {
+		return
+	}
+	if root.PaintDirty {
+		paintNode(buf, root)
+		clearPaintDirty(root)
+		return
+	}
+	paintDirtyWalk(buf, root)
+}
+
 func paintDirtyWalk(buf *CellBuffer, node *Node) {
 	if node == nil {
 		return
