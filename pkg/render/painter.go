@@ -166,17 +166,19 @@ func repaintOverlappingSiblings(buf *CellBuffer, node *Node) {
 		return // not inside a window
 	}
 
-	// Find absNode's index in parent's children
+	// Find the container that holds all windows as children.
+	// Walk through component wrappers to find the actual parent container.
 	parent := absNode.Parent
-	// Walk through component wrappers to find the actual container with children
+	containerChild := absNode // the child of parent that contains our window
 	for parent != nil && parent.Type == "component" && parent.Parent != nil {
-		absNode = parent
+		containerChild = parent
 		parent = parent.Parent
 	}
 
+	// Find our index in parent's children
 	idx := -1
 	for i, ch := range parent.Children {
-		if ch == absNode {
+		if ch == containerChild {
 			idx = i
 			break
 		}
@@ -185,20 +187,42 @@ func repaintOverlappingSiblings(buf *CellBuffer, node *Node) {
 		return
 	}
 
-	// Use the absolute-positioned window's bounds for overlap check,
-	// since the window's repaint may have overwritten pixels of siblings above.
-	// Walk into the absNode to find actual bounds (component wrappers may have 0 size).
+	// Use the ACTUAL absolute-positioned window bounds for overlap check
 	rx, ry, rw, rh := absNode.X, absNode.Y, absNode.W, absNode.H
 	if rw <= 0 || rh <= 0 {
-		// Component wrapper — use the original node's bounds as fallback
 		rx, ry, rw, rh = node.X, node.Y, node.W, node.H
 	}
+
+	// Repaint later siblings (higher z-order) that overlap
 	for i := idx + 1; i < len(parent.Children); i++ {
 		sibling := parent.Children[i]
-		if rectsOverlap(rx, ry, rw, rh, sibling.X, sibling.Y, sibling.W, sibling.H) {
-			paintNode(buf, sibling)
+		// Find the absolute-positioned child INSIDE the sibling (component wrapper)
+		sibAbs := findAbsoluteChild(sibling)
+		if sibAbs != nil {
+			if rectsOverlap(rx, ry, rw, rh, sibAbs.X, sibAbs.Y, sibAbs.W, sibAbs.H) {
+				paintNode(buf, sibAbs)
+			}
+		} else {
+			// Fallback: use sibling's own bounds
+			if rectsOverlap(rx, ry, rw, rh, sibling.X, sibling.Y, sibling.W, sibling.H) {
+				paintNode(buf, sibling)
+			}
 		}
 	}
+}
+
+// findAbsoluteChild finds the first absolute-positioned descendant within a node.
+// This traverses through component wrappers to find the actual window vbox.
+func findAbsoluteChild(node *Node) *Node {
+	if node.Style.Position == "absolute" {
+		return node
+	}
+	for _, ch := range node.Children {
+		if found := findAbsoluteChild(ch); found != nil {
+			return found
+		}
+	}
+	return nil
 }
 
 // rectsOverlap returns true if two rectangles overlap.
