@@ -427,8 +427,8 @@ func TestAppV2Engine_TableAutoFocusKeyboard(t *testing.T) {
 	default:
 		t.Fatalf("tblIdx type %T value %v", v, v)
 	}
-	if idx != 0 {
-		t.Fatalf("first j from SelectedRow=-1 should select row 0, store got %d", idx)
+	if idx != 1 {
+		t.Fatalf("first j should select row 1 (1-based), store got %d", idx)
 	}
 
 	app.HandleEvent(&event.Event{Type: "keydown", Key: "j"})
@@ -444,7 +444,7 @@ func TestAppV2Engine_TableAutoFocusKeyboard(t *testing.T) {
 	default:
 		t.Fatalf("tblIdx type %T", v)
 	}
-	if idx != 1 {
-		t.Fatalf("second j should select row 1, got %d", idx)
+	if idx != 2 {
+		t.Fatalf("second j should select row 2 (1-based), got %d", idx)
 	}
 }

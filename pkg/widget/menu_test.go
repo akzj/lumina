@@ -223,8 +223,8 @@ func TestMenuKeydownEnter(t *testing.T) {
 	if changed {
 		t.Error("Enter should return false (no state change)")
 	}
-	if evt.FireOnChange != 1 {
-		t.Errorf("FireOnChange: got %v, want 1", evt.FireOnChange)
+	if evt.FireOnChange != 2 {
+		t.Errorf("FireOnChange: got %v, want 2 (1-based)", evt.FireOnChange)
 	}
 }
 

@@ -166,20 +166,20 @@ var Menu = &Widget{
 				next := findNextMenuItem(items, s.SelectedIndex, 1)
 				if next != s.SelectedIndex {
 					s.SelectedIndex = next
-					event.FireOnChange = s.SelectedIndex
+					event.FireOnChange = s.SelectedIndex + 1
 					return true
 				}
 			case "ArrowUp", "k":
 				next := findNextMenuItem(items, s.SelectedIndex, -1)
 				if next != s.SelectedIndex {
 					s.SelectedIndex = next
-					event.FireOnChange = s.SelectedIndex
+					event.FireOnChange = s.SelectedIndex + 1
 					return true
 				}
 			case "Enter":
 				if s.SelectedIndex >= 0 && s.SelectedIndex < len(items) {
 					if !items[s.SelectedIndex].Disabled && !items[s.SelectedIndex].Divider {
-						event.FireOnChange = s.SelectedIndex
+						event.FireOnChange = s.SelectedIndex + 1
 					}
 				}
 				return false

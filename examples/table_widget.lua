@@ -34,7 +34,7 @@ lumina.app {
             line(t.muted, true, 1, "  striped: rows where 0-based index is odd get surface0 (1st row plain, 2nd striped, ...)."),
             line(t.muted, true, 1, "  Chrome: header row bold primary; rule line; rounded border; text cells only."),
             line(t.muted, true, 1, "  Selection: primary background + primaryDark text on the active row."),
-            line(t.muted, true, 1, "  onChange(idx): idx is 0-based row index (number)."),
+            line(t.muted, true, 1, "  onChange(idx): idx is 1-based row index (number)."),
             line(t.muted, true, 1, "  autoFocus + selectable: table grabs focus after mount (otherwise click first)."),
             line(nil, false, 1, "  " .. hint),
         }
@@ -63,7 +63,7 @@ lumina.app {
             striped = true,
             autoFocus = true,
             onChange = function(idx)
-                lumina.store.set("hint", string.format("onChange: row index=%s (0-based)", tostring(idx)))
+                lumina.store.set("hint", string.format("onChange: row index=%s (1-based)", tostring(idx)))
             end,
         })
 

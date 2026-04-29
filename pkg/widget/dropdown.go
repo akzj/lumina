@@ -164,7 +164,7 @@ var Dropdown = &Widget{
 					if !item.Disabled && !item.Divider {
 						s.Open = false
 						s.Highlighted = -1
-						event.FireOnChange = optionY
+						event.FireOnChange = optionY + 1
 						return true
 					}
 				}
@@ -199,7 +199,7 @@ var Dropdown = &Widget{
 					item := items[s.Highlighted]
 					if !item.Disabled && !item.Divider {
 						s.Open = false
-						event.FireOnChange = s.Highlighted
+						event.FireOnChange = s.Highlighted + 1
 						s.Highlighted = -1
 						return true
 					}

@@ -158,8 +158,8 @@ func TestTableKeydownArrowDown(t *testing.T) {
 	if state.SelectedRow != 1 {
 		t.Errorf("expected SelectedRow=1, got %d", state.SelectedRow)
 	}
-	if evt.FireOnChange != 1 {
-		t.Errorf("FireOnChange: got %v, want 1", evt.FireOnChange)
+	if evt.FireOnChange != 2 {
+		t.Errorf("FireOnChange: got %v, want 2 (1-based)", evt.FireOnChange)
 	}
 }
 
