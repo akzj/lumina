@@ -4,6 +4,7 @@
 --   • Drag title bar to move
 --   • Drag bottom-right corner (◢) to resize
 --   • Close button (✕)
+--   • Click/drag brings window to front (z-order)
 --   • Multiple overlapping windows
 --
 -- See also: examples/windows.lua for the pure Lua keyboard-only version.
@@ -13,83 +14,75 @@ local Window = lumina.Window
 lumina.app {
     id = "window-widget-demo",
     store = {
-        win1 = {x = 2, y = 1, w = 35, h = 12, open = true},
-        win2 = {x = 20, y = 5, w = 35, h = 12, open = true},
-        win3 = {x = 10, y = 3, w = 30, h = 10, open = true},
+        windows = {
+            { id = "win1", title = "📝 Editor",  x = 2,  y = 1, w = 35, h = 12, open = true,
+              content = "Welcome to the editor.\nDrag the title bar to move.\nDrag ◢ to resize.\nClick ✕ to close." },
+            { id = "win2", title = "📊 Monitor", x = 20, y = 5, w = 35, h = 12, open = true,
+              content = "System monitor.\nCPU: 42%  Memory: 68%\nProcesses: 142" },
+            { id = "win3", title = "🎨 Palette", x = 10, y = 3, w = 30, h = 10, open = true,
+              content = "Color palette.\nRed Green Blue\nBrush: Round 3px" },
+        },
     },
     keys = {
         ["ctrl+c"] = function() lumina.quit() end,
         ["q"] = function() lumina.quit() end,
         ["r"] = function()
             -- Reset all windows
-            lumina.store.set("win1", {x = 2, y = 1, w = 35, h = 12, open = true})
-            lumina.store.set("win2", {x = 20, y = 5, w = 35, h = 12, open = true})
-            lumina.store.set("win3", {x = 10, y = 3, w = 30, h = 10, open = true})
+            lumina.store.set("windows", {
+                { id = "win1", title = "📝 Editor",  x = 2,  y = 1, w = 35, h = 12, open = true,
+                  content = "Welcome to the editor.\nDrag the title bar to move.\nDrag ◢ to resize.\nClick ✕ to close." },
+                { id = "win2", title = "📊 Monitor", x = 20, y = 5, w = 35, h = 12, open = true,
+                  content = "System monitor.\nCPU: 42%  Memory: 68%\nProcesses: 142" },
+                { id = "win3", title = "🎨 Palette", x = 10, y = 3, w = 30, h = 10, open = true,
+                  content = "Color palette.\nRed Green Blue\nBrush: Round 3px" },
+            })
         end,
     },
     render = function()
         local t = lumina.getTheme()
-        local win1 = lumina.useStore("win1")
-        local win2 = lumina.useStore("win2")
-        local win3 = lumina.useStore("win3")
+        local windows = lumina.useStore("windows")
+
+        -- Helper: bring window at index to front (end of array = on top)
+        local function bringToFront(idx)
+            local wins = lumina.store.get("windows")
+            local win = table.remove(wins, idx)
+            wins[#wins + 1] = win
+            lumina.store.set("windows", wins)
+        end
 
         local children = {}
 
-        -- Helper to create window onChange handler
-        local function makeHandler(storeKey)
-            return function(e)
-                if e == "close" then
-                    local s = lumina.store.get(storeKey)
-                    s.open = false
-                    lumina.store.set(storeKey, s)
-                elseif type(e) == "table" then
-                    local s = lumina.store.get(storeKey)
-                    if e.type == "move" then
-                        s.x = e.x
-                        s.y = e.y
-                    elseif e.type == "resize" then
-                        s.w = e.width
-                        s.h = e.height
-                    end
-                    lumina.store.set(storeKey, s)
-                end
+        for i, win in ipairs(windows) do
+            if win.open then
+                local winIdx = i  -- capture for closure
+                children[#children + 1] = Window {
+                    title = win.title,
+                    x = win.x, y = win.y,
+                    width = win.w, height = win.h,
+                    key = win.id,
+                    onChange = function(e)
+                        if e == "close" then
+                            local wins = lumina.store.get("windows")
+                            wins[winIdx].open = false
+                            lumina.store.set("windows", wins)
+                        elseif type(e) == "table" then
+                            bringToFront(winIdx)
+                            local wins = lumina.store.get("windows")
+                            -- After bringToFront, this window is now at end
+                            local w = wins[#wins]
+                            if e.type == "move" then
+                                w.x = e.x
+                                w.y = e.y
+                            elseif e.type == "resize" then
+                                w.w = e.width
+                                w.h = e.height
+                            end
+                            lumina.store.set("windows", wins)
+                        end
+                    end,
+                    lumina.createElement("text", { style = { foreground = t.text } }, win.content),
+                }
             end
-        end
-
-        if win1.open then
-            children[#children + 1] = Window {
-                title = "📝 Editor",
-                x = win1.x, y = win1.y,
-                width = win1.w, height = win1.h,
-                key = "win1",
-                onChange = makeHandler("win1"),
-                lumina.createElement("text", { style = { foreground = t.text } },
-                    "Welcome to the editor.\nDrag the title bar to move.\nDrag ◢ to resize.\nClick ✕ to close."),
-            }
-        end
-
-        if win2.open then
-            children[#children + 1] = Window {
-                title = "📊 Monitor",
-                x = win2.x, y = win2.y,
-                width = win2.w, height = win2.h,
-                key = "win2",
-                onChange = makeHandler("win2"),
-                lumina.createElement("text", { style = { foreground = t.text } },
-                    "System monitor.\nCPU: 42%  Memory: 68%\nProcesses: 142"),
-            }
-        end
-
-        if win3.open then
-            children[#children + 1] = Window {
-                title = "🎨 Palette",
-                x = win3.x, y = win3.y,
-                width = win3.w, height = win3.h,
-                key = "win3",
-                onChange = makeHandler("win3"),
-                lumina.createElement("text", { style = { foreground = t.text } },
-                    "Color palette.\nRed Green Blue\nBrush: Round 3px"),
-            }
         end
 
         -- Status bar at bottom

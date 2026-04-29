@@ -644,6 +644,26 @@ func (e *Engine) callLuaRefWithValue(ref LuaRef, value any) {
 		L.PushInteger(int64(v))
 	case int64:
 		L.PushInteger(v)
+	case map[string]any:
+		L.CreateTable(0, len(v))
+		for key, val := range v {
+			L.PushString(key)
+			switch tv := val.(type) {
+			case bool:
+				L.PushBoolean(tv)
+			case string:
+				L.PushString(tv)
+			case float64:
+				L.PushNumber(tv)
+			case int:
+				L.PushInteger(int64(tv))
+			case int64:
+				L.PushInteger(tv)
+			default:
+				L.PushNil()
+			}
+			L.SetTable(-3)
+		}
 	default:
 		L.PushNil()
 	}

@@ -37,7 +37,7 @@ test.describe("Window widget", function()
         test.assert.eq(app:screenContains("◢"), true)
     end)
 
-    test.it("drag title bar updates position via onChange", function()
+    test.it("drag title bar moves window", function()
         app:loadString([[
             lumina.store.set("win", {x = 10, y = 5, w = 30, h = 10})
             lumina.createComponent({
@@ -63,18 +63,18 @@ test.describe("Window widget", function()
         ]])
         test.assert.eq(app:screenContains("Draggable"), true)
 
-        -- Mousedown on title bar (y=6 is title row: widget at y=5, border=row5, title=row6)
-        app:mouseDown(15, 6)
-        -- Drag to new position (move 5 right, 3 down)
-        app:mouseMove(20, 9)
+        -- Mousedown on title bar (border at y=5, title row at y=6)
+        app:mouseDown(20, 6)
+        -- Drag 5 right, 3 down
+        app:mouseMove(25, 9)
         -- Release
-        app:mouseUp(20, 9)
+        app:mouseUp(25, 9)
 
         -- Window should still be visible after drag
         test.assert.eq(app:screenContains("Draggable"), true)
     end)
 
-    test.it("resize handle updates dimensions via onChange", function()
+    test.it("resize handle resizes window", function()
         app:loadString([[
             lumina.store.set("win", {x = 5, y = 2, w = 30, h = 10})
             lumina.createComponent({
@@ -100,15 +100,15 @@ test.describe("Window widget", function()
         ]])
         test.assert.eq(app:screenContains("Resizable"), true)
 
-        -- Mousedown on resize handle (bottom-right corner of window)
-        -- Window at x=5, y=2, w=30, h=10 → bottom-right is around (34, 11)
+        -- Mousedown on resize handle (bottom-right corner)
+        -- Window at x=5, y=2, w=30, h=10 → bottom-right around (34, 11)
         app:mouseDown(34, 11)
         -- Drag to resize larger
         app:mouseMove(39, 14)
         -- Release
         app:mouseUp(39, 14)
 
-        -- Window should still be visible
+        -- Window should still be visible after resize
         test.assert.eq(app:screenContains("Resizable"), true)
     end)
 
