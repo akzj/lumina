@@ -56,4 +56,19 @@ test.describe("ScrollView", function()
         test.assert.eq(s:find("█") ~= nil, true)
         test.assert.eq(s:find("░") ~= nil, true)
     end)
+
+    test.it("scrollbar drag scrolls content", function()
+        -- Verify Line 2 is visible initially
+        test.assert.eq(app:screenContains("Line 2"), true)
+        -- Drag scrollbar from near top to near bottom
+        -- Scrollbar is at x=79 (rightmost column), track spans y=2 to y=22
+        app:mouseDown(79, 3)
+        app:mouseMove(79, 20)
+        app:mouseUp(79, 20)
+        local s = app:screenText()
+        -- After dragging scrollbar most of the way down, Line 20+ should be visible
+        test.assert.eq(s:find("Line 20") ~= nil or s:find("Line 25") ~= nil, true)
+        -- Line 2 should no longer be visible (scrolled past it)
+        test.assert.eq(s:find("Line 2 ") == nil, true)
+    end)
 end)

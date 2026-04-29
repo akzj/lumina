@@ -191,15 +191,25 @@ func (e *Engine) HandleMouseMove(x, y int) {
 					evt.WidgetY = e.capturedComp.RootNode.Y
 					evt.WidgetW = e.capturedComp.RootNode.W
 					evt.WidgetH = e.capturedComp.RootNode.H
+					if scrollNode := findScrollNode(e.capturedComp.RootNode); scrollNode != nil {
+						evt.ScrollY = scrollNode.ScrollY
+						evt.ContentHeight = scrollNode.ScrollHeight
+					}
 				}
 				consumed := w.DoOnEvent(e.capturedComp.Props, state, evt)
 				if consumed {
-					e.capturedComp.Dirty = true
+					if evt.ScrollBy == 0 {
+						e.capturedComp.Dirty = true
+					}
 					e.needsRender = true
 				}
 				// Fire onChange if widget requested it
 				if evt.FireOnChange != nil && e.capturedComp.RootNode != nil && e.capturedComp.RootNode.OnChange != 0 {
 					e.callLuaRefWithValue(e.capturedComp.RootNode.OnChange, evt.FireOnChange)
+				}
+				// Process scroll request from captured widget
+				if evt.ScrollBy != 0 && e.capturedComp.RootNode != nil {
+					e.scrollNodeBy(e.capturedComp.RootNode, evt.ScrollBy)
 				}
 				return // captured widget gets ALL mouse events, skip normal dispatch
 			}
@@ -354,14 +364,24 @@ func (e *Engine) HandleMouseUp(x, y int) {
 					evt.WidgetY = e.capturedComp.RootNode.Y
 					evt.WidgetW = e.capturedComp.RootNode.W
 					evt.WidgetH = e.capturedComp.RootNode.H
+					if scrollNode := findScrollNode(e.capturedComp.RootNode); scrollNode != nil {
+						evt.ScrollY = scrollNode.ScrollY
+						evt.ContentHeight = scrollNode.ScrollHeight
+					}
 				}
 				if w.DoOnEvent(e.capturedComp.Props, state, evt) {
-					e.capturedComp.Dirty = true
+					if evt.ScrollBy == 0 {
+						e.capturedComp.Dirty = true
+					}
 					e.needsRender = true
 				}
 				// Fire onChange if widget requested it
 				if evt.FireOnChange != nil && e.capturedComp.RootNode != nil && e.capturedComp.RootNode.OnChange != 0 {
 					e.callLuaRefWithValue(e.capturedComp.RootNode.OnChange, evt.FireOnChange)
+				}
+				// Process scroll request from captured widget
+				if evt.ScrollBy != 0 && e.capturedComp.RootNode != nil {
+					e.scrollNodeBy(e.capturedComp.RootNode, evt.ScrollBy)
 				}
 			}
 			// stateOk == false: widget state missing, skip dispatch
@@ -676,6 +696,11 @@ func (e *Engine) dispatchWidgetEvent(node *Node, eventType, key string, x, y int
 		evt.WidgetY = comp.RootNode.Y
 		evt.WidgetW = comp.RootNode.W
 		evt.WidgetH = comp.RootNode.H
+		// Populate scroll state from the scroll container
+		if scrollNode := findScrollNode(comp.RootNode); scrollNode != nil {
+			evt.ScrollY = scrollNode.ScrollY
+			evt.ContentHeight = scrollNode.ScrollHeight
+		}
 	}
 	consumed := w.DoOnEvent(comp.Props, state, evt)
 	if consumed {
