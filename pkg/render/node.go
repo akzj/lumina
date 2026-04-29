@@ -60,6 +60,10 @@ type Node struct {
 	X, Y, W, H int  // absolute position + size
 	LayoutDirty bool // true → recompute this subtree's layout
 
+	// Previous position (for clearing old region when node moves)
+	OldX, OldY, OldW, OldH int
+	PositionChanged         bool
+
 	// Paint
 	Content     string // text content
 	Placeholder string // placeholder text (input/textarea)

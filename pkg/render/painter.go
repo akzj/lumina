@@ -62,6 +62,11 @@ func paintDirtyWalk(buf *CellBuffer, node *Node) {
 			clearPaintDirtyBelow(scrollAncestor)
 			return
 		}
+		// If node moved/resized, clear the old region to avoid ghost artifacts
+		if node.PositionChanged {
+			buf.ClearRect(node.OldX, node.OldY, node.OldW, node.OldH)
+			node.PositionChanged = false
+		}
 		// Clear this node's region first, then repaint
 		buf.ClearRect(node.X, node.Y, node.W, node.H)
 		paintNode(buf, node)
