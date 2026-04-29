@@ -32,6 +32,10 @@ type WidgetEvent struct {
 	// Output: Layer management (set by widget, processed by engine AFTER OnEvent).
 	CreateLayer *LayerRequest // non-nil → engine creates this layer
 	RemoveLayer string        // non-empty → engine removes this layer ID
+
+	// Output: Scroll request (set by widget, processed by engine AFTER OnEvent).
+	// Non-zero → engine adjusts ScrollY on the widget's root node by this many lines.
+	ScrollBy int
 }
 
 // LayerRequest describes a layer to create.

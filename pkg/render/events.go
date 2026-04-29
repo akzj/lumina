@@ -497,6 +497,51 @@ func (e *Engine) autoScroll(node *Node, delta int) {
 	e.needsRender = true
 }
 
+// scrollNodeBy adjusts a node's ScrollY by the given number of lines (positive=down, negative=up).
+// Unlike autoScroll, this does NOT multiply by a step factor — the caller provides the exact delta.
+// The node must have overflow:"scroll" style and valid ScrollHeight from layout.
+func (e *Engine) scrollNodeBy(node *Node, lines int) {
+	// Find the scroll container: if the root node itself has overflow scroll, use it.
+	// Otherwise look for the first child with overflow scroll.
+	scrollNode := findScrollNode(node)
+	if scrollNode == nil {
+		return
+	}
+	maxScroll := computeMaxScrollY(scrollNode)
+	if maxScroll <= 0 {
+		return
+	}
+
+	newScrollY := scrollNode.ScrollY + lines
+	if newScrollY < 0 {
+		newScrollY = 0
+	}
+	if newScrollY > maxScroll {
+		newScrollY = maxScroll
+	}
+	if newScrollY == scrollNode.ScrollY {
+		return
+	}
+
+	scrollNode.ScrollY = newScrollY
+	scrollNode.PaintDirty = true
+	e.needsRender = true
+}
+
+// findScrollNode finds the first node with overflow:"scroll" in the tree rooted at node.
+// Checks the node itself first, then searches children depth-first.
+func findScrollNode(node *Node) *Node {
+	if node.Style.Overflow == "scroll" {
+		return node
+	}
+	for _, ch := range node.Children {
+		if found := findScrollNode(ch); found != nil {
+			return found
+		}
+	}
+	return nil
+}
+
 // computeMaxScrollY calculates the maximum scroll offset for a scroll container.
 // Uses the stored ScrollHeight (set by layout) minus the visible content height.
 func computeMaxScrollY(node *Node) int {
@@ -634,7 +679,11 @@ func (e *Engine) dispatchWidgetEvent(node *Node, eventType, key string, x, y int
 	}
 	consumed := w.DoOnEvent(comp.Props, state, evt)
 	if consumed {
-		comp.Dirty = true
+		// Don't mark dirty if only ScrollBy was set — scrolling is handled
+		// by the engine directly on the existing node tree (no re-render needed).
+		if evt.ScrollBy == 0 {
+			comp.Dirty = true
+		}
 		e.needsRender = true
 	}
 
@@ -656,6 +705,12 @@ func (e *Engine) dispatchWidgetEvent(node *Node, eventType, key string, x, y int
 	if evt.RemoveLayer != "" {
 		e.RemoveLayer(evt.RemoveLayer)
 	}
+
+	// Scroll request: widget wants to scroll its root node by N lines
+	if evt.ScrollBy != 0 && comp.RootNode != nil {
+		e.scrollNodeBy(comp.RootNode, evt.ScrollBy)
+	}
+
 	return consumed
 }
 

@@ -250,6 +250,9 @@ func paintScrollChildren(buf *CellBuffer, node *Node) {
 	for _, child := range node.Children {
 		paintNodeClipped(buf, child, clipX1, clipY1, clipX2, clipY2)
 	}
+
+	// Paint scrollbar in the reserved right column
+	paintScrollbar(buf, node, clipX2, clipY1, clipY2, maxScroll)
 }
 // paintScrollChildrenClipped paints scroll container children with both the
 // inner scroll offset AND an outer clip rect (from a parent scroll container).
@@ -293,6 +296,9 @@ func paintScrollChildrenClipped(buf *CellBuffer, node *Node, outerClipX1, outerC
 	for _, child := range node.Children {
 		paintNodeClipped(buf, child, clipX1, clipY1, clipX2, clipY2)
 	}
+
+	// Paint scrollbar in the reserved right column (use inner clip for position)
+	paintScrollbar(buf, node, innerX2, innerY1, innerY2, maxScroll)
 }
 
 
@@ -327,6 +333,63 @@ func paintHiddenChildrenClipped(buf *CellBuffer, node *Node, outerClipX1, outerC
 // shiftNodeTreeY shifts all children (recursively) of a node by dy.
 // Does NOT shift the node itself (only its children).
 //
+// paintScrollbar draws a vertical scrollbar in the reserved right column of a scroll container.
+// scrollbarX is the x-coordinate of the scrollbar column.
+// clipY1/clipY2 define the vertical extent of the content area.
+// maxScroll is the maximum scroll offset (0 means no overflow, no scrollbar drawn).
+func paintScrollbar(buf *CellBuffer, node *Node, scrollbarX, clipY1, clipY2, maxScroll int) {
+	if maxScroll <= 0 {
+		return // content fits, no scrollbar needed
+	}
+
+	visibleH := clipY2 - clipY1
+	if visibleH <= 0 {
+		return
+	}
+
+	totalH := node.ScrollHeight
+	if totalH <= 0 {
+		return
+	}
+
+	// Calculate thumb size and position
+	thumbSize := visibleH * visibleH / totalH
+	if thumbSize < 1 {
+		thumbSize = 1
+	}
+	if thumbSize > visibleH {
+		thumbSize = visibleH
+	}
+
+	trackSpace := visibleH - thumbSize
+	thumbPos := 0
+	if maxScroll > 0 && trackSpace > 0 {
+		thumbPos = node.ScrollY * trackSpace / maxScroll
+	}
+	if thumbPos < 0 {
+		thumbPos = 0
+	}
+	if thumbPos > trackSpace {
+		thumbPos = trackSpace
+	}
+
+	// Determine colors: use dim track and bright thumb
+	trackBG := node.Style.Background
+	thumbFG := "#6c7086" // dim gray for track
+	thumbBright := "#cdd6f4" // bright for thumb
+
+	for row := 0; row < visibleH; row++ {
+		y := clipY1 + row
+		if row >= thumbPos && row < thumbPos+thumbSize {
+			// Thumb
+			buf.Set(scrollbarX, y, Cell{Ch: '█', FG: thumbBright, BG: trackBG})
+		} else {
+			// Track
+			buf.Set(scrollbarX, y, Cell{Ch: '░', FG: thumbFG, BG: trackBG, Dim: true})
+		}
+	}
+}
+
 // SAFETY: This temporarily mutates node Y positions for scroll painting.
 // This is only safe because the engine is single-threaded. If concurrent
 // access is ever added, this must be replaced with a paint-time offset
