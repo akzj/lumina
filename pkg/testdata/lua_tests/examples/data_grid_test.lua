@@ -41,4 +41,24 @@ test.describe("DataGrid example", function()
 		app:keyPress("Enter")
 		test.assert.eq(app:screenContains("Last Enter: Bravo@2"), true)
 	end)
+
+	test.it("Home goes to first row", function()
+		app:keyPress("j")
+		app:keyPress("j")
+		test.assert.eq(app:screenContains("Selected: Charlie"), true)
+		app:keyPress("Home")
+		test.assert.eq(app:screenContains("Selected: Alpha"), true)
+	end)
+
+	test.it("End goes to last row", function()
+		app:keyPress("End")
+		test.assert.eq(app:screenContains("Selected: Lima"), true)
+	end)
+
+	test.it("PageDown jumps by page size", function()
+		app:keyPress("PageDown")
+		-- bodyHeight = 14 - 1(header) - 1(sep) = 12, so jumps 12 rows
+		-- from row 1 to row 13 but clamped to #rows=12
+		test.assert.eq(app:screenContains("Selected: Lima"), true)
+	end)
 end)

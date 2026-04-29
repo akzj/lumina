@@ -743,13 +743,29 @@ return ListView
 
 const luxDataGridLua = `
 -- lua/lux/data_grid.lua — Lux DataGrid: fixed header, scrollable body, rich cells.
--- See lua/lux/data_grid.md for design and P0 scope.
+-- See lua/lux/data_grid.md for design and P0/P1 scope.
 -- Usage: local DataGrid = require("lux.data_grid")
+
+-- Pad/truncate text to a given width with alignment.
+local function padText(str, width, align)
+	local len = #str
+	if len >= width then return str:sub(1, width) end
+	local pad = width - len
+	if align == "right" then
+		return string.rep(" ", pad) .. str
+	elseif align == "center" then
+		local left = math.floor(pad / 2)
+		return string.rep(" ", left) .. str .. string.rep(" ", pad - left)
+	else -- "left" or default
+		return str .. string.rep(" ", pad)
+	end
+end
 
 local DataGrid = lumina.defineComponent("DataGrid", function(props)
 	local rows = props.rows or {}
 	local columns = props.columns or {}
 	local renderCell = props.renderCell
+	local sort = props.sort
 	local t = lumina.getTheme and lumina.getTheme() or {}
 
 	local gridW = props.width
@@ -805,6 +821,18 @@ local DataGrid = lumina.defineComponent("DataGrid", function(props)
 			if props.onActivate and rows[selectedIdx] then
 				props.onActivate(selectedIdx, rows[selectedIdx])
 			end
+		elseif e.key == "Home" then
+			if props.onChangeIndex then props.onChangeIndex(1) end
+		elseif e.key == "End" then
+			if props.onChangeIndex then props.onChangeIndex(#rows) end
+		elseif e.key == "PageUp" then
+			local pageSize = math.max(1, bodyHeight)
+			local n = math.max(1, selectedIdx - pageSize)
+			if props.onChangeIndex then props.onChangeIndex(n) end
+		elseif e.key == "PageDown" then
+			local pageSize = math.max(1, bodyHeight)
+			local n = math.min(#rows, selectedIdx + pageSize)
+			if props.onChangeIndex then props.onChangeIndex(n) end
 		end
 	end
 
@@ -828,18 +856,44 @@ local DataGrid = lumina.defineComponent("DataGrid", function(props)
 	else
 		if props.renderHeaderCell then
 			for _, col in ipairs(columns) do
-				headerCells[#headerCells + 1] = props.renderHeaderCell(col, {})
+				headerCells[#headerCells + 1] = props.renderHeaderCell(col, { sort = sort })
 			end
 		else
 			for _, col in ipairs(columns) do
 				local w = columnWidth(col)
 				local label = col.header or col.id or "?"
+
+				-- Sort indicator
+				local sortIndicator = ""
+				if col.sortable and sort and sort.columnId == col.id then
+					if sort.direction == "asc" then
+						sortIndicator = " \226\150\178"
+					else
+						sortIndicator = " \226\150\188"
+					end
+				elseif col.sortable then
+					sortIndicator = " \226\135\133"
+				end
+
+				local headerFg = (sort and sort.columnId == col.id)
+					and (t.primary or "#89B4FA")
+					or (t.text or "#CDD6F4")
+
 				headerCells[#headerCells + 1] = lumina.createElement("text", {
 					bold = true,
-					foreground = t.text or "#CDD6F4",
+					foreground = headerFg,
 					background = t.surface0 or "#313244",
 					style = { width = w, height = 1 },
-				}, " " .. label)
+					onClick = col.sortable and function()
+						if props.onSortChange then
+							local newDir = "asc"
+							if sort and sort.columnId == col.id and sort.direction == "asc" then
+								newDir = "desc"
+							end
+							props.onSortChange({ columnId = col.id, direction = newDir })
+						end
+					end or nil,
+				}, " " .. label .. sortIndicator)
 			end
 		end
 	end
@@ -852,7 +906,32 @@ local DataGrid = lumina.defineComponent("DataGrid", function(props)
 		foreground = t.surface1 or "#45475A",
 		dim = true,
 		style = { height = sepH, background = t.base or "#1E1E2E" },
-	}, string.rep("─", sepW))
+	}, string.rep("\226\148\128", sepW))
+
+	-- Default renderCell when none provided
+	if type(renderCell) ~= "function" then
+		renderCell = function(row, rowIndex, col, ctx)
+			local v
+			if type(col.accessor) == "function" then
+				v = col.accessor(row)
+			elseif col.key then
+				v = row[col.key]
+			end
+			if v == nil then v = "" end
+			if type(v) ~= "string" then v = tostring(v) end
+
+			local fg = ctx.selected and (t.primary or "#89B4FA") or (t.text or "#CDD6F4")
+			local bg = ctx.selected and (t.surface1 or "#45475A") or (t.base or "#1E1E2E")
+			local w = columnWidth(col)
+			local text = " " .. v
+			text = padText(text, w, col.align)
+			return lumina.createElement("text", {
+				foreground = fg,
+				background = bg,
+				style = { height = 1 },
+			}, text)
+		end
+	end
 
 	local bodyChildren = {}
 	if ncols == 0 then
@@ -871,12 +950,6 @@ local DataGrid = lumina.defineComponent("DataGrid", function(props)
 			style = { height = 1 },
 			background = t.base or "#1E1E2E",
 		}, "  " .. emptyText)
-	elseif type(renderCell) ~= "function" then
-		bodyChildren[1] = lumina.createElement("text", {
-			foreground = t.error or "#F38BA8",
-			style = { height = 1 },
-			background = t.base or "#1E1E2E",
-		}, "  DataGrid: renderCell function required")
 	else
 		for i, row in ipairs(rows) do
 			local ctx = { selected = (i == selectedIdx) }
