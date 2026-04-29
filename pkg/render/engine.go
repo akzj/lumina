@@ -1288,6 +1288,9 @@ func safeEqual(a, b any) bool {
 	case int64:
 		bv, ok := b.(int64)
 		return ok && av == bv
+	case propFuncRef:
+		bv, ok := b.(propFuncRef)
+		return ok && av == bv
 	case float64:
 		bv, ok := b.(float64)
 		return ok && av == bv
@@ -2029,12 +2032,31 @@ func (e *Engine) luaUseState(L *lua.State) int {
 
 // --- Helper functions for reading Lua tables ---
 
+// propFuncRef is a Lua registry reference for a function stored in ComponentProps.
+// Plain int64 in props would round-trip as a Lua number via PushAny; propFuncRef
+// is restored in pushMap via RawGetI(registry, ref).
+type propFuncRef int64
+
 func pushMap(L *lua.State, m map[string]any) {
 	if m == nil {
 		L.NewTable()
 		return
 	}
-	L.NewTableFrom(m)
+	L.CreateTable(0, len(m))
+	for k, v := range m {
+		L.PushString(k)
+		switch vv := v.(type) {
+		case propFuncRef:
+			if vv != 0 {
+				L.RawGetI(lua.RegistryIndex, int64(vv))
+			} else {
+				L.PushNil()
+			}
+		default:
+			L.PushAny(v)
+		}
+		L.SetTable(-3)
+	}
 }
 
 func getStringField(L *lua.State, idx int, field string) string {
@@ -2076,7 +2098,13 @@ func readMapFromTable(L *lua.State, idx int) map[string]any {
 	L.ForEach(absIdx, func(L *lua.State) bool {
 		if L.Type(-2) == lua.TypeString {
 			key, _ := L.ToString(-2)
-			m[key] = L.ToAny(-1)
+			if L.IsFunction(-1) {
+				L.PushValue(-1)
+				ref := L.Ref(lua.RegistryIndex)
+				m[key] = propFuncRef(ref)
+			} else {
+				m[key] = L.ToAny(-1)
+			}
 		}
 		return true
 	})

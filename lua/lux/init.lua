@@ -12,6 +12,7 @@ M.Spinner = require("lux.spinner")
 M.Dialog = require("lux.dialog")
 M.Layout = require("lux.layout")
 M.CommandPalette = require("lux.command_palette")
+M.ListView = require("lux.list")
 M.WM = require("lux.wm")
 
 return M

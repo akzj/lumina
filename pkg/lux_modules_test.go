@@ -62,6 +62,7 @@ func TestV2E2E_RequireLux(t *testing.T) {
 		assert(lux.Divider ~= nil, "lux.Divider missing")
 		assert(lux.Progress ~= nil, "lux.Progress missing")
 		assert(lux.Spinner ~= nil, "lux.Spinner missing")
+		assert(lux.ListView ~= nil, "lux.ListView missing")
 	`)
 	if err != nil {
 		t.Fatalf("RunString failed: %v", err)
@@ -161,5 +162,39 @@ func TestV2E2E_RequireLuxDivider(t *testing.T) {
 	// Divider renders repeated "─" chars
 	if !screenHasChar(ta, '─') {
 		t.Error("expected '─' from Divider component")
+	}
+}
+
+func TestV2E2E_RequireLuxListView(t *testing.T) {
+	app, ta, _ := newV2App(t, 40, 12)
+	err := app.RunString(`
+		local ListView = require("lux.list")
+		lumina.createComponent({
+			id = "listview-test",
+			render = function()
+				return lumina.createElement("vbox", { id = "root" },
+					lumina.createElement(ListView, {
+						id = "lv",
+						rows = { { t = "RowA" }, { t = "RowB" } },
+						rowHeight = 1,
+						height = 6,
+						selectedIndex = 1,
+						renderRow = function(row, i, ctx)
+							return lumina.createElement("text", {
+								style = { height = 1 },
+								bold = ctx.selected,
+							}, row.t)
+						end,
+					})
+				)
+			end,
+		})
+	`)
+	if err != nil {
+		t.Fatalf("RunString failed: %v", err)
+	}
+	app.RenderAll()
+	if !screenHasString(ta, "RowA") || !screenHasString(ta, "RowB") {
+		t.Errorf("expected RowA and RowB on screen, got: %q", readScreenLine(ta, 0, 40))
 	}
 }
