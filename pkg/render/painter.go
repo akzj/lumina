@@ -86,6 +86,8 @@ func paintDirtyWalk(buf *CellBuffer, node *Node) {
 			paintNode(buf, scrollAncestor)
 			scrollAncestor.PaintDirty = false
 			clearPaintDirtyBelow(scrollAncestor)
+			// Repaint overlapping windows above this scroll container
+			repaintOverlappingSiblings(buf, scrollAncestor)
 			return
 		}
 		// Component placeholders have stacked bounds that may overlap siblings'
@@ -183,8 +185,14 @@ func repaintOverlappingSiblings(buf *CellBuffer, node *Node) {
 		return
 	}
 
-	// Repaint later siblings (higher z-order) that overlap the repainted node's area
-	rx, ry, rw, rh := node.X, node.Y, node.W, node.H
+	// Use the absolute-positioned window's bounds for overlap check,
+	// since the window's repaint may have overwritten pixels of siblings above.
+	// Walk into the absNode to find actual bounds (component wrappers may have 0 size).
+	rx, ry, rw, rh := absNode.X, absNode.Y, absNode.W, absNode.H
+	if rw <= 0 || rh <= 0 {
+		// Component wrapper — use the original node's bounds as fallback
+		rx, ry, rw, rh = node.X, node.Y, node.W, node.H
+	}
 	for i := idx + 1; i < len(parent.Children); i++ {
 		sibling := parent.Children[i]
 		if rectsOverlap(rx, ry, rw, rh, sibling.X, sibling.Y, sibling.W, sibling.H) {
