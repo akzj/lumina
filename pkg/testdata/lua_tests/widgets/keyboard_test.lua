@@ -119,7 +119,7 @@ test.describe("Widget keyboard dispatch", function()
             lumina.createComponent({
                 id = "test", name = "Test",
                 render = function()
-                    local selected, setSelected = lumina.useState("sel", -1)
+                    local selected, setSelected = lumina.useState("sel", 0)
                     return lumina.createElement("vbox", {id = "root"},
                         lumina.createElement(lumina.List, {
                             items = {"Alpha", "Beta", "Gamma"},
@@ -136,11 +136,11 @@ test.describe("Widget keyboard dispatch", function()
         ]])
         -- Click to focus
         app:click(5, 2)
-        -- j: selectedIndex goes from -1 to 0 (Alpha)
+        -- j: onChange fires 1 (Alpha, 1-based)
         app:keyPress("j")
         local sel = app:find("sel")
         test.assert.notNil(sel)
-        test.assert.contains(sel.content, "selected:0")
+        test.assert.contains(sel.content, "selected:1")
         app:destroy()
     end)
 
