@@ -78,7 +78,8 @@ func paintDirtyWalk(buf *CellBuffer, node *Node) {
 		// escalate to that ancestor for full repaint to maintain correct z-order.
 		if overlayParent := findOverlayAncestor(node); overlayParent != nil && !overlayParent.PaintDirty {
 			overlayParent.PaintDirty = true
-			buf.ClearRect(overlayParent.X, overlayParent.Y, overlayParent.W, overlayParent.H)
+			bg := findAncestorBackground(overlayParent)
+			clearRectWithBG(buf, overlayParent.X, overlayParent.Y, overlayParent.W, overlayParent.H, bg)
 			paintNode(buf, overlayParent)
 			overlayParent.PaintDirty = false
 			clearPaintDirtyBelow(overlayParent)
@@ -93,7 +94,8 @@ func paintDirtyWalk(buf *CellBuffer, node *Node) {
 		scrollAncestor := findScrollableAncestor(node.Parent)
 		if scrollAncestor != nil && !scrollAncestor.PaintDirty {
 			scrollAncestor.PaintDirty = true
-			buf.ClearRect(scrollAncestor.X, scrollAncestor.Y, scrollAncestor.W, scrollAncestor.H)
+			bg := findAncestorBackground(scrollAncestor)
+			clearRectWithBG(buf, scrollAncestor.X, scrollAncestor.Y, scrollAncestor.W, scrollAncestor.H, bg)
 			paintNode(buf, scrollAncestor)
 			scrollAncestor.PaintDirty = false
 			clearPaintDirtyBelow(scrollAncestor)
@@ -108,13 +110,15 @@ func paintDirtyWalk(buf *CellBuffer, node *Node) {
 			parent := findRepaintParent(node)
 			if parent != nil {
 				if node.PositionChanged {
-					buf.ClearRect(node.OldX, node.OldY, node.OldW, node.OldH)
+					bg := findAncestorBackground(node)
+					clearRectWithBG(buf, node.OldX, node.OldY, node.OldW, node.OldH, bg)
 					node.PositionChanged = false
 				}
 				node.PaintDirty = false
 				if !parent.PaintDirty {
 					parent.PaintDirty = true
-					buf.ClearRect(parent.X, parent.Y, parent.W, parent.H)
+					bg := findAncestorBackground(parent)
+					clearRectWithBG(buf, parent.X, parent.Y, parent.W, parent.H, bg)
 					paintNode(buf, parent)
 					parent.PaintDirty = false
 					clearPaintDirtyBelow(parent)
@@ -127,11 +131,13 @@ func paintDirtyWalk(buf *CellBuffer, node *Node) {
 		if node.PositionChanged && node.Style.Position == "absolute" {
 			parent := findRepaintParent(node)
 			if parent != nil && !parent.PaintDirty {
-				buf.ClearRect(node.OldX, node.OldY, node.OldW, node.OldH)
+				bg := findAncestorBackground(node)
+				clearRectWithBG(buf, node.OldX, node.OldY, node.OldW, node.OldH, bg)
 				node.PositionChanged = false
 				node.PaintDirty = false
 				parent.PaintDirty = true
-				buf.ClearRect(parent.X, parent.Y, parent.W, parent.H)
+				bg = findAncestorBackground(parent)
+				clearRectWithBG(buf, parent.X, parent.Y, parent.W, parent.H, bg)
 				paintNode(buf, parent)
 				parent.PaintDirty = false
 				clearPaintDirtyBelow(parent)
@@ -140,11 +146,13 @@ func paintDirtyWalk(buf *CellBuffer, node *Node) {
 		}
 		// If node moved/resized, clear the old region to avoid ghost artifacts
 		if node.PositionChanged {
-			buf.ClearRect(node.OldX, node.OldY, node.OldW, node.OldH)
+			bg := findAncestorBackground(node)
+			clearRectWithBG(buf, node.OldX, node.OldY, node.OldW, node.OldH, bg)
 			node.PositionChanged = false
 		}
 		// Clear this node's region first, then repaint
-		buf.ClearRect(node.X, node.Y, node.W, node.H)
+		bg := findAncestorBackground(node)
+		clearRectWithBG(buf, node.X, node.Y, node.W, node.H, bg)
 		paintNode(buf, node)
 		node.PaintDirty = false
 		// Clear all descendants' PaintDirty flags — paintNode already painted them
@@ -219,13 +227,15 @@ func repaintOverlappingSiblings(buf *CellBuffer, node *Node) {
 		sibAbs := findAbsoluteOrFixedChild(sibling)
 		if sibAbs != nil {
 			if rectsOverlap(rx, ry, rw, rh, sibAbs.X, sibAbs.Y, sibAbs.W, sibAbs.H) {
-				buf.ClearRect(sibAbs.X, sibAbs.Y, sibAbs.W, sibAbs.H)
+				bg := findAncestorBackground(sibAbs)
+				clearRectWithBG(buf, sibAbs.X, sibAbs.Y, sibAbs.W, sibAbs.H, bg)
 				paintNode(buf, sibAbs)
 			}
 		} else {
 			// Fallback: use sibling's own bounds
 			if rectsOverlap(rx, ry, rw, rh, sibling.X, sibling.Y, sibling.W, sibling.H) {
-				buf.ClearRect(sibling.X, sibling.Y, sibling.W, sibling.H)
+				bg := findAncestorBackground(sibling)
+				clearRectWithBG(buf, sibling.X, sibling.Y, sibling.W, sibling.H, bg)
 				paintNode(buf, sibling)
 			}
 		}
@@ -267,7 +277,8 @@ func repaintFixedOverlappingSiblings(buf *CellBuffer, node *Node) {
 		sibFixed := findAbsoluteOrFixedChild(sibling)
 		if sibFixed != nil {
 			if rectsOverlap(rx, ry, rw, rh, sibFixed.X, sibFixed.Y, sibFixed.W, sibFixed.H) {
-				buf.ClearRect(sibFixed.X, sibFixed.Y, sibFixed.W, sibFixed.H)
+				bg := findAncestorBackground(sibFixed)
+				clearRectWithBG(buf, sibFixed.X, sibFixed.Y, sibFixed.W, sibFixed.H, bg)
 				paintNode(buf, sibFixed)
 			}
 		}
@@ -310,6 +321,37 @@ func findOverlayAncestor(node *Node) *Node {
 	}
 	return nil
 }
+// findAncestorBackground walks up the tree to find the nearest ancestor
+// with a non-empty background color. This simulates CSS background inheritance.
+func findAncestorBackground(node *Node) string {
+	for n := node.Parent; n != nil; n = n.Parent {
+		if n.Style.Background != "" {
+			return n.Style.Background
+		}
+	}
+	return ""
+}
+
+// clearRectWithBG clears a rectangular area and fills it with the given
+// background color. If bg is empty, falls back to plain ClearRect.
+func clearRectWithBG(buf *CellBuffer, x, y, w, h int, bg string) {
+	if bg == "" {
+		buf.ClearRect(x, y, w, h)
+		return
+	}
+	for row := y; row < y+h && row < buf.Height(); row++ {
+		if row < 0 {
+			continue
+		}
+		for col := x; col < x+w && col < buf.Width(); col++ {
+			if col < 0 {
+				continue
+			}
+			buf.SetChar(col, row, ' ', "", bg, false)
+		}
+	}
+}
+
 
 func parentHasOverlayChildren(node *Node) bool {
 	for _, child := range node.Children {

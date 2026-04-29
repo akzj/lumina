@@ -55,10 +55,12 @@ lumina.app {
         end
 
         local function renderRow(row, i, ctx)
+            -- Opaque row bg: empty string skips hbox fill so dirty cells show terminal default.
+            local rowBg = ctx.selected and (t.surface1 or "#45475A") or (t.base or "#1E1E2E")
             return lumina.createElement("hbox", {
                 style = {
                     height = 1,
-                    background = ctx.selected and (t.surface1 or "#45475A") or "",
+                    background = rowBg,
                 },
                 onClick = function()
                     openForRow(i, row)
