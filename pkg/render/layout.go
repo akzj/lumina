@@ -197,6 +197,13 @@ func computeFlex(node *Node, x, y, w, h int) {
 		}
 	}
 
+	// Track position changes for clearing old region during paint
+	if node.X != x || node.Y != y || node.W != w || node.H != h {
+		node.OldX, node.OldY, node.OldW, node.OldH = node.X, node.Y, node.W, node.H
+		node.PositionChanged = true
+		node.PaintDirty = true
+	}
+
 	node.X = x
 	node.Y = y
 	node.W = w
@@ -232,12 +239,28 @@ func computeFlex(node *Node, x, y, w, h int) {
 		return
 
 	case "component":
-		// Component placeholder: transparent container, passes through to children
+		// Component placeholder: transparent container, passes through to children.
+		// For absolute/fixed positioned children, position relative to the parent
+		// container's content area, not the placeholder's stacked position.
+		// This prevents double-offset when multiple component placeholders are
+		// stacked in a vbox (each placeholder gets a different y from stacking).
+		parentX, parentY, parentW, parentH := x, y, w, h
+		if node.Parent != nil {
+			p := node.Parent
+			bw := 0
+			if p.Style.Border != "" && p.Style.Border != "none" {
+				bw = 1
+			}
+			parentX = p.X + bw + p.Style.PaddingLeft
+			parentY = p.Y + bw + p.Style.PaddingTop
+			parentW = p.W - 2*bw - p.Style.PaddingLeft - p.Style.PaddingRight
+			parentH = p.H - 2*bw - p.Style.PaddingTop - p.Style.PaddingBottom
+		}
 		for _, child := range node.Children {
 			cs := child.Style
 			if isPositioned(cs) {
-				// Handle absolute/fixed positioned children within component placeholders
-				cx, cy, cw, ch := x+cs.Left, y+cs.Top, w, h
+				// Position relative to parent container's content area
+				cx, cy, cw, ch := parentX+cs.Left, parentY+cs.Top, parentW, parentH
 				if cs.Width > 0 {
 					cw = cs.Width
 				}
@@ -245,10 +268,10 @@ func computeFlex(node *Node, x, y, w, h int) {
 					ch = cs.Height
 				}
 				if cs.Right >= 0 && cs.Left == 0 {
-					cx = x + w - cw - cs.Right
+					cx = parentX + parentW - cw - cs.Right
 				}
 				if cs.Bottom >= 0 && cs.Top == 0 {
-					cy = y + h - ch - cs.Bottom
+					cy = parentY + parentH - ch - cs.Bottom
 				}
 				computeFlex(child, cx, cy, cw, ch)
 			} else {

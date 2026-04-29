@@ -154,4 +154,91 @@ test.describe("Window widget", function()
         test.assert.eq(app:screenContains("Window Closed"), true)
         test.assert.eq(app:screenContains("Closable"), false)
     end)
+
+    test.it("two windows at different y positions render correctly", function()
+        app:loadString([[
+            lumina.createComponent({
+                id = "test", name = "Test",
+                render = function()
+                    return lumina.createElement("box", {id = "root",
+                        style = {width = 80, height = 24}},
+                        lumina.createElement(lumina.Window, {
+                            title = "TopWin",
+                            x = 2, y = 1, width = 30, height = 6,
+                            key = "w1",
+                        }),
+                        lumina.createElement(lumina.Window, {
+                            title = "BotWin",
+                            x = 2, y = 10, width = 30, height = 6,
+                            key = "w2",
+                        })
+                    )
+                end,
+            })
+        ]])
+        -- Both windows should be visible at their correct positions
+        test.assert.eq(app:screenContains("TopWin"), true)
+        test.assert.eq(app:screenContains("BotWin"), true)
+        -- Verify BotWin is at y=10 (not double-offset from vbox stacking)
+        local screen = app:screenText()
+        local lines = {}
+        for line in screen:gmatch("[^\n]+") do
+            lines[#lines + 1] = line
+        end
+        -- BotWin title should be on line 12 (y=10 border + 1 for title row + 1 for 1-based)
+        -- Actually: border at row 10 (0-based), title at row 11 (0-based) = line 12 (1-based)
+        local titleLine = lines[12] or ""
+        test.assert.eq(titleLine:find("BotWin") ~= nil, true)
+    end)
+
+    test.it("drag clears old position (no ghost artifacts)", function()
+        app:loadString([[
+            lumina.store.set("win", {x = 5, y = 2, w = 30, h = 8})
+            lumina.createComponent({
+                id = "test", name = "Test",
+                render = function()
+                    local win = lumina.useStore("win")
+                    return lumina.createElement("box", {id = "root",
+                        style = {width = 80, height = 24}},
+                        lumina.createElement(lumina.Window, {
+                            title = "Ghost",
+                            x = win.x, y = win.y,
+                            width = win.w, height = win.h,
+                            key = "w1",
+                            onChange = function(e)
+                                if type(e) == "table" and e.type == "move" then
+                                    lumina.store.set("win", {x = e.x, y = e.y, w = 30, h = 8})
+                                end
+                            end,
+                        })
+                    )
+                end,
+            })
+        ]])
+        -- Window starts at y=2, title at y=3
+        test.assert.eq(app:screenContains("Ghost"), true)
+        local screen = app:screenText()
+        local lines = {}
+        for line in screen:gmatch("[^\n]+") do
+            lines[#lines + 1] = line
+        end
+        -- Title "Ghost" should be on line 4 (y=2 border, y=3 title, 1-based = line 4)
+        test.assert.eq((lines[4] or ""):find("Ghost") ~= nil, true)
+
+        -- Drag window down by 5 rows: mouseDown on title bar (y=3), move to y=8
+        app:mouseDown(15, 3)
+        app:mouseMove(15, 8)
+        app:mouseUp(15, 8)
+
+        -- After drag, window should be at new position
+        test.assert.eq(app:screenContains("Ghost"), true)
+        local screen2 = app:screenText()
+        local lines2 = {}
+        for line in screen2:gmatch("[^\n]+") do
+            lines2[#lines2 + 1] = line
+        end
+        -- Old position (line 4) should be cleared (no "Ghost" text)
+        local oldLine = lines2[4] or ""
+        test.assert.eq(oldLine:find("Ghost") == nil, true)
+    end)
 end)
