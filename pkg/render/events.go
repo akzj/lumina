@@ -400,10 +400,12 @@ func (e *Engine) HandleKeyDown(key string) {
 
 	// Dispatch keydown to Go widget that owns the focused node.
 	// dispatchWidgetEvent walks up from the node to find the owning widget
-	// component and calls DoOnEvent("keydown", key). If no widget ancestor
-	// exists, it returns without action.
+	// component and calls DoOnEvent("keydown", key). If the widget consumed
+	// the event, don't dispatch to Lua onKeyDown handler.
 	if e.focusedNode != nil {
-		e.dispatchWidgetEvent(e.focusedNode, "keydown", key, 0, 0)
+		if e.dispatchWidgetEvent(e.focusedNode, "keydown", key, 0, 0) {
+			return // consumed by Go widget, skip Lua onKeyDown
+		}
 	}
 
 	// Fall through to onKeyDown handler — search from top layer down
@@ -600,18 +602,19 @@ func (e *Engine) callLuaRefSimple(ref LuaRef) {
 // component is marked dirty for re-render.
 // If the widget sets FireOnChange on the event, the engine fires the onChange
 // Lua callback on the widget's root node.
-func (e *Engine) dispatchWidgetEvent(node *Node, eventType, key string, x, y int) {
+// Returns true if a widget was found AND DoOnEvent returned true (event consumed).
+func (e *Engine) dispatchWidgetEvent(node *Node, eventType, key string, x, y int) bool {
 	comp := findOwnerComponent(node)
 	if comp == nil {
-		return
+		return false
 	}
 	w, ok := e.widgets[comp.Type]
 	if !ok {
-		return
+		return false
 	}
 	state, ok := e.widgetStates[comp.ID]
 	if !ok {
-		return
+		return false
 	}
 	evt := &WidgetEvent{Type: eventType, Key: key, X: x, Y: y}
 	// Populate widget screen bounds so widgets know their position
@@ -621,7 +624,8 @@ func (e *Engine) dispatchWidgetEvent(node *Node, eventType, key string, x, y int
 		evt.WidgetW = comp.RootNode.W
 		evt.WidgetH = comp.RootNode.H
 	}
-	if w.DoOnEvent(comp.Props, state, evt) {
+	consumed := w.DoOnEvent(comp.Props, state, evt)
+	if consumed {
 		comp.Dirty = true
 		e.needsRender = true
 	}
@@ -644,6 +648,7 @@ func (e *Engine) dispatchWidgetEvent(node *Node, eventType, key string, x, y int
 	if evt.RemoveLayer != "" {
 		e.RemoveLayer(evt.RemoveLayer)
 	}
+	return consumed
 }
 
 // callLuaRefWithValue calls a Lua function by registry ref with a single typed value argument.
