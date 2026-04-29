@@ -357,9 +357,21 @@ func paintElementsTab(cb *render.CellBuffer, panel *devtools.Panel, startRow, wi
 		row++
 	}
 
-	// Selection detail strip
-	if sel >= 0 && sel < len(nodes) && panel.ElementsDetailReservedLines() > 0 {
+	// Selection detail strip (line budget matches Panel.elementsDetailReserved).
+	if sel >= 0 && sel < len(nodes) {
+		budget := panel.ElementsDetailReservedLines()
+		if budget <= 0 {
+			return row
+		}
 		n := nodes[sel]
+		if budget == 1 {
+			if row < cb.Height() {
+				compact := fmt.Sprintf("  sel <%s> %d,%d %dx%d id=%s", n.Type, n.X, n.Y, n.W, n.H, n.ID)
+				paintTextLine(cb, row, width, truncateElementsLine(compact, width), fgColor, bgColor)
+				row++
+			}
+			return row
+		}
 		if row < cb.Height() {
 			paintTextLine(cb, row, width, "  ── selection ──", titleColor, bgColor)
 			row++
@@ -374,12 +386,14 @@ func paintElementsTab(cb *render.CellBuffer, panel *devtools.Panel, startRow, wi
 		if n.ComponentID != "" || n.ComponentFactory != "" {
 			detail = append(detail, fmt.Sprintf("  component id=%s type=%s", n.ComponentID, n.ComponentFactory))
 		}
+		remaining := budget - 1 // after separator
 		for _, s := range detail {
-			if row >= cb.Height() {
+			if remaining <= 0 || row >= cb.Height() {
 				break
 			}
 			paintTextLine(cb, row, width, truncateElementsLine(s, width), fgColor, bgColor)
 			row++
+			remaining--
 		}
 	}
 

@@ -265,12 +265,12 @@ func TestWindowMinimumSize(t *testing.T) {
 	Window.OnEvent(props, state, evt2)
 
 	resizeData := evt2.FireOnChange.(map[string]any)
-	// min width=10, min height=5
+	// min width=10, min height=6 (border + title + divider + content + handle + border)
 	if resizeData["width"] != 10 {
 		t.Errorf("expected min width=10, got %v", resizeData["width"])
 	}
-	if resizeData["height"] != 5 {
-		t.Errorf("expected min height=5, got %v", resizeData["height"])
+	if resizeData["height"] != 6 {
+		t.Errorf("expected min height=6, got %v", resizeData["height"])
 	}
 }
 
