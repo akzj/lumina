@@ -181,23 +181,29 @@ func (e *Engine) HandleMouseMove(x, y int) {
 			// and fall through to normal dispatch below.
 			e.capturedComp = nil
 		} else {
-			state := e.widgetStates[e.capturedComp.ID]
-			evt := &WidgetEvent{Type: "mousemove", X: x, Y: y}
-			if e.capturedComp.RootNode != nil {
-				evt.WidgetX = e.capturedComp.RootNode.X
-				evt.WidgetY = e.capturedComp.RootNode.Y
-				evt.WidgetW = e.capturedComp.RootNode.W
-				evt.WidgetH = e.capturedComp.RootNode.H
+			state, stateOk := e.widgetStates[e.capturedComp.ID]
+			if !stateOk {
+				// Widget state missing (component rebuilt) — release capture
+				// and fall through to normal dispatch below.
+				e.capturedComp = nil
+			} else {
+				evt := &WidgetEvent{Type: "mousemove", X: x, Y: y}
+				if e.capturedComp.RootNode != nil {
+					evt.WidgetX = e.capturedComp.RootNode.X
+					evt.WidgetY = e.capturedComp.RootNode.Y
+					evt.WidgetW = e.capturedComp.RootNode.W
+					evt.WidgetH = e.capturedComp.RootNode.H
+				}
+				if w.DoOnEvent(e.capturedComp.Props, state, evt) {
+					e.capturedComp.Dirty = true
+					e.needsRender = true
+				}
+				// Fire onChange if widget requested it
+				if evt.FireOnChange != nil && e.capturedComp.RootNode != nil && e.capturedComp.RootNode.OnChange != 0 {
+					e.callLuaRefWithValue(e.capturedComp.RootNode.OnChange, evt.FireOnChange)
+				}
+				return // captured widget gets ALL mouse events, skip normal dispatch
 			}
-			if w.DoOnEvent(e.capturedComp.Props, state, evt) {
-				e.capturedComp.Dirty = true
-				e.needsRender = true
-			}
-			// Fire onChange if widget requested it
-			if evt.FireOnChange != nil && e.capturedComp.RootNode != nil && e.capturedComp.RootNode.OnChange != 0 {
-				e.callLuaRefWithValue(e.capturedComp.RootNode.OnChange, evt.FireOnChange)
-			}
-			return // captured widget gets ALL mouse events, skip normal dispatch
 		}
 	}
 
@@ -341,22 +347,25 @@ func (e *Engine) HandleMouseUp(x, y int) {
 	if e.capturedComp != nil {
 		w, ok := e.widgets[e.capturedComp.Type]
 		if ok {
-			state := e.widgetStates[e.capturedComp.ID]
-			evt := &WidgetEvent{Type: "mouseup", X: x, Y: y}
-			if e.capturedComp.RootNode != nil {
-				evt.WidgetX = e.capturedComp.RootNode.X
-				evt.WidgetY = e.capturedComp.RootNode.Y
-				evt.WidgetW = e.capturedComp.RootNode.W
-				evt.WidgetH = e.capturedComp.RootNode.H
+			state, stateOk := e.widgetStates[e.capturedComp.ID]
+			if stateOk {
+				evt := &WidgetEvent{Type: "mouseup", X: x, Y: y}
+				if e.capturedComp.RootNode != nil {
+					evt.WidgetX = e.capturedComp.RootNode.X
+					evt.WidgetY = e.capturedComp.RootNode.Y
+					evt.WidgetW = e.capturedComp.RootNode.W
+					evt.WidgetH = e.capturedComp.RootNode.H
+				}
+				if w.DoOnEvent(e.capturedComp.Props, state, evt) {
+					e.capturedComp.Dirty = true
+					e.needsRender = true
+				}
+				// Fire onChange if widget requested it
+				if evt.FireOnChange != nil && e.capturedComp.RootNode != nil && e.capturedComp.RootNode.OnChange != 0 {
+					e.callLuaRefWithValue(e.capturedComp.RootNode.OnChange, evt.FireOnChange)
+				}
 			}
-			if w.DoOnEvent(e.capturedComp.Props, state, evt) {
-				e.capturedComp.Dirty = true
-				e.needsRender = true
-			}
-			// Fire onChange if widget requested it
-			if evt.FireOnChange != nil && e.capturedComp.RootNode != nil && e.capturedComp.RootNode.OnChange != 0 {
-				e.callLuaRefWithValue(e.capturedComp.RootNode.OnChange, evt.FireOnChange)
-			}
+			// stateOk == false: widget state missing, skip dispatch
 		}
 		e.capturedComp = nil // release capture
 		return
