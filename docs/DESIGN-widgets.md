@@ -1,6 +1,6 @@
 # Lumina Widget System Design
 
-> Go 提供 **Radix 风格**原生控件（`pkg/widget/`，Lua 里为 `lumina.*`）；Lua 提供可复制、可热更的展示模板 **Lux**（源码在 `lua/lux/`，运行时由 `pkg/lux_modules.go` 内嵌到 `require("lux")`）。
+> Go 提供 **Radix 风格**原生控件（`pkg/widget/`，Lua 里为 `lumina.*`）；Lua 提供可复制、可热更的展示模板 **Lux**（源码在 `lua/lux/`，构建时由 `lua/lux/embed.go` 嵌入、`pkg/lux_modules.go` 注册到 `require("lux")`）。
 
 **与仓库同步**：内置控件列表以 [`pkg/widget/register.go`](../pkg/widget/register.go) 的 `widget.All()` 为准；Lux 子模块以 [`pkg/lux_modules.go`](../pkg/lux_modules.go) 的 `registerLuxModules` 为准；应用侧注册见 [`pkg/app.go`](../pkg/app.go) 中 `NewApp` 对 `eng.RegisterWidget` 的循环。
 
@@ -132,9 +132,9 @@ type Widget struct {
 
 ### 2.3 Lux（Lua 模板，内嵌 preload）
 
-源码目录为 **`lua/lux/`**；运行时由 **`pkg/lux_modules.go`** 写入 `package.preload`（与二进制同发，无需随盘携带 `lua/`）。
+源码目录为 **`lua/lux/`**；构建时由 **`lua/lux/embed.go`** 嵌入，`pkg/lux_modules.go` 的 **`registerLuxModules`** 写入 `package.preload`（与二进制同发，无需随盘携带 `lua/`）。
 
-当前 umbrella **`require("lux")`** 暴露的子模块包括（与 `luxInitLua` 一致）：
+当前 umbrella **`require("lux")`** 暴露的子模块包括（与 `lua/lux/init.lua` 一致）：
 
 | 模块 | 说明 |
 |------|------|
@@ -256,7 +256,7 @@ Spinner:
 | Phase 1 | `RegisterWidget` + Button | **已完成** |
 | Phase 2 | Checkbox、Switch、Radio | **已完成** |
 | Phase 3 | Select、Label；草稿中的 **Form** | Select、Label **已完成**；**无** `pkg/widget/form.go` |
-| Phase 4 | Lua Lux + 主题 | **已完成**；Lux 以 **`pkg/lux_modules.go` 内嵌**为主，`lua/lux/` 为权威源码 |
+| Phase 4 | Lua Lux + 主题 | **已完成**；Lux 源码在 **`lua/lux/`**（`embed.go` 嵌入），`pkg/lux_modules.go` 负责 preload 注册 |
 | Phase 5 | Overlay、Dialog、Menu、Dropdown… | **部分完成**：上述控件已在 `widget.All()`；**Layer**（`WidgetEvent.CreateLayer` 等）与全局 overlay 策略仍在 **迭代**；**Popover**、独立 **`lua/lux/toast.lua`** 等**未**按原清单落地 |
 
 **后续工作（方向性，非排期承诺）**

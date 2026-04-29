@@ -222,7 +222,7 @@ lumina.createElement(lumina.Checkbox, {
 
 ### Lua Lux 组件库（`require("lux")`）
 
-与上一节的 **Go Radix 风格控件** 区分：`lux` 是 **Lua 侧可热更的 UI 模板**（由 `pkg/lux_modules.go` 内嵌 `lua/lux/*.lua` 到 `package.preload`，运行时 `require` 即可），不负责底层焦点/键盘路由等——那些由引擎 + Go Widget 处理。
+与上一节的 **Go Radix 风格控件** 区分：`lux` 是 **Lua 侧可热更的 UI 模板**（由 `pkg/lux_modules.go` 通过 `lua/lux/embed.go` 将 `lua/lux/*.lua` 打进二进制并注册到 `package.preload`，运行时 `require` 即可），不负责底层焦点/键盘路由等——那些由引擎 + Go Widget 处理。
 
 典型用法：
 

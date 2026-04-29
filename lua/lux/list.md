@@ -1,6 +1,6 @@
 # Lux ListView — 设计与使用
 
-> **实现**：`lua/lux/list.lua`，`require("lux.list")` 或 `require("lux").ListView`。源码与 `pkg/lux_modules.go` 内嵌常量需保持同步。  
+> **实现**：`lua/lux/list.lua`，`require("lux.list")` 或 `require("lux").ListView`。运行时由 `lua/lux/embed.go` + `pkg/lux_modules.go` 的 `registerLuxModules` 加载本文件。  
 > **命名**：**`ListView`**，与 Go `lumina.List`（纯文本 widget）区分。
 
 ---

@@ -17,7 +17,7 @@ local Badge = require("lux.badge")
 local DataGrid = require("lux.data_grid")
 ```
 
-All Lux modules are embedded in the Go binary via `pkg/lux_modules.go` — no external file dependencies at runtime.
+All Lux modules are embedded in the Go binary from `lua/lux/*.lua` (`lua/lux/embed.go`) and registered in `pkg/lux_modules.go` — no external file dependencies at runtime.
 
 ---
 
