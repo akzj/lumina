@@ -213,27 +213,22 @@ var Window = &Widget{
 				newX := s.OrigX + dx
 				newY := s.OrigY + dy
 
-				// Strict: keep entire window within app bounds
+				// Keep title bar visible so user can always drag the window back
 				if event.ScreenW > 0 && event.ScreenH > 0 {
-					maxX := event.ScreenW - w
-					maxY := event.ScreenH - h
-					if maxX < 0 {
-						maxX = 0
+					minVisible := 5 // at least 5 columns of title bar visible
+					// X: allow window to go partially off-screen, but keep some title bar visible
+					if newX < -w+minVisible {
+						newX = -w + minVisible
 					}
-					if maxY < 0 {
-						maxY = 0
+					if newX > event.ScreenW-minVisible {
+						newX = event.ScreenW - minVisible
 					}
-					if newX < 0 {
-						newX = 0
-					}
-					if newX > maxX {
-						newX = maxX
-					}
+					// Y: title bar must stay within app area (can't go above or below)
 					if newY < 0 {
 						newY = 0
 					}
-					if newY > maxY {
-						newY = maxY
+					if newY > event.ScreenH-2 {
+						newY = event.ScreenH - 2 // keep title bar row visible
 					}
 				}
 
