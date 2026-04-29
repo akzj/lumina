@@ -3,6 +3,7 @@ package render
 import (
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/akzj/go-lua/pkg/lua"
@@ -1242,6 +1243,7 @@ func (e *Engine) reconcileChildComponents(parent *Component, node *Node) {
 		} else {
 			// Existing child: update props and mark dirty if changed.
 			if !propsEqual(child.Props, node.ComponentProps) {
+				unrefPropFuncRefsInProps(e.L, child.Props)
 				child.Props = node.ComponentProps
 				child.Dirty = true
 			}
@@ -1401,6 +1403,10 @@ func (e *Engine) cleanupComponentTree(comp *Component) {
 
 	// Clean up widget state for this component (prevent memory leak + stale state)
 	delete(e.widgetStates, comp.ID)
+
+	// Drop Lua function refs held in props (nested propFuncRef from readMapFromTable).
+	unrefPropFuncRefsInProps(e.L, comp.Props)
+	comp.Props = nil
 
 	// Cleanup hook refs (effects, memos, refs) — runs effect cleanups
 	e.cleanupComponentHooks(comp)
@@ -2037,6 +2043,40 @@ func (e *Engine) luaUseState(L *lua.State) int {
 // is restored in pushMap via RawGetI(registry, ref).
 type propFuncRef int64
 
+// collectPropFuncRefsFromAny walks values produced by readMapFromTable / readPropTable
+// and collects nested propFuncRef ids (registry indices).
+func collectPropFuncRefsFromAny(v any, out *[]int64) {
+	switch x := v.(type) {
+	case propFuncRef:
+		if x != 0 {
+			*out = append(*out, int64(x))
+		}
+	case map[string]any:
+		for _, vv := range x {
+			collectPropFuncRefsFromAny(vv, out)
+		}
+	case []any:
+		for _, vv := range x {
+			collectPropFuncRefsFromAny(vv, out)
+		}
+	}
+}
+
+// unrefPropFuncRefsInProps releases Lua registry refs held in a props map. Must be
+// called before dropping the map: each render builds a new readMapFromTable result
+// with new Ref() ids for the same logical functions, so propsEqual is usually false
+// every frame and child.Props is reassigned without otherwise freeing old refs.
+func unrefPropFuncRefsInProps(L *lua.State, m map[string]any) {
+	if L == nil || m == nil {
+		return
+	}
+	var refs []int64
+	collectPropFuncRefsFromAny(m, &refs)
+	for _, ref := range refs {
+		L.Unref(lua.RegistryIndex, int(ref))
+	}
+}
+
 func pushMap(L *lua.State, m map[string]any) {
 	if m == nil {
 		L.NewTable()
@@ -2053,9 +2093,43 @@ func pushMap(L *lua.State, m map[string]any) {
 				L.PushNil()
 			}
 		default:
-			L.PushAny(v)
+			pushPropValue(L, v)
 		}
 		L.SetTable(-3)
+	}
+}
+
+// pushPropValue pushes a value stored in ComponentProps, preserving nested
+// propFuncRef (Lua functions) that plain PushAny cannot represent.
+func pushPropValue(L *lua.State, v any) {
+	if v == nil {
+		L.PushNil()
+		return
+	}
+	if pf, ok := v.(propFuncRef); ok {
+		if pf != 0 {
+			L.RawGetI(lua.RegistryIndex, int64(pf))
+		} else {
+			L.PushNil()
+		}
+		return
+	}
+	switch vv := v.(type) {
+	case map[string]any:
+		L.CreateTable(0, len(vv))
+		for k, val := range vv {
+			L.PushString(k)
+			pushPropValue(L, val)
+			L.RawSet(-3)
+		}
+	case []any:
+		L.CreateTable(len(vv), 0)
+		for i, val := range vv {
+			pushPropValue(L, val)
+			L.RawSetI(-2, int64(i+1))
+		}
+	default:
+		L.PushAny(v)
 	}
 }
 
@@ -2098,16 +2172,92 @@ func readMapFromTable(L *lua.State, idx int) map[string]any {
 	L.ForEach(absIdx, func(L *lua.State) bool {
 		if L.Type(-2) == lua.TypeString {
 			key, _ := L.ToString(-2)
-			if L.IsFunction(-1) {
-				L.PushValue(-1)
-				ref := L.Ref(lua.RegistryIndex)
-				m[key] = propFuncRef(ref)
-			} else {
-				m[key] = L.ToAny(-1)
-			}
+			m[key] = readPropValueFromStack(L)
 		}
 		return true
 	})
+	return m
+}
+
+func luaPropTableKeyString(L *lua.State, keyIdx int) string {
+	switch L.Type(keyIdx) {
+	case lua.TypeString:
+		s, _ := L.ToString(keyIdx)
+		return s
+	case lua.TypeNumber:
+		if L.IsInteger(keyIdx) {
+			v, _ := L.ToInteger(keyIdx)
+			return strconv.FormatInt(v, 10)
+		}
+		v, _ := L.ToNumber(keyIdx)
+		return strconv.FormatFloat(v, 'g', -1, 64)
+	default:
+		s, _ := L.ToString(keyIdx)
+		return s
+	}
+}
+
+// readPropValueFromStack reads the Lua value at stack index -1 (without popping it).
+// Used for ComponentProps so nested descriptor tables keep onClick etc. as propFuncRef.
+// (L.ToAny maps Lua functions to nil.)
+func readPropValueFromStack(L *lua.State) any {
+	switch L.Type(-1) {
+	case lua.TypeNil:
+		return nil
+	case lua.TypeBoolean:
+		return L.ToBoolean(-1)
+	case lua.TypeNumber:
+		if L.IsInteger(-1) {
+			v, _ := L.ToInteger(-1)
+			return v
+		}
+		v, _ := L.ToNumber(-1)
+		return v
+	case lua.TypeString:
+		s, _ := L.ToString(-1)
+		return s
+	case lua.TypeFunction:
+		L.PushValue(-1)
+		ref := L.Ref(lua.RegistryIndex)
+		return propFuncRef(ref)
+	case lua.TypeTable:
+		L.PushValue(-1)
+		tIdx := L.AbsIndex(-1)
+		out := readPropTable(L, tIdx)
+		L.Pop(1)
+		return out
+	default:
+		return L.ToAny(-1)
+	}
+}
+
+func readPropTable(L *lua.State, idx int) any {
+	idx = L.AbsIndex(idx)
+	length := int(L.LenI(idx))
+	if length > 0 {
+		var count int64
+		L.PushNil()
+		for L.Next(idx) {
+			count++
+			L.Pop(1)
+		}
+		if count == int64(length) {
+			arr := make([]any, length)
+			for i := 1; i <= length; i++ {
+				L.RawGetI(idx, int64(i))
+				arr[i-1] = readPropValueFromStack(L)
+				L.Pop(1)
+			}
+			return arr
+		}
+	}
+	m := make(map[string]any)
+	L.PushNil()
+	for L.Next(idx) {
+		key := luaPropTableKeyString(L, -2)
+		m[key] = readPropValueFromStack(L)
+		L.Pop(1)
+	}
 	return m
 }
 

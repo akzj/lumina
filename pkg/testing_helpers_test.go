@@ -76,3 +76,31 @@ func screenHasString(ta *output.TestAdapter, s string) bool {
 	}
 	return false
 }
+
+// screenSubstringOrigin returns the top-left (x, y) of the first screen occurrence of s, or ok=false.
+func screenSubstringOrigin(ta *output.TestAdapter, s string) (x, y int, ok bool) {
+	runes := []rune(s)
+	if len(runes) == 0 || ta.LastScreen == nil {
+		return 0, 0, false
+	}
+	h := ta.LastScreen.Height()
+	w := ta.LastScreen.Width()
+	if w < len(runes) {
+		return 0, 0, false
+	}
+	for yy := 0; yy < h; yy++ {
+		for xx := 0; xx <= w-len(runes); xx++ {
+			match := true
+			for i, r := range runes {
+				if ta.LastScreen.Get(xx+i, yy).Char != r {
+					match = false
+					break
+				}
+			}
+			if match {
+				return xx, yy, true
+			}
+		}
+	}
+	return 0, 0, false
+}

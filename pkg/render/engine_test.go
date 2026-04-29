@@ -1,6 +1,7 @@
 package render
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/akzj/go-lua/pkg/lua"
@@ -286,6 +287,80 @@ func TestEngine_EventHandlerRef(t *testing.T) {
 	}
 	if node.OnMouseEnter == 0 {
 		t.Error("OnMouseEnter should be a non-zero Lua ref")
+	}
+}
+
+func TestEngine_ReadDescriptor_TextOnClick(t *testing.T) {
+	e, L := newTestEngine(t)
+	err := L.DoString(`
+		t = lumina.createElement("text", {
+			foreground = "#89B4FA",
+			bold = true,
+			onClick = function() end,
+		}, "  [ OK ]  ")
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	L.GetGlobal("t")
+	desc := e.readDescriptor(L, -1)
+	L.Pop(1)
+	if desc.Type != "text" {
+		t.Fatalf("type: got %q want text", desc.Type)
+	}
+	if desc.OnClick == 0 {
+		t.Fatalf("readDescriptor lost text onClick (same shape as list_dialog OK button)")
+	}
+}
+
+func findDescTextOnClick(d Descriptor, sub string) (onClick LuaRef, ok bool) {
+	if d.Type == "text" && strings.Contains(d.Content, sub) {
+		return d.OnClick, true
+	}
+	for _, ch := range d.Children {
+		if ref, found := findDescTextOnClick(ch, sub); found {
+			return ref, true
+		}
+	}
+	return 0, false
+}
+
+func TestEngine_ReadDescriptor_LuxDialogLikeVBoxOnClick(t *testing.T) {
+	e, L := newTestEngine(t)
+	err := L.DoString(`
+		local ok = lumina.createElement("text", {
+			foreground = "#89B4FA",
+			bold = true,
+			onClick = function() end,
+		}, "  [ OK ]  ")
+		local actionsSlot = { children = { ok } }
+		dlgLike = lumina.createElement("vbox", {
+			style = {
+				border = "rounded",
+				padding = 1,
+				width = 40,
+				background = "#313244",
+			},
+		},
+			lumina.createElement("text", { foreground = "#89B4FA", bold = true }, "T"),
+			lumina.createElement("text", { foreground = "#6C7086", dim = true }, string.rep("-", 36)),
+			lumina.createElement("text", { foreground = "#CDD6F4" }, "Body"),
+			lumina.createElement("text", { foreground = "#6C7086", dim = true }, string.rep("-", 36)),
+			lumina.createElement("hbox", { style = { gap = 1 } }, table.unpack(actionsSlot.children))
+		)
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	L.GetGlobal("dlgLike")
+	desc := e.readDescriptor(L, -1)
+	L.Pop(1)
+	ref, ok := findDescTextOnClick(desc, "[ OK ]")
+	if !ok {
+		t.Fatal("descriptor tree missing OK text")
+	}
+	if ref == 0 {
+		t.Fatal("LuxDialog-like vbox lost OK onClick at readDescriptor stage")
 	}
 }
 

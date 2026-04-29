@@ -1,7 +1,10 @@
 package v2
 
 import (
+	"strings"
 	"testing"
+
+	"github.com/akzj/lumina/pkg/render"
 )
 
 // TestSlotFactory_Basic tests that slot factories produce correct descriptor tables.
@@ -100,6 +103,74 @@ func TestComposableDialog_BasicSlots(t *testing.T) {
 	}
 	if !screenHasString(ta, "[Delete]") {
 		t.Error("expected '[Delete]' action on screen")
+	}
+}
+
+func findTextNodeContaining(n *render.Node, sub string) *render.Node {
+	if n == nil {
+		return nil
+	}
+	if n.Type == "text" && strings.Contains(n.Content, sub) {
+		return n
+	}
+	for _, c := range n.Children {
+		if hit := findTextNodeContaining(c, sub); hit != nil {
+			return hit
+		}
+	}
+	return nil
+}
+
+// TestComposableDialog_ActionsTextOnClickNode asserts the OK action text node
+// carries a Lua onClick ref after render (regression for empty-key reconcile / hit-test).
+func TestComposableDialog_ActionsTextOnClickNode(t *testing.T) {
+	app, _, _ := newLuaApp(t, 80, 24)
+
+	err := app.RunString(`
+		local lux = require("lux")
+		local Dialog = lux.Dialog
+		local Title, Content, Actions = Dialog.Title, Dialog.Content, Dialog.Actions
+
+		lumina.createComponent({
+			id = "dlg-okref",
+			name = "DlgOkRef",
+			x = 0, y = 0, w = 80, h = 24,
+			render = function(props)
+				return lumina.createElement("vbox", {
+					style = {width = 80, height = 24},
+				},
+					Dialog {
+						open = true,
+						width = 40,
+						Title { "T" },
+						Content { "Body" },
+						Actions {
+							lumina.createElement("text", {
+								foreground = "#89B4FA",
+								bold = true,
+								onClick = function() end,
+							}, "  [ OK ]  "),
+						},
+					}
+				)
+			end,
+		})
+	`)
+	if err != nil {
+		t.Fatalf("RunString failed: %v", err)
+	}
+	app.RenderAll()
+
+	root := app.Engine().Root()
+	if root == nil || root.RootNode == nil {
+		t.Fatal("missing root RootNode")
+	}
+	tn := findTextNodeContaining(root.RootNode, "[ OK ]")
+	if tn == nil {
+		t.Fatal("expected a text node containing [ OK ]")
+	}
+	if tn.OnClick == 0 {
+		t.Fatalf("OK action text node should have OnClick ref, got 0 (content=%q)", tn.Content)
 	}
 }
 

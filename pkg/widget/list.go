@@ -122,18 +122,18 @@ var List = &Widget{
 				if s.SelectedIndex >= len(items) {
 					s.SelectedIndex = 0
 				}
-				event.FireOnChange = s.SelectedIndex
+				event.FireOnChange = s.SelectedIndex + 1 // 1-based for Lua onChange
 				return true
 			case "ArrowUp", "k":
 				s.SelectedIndex--
 				if s.SelectedIndex < 0 {
 					s.SelectedIndex = len(items) - 1
 				}
-				event.FireOnChange = s.SelectedIndex
+				event.FireOnChange = s.SelectedIndex + 1
 				return true
 			case "Enter":
 				if s.SelectedIndex >= 0 && s.SelectedIndex < len(items) {
-					event.FireOnChange = s.SelectedIndex
+					event.FireOnChange = s.SelectedIndex + 1
 				}
 				return false
 			}

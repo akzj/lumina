@@ -124,3 +124,11 @@ ListView {
 - `lua/lux/command_palette.lua` — 选中行样式参考  
 - `examples/notes.lua` — `overflow` + `scrollY` 模式  
 - `pkg/widget/list.go` — Go 文本 `List`，勿混用  
+
+---
+
+## 9. 实现说明（引擎）
+
+子组件 `ComponentProps` 中的 **函数**（如 `renderRow`、`onChangeIndex`）在 `readDescriptor` → `readMapFromTable` 中存为 **`propFuncRef`（registry ref）**；`renderComponent` 里 `pushMap` 通过 **`RawGetI(RegistryIndex, ref)`** 压回 Lua，这样 `type(renderRow) == "function"`。普通 `int64` 仍按数值推入，避免与 ref 混淆。
+
+Go `lumina.List` 的 `FireOnChange` 对 Lua 为 **1-based** 下标；Lux `ListView` 的 `selectedIndex` / 回调参数为 **1-based**，二者在 Lua 侧一致，但与 `ListState.SelectedIndex`（0-based）不同，文档区分即可。
