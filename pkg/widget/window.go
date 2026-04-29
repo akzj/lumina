@@ -243,6 +243,25 @@ var Window = &Widget{
 				// Minimum size: border(2) + title(1) + divider(1) + content(1) + handle(1) = 6 rows
 				newW := max(10, s.OrigW+dx)
 				newH := max(6, s.OrigH+dy)
+
+				// Clamp resize to stay within app bounds
+				if event.ScreenW > 0 && event.ScreenH > 0 {
+					origX := intProp(props, "x", 0)
+					origY := intProp(props, "y", 0)
+					if origX+newW > event.ScreenW {
+						newW = event.ScreenW - origX
+					}
+					if origY+newH > event.ScreenH {
+						newH = event.ScreenH - origY
+					}
+					if newW < 10 {
+						newW = 10
+					}
+					if newH < 6 {
+						newH = 6
+					}
+				}
+
 				event.FireOnChange = map[string]any{
 					"type":   "resize",
 					"width":  newW,
