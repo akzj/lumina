@@ -24,6 +24,18 @@ local DataGrid = lumina.defineComponent("DataGrid", function(props)
 	local sort = props.sort
 	local t = lumina.getTheme and lumina.getTheme() or {}
 
+	-- Multi-select props
+	local selectionMode = props.selectionMode or "single"
+	local selectedIds = props.selectedIds or {}
+	local onSelectionChange = props.onSelectionChange
+	local getRowId = props.getRowId or function(row, index) return tostring(index) end
+
+	-- Build selectedIds lookup set for O(1) membership test
+	local selectedIdSet = {}
+	for _, id in ipairs(selectedIds) do
+		selectedIdSet[id] = true
+	end
+
 	local gridW = props.width
 	local ncols = #columns
 	local function columnWidth(col)
@@ -89,6 +101,27 @@ local DataGrid = lumina.defineComponent("DataGrid", function(props)
 			local pageSize = math.max(1, bodyHeight)
 			local n = math.min(#rows, selectedIdx + pageSize)
 			if props.onChangeIndex then props.onChangeIndex(n) end
+		elseif e.key == " " then
+			-- Space toggles selection of current row in multi mode
+			if selectionMode == "multi" and onSelectionChange then
+				local row = rows[selectedIdx]
+				if row then
+					local id = getRowId(row, selectedIdx)
+					local newIds = {}
+					local found = false
+					for _, sid in ipairs(selectedIds) do
+						if sid == id then
+							found = true
+						else
+							newIds[#newIds + 1] = sid
+						end
+					end
+					if not found then
+						newIds[#newIds + 1] = id
+					end
+					onSelectionChange(newIds)
+				end
+			end
 		end
 	end
 
@@ -178,8 +211,20 @@ local DataGrid = lumina.defineComponent("DataGrid", function(props)
 
 			local fg = ctx.selected and (t.primary or "#89B4FA") or (t.text or "#CDD6F4")
 			local bg = ctx.selected and (t.surface1 or "#45475A") or (t.base or "#1E1E2E")
+			if ctx.multiSelected then
+				bg = t.surface0 or "#313244"
+			end
 			local w = columnWidth(col)
-			local text = " " .. v
+			-- Selection indicator prefix in multi mode
+			local prefix = " "
+			if selectionMode == "multi" then
+				if ctx.multiSelected then
+					prefix = "\226\151\143 "  -- ● (U+25CF)
+				else
+					prefix = "\226\151\139 "  -- ○ (U+25CB)
+				end
+			end
+			local text = prefix .. v
 			text = padText(text, w, col.align)
 			return lumina.createElement("text", {
 				foreground = fg,
@@ -208,7 +253,11 @@ local DataGrid = lumina.defineComponent("DataGrid", function(props)
 		}, "  " .. emptyText)
 	else
 		for i, row in ipairs(rows) do
-			local ctx = { selected = (i == selectedIdx) }
+			local rowId = getRowId(row, i)
+			local ctx = {
+				selected = (i == selectedIdx),
+				multiSelected = (selectedIdSet[rowId] == true),
+			}
 			local cells = {}
 			for _, col in ipairs(columns) do
 				local cw = columnWidth(col)
