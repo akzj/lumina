@@ -136,6 +136,9 @@ func paintDirtyWalk(buf *CellBuffer, node *Node) {
 		node.PaintDirty = false
 		// Clear all descendants' PaintDirty flags — paintNode already painted them
 		clearPaintDirtyBelow(node)
+		// If this node is inside an absolute-positioned window, repaint any
+		// overlapping siblings that are later in z-order (above this window).
+		repaintOverlappingSiblings(buf, node)
 		return
 	}
 
@@ -143,6 +146,56 @@ func paintDirtyWalk(buf *CellBuffer, node *Node) {
 	for _, child := range node.Children {
 		paintDirtyWalk(buf, child)
 	}
+}
+
+// repaintOverlappingSiblings finds the absolute-positioned ancestor of node
+// (the window), then repaints any later siblings in z-order that overlap the
+// repainted area. This prevents scroll repaints from leaking over windows above.
+func repaintOverlappingSiblings(buf *CellBuffer, node *Node) {
+	// Walk up to find the absolute-positioned ancestor (the window node)
+	var absNode *Node
+	for n := node; n != nil; n = n.Parent {
+		if n.Style.Position == "absolute" {
+			absNode = n
+			break
+		}
+	}
+	if absNode == nil || absNode.Parent == nil {
+		return // not inside a window
+	}
+
+	// Find absNode's index in parent's children
+	parent := absNode.Parent
+	// Walk through component wrappers to find the actual container with children
+	for parent != nil && parent.Type == "component" && parent.Parent != nil {
+		absNode = parent
+		parent = parent.Parent
+	}
+
+	idx := -1
+	for i, ch := range parent.Children {
+		if ch == absNode {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		return
+	}
+
+	// Repaint later siblings (higher z-order) that overlap the repainted node's area
+	rx, ry, rw, rh := node.X, node.Y, node.W, node.H
+	for i := idx + 1; i < len(parent.Children); i++ {
+		sibling := parent.Children[i]
+		if rectsOverlap(rx, ry, rw, rh, sibling.X, sibling.Y, sibling.W, sibling.H) {
+			paintNode(buf, sibling)
+		}
+	}
+}
+
+// rectsOverlap returns true if two rectangles overlap.
+func rectsOverlap(x1, y1, w1, h1, x2, y2, w2, h2 int) bool {
+	return x1 < x2+w2 && x1+w1 > x2 && y1 < y2+h2 && y1+h1 > y2
 }
 
 // findRepaintParent walks up from node to find the first non-component ancestor.
