@@ -69,6 +69,9 @@ go test ./pkg/ -run TestV2Engine
 # E2E 测试（完整 Lua 脚本执行）
 go test ./pkg/ -run TestE2E
 
+# Lua 测试框架（pkg/testdata/lua_tests/**/*_test.lua）
+go test ./pkg/ -run TestLuaTestFramework -count=1
+
 # 性能测试
 go test ./pkg/ -run TestPerf
 
@@ -78,6 +81,8 @@ go test ./pkg/ -bench BenchmarkStress -benchtime 5s
 # 带详细输出
 go test ./pkg/render/... -v -run TestReconcile
 ```
+
+**Lua 组件 / 示例应用怎么测**：分层策略、`test.createApp` API、断言习惯与目录约定见 **[TESTING.md](./TESTING.md)**。
 
 ---
 
@@ -89,6 +94,7 @@ go test ./pkg/render/... -v -run TestReconcile
 |---|------|------|
 | 渲染引擎 | `render/*_test.go` | 协调、布局、绘制、事件的纯单元测试 |
 | App 集成 | `app_v2engine_test.go` | Lua 代码 → 渲染 → 输出的集成测试 |
+| Lua 集成 | `lua_test.go` + `testdata/lua_tests/` | `test.describe` / `test.createApp`，覆盖 `lumina.app`、store、hooks、示例 |
 | E2E | `lua_e2e_v2_test.go` | 完整 Lua 脚本文件执行 |
 | 性能 | `app_v2engine_perf_test.go` | 性能指标验证 |
 | Benchmark | `stress_bench_test.go` | 压力测试基准 |

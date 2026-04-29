@@ -90,15 +90,21 @@ var Window = &Widget{
 			},
 		})
 
-		// Content area: wrap Lua children in a flex box with overflow hidden
-		// so content is clipped to available space and resize handle stays at bottom
+		// Content area: wrap Lua children in a flex box
+		// overflow:"hidden" by default, "scroll" when scrollable=true
 		if childNodes, ok := props["_childNodes"].([]*render.Node); ok {
+			overflow := "hidden"
+			if v, ok := props["scrollable"]; ok {
+				if b, ok := v.(bool); ok && b {
+					overflow = "scroll"
+				}
+			}
 			contentBox := &render.Node{
 				Type:     "vbox",
 				Children: childNodes,
 				Style: render.Style{
 					Flex:     1,
-					Overflow: "hidden",
+					Overflow: overflow,
 					Right:    -1, Bottom: -1,
 				},
 			}
@@ -231,6 +237,37 @@ var Window = &Widget{
 					"height": newH,
 				}
 				return true
+			}
+
+		case "keydown":
+			// Scroll keys when window content is scrollable
+			scrollable := false
+			if v, ok := props["scrollable"]; ok {
+				if b, ok := v.(bool); ok && b {
+					scrollable = b
+				}
+			}
+			if scrollable {
+				switch event.Key {
+				case "Up", "k":
+					event.ScrollBy = -1
+					return true
+				case "Down", "j":
+					event.ScrollBy = 1
+					return true
+				case "PageUp":
+					event.ScrollBy = -(h - 4) // content height approx
+					return true
+				case "PageDown":
+					event.ScrollBy = h - 4
+					return true
+				case "Home":
+					event.ScrollBy = -999999
+					return true
+				case "End":
+					event.ScrollBy = 999999
+					return true
+				}
 			}
 
 		case "mouseup":
