@@ -61,4 +61,14 @@ test.describe("DataGrid example", function()
 		-- from row 1 to row 13 but clamped to #rows=12
 		test.assert.eq(app:screenContains("Selected: Lima"), true)
 	end)
+
+	test.it("PageUp jumps back by page size", function()
+		-- Move down several rows first
+		for i = 1, 8 do app:keyPress("j") end
+		-- Now at row 9 (India)
+		test.assert.eq(app:screenContains("Selected: India"), true)
+		app:keyPress("PageUp")
+		-- bodyHeight=12, so jumps back from 9 to max(1, 9-12)=1
+		test.assert.eq(app:screenContains("Selected: Alpha"), true)
+	end)
 end)
