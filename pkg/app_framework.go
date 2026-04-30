@@ -147,8 +147,19 @@ func (a *App) notifyStoreSubscribers(key string) {
 		return
 	}
 	val, _ := a.store.Get(key)
-	for _, b := range a.storeBindings[key] {
-		a.engine.SetState(b.compID, b.stateKey, val)
+	bindings := a.storeBindings[key]
+	// Lazy cleanup: filter out stale bindings for unmounted components
+	alive := bindings[:0]
+	for _, b := range bindings {
+		if a.engine.HasComponent(b.compID) {
+			a.engine.SetState(b.compID, b.stateKey, val)
+			alive = append(alive, b)
+		}
+	}
+	if len(alive) == 0 {
+		delete(a.storeBindings, key)
+	} else {
+		a.storeBindings[key] = alive
 	}
 }
 
@@ -253,9 +264,15 @@ func (a *App) registerRouteBinding(compID, stateKey string) {
 
 func (a *App) notifyRouteSubscribers() {
 	path := a.routerMgr.CurrentPath()
+	// Lazy cleanup: filter out stale bindings for unmounted components
+	alive := a.routeBindings[:0]
 	for _, b := range a.routeBindings {
-		a.engine.SetState(b.compID, b.stateKey, path)
+		if a.engine.HasComponent(b.compID) {
+			a.engine.SetState(b.compID, b.stateKey, path)
+			alive = append(alive, b)
+		}
 	}
+	a.routeBindings = alive
 }
 
 // --- useRoute hook ---
