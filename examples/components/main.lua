@@ -172,7 +172,7 @@ lumina.app {
 
         local mainBody = {}
         if active == "forms" then
-            mainBody = Atlantis.formShowcaseBlocks()
+            mainBody = lux.AtlantisFormDemo.formShowcaseBlocks()
         elseif active == "btn" then
             mainBody = buttonShowcaseBlocks()
         else

@@ -30,5 +30,6 @@ M.Toast = require("lux.toast")
 M.Tree = require("lux.tree")
 M.Form = require("lux.form")
 M.Atlantis = require("lux.atlantis")
+M.AtlantisFormDemo = require("lux.atlantis_form_demo")
 
 return M

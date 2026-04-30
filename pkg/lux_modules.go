@@ -51,6 +51,7 @@ func registerLuxModules(L *lua.State) {
 	preloadLuaSource(L, "lux.tree", mustReadLuxLua("tree.lua"))
 	preloadLuaSource(L, "lux.form", mustReadLuxLua("form.lua"))
 	preloadLuaSource(L, "lux.atlantis", mustReadLuxLua("atlantis.lua"))
+	preloadLuaSource(L, "lux.atlantis_form_demo", mustReadLuxLua("atlantis_form_demo.lua"))
 
 	// Register the lux umbrella module (requires individual modules)
 	preloadLuaSource(L, "lux", mustReadLuxLua("init.lua"))
