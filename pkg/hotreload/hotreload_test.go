@@ -320,3 +320,132 @@ func TestSnapshot_EmptyMaps(t *testing.T) {
 	}
 }
 func (m *mockComponent) HookStore() map[string]any { return m.hookStore }
+
+func TestWatcher_AddPath_Dedup(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "dup.lua")
+	if err := os.WriteFile(path, []byte("-- v1"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	var called atomic.Int32
+
+	w := NewWatcher([]string{path}, 50*time.Millisecond)
+	w.SetOnChange(func(p string) {
+		called.Add(1)
+	})
+
+	// AddPath with same path should be a no-op (dedup).
+	w.AddPath(path)
+	w.AddPath(path)
+	w.AddPath(path)
+
+	w.mu.Lock()
+	pathCount := len(w.paths)
+	w.mu.Unlock()
+
+	if pathCount != 1 {
+		t.Fatalf("expected 1 path after dedup, got %d", pathCount)
+	}
+
+	w.Start()
+	defer w.Stop()
+
+	time.Sleep(100 * time.Millisecond)
+
+	// Modify the file — should only trigger once per poll.
+	time.Sleep(10 * time.Millisecond)
+	if err := os.WriteFile(path, []byte("-- v2"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if called.Load() > 0 {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	if called.Load() == 0 {
+		t.Fatal("expected callback after modify")
+	}
+}
+
+func TestWatcher_AddDir_RescanNewFile(t *testing.T) {
+	dir := t.TempDir()
+
+	var called atomic.Int32
+	var changedPath atomic.Value
+
+	// Start watcher with no initial files but with the dir for rescan.
+	w := NewWatcher(nil, 50*time.Millisecond)
+	w.RescanInterval = 2 // rescan every 2 polls = 100ms
+	w.AddDir(dir)
+	w.SetOnChange(func(p string) {
+		called.Add(1)
+		changedPath.Store(p)
+	})
+	w.Start()
+	defer w.Stop()
+
+	// Wait for a rescan cycle to pass (no files yet).
+	time.Sleep(200 * time.Millisecond)
+
+	// Create a new .lua file in the watched directory.
+	newFile := filepath.Join(dir, "new_module.lua")
+	if err := os.WriteFile(newFile, []byte("-- v1"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait for rescan to pick it up + register modtime.
+	time.Sleep(300 * time.Millisecond)
+
+	// Now modify the file — should trigger onChange.
+	time.Sleep(10 * time.Millisecond)
+	if err := os.WriteFile(newFile, []byte("-- v2"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if called.Load() > 0 {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	if called.Load() == 0 {
+		t.Fatal("expected callback for new file discovered via rescan")
+	}
+	if got := changedPath.Load().(string); got != newFile {
+		t.Fatalf("expected path %q, got %q", newFile, got)
+	}
+}
+
+func TestWatcher_AddDir_IgnoresNonLua(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create a non-lua file.
+	txtFile := filepath.Join(dir, "notes.txt")
+	if err := os.WriteFile(txtFile, []byte("hello"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	w := NewWatcher(nil, 50*time.Millisecond)
+	w.RescanInterval = 1
+	w.AddDir(dir)
+	w.Start()
+	defer w.Stop()
+
+	// Wait for rescan.
+	time.Sleep(150 * time.Millisecond)
+
+	w.mu.Lock()
+	pathCount := len(w.paths)
+	w.mu.Unlock()
+
+	if pathCount != 0 {
+		t.Fatalf("expected 0 paths (non-lua ignored), got %d", pathCount)
+	}
+}

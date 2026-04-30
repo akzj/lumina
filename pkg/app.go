@@ -11,6 +11,7 @@ import (
 	"github.com/akzj/lumina/pkg/buffer"
 	"github.com/akzj/lumina/pkg/devtools"
 	"github.com/akzj/lumina/pkg/event"
+	"github.com/akzj/lumina/pkg/hotreload"
 	"github.com/akzj/lumina/pkg/output"
 	"github.com/akzj/lumina/pkg/perf"
 	"github.com/akzj/lumina/pkg/render"
@@ -37,6 +38,7 @@ type App struct {
 	scheduler *lua.Scheduler
 	quit      chan struct{}
 	running   bool
+	watcher   *hotreload.Watcher // hot reload file watcher (nil when --watch is off)
 
 	// Render engine — the single rendering path.
 	engine *render.Engine
