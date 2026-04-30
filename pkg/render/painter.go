@@ -470,60 +470,23 @@ func paintBox(buf *CellBuffer, node *Node) {
 
 // paintHiddenChildren paints children clipped to the node's content area.
 // Unlike scroll, there is no scroll offset — children are simply clipped.
+// paintHiddenChildren paints overflow:hidden children clipped to the content area.
+// Delegates to paintHiddenChildrenClipped with unbounded outer clip.
 func paintHiddenChildren(buf *CellBuffer, node *Node) {
-	bw := 0
-	if node.Style.Border != "" && node.Style.Border != "none" {
-		bw = 1
-	}
-	clipX1 := node.X + bw + node.Style.PaddingLeft
-	clipY1 := node.Y + bw + node.Style.PaddingTop
-	clipX2 := node.X + node.W - bw - node.Style.PaddingRight
-	clipY2 := node.Y + node.H - bw - node.Style.PaddingBottom
-	for _, child := range paintOrderChildren(node.Children) {
-		paintNodeClipped(buf, child, clipX1, clipY1, clipX2, clipY2)
-	}
+	paintHiddenChildrenClipped(buf, node, 0, 0, 1<<30, 1<<30)
 }
 
-// paintScrollChildren paints children with a scroll offset, clipping to the content area
-// (inside border + padding). Temporarily shifts child Y positions by -scrollY, then restores.
+// paintScrollChildren paints children with a scroll offset, clipping to the content area.
+// Delegates to paintScrollChildrenClipped with unbounded outer clip.
 func paintScrollChildren(buf *CellBuffer, node *Node) {
-	// Clamp scrollY to valid range (content may have shrunk since last scroll)
-	maxScroll := computeMaxScrollY(node)
-	if node.ScrollY > maxScroll {
-		node.ScrollY = maxScroll
-	}
-	if node.ScrollY < 0 {
-		node.ScrollY = 0
-	}
-
-	scrollY := node.ScrollY
-
-	// Shift all child subtree Y positions
-	shiftNodeTreeY(node, -scrollY)
-	defer shiftNodeTreeY(node, scrollY) // restore
-
-	// Clip to content area (inside border + padding)
-	bw := 0
-	if node.Style.Border != "" && node.Style.Border != "none" {
-		bw = 1
-	}
-	clipX1 := node.X + bw + node.Style.PaddingLeft
-	clipY1 := node.Y + bw + node.Style.PaddingTop
-	clipX2 := node.X + node.W - bw - node.Style.PaddingRight
-	clipY2 := node.Y + node.H - bw - node.Style.PaddingBottom
-
-	for _, child := range paintOrderChildren(node.Children) {
-		paintNodeClipped(buf, child, clipX1, clipY1, clipX2, clipY2)
-	}
-
-	// Paint scrollbar in the reserved right column
-	paintScrollbar(buf, node, clipX2, clipY1, clipY2, maxScroll)
+	paintScrollChildrenClipped(buf, node, 0, 0, 1<<30, 1<<30)
 }
+
 // paintScrollChildrenClipped paints scroll container children with both the
 // inner scroll offset AND an outer clip rect (from a parent scroll container).
 // The effective clip is the intersection of the outer clip and the inner content area.
 func paintScrollChildrenClipped(buf *CellBuffer, node *Node, outerClipX1, outerClipY1, outerClipX2, outerClipY2 int) {
-	// Clamp scrollY
+	// Clamp scrollY to valid range
 	maxScroll := computeMaxScrollY(node)
 	if node.ScrollY > maxScroll {
 		node.ScrollY = maxScroll
@@ -565,7 +528,6 @@ func paintScrollChildrenClipped(buf *CellBuffer, node *Node, outerClipX1, outerC
 	// Paint scrollbar in the reserved right column (use inner clip for position)
 	paintScrollbar(buf, node, innerX2, innerY1, innerY2, maxScroll)
 }
-
 
 // paintHiddenChildrenClipped paints overflow:hidden children with both the
 // inner content clip AND an outer clip rect (from a parent clipped container).
