@@ -87,6 +87,8 @@ go test ./pkg/render/... -v -run TestReconcile
 
 **Lua 组件 / 示例应用怎么测**：分层策略、`test.createApp` API、断言习惯与目录约定见 **[TESTING.md](./TESTING.md)**。
 
+**框架后续分期（P0 → P1 → P2）**：按依赖顺序的 backlog 见 **[DESIGN-widgets.md](./DESIGN-widgets.md)** 文末「**后续工作分期**」（Layer / `zIndex`、Form、Popover 等）。**Lux DataGrid** 的 P0–P3 与实现状态见 **[lua/lux/data_grid.md](../lua/lux/data_grid.md)** §9。
+
 ---
 
 ## 测试策略
@@ -252,7 +254,13 @@ Lua 表 **键名**（字符串）与 Go 侧 `readDescriptor` 读取一致。
 | `overflow` | 溢出行为 | 见下表「`overflow` 取值」 |
 | `position` | 定位模式 | 见下表「`position` 取值」 |
 | `top` / `left` / `right` / `bottom` | 偏移 | 与 `position` 配合；`right`/`bottom` 常用 **`-1`** 表「贴边」约定 |
-| `zIndex` | 叠放（有限使用） | 层内顺序辅助 |
+| `zIndex` | 叠放（**有限使用**） | 单棵树内辅助字段；**大块叠在主应用上请用引擎 Layer**，勿与下文「Layer」混为一谈 |
+
+#### Layer（引擎）与 `style.zIndex`
+
+- **Layer**（`Engine.CreateLayer` 等，`pkg/render/layer.go`）：多棵**根树栈**，后面的层**整层**盖在前层之上，事件按层从上到下 hit-test。用于模态、遮罩、Widget 通过 `WidgetEvent.CreateLayer` 输出的 overlay。**不是**用 Layer「替代」CSS 式 z-index 的同一概念，而是**另一维度**（跨树根的全局叠层）。
+- **`style.zIndex`**：`Style` 上保留，Lua 可传；**当前未**实现为与 Web 相同的全局 z 序重排（以 `pkg/render/layout.go`、`painter.go` 为准）。同层叠放仍主要看**子节点顺序**与 **`absolute`/`fixed`** 相关逻辑。
+- 详细对照与设计语境见 **`docs/DESIGN-widgets.md` §1.2.1**。
 
 ### 节点 `type`（基元与占位）
 

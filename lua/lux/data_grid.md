@@ -13,9 +13,9 @@
 | 单元格 | 仅 `tostring` + 定宽截断 | 任意 React 节点、按钮、徽标、进度条 | **`renderCell(row, rowIndex, column, ctx)`** → 任意 vnode（签名与 `ListView.renderRow(row, i, ctx)` 对齐：**行在前、索引第二、列第三**） |
 | 表头 | 纯文本 | 排序图标、筛选 popover、拖拽调宽 | **`renderHeaderCell(col, ctx)`** 可选；默认文本头 |
 | 列定义 | `header` / `key` / `width` | `accessor`、meta、`size`/`minSize`/`maxSize` | **列描述表**：`id`、`accessor` 或 `key`、宽度、`align`、可选 `sortable` |
-| 选择 | 整行（Go 侧 `onChange` 为 **0-based** 行索引） | 单选 / 多选 / checkbox 列 / Shift 范围 | **P0**：与 ListView 一致的 **1-based** `selectedIndex` / `onChangeIndex`；**P1**：`selectedIds` / 多选 / `getRowId` |
+| 选择 | 整行（Go 侧 `onChange` 为 **0-based** 行索引） | 单选 / 多选 / checkbox 列 / Shift 范围 | **P0**：**1-based** `selectedIndex` / `onChangeIndex`；**P1**：`selectedIds` / 多选 / `getRowId` 等（**已实现**，见 §9） |
 | 排序 / 筛选 | 无 | 服务端或客户端 | **受控模式**：父组件或 store 持有 `sort` / `filters`，表只负责 UI 与回调 |
-| 虚拟滚动 | 无（`ScrollOffset` 未接线） | 大行数必备 | **P2+**：视口裁剪或引擎能力扩展前，先 **行数上限 + 文档警告** |
+| 虚拟滚动 | 无（`ScrollOffset` 未接线） | 大行数必备 | **P2**：可选 **`virtualScroll`**（`data_grid.lua` 视口行 + spacer）；生产级对齐与 **行数上限** 仍见 §7 |
 | 热更 / 定制 | 改 Go | 改 JS | **Lua-only**，与 Card / ListView 同一分发模型 |
 
 **一句话**：Go `Table` 适合「日志型、只读、纯文本」；Lux **DataGrid** 适合「运维控制台、可编辑单元格、复杂表头」等 **Web Data Grid 子集**，在终端约束下渐进落地。
@@ -141,12 +141,16 @@ vbox (root: focusable, autoFocus?; 占满 height/width)
 
 **原则**：默认 **「表级焦点」** 优先（与 ListView 一致）；仅当显式进入「单元格编辑」才把焦点交给 `input`（参考 `list.md` 行内勿用 `focusable` 的警告；DataGrid 用 **模式位** 收紧）。
 
+### 6.3 与当前实现同步
+
+`lua/lux/data_grid.lua` 已超出 §6.1 最小集：含 **编辑态**（`Escape`、非编辑态下 `Enter`/`F2` 进入编辑）、**`Space` 多选**、`Home`/`End`/`PageUp`/`PageDown` 等。以源码为准；本节保留为**设计分档**与后续列导航（`←→`）等扩展位。
+
 ---
 
 ## 7. 性能与数据规模
 
-- **P0**：`#rows * rowHeight` 全量挂载；建议文档写 **软上限**（如 ≤500 行或按列宽乘行数估算 cell 数）。  
-- **P2**：**窗口化**：只 `renderCell` 视口内 ±buffer 行，`scrollY` 变化时重算 `windowStart`；依赖 **P1** 的 `getRowId` 与稳定 `key`。  
+- **P0**：默认 `#rows * rowHeight` **全量**挂载；建议 **软上限**（如 ≤500 行或按列宽×行数估算 cell 数）。  
+- **P2（可选）**：`virtualScroll = true` 时仅 `renderCell` **视口 ±buffer** 行，并用上下 **spacer** 占位；`scrollY` 与窗口对齐依赖稳定 `rowHeight` 与 **P1** 的 `getRowId` / 行 `key`。  
 - 与 **DevTools / perf**：大表调试时关注 `PaintCells` 与 `renderComponent` 次数（见 `docs/DESIGN-perf.md`）。
 
 ---
@@ -160,14 +164,14 @@ vbox (root: focusable, autoFocus?; 占满 height/width)
 
 ---
 
-## 9. 路线图摘要
+## 9. 路线图摘要（推进顺序：P0 → P1 → P2 → P3）
 
-| 阶段 | 交付物 |
-|------|--------|
-| **P0** | `DataGrid`：`columns` + `rows` + **`renderCell(row, rowIndex, column, ctx)`** + **表头固定 + 仅表体 scroll** + **`selectedIndex` / `onChangeIndex` / `onActivate`** + 空态 + 主题安全背景 |
-| **P1** | `getRowId`、多选 `selectedIds` / `onSelectionChange`、排序/筛选回调、`renderHeaderCell`（含 sortable）、`scrollMode`、分页组合示例 |
-| **P2** | 横向粘性列 / 更强冻结语义、或虚拟窗口、展开行 |
-| **P3** | 列拖拽、列菜单、列宽指针交互 |
+| 阶段 | 交付物 | 仓库现状（以 `lua/lux/data_grid.lua` 为准） |
+|------|--------|---------------------------------------------|
+| **P0** | `columns` + `rows` + **`renderCell`** + **表头固定 + 仅表体 scroll** + **`selectedIndex` / `onChangeIndex` / `onActivate`** + 空态 + 主题安全背景 | **已合入** |
+| **P1** | `getRowId`、多选 `selectedIds` / `onSelectionChange`、`sort`/`onSortChange`、默认可排序表头、`renderHeaderCell`、默认 **`renderCell`**（`accessor`/`key`/`align`）、可编辑单元格、`selectionMode` 等 | **已合入**；**筛选**仍建议父层过滤 `rows`；**`scrollMode`**、与 **Pagination** 的组合示例可作为文档/示例馀量 |
+| **P2** | 横向粘性列、更强冻结语义、**展开行**模板、虚拟化「生产级」对齐（大表、键盘滚动与数据窗口严格一致） | **部分**：**`virtualScroll`** + 上下 spacer **已可选**；横向粘性 / 展开行 / 引擎级增强 **未** |
+| **P3** | 列拖拽、列菜单、列宽指针交互 | **未** |
 
 ---
 
@@ -176,4 +180,4 @@ vbox (root: focusable, autoFocus?; 占满 height/width)
 - **ListView**：`lua/lux/list.md`、`lua/lux/list.lua`  
 - **Go Table**：`pkg/widget/table.go`（简单场景继续用）  
 - **架构总览**：`docs/DESIGN-widgets.md`  
-- **修订记录**：在 PR / commit 中更新本文件；**2026-04** 评审纳入：`renderCell` 参数顺序、P0 固定表头双容器、P0 单行选中 API、`getRowId` 推迟 P1、§6 拆分 P0/P1 键盘。
+- **修订记录**：在 PR / commit 中更新本文件；**2026-04** 评审纳入：`renderCell` 参数顺序、P0 固定表头双容器、P0 单行选中 API、`getRowId` 推迟 P1、§6 拆分 P0/P1 键盘。**2026-04** 末：§9 增加 **P0→P3 推进顺序** 与 **实现状态** 列，与 `data_grid.lua` 对齐；框架级分期见 `docs/DESIGN-widgets.md`「后续工作分期」。

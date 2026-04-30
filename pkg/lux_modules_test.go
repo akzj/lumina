@@ -1,6 +1,8 @@
 package v2
 
 import (
+	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -63,6 +65,8 @@ func TestV2E2E_RequireLux(t *testing.T) {
 		assert(lux.Progress ~= nil, "lux.Progress missing")
 		assert(lux.Spinner ~= nil, "lux.Spinner missing")
 		assert(lux.ListView ~= nil, "lux.ListView missing")
+		assert(lux.Atlantis ~= nil, "lux.Atlantis missing")
+		assert(lux.Atlantis.applyTheme ~= nil, "lux.Atlantis.applyTheme missing")
 	`)
 	if err != nil {
 		t.Fatalf("RunString failed: %v", err)
@@ -196,5 +200,63 @@ func TestV2E2E_RequireLuxListView(t *testing.T) {
 	app.RenderAll()
 	if !screenHasString(ta, "RowA") || !screenHasString(ta, "RowB") {
 		t.Errorf("expected RowA and RowB on screen, got: %q", readScreenLine(ta, 0, 40))
+	}
+}
+
+func TestV2E2E_AtlantisComponentsMainLua(t *testing.T) {
+	app, ta, _ := newV2App(t, 100, 40)
+	path := filepath.Join("..", "examples", "components", "main.lua")
+	if err := app.RunScript(path); err != nil {
+		t.Fatalf("RunScript: %v", err)
+	}
+	app.RenderAll()
+	if !screenHasString(ta, "ATLANTIS") {
+		t.Error("expected ATLANTIS brand on screen")
+	}
+	var flat strings.Builder
+	for y := 0; y < ta.LastScreen.Height(); y++ {
+		flat.WriteString(readScreenLine(ta, y, 200))
+		flat.WriteByte('\n')
+	}
+	screen := flat.String()
+	if !strings.Contains(screen, "Vertical") {
+		t.Logf("screen dump:\n%s", screen)
+		t.Error("expected Vertical form card title somewhere on screen")
+	}
+	if !strings.Contains(screen, "Form Layout") {
+		t.Error("expected breadcrumb Form Layout segment")
+	}
+}
+
+func TestV2E2E_AtlantisShellMinimal(t *testing.T) {
+	app, ta, _ := newV2App(t, 100, 30)
+	err := app.RunString(`
+		local lux = require("lux")
+		local A = lux.Atlantis
+		lumina.app({
+			id = "atlantis-min",
+			render = function()
+				return A.Shell({
+					sidebar = A.SideNav({
+						brand = "ATLANTIS",
+						items = { { id = "a", label = "Nav" } },
+						activeId = "a",
+					}),
+					mainChildren = {
+						lumina.createElement("text", { id = "mark" }, "Vertical"),
+					},
+				})
+			end,
+		})
+	`)
+	if err != nil {
+		t.Fatalf("RunString: %v", err)
+	}
+	app.RenderAll()
+	if !screenHasString(ta, "Vertical") {
+		t.Error("expected Vertical marker from minimal Shell")
+	}
+	if !screenHasString(ta, "ATLANTIS") {
+		t.Error("expected ATLANTIS in minimal Shell")
 	}
 }
