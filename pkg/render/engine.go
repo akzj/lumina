@@ -1647,6 +1647,15 @@ func (e *Engine) RegisterLuaAPI() {
 	// Store shared metatable as registry ref for reuse by defineComponent
 	e.factoryMetaRef = int64(L.Ref(lua.RegistryIndex)) // pops metatable
 
+	// lumina.focusById(id) → boolean: programmatically focus a node by ID
+	L.PushFunction(func(L *lua.State) int {
+		id := L.CheckString(1)
+		ok := e.FocusByID(id)
+		L.PushBoolean(ok)
+		return 1
+	})
+	L.SetField(tblIdx, "focusById")
+
 	// lumina.getTheme() → returns theme color table
 	L.PushFunction(e.luaGetTheme)
 	L.SetField(tblIdx, "getTheme")
