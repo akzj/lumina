@@ -364,39 +364,7 @@ func (e *Engine) HandleMouseUp(x, y int) {
 
 	// If a widget has captured the mouse, dispatch to it and release capture
 	if e.capturedComp != nil {
-		w, ok := e.widgets[e.capturedComp.Type]
-		if ok {
-			state, stateOk := e.widgetStates[e.capturedComp.ID]
-			if stateOk {
-				appW, appH := e.appBounds()
-				evt := &WidgetEvent{Type: "mouseup", X: x, Y: y, ScreenW: appW, ScreenH: appH}
-				if e.capturedComp.RootNode != nil {
-					evt.WidgetX = e.capturedComp.RootNode.X
-					evt.WidgetY = e.capturedComp.RootNode.Y
-					evt.WidgetW = e.capturedComp.RootNode.W
-					evt.WidgetH = e.capturedComp.RootNode.H
-					if scrollNode := findScrollNode(e.capturedComp.RootNode); scrollNode != nil {
-						evt.ScrollY = scrollNode.ScrollY
-						evt.ContentHeight = scrollNode.ScrollHeight
-					}
-				}
-				if w.DoOnEvent(e.capturedComp.Props, state, evt) {
-					if evt.ScrollBy == 0 {
-						e.capturedComp.Dirty = true
-					}
-					e.needsRender = true
-				}
-				// Fire onChange if widget requested it
-				if evt.FireOnChange != nil && e.capturedComp.RootNode != nil && e.capturedComp.RootNode.OnChange != 0 {
-					e.callLuaRefWithValue(e.capturedComp.RootNode.OnChange, evt.FireOnChange)
-				}
-				// Process scroll request from captured widget
-				if evt.ScrollBy != 0 && e.capturedComp.RootNode != nil {
-					e.scrollNodeBy(e.capturedComp.RootNode, evt.ScrollBy)
-				}
-			}
-			// stateOk == false: widget state missing, skip dispatch
-		}
+		e.dispatchCapturedWidgetEvent("mouseup", x, y)
 		e.capturedComp = nil // release capture
 		return
 	}
