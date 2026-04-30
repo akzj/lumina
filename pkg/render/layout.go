@@ -353,9 +353,6 @@ func intrinsicFlowHeight(n *Node) int {
 	if n == nil {
 		return 1
 	}
-	if n.H > 0 && n.H < layoutProbeHMin {
-		return n.H
-	}
 	if len(n.Children) == 0 {
 		if n.H >= layoutProbeHMin {
 			return 1
@@ -375,6 +372,19 @@ func intrinsicFlowHeight(n *Node) int {
 		if span > maxSpan {
 			maxSpan = span
 		}
+	}
+	if n.H >= layoutProbeHMin {
+		// Unlimited-measure probe height is not a real content box.
+		return maxSpan
+	}
+	if n.H > 0 {
+		// Use the larger of laid-out box height and descendant span: fixed Style.Height
+		// / flex finalH can exceed a one-line text's span; a too-small outer H (e.g.
+		// cross-axis hbox) must not hide taller overflow (Card rows below the border).
+		if maxSpan > n.H {
+			return maxSpan
+		}
+		return n.H
 	}
 	return maxSpan
 }
@@ -577,11 +587,15 @@ func computeFlex(node *Node, x, y, w, h int, depth int) {
 		if len(node.Children) == 1 {
 			root := node.Children[0]
 			if root.X == node.X && root.Y == node.Y {
-				if root.W > node.W {
+				// Match placeholder outer box to the grafted root (grow or shrink).
+				// Only growing used to leave a taller slot than the real button; the
+				// extra row sat under the bottom border and looked like a line drawn
+				// on the border (e.g. outlined LuxButton in flex-wrap rows).
+				if root.W != node.W {
 					node.W = root.W
 					node.PaintDirty = true
 				}
-				if root.H > node.H {
+				if root.H != node.H {
 					node.H = root.H
 					node.PaintDirty = true
 				}
