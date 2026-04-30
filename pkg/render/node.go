@@ -27,6 +27,9 @@ type Style struct {
 	WidthVW  int // percentage of viewport width
 	HeightVH int // percentage of viewport height
 
+	// Wrap
+	FlexWrap string // "" (default=nowrap), "wrap", "wrap-reverse"
+
 	// Ordering
 	Order int // 0 = default, lower values laid out first
 
@@ -62,8 +65,22 @@ type Style struct {
 	WhiteSpace   string // "" (default=normal/wrap), "nowrap"
 
 	// Display/Visibility
-	Display    string // "" (default=flex), "none"
+	Display    string // "" (default=flex), "none", "grid"
 	Visibility string // "" (default=visible), "hidden"
+
+	// Grid container properties
+	GridTemplateColumns string // e.g. "1fr 2fr 1fr", "100 200", "1fr 100 2fr"
+	GridTemplateRows    string // e.g. "auto 1fr 2fr"
+	GridColumnGap       int    // column gap (0 = use Gap)
+	GridRowGap          int    // row gap (0 = use Gap)
+
+	// Grid item properties
+	GridColumn      string // e.g. "1", "1 / 3" (start / end)
+	GridRow         string // e.g. "1", "1 / 3"
+	GridColumnStart int    // 1-based column start
+	GridColumnEnd   int    // 1-based column end (exclusive)
+	GridRowStart    int    // 1-based row start
+	GridRowEnd      int    // 1-based row end (exclusive)
 
 	// Overflow
 	Overflow string // "hidden", "scroll"

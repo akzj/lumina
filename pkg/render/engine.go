@@ -1004,6 +1004,85 @@ func styleFromMap(m map[string]any) Style {
 		s.MaxHeight = int(v)
 	}
 
+	// FlexWrap
+	if v, ok := m["flexWrap"].(string); ok {
+		s.FlexWrap = v
+	}
+	// FlexShrink
+	if v, ok := m["flexShrink"].(int64); ok {
+		s.FlexShrink = int(v)
+	} else if v, ok := m["flexShrink"].(float64); ok {
+		s.FlexShrink = int(v)
+	}
+	// FlexBasis
+	if v, ok := m["flexBasis"].(int64); ok {
+		s.FlexBasis = int(v)
+	} else if v, ok := m["flexBasis"].(float64); ok {
+		s.FlexBasis = int(v)
+	}
+	// AlignSelf
+	if v, ok := m["alignSelf"].(string); ok {
+		s.AlignSelf = v
+	}
+	// Order
+	if v, ok := m["order"].(int64); ok {
+		s.Order = int(v)
+	} else if v, ok := m["order"].(float64); ok {
+		s.Order = int(v)
+	}
+	// Display
+	if v, ok := m["display"].(string); ok {
+		s.Display = v
+	}
+	// Visibility
+	if v, ok := m["visibility"].(string); ok {
+		s.Visibility = v
+	}
+	// Grid container properties
+	if v, ok := m["gridTemplateColumns"].(string); ok {
+		s.GridTemplateColumns = v
+	}
+	if v, ok := m["gridTemplateRows"].(string); ok {
+		s.GridTemplateRows = v
+	}
+	if v, ok := m["gridColumnGap"].(int64); ok {
+		s.GridColumnGap = int(v)
+	} else if v, ok := m["gridColumnGap"].(float64); ok {
+		s.GridColumnGap = int(v)
+	}
+	if v, ok := m["gridRowGap"].(int64); ok {
+		s.GridRowGap = int(v)
+	} else if v, ok := m["gridRowGap"].(float64); ok {
+		s.GridRowGap = int(v)
+	}
+	// Grid item properties
+	if v, ok := m["gridColumn"].(string); ok {
+		s.GridColumn = v
+	}
+	if v, ok := m["gridRow"].(string); ok {
+		s.GridRow = v
+	}
+	if v, ok := m["gridColumnStart"].(int64); ok {
+		s.GridColumnStart = int(v)
+	} else if v, ok := m["gridColumnStart"].(float64); ok {
+		s.GridColumnStart = int(v)
+	}
+	if v, ok := m["gridColumnEnd"].(int64); ok {
+		s.GridColumnEnd = int(v)
+	} else if v, ok := m["gridColumnEnd"].(float64); ok {
+		s.GridColumnEnd = int(v)
+	}
+	if v, ok := m["gridRowStart"].(int64); ok {
+		s.GridRowStart = int(v)
+	} else if v, ok := m["gridRowStart"].(float64); ok {
+		s.GridRowStart = int(v)
+	}
+	if v, ok := m["gridRowEnd"].(int64); ok {
+		s.GridRowEnd = int(v)
+	} else if v, ok := m["gridRowEnd"].(float64); ok {
+		s.GridRowEnd = int(v)
+	}
+
 	return s
 }
 
@@ -1138,6 +1217,7 @@ func (e *Engine) readStyle(L *lua.State, idx int) Style {
 	s.Flex = int(getIntField(L, absIdx, "flex"))
 	s.FlexShrink = int(getIntField(L, absIdx, "flexShrink"))
 	s.FlexBasis = int(getIntField(L, absIdx, "flexBasis"))
+	s.FlexWrap = getStringField(L, absIdx, "flexWrap")
 	s.Padding = int(getIntField(L, absIdx, "padding"))
 	s.PaddingTop = int(getIntField(L, absIdx, "paddingTop"))
 	s.PaddingBottom = int(getIntField(L, absIdx, "paddingBottom"))
@@ -1214,6 +1294,18 @@ func (e *Engine) readStyle(L *lua.State, idx int) Style {
 	s.Display = getStringField(L, absIdx, "display")
 	s.Visibility = getStringField(L, absIdx, "visibility")
 	s.BorderColor = getStringField(L, absIdx, "borderColor")
+	// Grid container properties
+	s.GridTemplateColumns = getStringField(L, absIdx, "gridTemplateColumns")
+	s.GridTemplateRows = getStringField(L, absIdx, "gridTemplateRows")
+	s.GridColumnGap = int(getIntField(L, absIdx, "gridColumnGap"))
+	s.GridRowGap = int(getIntField(L, absIdx, "gridRowGap"))
+	// Grid item properties
+	s.GridColumn = getStringField(L, absIdx, "gridColumn")
+	s.GridRow = getStringField(L, absIdx, "gridRow")
+	s.GridColumnStart = int(getIntField(L, absIdx, "gridColumnStart"))
+	s.GridColumnEnd = int(getIntField(L, absIdx, "gridColumnEnd"))
+	s.GridRowStart = int(getIntField(L, absIdx, "gridRowStart"))
+	s.GridRowEnd = int(getIntField(L, absIdx, "gridRowEnd"))
 	return s
 }
 
@@ -1413,6 +1505,41 @@ func (e *Engine) readStyleFields(L *lua.State, idx int, s *Style) {
 	}
 	if s.BorderColor == "" {
 		s.BorderColor = getStringField(L, absIdx, "borderColor")
+	}
+	if s.FlexWrap == "" {
+		s.FlexWrap = getStringField(L, absIdx, "flexWrap")
+	}
+	// Grid container properties
+	if s.GridTemplateColumns == "" {
+		s.GridTemplateColumns = getStringField(L, absIdx, "gridTemplateColumns")
+	}
+	if s.GridTemplateRows == "" {
+		s.GridTemplateRows = getStringField(L, absIdx, "gridTemplateRows")
+	}
+	if s.GridColumnGap == 0 {
+		s.GridColumnGap = int(getIntField(L, absIdx, "gridColumnGap"))
+	}
+	if s.GridRowGap == 0 {
+		s.GridRowGap = int(getIntField(L, absIdx, "gridRowGap"))
+	}
+	// Grid item properties
+	if s.GridColumn == "" {
+		s.GridColumn = getStringField(L, absIdx, "gridColumn")
+	}
+	if s.GridRow == "" {
+		s.GridRow = getStringField(L, absIdx, "gridRow")
+	}
+	if s.GridColumnStart == 0 {
+		s.GridColumnStart = int(getIntField(L, absIdx, "gridColumnStart"))
+	}
+	if s.GridColumnEnd == 0 {
+		s.GridColumnEnd = int(getIntField(L, absIdx, "gridColumnEnd"))
+	}
+	if s.GridRowStart == 0 {
+		s.GridRowStart = int(getIntField(L, absIdx, "gridRowStart"))
+	}
+	if s.GridRowEnd == 0 {
+		s.GridRowEnd = int(getIntField(L, absIdx, "gridRowEnd"))
 	}
 }
 
