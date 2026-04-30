@@ -158,7 +158,8 @@ var Dropdown = &Widget{
 			if s.Open {
 				// Check if click is on a dropdown item
 				triggerHeight := 3 // border + content + border
-				optionY := event.Y - (event.WidgetY + triggerHeight)
+				dropdownBorderTop := 1 // menu has "single" border
+				optionY := event.Y - (event.WidgetY + triggerHeight + dropdownBorderTop)
 				if optionY >= 0 && optionY < len(items) {
 					item := items[optionY]
 					if !item.Disabled && !item.Divider {
