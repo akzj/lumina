@@ -419,4 +419,19 @@ func layoutGrid(node *Node, contentX, contentY, contentW, contentH int, style St
 		computeFlex(child, cellX, cellY, cellW, cellH, depth+1)
 		applyRelativeOffset(child, child.Style)
 	}
+
+	// For scroll containers, store the total content height
+	if style.Overflow == "scroll" || style.Overflow == "auto" {
+		maxBottom := 0
+		for _, child := range node.Children {
+			if isPositioned(child.Style) || child.Style.Display == "none" {
+				continue
+			}
+			bottom := child.Y + child.H - contentY
+			if bottom > maxBottom {
+				maxBottom = bottom
+			}
+		}
+		node.ScrollHeight = maxBottom
+	}
 }
