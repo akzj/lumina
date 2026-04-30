@@ -458,6 +458,7 @@ func measureHBox(node *Node, c Constraints, contentW, padW, padH int) (int, int)
 
 	// Now measure each child with its allocated width to get correct height
 	maxH := 0
+	usedW := 0
 	for i, child := range node.Children {
 		if children[i].positioned {
 			measure(child, Constraints{Width: contentW, WidthMode: SizeModeAtMost, Height: 0, HeightMode: SizeModeUnbounded})
@@ -473,13 +474,24 @@ func measureHBox(node *Node, c Constraints, contentW, padW, padH int) (int, int)
 		if childH > maxH {
 			maxH = childH
 		}
+		usedW += children[i].finalW
+	}
+
+	// Add gaps to used width
+	if flowCount > 1 {
+		usedW += node.Style.Gap * (flowCount - 1)
 	}
 
 	if maxH < 1 {
 		maxH = 1
 	}
 
-	return contentW + padW, maxH + padH
+	// For AtMost mode, shrink to content width; for Exact mode, fill parent
+	returnW := contentW + padW
+	if c.WidthMode == SizeModeAtMost && usedW+padW < returnW {
+		returnW = usedW + padW
+	}
+	return returnW, maxH + padH
 }
 
 // measureHBoxWrap measures children in a wrapping horizontal layout.
