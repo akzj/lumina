@@ -109,12 +109,24 @@ var Checkbox = &Widget{
 				return true
 			}
 		case "click":
+			// Sync internal state from controlled prop before toggling
+			if v, ok := props["checked"]; ok {
+				if b, ok := v.(bool); ok {
+					s.Checked = b
+				}
+			}
 			s.Checked = !s.Checked
 			event.FireOnChange = s.Checked
 			return true
 		case "keydown":
 			if event.Key != " " && event.Key != "Enter" {
 				return false
+			}
+			// Sync internal state from controlled prop before toggling
+			if v, ok := props["checked"]; ok {
+				if b, ok := v.(bool); ok {
+					s.Checked = b
+				}
 			}
 			s.Checked = !s.Checked
 			event.FireOnChange = s.Checked
