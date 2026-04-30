@@ -220,9 +220,24 @@ func repaintOverlappingSiblings(buf *CellBuffer, node *Node) {
 		rx, ry, rw, rh = node.X, node.Y, node.W, node.H
 	}
 
-	// Repaint later siblings (higher z-order) that overlap
-	for i := idx + 1; i < len(parent.Children); i++ {
-		sibling := parent.Children[i]
+	// Repaint siblings that paint ABOVE us (higher z-order) and overlap.
+	// With z-index: a sibling is "above" if it has higher ZIndex, or same ZIndex
+	// but comes later in the array. Use paint-order to determine this.
+	ordered := paintOrderChildren(parent.Children)
+	// Find our position in paint order
+	paintIdx := -1
+	for i, ch := range ordered {
+		if ch == containerChild {
+			paintIdx = i
+			break
+		}
+	}
+	if paintIdx < 0 {
+		return
+	}
+	// Repaint everything that paints after us (above us visually)
+	for i := paintIdx + 1; i < len(ordered); i++ {
+		sibling := ordered[i]
 		// Find the absolute/fixed-positioned child INSIDE the sibling (component wrapper)
 		sibAbs := findAbsoluteOrFixedChild(sibling)
 		if sibAbs != nil {
@@ -271,9 +286,21 @@ func repaintFixedOverlappingSiblings(buf *CellBuffer, node *Node) {
 
 	rx, ry, rw, rh := node.X, node.Y, node.W, node.H
 
-	// Repaint later siblings that are fixed/absolute and overlap
-	for i := idx + 1; i < len(parent.Children); i++ {
-		sibling := parent.Children[i]
+	// Repaint siblings that paint above us and are fixed/absolute and overlap.
+	// Use paint order (z-index sorted) to find siblings that paint after target.
+	ordered := paintOrderChildren(parent.Children)
+	paintIdx := -1
+	for i, ch := range ordered {
+		if ch == target {
+			paintIdx = i
+			break
+		}
+	}
+	if paintIdx < 0 {
+		return
+	}
+	for i := paintIdx + 1; i < len(ordered); i++ {
+		sibling := ordered[i]
 		sibFixed := findAbsoluteOrFixedChild(sibling)
 		if sibFixed != nil {
 			if rectsOverlap(rx, ry, rw, rh, sibFixed.X, sibFixed.Y, sibFixed.W, sibFixed.H) {
@@ -393,7 +420,7 @@ func paintNode(buf *CellBuffer, node *Node) {
 		paintInput(buf, node)
 	case "component":
 		// Component placeholder: transparent container, just paint children
-		for _, child := range node.Children {
+		for _, child := range paintOrderChildren(node.Children) {
 			paintNode(buf, child)
 		}
 	}
@@ -420,7 +447,7 @@ func paintBox(buf *CellBuffer, node *Node) {
 	} else if node.Style.Overflow == "hidden" {
 		paintHiddenChildren(buf, node)
 	} else {
-		for _, child := range node.Children {
+		for _, child := range paintOrderChildren(node.Children) {
 			paintNode(buf, child)
 		}
 	}
@@ -437,7 +464,7 @@ func paintHiddenChildren(buf *CellBuffer, node *Node) {
 	clipY1 := node.Y + bw + node.Style.PaddingTop
 	clipX2 := node.X + node.W - bw - node.Style.PaddingRight
 	clipY2 := node.Y + node.H - bw - node.Style.PaddingBottom
-	for _, child := range node.Children {
+	for _, child := range paintOrderChildren(node.Children) {
 		paintNodeClipped(buf, child, clipX1, clipY1, clipX2, clipY2)
 	}
 }
@@ -470,7 +497,7 @@ func paintScrollChildren(buf *CellBuffer, node *Node) {
 	clipX2 := node.X + node.W - bw - node.Style.PaddingRight
 	clipY2 := node.Y + node.H - bw - node.Style.PaddingBottom
 
-	for _, child := range node.Children {
+	for _, child := range paintOrderChildren(node.Children) {
 		paintNodeClipped(buf, child, clipX1, clipY1, clipX2, clipY2)
 	}
 
@@ -516,7 +543,7 @@ func paintScrollChildrenClipped(buf *CellBuffer, node *Node, outerClipX1, outerC
 		return // No visible area
 	}
 
-	for _, child := range node.Children {
+	for _, child := range paintOrderChildren(node.Children) {
 		paintNodeClipped(buf, child, clipX1, clipY1, clipX2, clipY2)
 	}
 
@@ -548,7 +575,7 @@ func paintHiddenChildrenClipped(buf *CellBuffer, node *Node, outerClipX1, outerC
 		return // No visible area
 	}
 
-	for _, child := range node.Children {
+	for _, child := range paintOrderChildren(node.Children) {
 		paintNodeClipped(buf, child, clipX1, clipY1, clipX2, clipY2)
 	}
 }
@@ -649,7 +676,7 @@ func paintNodeClipped(buf *CellBuffer, node *Node, clipX1, clipY1, clipX2, clipY
 	case "input", "textarea":
 		paintTextClipped(buf, node, clipX1, clipY1, clipX2, clipY2)
 	case "component":
-		for _, child := range node.Children {
+		for _, child := range paintOrderChildren(node.Children) {
 			paintNodeClipped(buf, child, clipX1, clipY1, clipX2, clipY2)
 		}
 	}
@@ -680,7 +707,7 @@ func paintBoxClipped(buf *CellBuffer, node *Node, clipX1, clipY1, clipX2, clipY2
 		// outer clip and inner content area.
 		paintHiddenChildrenClipped(buf, node, clipX1, clipY1, clipX2, clipY2)
 	} else {
-		for _, child := range node.Children {
+		for _, child := range paintOrderChildren(node.Children) {
 			paintNodeClipped(buf, child, clipX1, clipY1, clipX2, clipY2)
 		}
 	}

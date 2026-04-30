@@ -23,9 +23,17 @@ func hitTestWithOffset(node *Node, x, y int, scrollOffsetY int) *Node {
 	// parent layout don't reflect absolute-positioned children's actual positions.
 	// Skip bounds check and go straight to checking children.
 	if node.Type == "component" {
-		for i := len(node.Children) - 1; i >= 0; i-- {
-			if hit := hitTestWithOffset(node.Children[i], x, y, scrollOffsetY); hit != nil {
-				return hit
+		if sorted := hitTestOrderChildren(node.Children); sorted != nil {
+			for _, child := range sorted {
+				if hit := hitTestWithOffset(child, x, y, scrollOffsetY); hit != nil {
+					return hit
+				}
+			}
+		} else {
+			for i := len(node.Children) - 1; i >= 0; i-- {
+				if hit := hitTestWithOffset(node.Children[i], x, y, scrollOffsetY); hit != nil {
+					return hit
+				}
 			}
 		}
 		return nil // component placeholder is transparent — no match
@@ -57,27 +65,53 @@ func hitTestWithOffset(node *Node, x, y int, scrollOffsetY int) *Node {
 		}
 	}
 
-	// Check children in reverse order (top-most first)
-	for i := len(node.Children) - 1; i >= 0; i-- {
-		child := node.Children[i]
-
-		// For scroll containers, skip children outside visible area
-		if node.Style.Overflow == "scroll" {
-			childScreenY := child.Y - childScrollOffset
-			childScreenBottom := childScreenY + child.H
-			bw := 0
-			if node.Style.Border != "" && node.Style.Border != "none" {
-				bw = 1
+	// Check children in reverse z-order (highest ZIndex / top-most first)
+	hitChildren := hitTestOrderChildren(node.Children)
+	if hitChildren != nil {
+		// z-index sorting active: iterate forward through pre-sorted list
+		for _, child := range hitChildren {
+			// For scroll containers, skip children outside visible area
+			if node.Style.Overflow == "scroll" {
+				childScreenY := child.Y - childScrollOffset
+				childScreenBottom := childScreenY + child.H
+				bw := 0
+				if node.Style.Border != "" && node.Style.Border != "none" {
+					bw = 1
+				}
+				visTop := screenY + bw + node.Style.PaddingTop
+				visBot := screenY + node.H - bw - node.Style.PaddingBottom
+				if childScreenBottom <= visTop || childScreenY >= visBot {
+					continue // scrolled out of view
+				}
 			}
-			visTop := screenY + bw + node.Style.PaddingTop
-			visBot := screenY + node.H - bw - node.Style.PaddingBottom
-			if childScreenBottom <= visTop || childScreenY >= visBot {
-				continue // scrolled out of view
+
+			if hit := hitTestWithOffset(child, x, y, childScrollOffset); hit != nil {
+				return hit
 			}
 		}
+	} else {
+		// Fast path: no z-index, reverse order (same as before)
+		for i := len(node.Children) - 1; i >= 0; i-- {
+			child := node.Children[i]
 
-		if hit := hitTestWithOffset(child, x, y, childScrollOffset); hit != nil {
-			return hit
+			// For scroll containers, skip children outside visible area
+			if node.Style.Overflow == "scroll" {
+				childScreenY := child.Y - childScrollOffset
+				childScreenBottom := childScreenY + child.H
+				bw := 0
+				if node.Style.Border != "" && node.Style.Border != "none" {
+					bw = 1
+				}
+				visTop := screenY + bw + node.Style.PaddingTop
+				visBot := screenY + node.H - bw - node.Style.PaddingBottom
+				if childScreenBottom <= visTop || childScreenY >= visBot {
+					continue // scrolled out of view
+				}
+			}
+
+			if hit := hitTestWithOffset(child, x, y, childScrollOffset); hit != nil {
+				return hit
+			}
 		}
 	}
 
