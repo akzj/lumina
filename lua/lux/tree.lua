@@ -11,7 +11,7 @@
 --   indent: number (default 2)
 --   autoFocus: boolean
 
-local Tree = lumina.defineComponent("Tree", function(props)
+local Tree = lumina.defineComponent("LuxTree", function(props)
     local t = lumina.getTheme and lumina.getTheme() or {}
     local items = props.items or {}
     local expandedIds = props.expandedIds or {}
