@@ -2180,6 +2180,13 @@ func collectPropFuncRefsFromAny(v any, out *[]int64) {
 // called before dropping the map: each render builds a new readMapFromTable result
 // with new Ref() ids for the same logical functions, so propsEqual is usually false
 // every frame and child.Props is reassigned without otherwise freeing old refs.
+//
+// NOTE: propsEqual currently compares propFuncRef by value (ref ID). Because each
+// render produces fresh Ref() IDs, props with callbacks are always "different",
+// triggering re-render and old-ref cleanup. If we ever cache/reuse Lua refs across
+// renders (e.g. for performance), propsEqual would return true and the old refs
+// would NOT be freed — causing a leak. Any such optimization must update the
+// cleanup logic here.
 func unrefPropFuncRefsInProps(L *lua.State, m map[string]any) {
 	if L == nil || m == nil {
 		return
