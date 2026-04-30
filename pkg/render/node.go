@@ -27,12 +27,25 @@ type Style struct {
 	Align   string // "stretch", "start", "center", "end"
 
 	// Visual
-	Border     string // "none", "single", "double", "rounded"
-	Foreground string
-	Background string
-	Bold       bool
-	Dim        bool
-	Underline  bool
+	Border      string // "none", "single", "double", "rounded"
+	BorderColor string // "" = use Foreground, otherwise "#RRGGBB"
+	Foreground  string
+	Background  string
+	Bold        bool
+	Dim         bool
+	Underline   bool
+	Italic        bool
+	Strikethrough bool
+	Inverse       bool
+
+	// Text layout
+	TextAlign    string // "" (default=left), "center", "right"
+	TextOverflow string // "" (default=clip), "ellipsis"
+	WhiteSpace   string // "" (default=normal/wrap), "nowrap"
+
+	// Display/Visibility
+	Display    string // "" (default=flex), "none"
+	Visibility string // "" (default=visible), "hidden"
 
 	// Overflow
 	Overflow string // "hidden", "scroll"

@@ -17,10 +17,15 @@ type RenderResult struct {
 
 // CellJSON is the JSON representation of a single cell.
 type CellJSON struct {
-	Char string `json:"char"`
-	Fg   string `json:"fg,omitempty"`
-	Bg   string `json:"bg,omitempty"`
-	Bold bool   `json:"bold,omitempty"`
+	Char          string `json:"char"`
+	Fg            string `json:"fg,omitempty"`
+	Bg            string `json:"bg,omitempty"`
+	Bold          bool   `json:"bold,omitempty"`
+	Dim           bool   `json:"dim,omitempty"`
+	Underline     bool   `json:"underline,omitempty"`
+	Italic        bool   `json:"italic,omitempty"`
+	Strikethrough bool   `json:"strikethrough,omitempty"`
+	Inverse       bool   `json:"inverse,omitempty"`
 }
 
 // RectJSON is the JSON representation of a rectangle.
@@ -76,10 +81,15 @@ func bufferToRenderResult(screen *buffer.Buffer) RenderResult {
 				ch = ' '
 			}
 			row[x] = CellJSON{
-				Char: string(ch),
-				Fg:   c.Foreground,
-				Bg:   c.Background,
-				Bold: c.Bold,
+				Char:          string(ch),
+				Fg:            c.Foreground,
+				Bg:            c.Background,
+				Bold:          c.Bold,
+				Dim:           c.Dim,
+				Underline:     c.Underline,
+				Italic:        c.Italic,
+				Strikethrough: c.Strikethrough,
+				Inverse:       c.Inverse,
 			}
 		}
 		cells[y] = row

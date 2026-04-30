@@ -10,6 +10,9 @@ type Cell struct {
 	Bold      bool
 	Dim       bool
 	Underline bool
+	Italic        bool
+	Strikethrough bool
+	Inverse       bool
 	// Wide: true if this cell is the right half of a CJK character
 	Wide bool
 }

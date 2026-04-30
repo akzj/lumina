@@ -14,6 +14,12 @@ type tuiAdapter struct {
 	w *bufio.Writer
 }
 
+// tuiState tracks current ANSI attribute state for incremental output.
+type tuiState struct {
+	fg, bg                                                  string
+	bold, dim, underline, italic, strikethrough, inverse bool
+}
+
 // NewTUIAdapter creates a TUI adapter that writes ANSI escape sequences to w.
 func NewTUIAdapter(w io.Writer) Adapter {
 	return &tuiAdapter{w: bufio.NewWriter(w)}
@@ -22,15 +28,14 @@ func NewTUIAdapter(w io.Writer) Adapter {
 // WriteFull writes the entire screen buffer as ANSI output.
 func (t *tuiAdapter) WriteFull(screen *buffer.Buffer) error {
 	t.w.WriteString("\033[0m") // reset at start
-	var curFg, curBg string
-	var curBold, curDim, curUnderline bool
+	var st tuiState
 
 	for y := 0; y < screen.Height(); y++ {
 		// Move cursor to start of row (1-based).
 		fmt.Fprintf(t.w, "\033[%d;%dH", y+1, 1)
 		for x := 0; x < screen.Width(); x++ {
 			c := screen.Get(x, y)
-			t.writeCell(c, &curFg, &curBg, &curBold, &curDim, &curUnderline)
+			t.writeCell(c, &st)
 			if c.Wide {
 				x++ // skip the next padding cell — terminal already advanced cursor by 2
 			}
@@ -42,8 +47,7 @@ func (t *tuiAdapter) WriteFull(screen *buffer.Buffer) error {
 // WriteDirty writes only the cells within the dirty rects.
 func (t *tuiAdapter) WriteDirty(screen *buffer.Buffer, dirtyRects []buffer.Rect) error {
 	t.w.WriteString("\033[0m") // reset at start
-	var curFg, curBg string
-	var curBold, curDim, curUnderline bool
+	var st tuiState
 
 	bounds := buffer.Rect{X: 0, Y: 0, W: screen.Width(), H: screen.Height()}
 	for _, dr := range dirtyRects {
@@ -56,7 +60,7 @@ func (t *tuiAdapter) WriteDirty(screen *buffer.Buffer, dirtyRects []buffer.Rect)
 			fmt.Fprintf(t.w, "\033[%d;%dH", y+1, region.X+1)
 			for x := region.X; x < region.X+region.W; x++ {
 				c := screen.Get(x, y)
-				t.writeCell(c, &curFg, &curBg, &curBold, &curDim, &curUnderline)
+				t.writeCell(c, &st)
 				if c.Wide {
 					x++ // skip the next padding cell — terminal already advanced cursor by 2
 				}
@@ -68,61 +72,76 @@ func (t *tuiAdapter) WriteDirty(screen *buffer.Buffer, dirtyRects []buffer.Rect)
 
 // writeCell emits ANSI escape sequences for a single cell, optimizing by
 // tracking current state and only emitting changes.
-func (t *tuiAdapter) writeCell(c buffer.Cell, curFg, curBg *string, curBold, curDim, curUnderline *bool) {
-	// Check if attributes changed — if bold/dim/underline turned OFF, we need a reset.
-	needReset := (!c.Bold && *curBold) || (!c.Dim && *curDim) || (!c.Underline && *curUnderline)
+func (t *tuiAdapter) writeCell(c buffer.Cell, st *tuiState) {
+	// Check if any attribute turned OFF — we need a full reset.
+	needReset := (!c.Bold && st.bold) || (!c.Dim && st.dim) || (!c.Underline && st.underline) ||
+		(!c.Italic && st.italic) || (!c.Strikethrough && st.strikethrough) || (!c.Inverse && st.inverse)
 	if needReset {
 		t.w.WriteString("\033[0m")
-		*curFg = ""
-		*curBg = ""
-		*curBold = false
-		*curDim = false
-		*curUnderline = false
+		*st = tuiState{} // reset all tracked state
 	}
 
 	// Set foreground color if changed.
-	if c.Foreground != *curFg {
+	if c.Foreground != st.fg {
 		if c.Foreground == "" {
 			// Only reset fg if we're not already at default (after a full reset).
-			if *curFg != "" {
+			if st.fg != "" {
 				t.w.WriteString("\033[39m")
 			}
 		} else {
 			r, g, b := parseHexColor(c.Foreground)
 			fmt.Fprintf(t.w, "\033[38;2;%d;%d;%dm", r, g, b)
 		}
-		*curFg = c.Foreground
+		st.fg = c.Foreground
 	}
 
 	// Set background color if changed.
-	if c.Background != *curBg {
+	if c.Background != st.bg {
 		if c.Background == "" {
-			if *curBg != "" {
+			if st.bg != "" {
 				t.w.WriteString("\033[49m")
 			}
 		} else {
 			r, g, b := parseHexColor(c.Background)
 			fmt.Fprintf(t.w, "\033[48;2;%d;%d;%dm", r, g, b)
 		}
-		*curBg = c.Background
+		st.bg = c.Background
 	}
 
 	// Set bold if changed.
-	if c.Bold && !*curBold {
+	if c.Bold && !st.bold {
 		t.w.WriteString("\033[1m")
-		*curBold = true
+		st.bold = true
 	}
 
 	// Set dim if changed.
-	if c.Dim && !*curDim {
+	if c.Dim && !st.dim {
 		t.w.WriteString("\033[2m")
-		*curDim = true
+		st.dim = true
+	}
+
+	// Set italic if changed.
+	if c.Italic && !st.italic {
+		t.w.WriteString("\033[3m")
+		st.italic = true
 	}
 
 	// Set underline if changed.
-	if c.Underline && !*curUnderline {
+	if c.Underline && !st.underline {
 		t.w.WriteString("\033[4m")
-		*curUnderline = true
+		st.underline = true
+	}
+
+	// Set inverse if changed.
+	if c.Inverse && !st.inverse {
+		t.w.WriteString("\033[7m")
+		st.inverse = true
+	}
+
+	// Set strikethrough if changed.
+	if c.Strikethrough && !st.strikethrough {
+		t.w.WriteString("\033[9m")
+		st.strikethrough = true
 	}
 
 	// Write the character. Zero cells render as space.

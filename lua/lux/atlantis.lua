@@ -163,10 +163,8 @@ end
 function M.Shell(props)
     local t = lumina.getTheme and lumina.getTheme() or M.themeTable()
     local sidebarW = props.sidebarWidth or 26
-    -- Layout.Main with overflow=scroll hits an engine quirk: a single inner vbox
-    -- gets natural height 1 inside scroll parents (see pkg/render/layout.go scroll branch).
-    -- Nested scroll on a tall vbox of Cards also produced overlapping rows in practice.
-    local mainScroll = props.mainScroll == true
+    -- Main scroll defaults on: engine measures scroll children with intrinsic height.
+    local mainScroll = props.mainScroll ~= false
     local innerOverflow = props.innerOverflow
     local top = props.topBar or M.TopBar({ title = props.title or "Form Layout" })
 

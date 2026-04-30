@@ -1134,6 +1134,9 @@ func (e *Engine) readStyle(L *lua.State, idx int) Style {
 	s.Bold = getBoolField(L, absIdx, "bold")
 	s.Dim = getBoolField(L, absIdx, "dim")
 	s.Underline = getBoolField(L, absIdx, "underline")
+	s.Italic = getBoolField(L, absIdx, "italic")
+	s.Strikethrough = getBoolField(L, absIdx, "strikethrough")
+	s.Inverse = getBoolField(L, absIdx, "inverse")
 	s.Overflow = getStringField(L, absIdx, "overflow")
 	s.Position = getStringField(L, absIdx, "position")
 	s.Top = int(getIntField(L, absIdx, "top"))
@@ -1141,6 +1144,12 @@ func (e *Engine) readStyle(L *lua.State, idx int) Style {
 	s.Right = int(getIntFieldDefault(L, absIdx, "right", -1))
 	s.Bottom = int(getIntFieldDefault(L, absIdx, "bottom", -1))
 	s.ZIndex = int(getIntField(L, absIdx, "zIndex"))
+	s.TextAlign = getStringField(L, absIdx, "textAlign")
+	s.TextOverflow = getStringField(L, absIdx, "textOverflow")
+	s.WhiteSpace = getStringField(L, absIdx, "whiteSpace")
+	s.Display = getStringField(L, absIdx, "display")
+	s.Visibility = getStringField(L, absIdx, "visibility")
+	s.BorderColor = getStringField(L, absIdx, "borderColor")
 	return s
 }
 
@@ -1239,6 +1248,15 @@ func (e *Engine) readStyleFields(L *lua.State, idx int, s *Style) {
 	if !s.Underline {
 		s.Underline = getBoolField(L, absIdx, "underline")
 	}
+	if !s.Italic {
+		s.Italic = getBoolField(L, absIdx, "italic")
+	}
+	if !s.Strikethrough {
+		s.Strikethrough = getBoolField(L, absIdx, "strikethrough")
+	}
+	if !s.Inverse {
+		s.Inverse = getBoolField(L, absIdx, "inverse")
+	}
 	if s.Top == 0 {
 		s.Top = int(getIntField(L, absIdx, "top"))
 	}
@@ -1253,6 +1271,24 @@ func (e *Engine) readStyleFields(L *lua.State, idx int, s *Style) {
 	}
 	if s.ZIndex == 0 {
 		s.ZIndex = int(getIntField(L, absIdx, "zIndex"))
+	}
+	if s.TextAlign == "" {
+		s.TextAlign = getStringField(L, absIdx, "textAlign")
+	}
+	if s.TextOverflow == "" {
+		s.TextOverflow = getStringField(L, absIdx, "textOverflow")
+	}
+	if s.WhiteSpace == "" {
+		s.WhiteSpace = getStringField(L, absIdx, "whiteSpace")
+	}
+	if s.Display == "" {
+		s.Display = getStringField(L, absIdx, "display")
+	}
+	if s.Visibility == "" {
+		s.Visibility = getStringField(L, absIdx, "visibility")
+	}
+	if s.BorderColor == "" {
+		s.BorderColor = getStringField(L, absIdx, "borderColor")
 	}
 }
 
@@ -2452,13 +2488,16 @@ func (e *Engine) ToBuffer() *buffer.Buffer {
 				}
 			}
 			buf.Set(x, y, buffer.Cell{
-				Char:       c.Ch,
-				Foreground: c.FG,
-				Background: c.BG,
-				Bold:       c.Bold,
-				Dim:        c.Dim,
-				Underline:  c.Underline,
-				Wide:       isWideChar, // Wide on MAIN cell, not padding
+				Char:          c.Ch,
+				Foreground:    c.FG,
+				Background:    c.BG,
+				Bold:          c.Bold,
+				Dim:           c.Dim,
+				Underline:     c.Underline,
+				Italic:        c.Italic,
+				Strikethrough: c.Strikethrough,
+				Inverse:       c.Inverse,
+				Wide:          isWideChar, // Wide on MAIN cell, not padding
 			})
 		}
 	}
