@@ -236,6 +236,12 @@ func (e *Engine) Root() *Component { return e.root }
 // GetComponent returns a component by ID.
 func (e *Engine) GetComponent(id string) *Component { return e.components[id] }
 
+// HasComponent returns true if a component with the given ID exists.
+func (e *Engine) HasComponent(id string) bool {
+	_, exists := e.components[id]
+	return exists
+}
+
 // CurrentComponent returns the component currently being rendered (for hooks).
 func (e *Engine) CurrentComponent() *Component { return e.currentComp }
 // AllComponents returns all registered components.
