@@ -26,6 +26,13 @@ func reconcileImpl(node *Node, desc Descriptor, freedRefs *[]int64) bool {
 			// Uncontrolled input: preserve user-typed content
 		} else {
 			node.Content = desc.Content
+			// Clamp cursor position if new content is shorter
+			if node.Type == "input" || node.Type == "textarea" {
+				runes := []rune(node.Content)
+				if node.CursorPos > len(runes) {
+					node.CursorPos = len(runes)
+				}
+			}
 			node.PaintDirty = true
 			changed = true
 		}
