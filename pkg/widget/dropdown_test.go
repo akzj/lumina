@@ -159,11 +159,11 @@ func TestDropdownClickOnItem(t *testing.T) {
 	props := map[string]any{"items": testDropdownItems()}
 
 	// Click on second item (index 1 = Paste)
-	// Widget at Y=0, trigger height=3, option 0 at Y=3, option 1 at Y=4
+	// Widget at Y=0, trigger height=3, menu border top=1, option 0 at Y=4, option 1 at Y=5
 	evt := &render.WidgetEvent{
 		Type:    "click",
 		X:       5,
-		Y:       4,
+		Y:       5,
 		WidgetX: 0, WidgetY: 0,
 	}
 	changed := Dropdown.OnEvent(props, state, evt)
@@ -187,11 +187,11 @@ func TestDropdownClickOnDisabledItem(t *testing.T) {
 	state.Open = true
 	props := map[string]any{"items": items}
 
-	// Click on disabled item (index 1)
+	// Click on disabled item (index 1), menu border top=1
 	evt := &render.WidgetEvent{
 		Type:    "click",
 		X:       5,
-		Y:       4,
+		Y:       5,
 		WidgetX: 0, WidgetY: 0,
 	}
 	changed := Dropdown.OnEvent(props, state, evt)
@@ -209,11 +209,11 @@ func TestDropdownClickOnDivider(t *testing.T) {
 	state.Open = true
 	props := map[string]any{"items": testDropdownItems()}
 
-	// Click on divider (index 2)
+	// Click on divider (index 2), trigger(3) + border(1) + items 0,1 + divider at Y=6
 	evt := &render.WidgetEvent{
 		Type:    "click",
 		X:       5,
-		Y:       5, // trigger(3) + items 0,1 + divider at index 2
+		Y:       6,
 		WidgetX: 0, WidgetY: 0,
 	}
 	changed := Dropdown.OnEvent(props, state, evt)
