@@ -348,6 +348,7 @@ local LuxButtonGroup = lumina.defineComponent("LuxButtonGroup", function(props)
         borderColor = edge0,
         background = bg,
         gap = 0,
+        height = 3,
         width = props.width,
         flex = props.flex,
     }

@@ -1243,6 +1243,23 @@ func TestLayoutHBoxWrap_BorderedButtonNotClampedToWidth1(t *testing.T) {
 	}
 }
 
+func TestLayoutHBox_ShrinksCrossAxisWithoutExplicitHeight(t *testing.T) {
+	// Parent passes a tall cross-axis slot; children are short (e.g. toolbar row).
+	// Outer hbox must not keep the full slot height or background fill looks wrong.
+	row := makeNode("hbox", Style{Background: "#FF0000", Right: -1, Bottom: -1},
+		makeTextStyled("A", withHeight(1)),
+		makeTextStyled("B", withHeight(1)),
+	)
+	setParentsRecursive(row)
+	layoutViewportW = 40
+	layoutViewportH = 24
+	normalizeSpacingInTree(row)
+	computeFlex(row, 0, 0, 20, 12, 0)
+	if row.H > 3 {
+		t.Fatalf("hbox H=%d, want <= 3 (shrink cross-axis to children)", row.H)
+	}
+}
+
 func TestLayoutHBoxNowrap_GrowsWhenGraftedChildTallerThanSlot(t *testing.T) {
 	// Non-wrap hbox (e.g. Lux SplitButton): row may pass a short cross-axis h while
 	// grafted inner hbox uses style.Height=3. Outer hbox must grow so border + fill

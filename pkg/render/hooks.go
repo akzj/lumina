@@ -2,6 +2,7 @@ package render
 
 import (
 	"fmt"
+	"reflect"
 	"sort"
 
 	"github.com/akzj/go-lua/pkg/lua"
@@ -30,16 +31,31 @@ func luaTableToDeps(L *lua.State, idx int) ([]any, bool) {
 }
 
 // depsEqual compares two dependency slices for shallow equality.
+// Uses == for comparable types (preserves reference equality for functions).
+// For non-comparable types (maps, slices from Lua tables), falls back to
+// reflect.DeepEqual to prevent panics.
 func depsEqual(a, b []any) bool {
 	if len(a) != len(b) {
 		return false
 	}
 	for i := range a {
-		if a[i] != b[i] {
+		if !depEqual(a[i], b[i]) {
 			return false
 		}
 	}
 	return true
+}
+
+// depEqual compares two any values. Uses == first (works for all comparable
+// types including function pointers). If == panics (non-comparable type like
+// map or slice), falls back to reflect.DeepEqual.
+func depEqual(a, b any) (result bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			result = reflect.DeepEqual(a, b)
+		}
+	}()
+	return a == b
 }
 
 // getHookSlot returns the hook slot at the current hookIdx for the component,

@@ -64,11 +64,12 @@ function M.formShowcaseBlocks()
             lumina.createElement("hbox", {
                 style = {
                     width = "100%",
-                    height = 1,
+                    height = 3,
                     gap = 1,
                     align = "center",
                     justify = "start",
                     flexWrap = "nowrap",
+                    overflow = "hidden",
                 },
             },
                 lumina.createElement("input", {

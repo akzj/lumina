@@ -308,6 +308,21 @@ func layoutHBox(node *Node, contentX, contentY, contentW, contentH int, style St
 		if node.Parent != nil {
 			node.Parent.PaintDirty = true
 		}
+	} else if style.Height <= 0 && flowCount > 0 {
+		// Cross-axis flex slice can be taller than flow children (e.g. lone row in a
+		// card vbox). Shrink outer H so background/border match content (Lux Button.Group).
+		mnh := resolveMinH(style, contentH)
+		shrinkTo := wantOuter
+		if shrinkTo < mnh {
+			shrinkTo = mnh
+		}
+		if shrinkTo < node.H {
+			node.H = shrinkTo
+			node.PaintDirty = true
+			if node.Parent != nil {
+				node.Parent.PaintDirty = true
+			}
+		}
 	}
 
 	// For scroll containers, store the total content height (cross-axis)
