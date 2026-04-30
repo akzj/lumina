@@ -108,6 +108,11 @@ type Node struct {
 	X, Y, W, H int  // absolute position + size
 	LayoutDirty bool // true → recompute this subtree's layout
 
+	// Measurement cache (set by measure pass, used by layout pass)
+	MeasuredW    int  // intrinsic outer width (including margin)
+	MeasuredH    int  // intrinsic outer height (including margin)
+	MeasureDirty bool // true → needs re-measurement
+
 	// Previous position (for clearing old region when node moves)
 	OldX, OldY, OldW, OldH int
 	PositionChanged         bool
