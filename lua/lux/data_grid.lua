@@ -30,6 +30,30 @@ local DataGrid = lumina.defineComponent("DataGrid", function(props)
 	local onSelectionChange = props.onSelectionChange
 	local getRowId = props.getRowId or function(row, index) return tostring(index) end
 
+	-- Editable cell props
+	local editable = props.editable == true
+	local editingCell = props.editingCell -- { rowIndex = N, columnId = "col" } or nil
+	local onEditStart = props.onEditStart
+	local onEditEnd = props.onEditEnd
+	local onCellChange = props.onCellChange
+	local onEditCancel = props.onEditCancel
+	local editableColumns = props.editableColumns -- nil = all columns editable
+
+	-- Controlled edit value: parent manages via store
+	local editValueProp = props.editValue
+	local onEditValueChange = props.onEditValueChange
+
+	-- Closure variable to capture latest edit value from onChange (for onSubmit)
+	local lastEditValue = editValueProp
+
+	-- Focus the edit input after it's rendered
+	lumina.useEffect(function()
+		if editingCell then
+			local editId = "edit-" .. tostring(editingCell.rowIndex) .. "-" .. tostring(editingCell.columnId)
+			lumina.focusById(editId)
+		end
+	end)
+
 	-- Build selectedIds lookup set for O(1) membership test
 	local selectedIdSet = {}
 	for _, id in ipairs(selectedIds) do
@@ -71,10 +95,34 @@ local DataGrid = lumina.defineComponent("DataGrid", function(props)
 	end
 	local scrollY = math.max(0, math.min(maxScroll, ideal))
 
+	-- Helper: find first editable column ID
+	local function firstEditableColumnId()
+		for _, col in ipairs(columns) do
+			if not editableColumns or editableColumns[col.id] then
+				return col.id
+			end
+		end
+		return nil
+	end
+
 	local function onKeyDown(e)
 		if #rows == 0 then
 			return
 		end
+
+		-- Handle Escape: cancel edit mode
+		if e.key == "Escape" then
+			if editingCell and onEditCancel then
+				onEditCancel(editingCell.rowIndex, editingCell.columnId)
+			end
+			return
+		end
+
+		-- When in edit mode, don't process navigation keys
+		if editingCell then
+			return
+		end
+
 		if e.key == "ArrowUp" or e.key == "Up" or e.key == "k" then
 			local n = math.max(1, selectedIdx - 1)
 			if props.onChangeIndex then
@@ -85,8 +133,14 @@ local DataGrid = lumina.defineComponent("DataGrid", function(props)
 			if props.onChangeIndex then
 				props.onChangeIndex(n)
 			end
-		elseif e.key == "Enter" then
-			if props.onActivate and rows[selectedIdx] then
+		elseif e.key == "Enter" or e.key == "F2" then
+			if editable then
+				-- Enter edit mode on first editable column
+				local colId = firstEditableColumnId()
+				if colId and onEditStart then
+					onEditStart(selectedIdx, colId)
+				end
+			elseif props.onActivate and rows[selectedIdx] then
 				props.onActivate(selectedIdx, rows[selectedIdx])
 			end
 		elseif e.key == "Home" then
@@ -283,9 +337,56 @@ local DataGrid = lumina.defineComponent("DataGrid", function(props)
 			local cells = {}
 			for _, col in ipairs(columns) do
 				local cw = columnWidth(col)
-				local cell = renderCell(row, i, col, ctx)
+				local colId = col.id or col.key or "?"
+				local isEditing = editingCell
+					and editingCell.rowIndex == i
+					and editingCell.columnId == colId
+				local cell
+				if isEditing then
+					-- Get current cell value
+					local currentValue = ""
+					if type(col.accessor) == "function" then
+						local v = col.accessor(row)
+						if v ~= nil then currentValue = tostring(v) end
+					elseif col.key then
+						local v = row[col.key]
+						if v ~= nil then currentValue = tostring(v) end
+					end
+					-- Controlled input: value comes from editValueProp (store-backed)
+					-- If editValueProp is nil, use currentValue as initial
+					local inputValue = editValueProp
+					if inputValue == nil then inputValue = currentValue end
+					lastEditValue = inputValue
+					-- Render native input for editing
+					cell = lumina.createElement("input", {
+						id = "edit-" .. tostring(i) .. "-" .. colId,
+						value = inputValue,
+						focusable = true,
+						foreground = t.text or "#CDD6F4",
+						background = t.surface1 or "#45475A",
+						style = { height = 1, width = cw },
+						onChange = function(text)
+							lastEditValue = text
+							if onEditValueChange then
+								onEditValueChange(text)
+							end
+						end,
+						onSubmit = function()
+							-- onChange fires RIGHT BEFORE onSubmit in same event cycle
+							-- lastEditValue has the latest content
+							if onCellChange then
+								onCellChange(i, colId, lastEditValue)
+							end
+							if onEditEnd then
+								onEditEnd(i, colId, lastEditValue, false)
+							end
+						end,
+					})
+				else
+					cell = renderCell(row, i, col, ctx)
+				end
 				cells[#cells + 1] = lumina.createElement("vbox", {
-					key = "c-" .. tostring(i) .. "-" .. tostring(col.id or col.key or "?"),
+					key = "c-" .. tostring(i) .. "-" .. tostring(colId),
 					style = { width = cw, height = rowHeight },
 				}, cell)
 			end
