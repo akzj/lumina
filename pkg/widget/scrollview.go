@@ -33,11 +33,13 @@ var ScrollView = &Widget{
 		// Build style from props, forcing overflow = "scroll"
 		style := render.Style{
 			Overflow: "scroll",
+			Right:    -1,
+			Bottom:   -1,
 		}
 
-		// Merge user-provided style
+		// Merge user-provided style (handles all 30+ style fields)
 		if userStyle, ok := props["style"].(map[string]any); ok {
-			mergeStyle(&style, userStyle)
+			render.MergeStyleFromMap(&style, userStyle)
 		}
 		// Force overflow to scroll regardless of user style
 		style.Overflow = "scroll"
@@ -151,56 +153,7 @@ var ScrollView = &Widget{
 	},
 }
 
-// mergeStyle applies Lua-style map values onto a render.Style struct.
-func mergeStyle(s *render.Style, m map[string]any) {
-	if v, ok := m["width"]; ok {
-		s.Width = intFromAny(v)
-	}
-	if v, ok := m["height"]; ok {
-		s.Height = intFromAny(v)
-	}
-	if v, ok := m["flex"]; ok {
-		s.Flex = intFromAny(v)
-	}
-	if v, ok := m["border"]; ok {
-		if str, ok := v.(string); ok {
-			s.Border = str
-		}
-	}
-	if v, ok := m["background"]; ok {
-		if str, ok := v.(string); ok {
-			s.Background = str
-		}
-	}
-	if v, ok := m["foreground"]; ok {
-		if str, ok := v.(string); ok {
-			s.Foreground = str
-		}
-	}
-	if v, ok := m["paddingTop"]; ok {
-		s.PaddingTop = intFromAny(v)
-	}
-	if v, ok := m["paddingBottom"]; ok {
-		s.PaddingBottom = intFromAny(v)
-	}
-	if v, ok := m["paddingLeft"]; ok {
-		s.PaddingLeft = intFromAny(v)
-	}
-	if v, ok := m["paddingRight"]; ok {
-		s.PaddingRight = intFromAny(v)
-	}
-	if v, ok := m["position"]; ok {
-		if str, ok := v.(string); ok {
-			s.Position = str
-		}
-	}
-	if v, ok := m["left"]; ok {
-		s.Left = intFromAny(v)
-	}
-	if v, ok := m["top"]; ok {
-		s.Top = intFromAny(v)
-	}
-}
+
 
 // intFromAny converts a Lua number (float64 or int64) to int.
 func intFromAny(v any) int {

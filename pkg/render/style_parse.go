@@ -314,3 +314,17 @@ func styleFromMap(m map[string]any) Style {
 	}
 	return s
 }
+
+// StyleFromMap is the exported version of styleFromMap.
+// Creates a Style from a map of property names to values.
+func StyleFromMap(m map[string]any) Style {
+	return styleFromMap(m)
+}
+
+// MergeStyleFromMap applies style fields from a map onto an existing Style.
+// Fields present in the map override the corresponding fields in s.
+func MergeStyleFromMap(s *Style, m map[string]any) {
+	for name, value := range m {
+		applyStyleField(s, name, value)
+	}
+}
