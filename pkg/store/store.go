@@ -4,9 +4,10 @@ package store
 
 import "sync"
 
-// subscriber holds a callback and an optional key filter.
+// subscriber holds a callback and a unique ID for stable unsubscribe.
 type subscriber struct {
-	key string                   // empty means subscribe to all keys
+	id  int                         // unique ID (never reused)
+	key string                      // empty means subscribe to all keys
 	fn  func(key string, value any) // always called with (key, value)
 }
 
@@ -15,8 +16,8 @@ type Store struct {
 	mu          sync.RWMutex
 	state       map[string]any
 	subscribers []*subscriber
-	nextID      int
-	removed     map[int]bool // tracks unsubscribed indices for lazy cleanup
+	nextID      int          // monotonically increasing subscriber ID
+	removed     map[int]bool // tracks unsubscribed IDs for lazy cleanup
 }
 
 // New creates a new Store with optional initial state.
@@ -88,14 +89,15 @@ func (s *Store) GetAll() map[string]any {
 // Returns an unsubscribe function.
 func (s *Store) Subscribe(fn func(key string, value any)) func() {
 	s.mu.Lock()
-	idx := len(s.subscribers)
-	s.subscribers = append(s.subscribers, &subscriber{fn: fn})
+	s.nextID++
+	id := s.nextID
+	s.subscribers = append(s.subscribers, &subscriber{id: id, fn: fn})
 	s.mu.Unlock()
 
 	return func() {
 		s.mu.Lock()
 		defer s.mu.Unlock()
-		s.removed[idx] = true
+		s.removed[id] = true
 	}
 }
 
@@ -132,8 +134,8 @@ func (s *Store) Batch(updates map[string]any) {
 // Must be called with s.mu held (read or write).
 func (s *Store) snapshotSubscribers() []*subscriber {
 	result := make([]*subscriber, 0, len(s.subscribers))
-	for i, sub := range s.subscribers {
-		if !s.removed[i] {
+	for _, sub := range s.subscribers {
+		if !s.removed[sub.id] {
 			result = append(result, sub)
 		}
 	}
@@ -147,8 +149,8 @@ func (s *Store) compactIfNeeded() {
 		return
 	}
 	var compacted []*subscriber
-	for i, sub := range s.subscribers {
-		if !s.removed[i] {
+	for _, sub := range s.subscribers {
+		if !s.removed[sub.id] {
 			compacted = append(compacted, sub)
 		}
 	}
