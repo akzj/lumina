@@ -52,9 +52,9 @@ func (j *jsonAdapter) WriteFull(screen *buffer.Buffer) error {
 	return json.NewEncoder(j.w).Encode(result)
 }
 
-// WriteDirty converts the buffer to JSON with dirty rect info.
+// WriteDirty converts only dirty cells to JSON with dirty rect info.
 func (j *jsonAdapter) WriteDirty(screen *buffer.Buffer, dirtyRects []buffer.Rect) error {
-	result := bufferToRenderResult(screen)
+	result := bufferToDirtyRenderResult(screen, dirtyRects)
 	result.DirtyRects = make([]RectJSON, len(dirtyRects))
 	for i, r := range dirtyRects {
 		result.DirtyRects[i] = RectJSON{X: r.X, Y: r.Y, W: r.W, H: r.H}
@@ -94,6 +94,46 @@ func bufferToRenderResult(screen *buffer.Buffer) RenderResult {
 		}
 		cells[y] = row
 	}
+	return RenderResult{
+		Width:  w,
+		Height: h,
+		Cells:  cells,
+	}
+}
+
+// bufferToDirtyRenderResult converts only the cells within dirty rects to a RenderResult.
+// Rows outside dirty rects are nil (omitted in JSON). This significantly reduces payload
+// for small updates (e.g., 1-cell change in a 200×50 terminal).
+func bufferToDirtyRenderResult(screen *buffer.Buffer, dirtyRects []buffer.Rect) RenderResult {
+	w, h := screen.Width(), screen.Height()
+	cells := make([][]CellJSON, h)
+
+	for _, r := range dirtyRects {
+		for y := r.Y; y < r.Y+r.H && y < h; y++ {
+			if cells[y] == nil {
+				cells[y] = make([]CellJSON, w)
+			}
+			for x := r.X; x < r.X+r.W && x < w; x++ {
+				c := screen.Get(x, y)
+				ch := c.Char
+				if ch == 0 {
+					ch = ' '
+				}
+				cells[y][x] = CellJSON{
+					Char:          string(ch),
+					Fg:            c.Foreground,
+					Bg:            c.Background,
+					Bold:          c.Bold,
+					Dim:           c.Dim,
+					Underline:     c.Underline,
+					Italic:        c.Italic,
+					Strikethrough: c.Strikethrough,
+					Inverse:       c.Inverse,
+				}
+			}
+		}
+	}
+
 	return RenderResult{
 		Width:  w,
 		Height: h,
