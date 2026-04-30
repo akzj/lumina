@@ -385,6 +385,7 @@ func (e *Engine) readStyle(L *lua.State, idx int) Style {
 	s.GridColumnEnd = int(getIntField(L, absIdx, "gridColumnEnd"))
 	s.GridRowStart = int(getIntField(L, absIdx, "gridRowStart"))
 	s.GridRowEnd = int(getIntField(L, absIdx, "gridRowEnd"))
+	validateStyle(&s)
 	return s
 }
 

@@ -312,6 +312,7 @@ func styleFromMap(m map[string]any) Style {
 	for name, value := range m {
 		applyStyleField(&s, name, value)
 	}
+	validateStyle(&s)
 	return s
 }
 
@@ -326,5 +327,70 @@ func StyleFromMap(m map[string]any) Style {
 func MergeStyleFromMap(s *Style, m map[string]any) {
 	for name, value := range m {
 		applyStyleField(s, name, value)
+	}
+}
+
+// validateStyle resets invalid enum field values to empty string.
+// Called after style parsing to catch typos like overflow="scrol".
+func validateStyle(s *Style) {
+	switch s.Display {
+	case "", "none", "flex", "grid":
+	default:
+		s.Display = ""
+	}
+	switch s.Position {
+	case "", "relative", "absolute", "fixed":
+	default:
+		s.Position = ""
+	}
+	switch s.Overflow {
+	case "", "scroll", "hidden":
+	default:
+		s.Overflow = ""
+	}
+	switch s.Border {
+	case "", "none", "single", "double", "rounded":
+	default:
+		s.Border = ""
+	}
+	switch s.FlexWrap {
+	case "", "wrap", "nowrap", "wrap-reverse":
+	default:
+		s.FlexWrap = ""
+	}
+	switch s.Justify {
+	case "", "start", "center", "end", "space-between", "space-around":
+	default:
+		s.Justify = ""
+	}
+	switch s.Align {
+	case "", "start", "center", "end", "stretch":
+	default:
+		s.Align = ""
+	}
+	switch s.AlignSelf {
+	case "", "start", "center", "end", "stretch":
+	default:
+		s.AlignSelf = ""
+	}
+	switch s.TextAlign {
+	case "", "left", "center", "right":
+	default:
+		s.TextAlign = ""
+	}
+	switch s.TextOverflow {
+	case "", "clip", "ellipsis":
+	default:
+		s.TextOverflow = ""
+	}
+	switch s.WhiteSpace {
+	case "", "normal", "nowrap":
+	default:
+		s.WhiteSpace = ""
+	}
+	switch s.Visibility {
+	case "", "visible", "hidden":
+	default:
+		s.Visibility = ""
 	}
 }
