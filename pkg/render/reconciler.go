@@ -208,11 +208,27 @@ func reconcileChildrenImpl(parent *Node, descs []Descriptor, freedRefs *[]int64)
 				continue
 			}
 		} else {
-			// Keyless: positional fallback — reuse old child at same index if also keyless and same type
+			// Keyless: positional fallback — try same index first, then scan forward
+			matched := false
 			if i < len(oldChildren) && !usedOld[i] && childKey(oldChildren[i]) == "" && oldChildren[i].Type == desc.Type {
 				usedOld[i] = true
 				reconcileImpl(oldChildren[i], desc, freedRefs)
 				newChildren = append(newChildren, oldChildren[i])
+				matched = true
+			}
+			if !matched {
+				// Scan for first available keyless child of same type
+				for j := 0; j < len(oldChildren); j++ {
+					if !usedOld[j] && childKey(oldChildren[j]) == "" && oldChildren[j].Type == desc.Type {
+						usedOld[j] = true
+						reconcileImpl(oldChildren[j], desc, freedRefs)
+						newChildren = append(newChildren, oldChildren[j])
+						matched = true
+						break
+					}
+				}
+			}
+			if matched {
 				continue
 			}
 		}
