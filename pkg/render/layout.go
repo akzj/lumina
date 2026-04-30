@@ -59,6 +59,15 @@ func LayoutFull(root *Node, x, y, w, h int) {
 	layoutViewportW = w
 	layoutViewportH = h
 	normalizeSpacingInTree(root)
+	// Phase 1: Measure pass — compute intrinsic sizes bottom-up.
+	// Results cached in node.MeasuredW / node.MeasuredH.
+	measure(root, Constraints{
+		Width:      w,
+		WidthMode:  SizeModeExact,
+		Height:     h,
+		HeightMode: SizeModeExact,
+	})
+	// Phase 2: Layout pass — position nodes top-down using measurements.
 	computeFlex(root, x, y, w, h, 0)
 	clearLayoutDirty(root)
 }
