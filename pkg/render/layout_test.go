@@ -1228,6 +1228,38 @@ func TestLayout_VBox_OverflowScroll_ScrollbarReservesColumn(t *testing.T) {
 	}
 }
 
+func TestLayoutHBoxWrap_BorderedButtonNotClampedToWidth1(t *testing.T) {
+	// Narrow row tail used to clamp last flex item to w=1; paintBorder needs w>=2.
+	inner := makeNode("hbox", Style{Height: 3, Border: "rounded", BorderColor: "#F5C842", PaddingLeft: 1, PaddingRight: 1}, makeText("XX"))
+	comp := makeNode("component", ds(), inner)
+	root := makeNode("hbox", Style{FlexWrap: "wrap"}, comp)
+	layoutViewportW = 80
+	layoutViewportH = 24
+	normalizeSpacingInTree(root)
+	computeFlex(root, 0, 0, 3, 5, 0)
+
+	if inner.W < 2 {
+		t.Fatalf("grafted button hbox W=%d, want >= 2 for border paint", inner.W)
+	}
+}
+
+func TestComponentPlaceholderSyncsSizeToGraftedRoot(t *testing.T) {
+	// Flex-wrap can pass a tiny cross-axis h (e.g. 1) into computeFlex for the row;
+	// LuxButton still lays out its grafted hbox at style.Height=3. The placeholder
+	// must pick up that height so row stacking and border paint see the real box.
+	inner := makeNode("hbox", Style{Height: 3, Width: 10, Border: "rounded", BorderColor: "#F5C842"}, makeText("Ok"))
+	comp := makeNode("component", ds(), inner)
+	root := makeNode("hbox", Style{FlexWrap: "wrap"}, comp)
+	layoutViewportW = 50
+	layoutViewportH = 24
+	normalizeSpacingInTree(root)
+	computeFlex(root, 0, 0, 50, 1, 0)
+
+	if comp.H < 3 {
+		t.Fatalf("component placeholder H=%d, want >= 3 after graft sync", comp.H)
+	}
+}
+
 func TestRuneWidth(t *testing.T) {
 	tests := []struct {
 		r    rune

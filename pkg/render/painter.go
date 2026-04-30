@@ -715,6 +715,13 @@ func paintBoxClipped(buf *CellBuffer, node *Node, clipX1, clipY1, clipX2, clipY2
 		}
 	}
 
+	// Border (must match paintBox): scroll/hidden parents paint children via
+	// paintNodeClipped → paintBoxClipped; omitting borders dropped LuxButton
+	// outlines inside overflow:scroll main regions.
+	if node.Style.Border != "" && node.Style.Border != "none" {
+		paintBorderClipped(buf, node, clipX1, clipY1, clipX2, clipY2)
+	}
+
 	// Paint children — handle nested scroll/hidden containers
 	if node.Style.Overflow == "scroll" {
 		// Nested scroll container inside an outer scroll: apply inner scroll
@@ -1084,6 +1091,52 @@ func paintBorder(buf *CellBuffer, node *Node) {
 	for row := y + 1; row < y+h-1; row++ {
 		buf.SetChar(x, row, vt, fg, bg, false)
 		buf.SetChar(x+w-1, row, vt, fg, bg, false)
+	}
+}
+
+// paintBorderClipped draws a box border like paintBorder but only writes cells
+// inside [clipX1,clipY1)–[clipX2,clipY2). Used from paintBoxClipped.
+func paintBorderClipped(buf *CellBuffer, node *Node, clipX1, clipY1, clipX2, clipY2 int) {
+	x, y, w, h := node.X, node.Y, node.W, node.H
+	if w < 2 || h < 2 {
+		return
+	}
+
+	fg := node.Style.BorderColor
+	if fg == "" {
+		fg = node.Style.Foreground
+	}
+	bg := node.Style.Background
+
+	var tl, tr, bl, br, hz, vt rune
+	switch node.Style.Border {
+	case "single":
+		tl, tr, bl, br, hz, vt = '┌', '┐', '└', '┘', '─', '│'
+	case "double":
+		tl, tr, bl, br, hz, vt = '╔', '╗', '╚', '╝', '═', '║'
+	case "rounded":
+		tl, tr, bl, br, hz, vt = '╭', '╮', '╰', '╯', '─', '│'
+	default:
+		return
+	}
+
+	set := func(px, py int, ch rune) {
+		if px >= clipX1 && px < clipX2 && py >= clipY1 && py < clipY2 {
+			buf.SetChar(px, py, ch, fg, bg, false)
+		}
+	}
+
+	set(x, y, tl)
+	set(x+w-1, y, tr)
+	set(x, y+h-1, bl)
+	set(x+w-1, y+h-1, br)
+	for col := x + 1; col < x+w-1; col++ {
+		set(col, y, hz)
+		set(col, y+h-1, hz)
+	}
+	for row := y + 1; row < y+h-1; row++ {
+		set(x, row, vt)
+		set(x+w-1, row, vt)
 	}
 }
 
