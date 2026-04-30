@@ -149,7 +149,8 @@ local LuxButton = lumina.defineComponent("LuxButton", function(props)
     local icon = props.icon
     local iconPos = props.iconPosition or "left"
     local linkLike = props.link == true or appearance == "link"
-    if appearance == "link" then
+    -- props.link alone must become text appearance (else we stay on solid and look like a filled pill).
+    if appearance == "link" or props.link == true then
         appearance = "text"
     end
 

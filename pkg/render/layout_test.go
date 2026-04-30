@@ -1260,6 +1260,42 @@ func TestComponentPlaceholderSyncsSizeToGraftedRoot(t *testing.T) {
 	}
 }
 
+func TestIntrinsicFlowHeight_IgnoresStaleSmallOuterHWithChildren(t *testing.T) {
+	// Parent may leave outer H=1 while children span more rows; intrinsic sizing must
+	// not return that stale n.H or Card-style stacks measure too short.
+	tn := makeText("x")
+	tn.X, tn.Y, tn.H = 10, 12, 1
+	inner := makeNode("hbox", Style{Height: 3, Right: -1, Bottom: -1}, tn)
+	inner.X, inner.Y = 10, 10
+	comp := makeNode("component", ds(), inner)
+	comp.X, comp.Y, comp.H = 10, 10, 1
+	wrap := makeNode("hbox", ds(), comp)
+	wrap.X, wrap.Y, wrap.H = 0, 10, 1
+	got := intrinsicFlowHeight(wrap)
+	if got < 3 {
+		t.Fatalf("intrinsicFlowHeight(hbox with tall child)=%d, want >= 3", got)
+	}
+}
+
+func TestComponentPlaceholderShrinksToGraftedRootWhenSlotTaller(t *testing.T) {
+	// Parent may pass a larger cross-axis size than the grafted UI needs; the
+	// placeholder must shrink to the real root so row height and paint bounds match.
+	inner := makeNode("hbox", Style{Height: 3, Width: 8, Border: "rounded"}, makeText("Ok"))
+	comp := makeNode("component", ds(), inner)
+	root := makeNode("hbox", Style{FlexWrap: "wrap"}, comp)
+	layoutViewportW = 50
+	layoutViewportH = 24
+	normalizeSpacingInTree(root)
+	computeFlex(root, 0, 0, 50, 6, 0)
+
+	if comp.H != inner.H {
+		t.Fatalf("placeholder H=%d, inner H=%d, want equal after shrink sync", comp.H, inner.H)
+	}
+	if comp.W != inner.W {
+		t.Fatalf("placeholder W=%d, inner W=%d, want equal after shrink sync", comp.W, inner.W)
+	}
+}
+
 func TestRuneWidth(t *testing.T) {
 	tests := []struct {
 		r    rune
