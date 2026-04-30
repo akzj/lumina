@@ -52,12 +52,13 @@ func (tm *timerManager) cancel(id int) {
 
 // fireDue returns Lua registry refs of timers that are due to fire.
 // One-shot timers are removed; repeating timers are rescheduled.
-// Canceled timers are cleaned up. Returns refs of one-shot timers
-// separately so the caller can Unref them after calling.
+// Canceled timers are cleaned up. Returns refs of fired one-shot timers
+// and canceled timers in oneshotRefs so the caller can Unref them.
 func (tm *timerManager) fireDue(now int64) (refs []int, oneshotRefs []int) {
 	var toRemove []int
 	for id, t := range tm.timers {
 		if t.canceled {
+			oneshotRefs = append(oneshotRefs, t.ref) // free leaked ref
 			toRemove = append(toRemove, id)
 			continue
 		}
