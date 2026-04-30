@@ -290,3 +290,24 @@ func TestRegistry_Names(t *testing.T) {
 		t.Fatalf("expected [alpha, beta, gamma], got %v", names)
 	}
 }
+
+func TestStore_UnsubscribeAfterCompaction(t *testing.T) {
+	s := New(nil)
+	countA, countC := 0, 0
+	s.Subscribe(func(k string, v any) { countA++ })
+	unsubB := s.Subscribe(func(k string, v any) {})
+	unsubC := s.Subscribe(func(k string, v any) { countC++ })
+
+	unsubB() // mark B removed
+	s.Set("x", 1) // triggers compaction: [A, C]
+
+	unsubC() // must remove C by ID, not stale index
+	s.Set("x", 2) // only A should fire
+
+	if countA != 2 {
+		t.Errorf("A: got %d, want 2", countA)
+	}
+	if countC != 1 {
+		t.Errorf("C: got %d, want 1", countC)
+	}
+}
