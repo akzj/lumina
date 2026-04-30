@@ -229,6 +229,10 @@ func (e *Engine) luaDefineComponent(L *lua.State) int {
 	// Store render function as registry ref
 	L.PushValue(2)
 	ref := L.Ref(lua.RegistryIndex)
+	// Free old factory ref if redefining (prevent Lua registry leak)
+	if old, exists := e.factories[name]; exists && old != goWidgetSentinel {
+		L.Unref(lua.RegistryIndex, int(old))
+	}
 	e.factories[name] = int64(ref)
 
 	// Return a factory table that createElement can detect
