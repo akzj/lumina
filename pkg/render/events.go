@@ -328,9 +328,12 @@ func (e *Engine) HandleClick(x, y int) {
 	}
 
 	// Dispatch onClick (bubble up from hit node, skip disabled)
-	target, _ := e.hitTestLayersWithHandler(x, y, "click")
-	if target != nil && target.OnClick != 0 && !target.Disabled {
-		e.callLuaRef(target.OnClick, x, y)
+	// Reuse hitNode from first hit-test — walk up to find nearest onClick handler.
+	for n := hitNode; n != nil; n = n.Parent {
+		if n.OnClick != 0 && !n.Disabled {
+			e.callLuaRef(n.OnClick, x, y)
+			break
+		}
 	}
 }
 
