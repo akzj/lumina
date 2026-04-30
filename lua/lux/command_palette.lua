@@ -11,6 +11,31 @@
 --       onClose = function() ... end,
 --   }
 
+-- Returns true if s is a single UTF-8 character (1-4 bytes).
+local function isSingleChar(s)
+    local n = #s
+    if n == 0 or n > 4 then return false end
+    local b = s:byte(1)
+    if b < 0x80 then return n == 1
+    elseif b < 0xC0 then return false -- continuation byte
+    elseif b < 0xE0 then return n == 2
+    elseif b < 0xF0 then return n == 3
+    else return n == 4
+    end
+end
+
+-- Remove the last UTF-8 character from a string.
+local function utf8RemoveLast(s)
+    local n = #s
+    if n == 0 then return s end
+    -- Walk backwards past continuation bytes (10xxxxxx = 0x80..0xBF)
+    local i = n
+    while i > 1 and s:byte(i) >= 0x80 and s:byte(i) < 0xC0 do
+        i = i - 1
+    end
+    return s:sub(1, i - 1)
+end
+
 local CommandPalette = lumina.defineComponent("CommandPalette", function(props)
     local query, setQuery = lumina.useState("query", "")
     local selectedIdx, setSelectedIdx = lumina.useState("selectedIdx", 1)
@@ -65,11 +90,11 @@ local CommandPalette = lumina.defineComponent("CommandPalette", function(props)
             setSelectedIdx(math.min(#filtered, selectedIdx + 1))
         elseif e.key == "Backspace" then
             if #query > 0 then
-                setQuery(query:sub(1, -2))
+                setQuery(utf8RemoveLast(query))
                 setSelectedIdx(1)
             end
-        elseif #e.key == 1 then
-            -- Single character input
+        elseif isSingleChar(e.key) then
+            -- Single character input (ASCII or multi-byte UTF-8)
             setQuery(query .. e.key)
             setSelectedIdx(1)
         end
