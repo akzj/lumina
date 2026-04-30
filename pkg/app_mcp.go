@@ -34,10 +34,60 @@ func (a *App) MCPInspectComponent(id string) (*mcp.ComponentDetail, error) {
 	if comp == nil {
 		return nil, fmt.Errorf("component not found: %s", id)
 	}
+	effects, memos, refs := comp.HookCounts()
+	childIDs := make([]string, 0, len(comp.Children))
+	for _, child := range comp.Children {
+		childIDs = append(childIDs, child.ID)
+	}
 	return &mcp.ComponentDetail{
-		ID:   comp.ID,
-		Name: comp.Name,
+		ID:          comp.ID,
+		Name:        comp.Name,
+		Props:       comp.Props,
+		State:       comp.State,
+		Dirty:       comp.Dirty,
+		RenderCount: comp.RenderCount,
+		Hooks: mcp.HookSummary{
+			Effects: effects,
+			Memos:   memos,
+			Refs:    refs,
+		},
+		Children: childIDs,
 	}, nil
+}
+
+// MCPInspectComponents returns a summary of all components, optionally filtered by name.
+func (a *App) MCPInspectComponents(filter string) []mcp.ComponentSummary {
+	allComps := a.engine.AllComponents()
+	result := make([]mcp.ComponentSummary, 0, len(allComps))
+	for _, comp := range allComps {
+		if filter != "" && !strings.Contains(strings.ToLower(comp.Name), strings.ToLower(filter)) {
+			continue
+		}
+		effects, memos, refs := comp.HookCounts()
+		childIDs := make([]string, 0, len(comp.Children))
+		for _, child := range comp.Children {
+			childIDs = append(childIDs, child.ID)
+		}
+		result = append(result, mcp.ComponentSummary{
+			ID:          comp.ID,
+			Name:        comp.Name,
+			Props:       comp.Props,
+			State:       comp.State,
+			HookCount:   effects + memos + refs,
+			RenderCount: comp.RenderCount,
+			Children:    childIDs,
+		})
+	}
+	return result
+}
+
+// MCPGetComponentProps returns the props of a specific component.
+func (a *App) MCPGetComponentProps(id string) (map[string]any, error) {
+	comp := a.engine.GetComponent(id)
+	if comp == nil {
+		return nil, fmt.Errorf("component not found: %s", id)
+	}
+	return comp.Props, nil
 }
 
 // MCPGetState returns component state.

@@ -112,6 +112,13 @@ type Engine struct {
 	// ThemeGetter returns the current theme as a map of color tokens.
 	// Set by the app layer to avoid import cycles (render cannot import widget).
 	ThemeGetter func() map[string]string
+
+	// ThemeSetter switches the active theme by name.
+	// Set by the app layer to avoid import cycles (render cannot import widget).
+	ThemeSetter func(name string) bool
+
+	// customTheme holds a user-provided theme table (from Lua setTheme(table)).
+	customTheme map[string]string
 }
 
 // SetTracker sets the performance tracker for recording render-engine metrics.
@@ -558,6 +565,7 @@ func (e *Engine) renderComponent(comp *Component) {
 
 	comp.Dirty = false
 	comp.Mounted = true
+	comp.RenderCount++
 }
 
 // renderGoWidget renders a component backed by a Go widget.
@@ -611,6 +619,7 @@ func (e *Engine) renderGoWidget(comp *Component, w WidgetDef) {
 
 	comp.Dirty = false
 	comp.Mounted = true
+	comp.RenderCount++
 }
 
 // preserveScrollState copies ScrollY from the old node tree to the new node tree
@@ -1660,23 +1669,70 @@ func (e *Engine) RegisterLuaAPI() {
 	L.PushFunction(e.luaGetTheme)
 	L.SetField(tblIdx, "getTheme")
 
+	// lumina.setTheme(nameOrTable) → switch theme by name or set custom
+	L.PushFunction(e.luaSetTheme)
+	L.SetField(tblIdx, "setTheme")
+
 	L.SetGlobal("lumina")
 }
 
 // luaGetTheme implements lumina.getTheme() → returns theme color table.
 // Uses Engine.ThemeGetter to avoid import cycles (render cannot import widget).
 func (e *Engine) luaGetTheme(L *lua.State) int {
-	if e.ThemeGetter == nil {
+	var theme map[string]string
+	if e.customTheme != nil {
+		theme = e.customTheme
+	} else if e.ThemeGetter != nil {
+		theme = e.ThemeGetter()
+	}
+	if theme == nil {
 		L.NewTable()
 		return 1
 	}
-	theme := e.ThemeGetter()
 	L.NewTable()
 	for k, v := range theme {
 		L.PushString(v)
 		L.SetField(-2, k)
 	}
 	return 1
+}
+
+// luaSetTheme implements lumina.setTheme(nameOrTable).
+// If a string is passed, switches to a built-in theme via ThemeSetter.
+// If a table is passed, stores it as a custom theme override.
+// After switching, marks all components dirty for re-render.
+func (e *Engine) luaSetTheme(L *lua.State) int {
+	if L.IsString(1) {
+		name, _ := L.ToString(1)
+		e.customTheme = nil
+		if e.ThemeSetter != nil {
+			e.ThemeSetter(name)
+		}
+	} else if L.IsTable(1) {
+		custom := make(map[string]string)
+		L.PushNil()
+		for L.Next(1) {
+			if L.IsString(-2) && L.IsString(-1) {
+				key, _ := L.ToString(-2)
+				val, _ := L.ToString(-1)
+				custom[key] = val
+			}
+			L.Pop(1)
+		}
+		e.customTheme = custom
+	}
+	// Mark all components dirty so they re-render with the new theme
+	e.markAllDirty()
+	return 0
+}
+
+// markAllDirty marks every component as dirty so the next render cycle
+// re-renders everything with updated theme colors.
+func (e *Engine) markAllDirty() {
+	for _, comp := range e.components {
+		comp.Dirty = true
+	}
+	e.needsRender = true
 }
 
 // luaDefineComponent implements lumina.defineComponent(name, renderFn)

@@ -166,9 +166,10 @@ type Component struct {
 	ChildNodes []*Node // Pre-converted child nodes from createElement children
 
 	// Lifecycle
-	IsRoot    bool
-	Mounted   bool
-	LastError string // last render error (empty = no error)
+	IsRoot      bool
+	Mounted     bool
+	LastError   string // last render error (empty = no error)
+	RenderCount int    // number of times this component has been rendered
 
 	// Hooks (React-style positional)
 	hookIdx   int         // current hook call index (reset each render)
@@ -271,4 +272,19 @@ func (c *Component) AddChild(child *Component, lookupKey ...string) {
 		mapKey = child.Type
 	}
 	c.ChildMap[mapKey] = child
+}
+
+// HookCounts returns the number of each hook type in this component.
+func (c *Component) HookCounts() (effects, memos, refs int) {
+	for _, slot := range c.hookSlots {
+		switch slot.kind {
+		case hookEffect:
+			effects++
+		case hookMemo:
+			memos++
+		case hookRef:
+			refs++
+		}
+	}
+	return
 }
