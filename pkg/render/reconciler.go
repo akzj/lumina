@@ -102,7 +102,14 @@ func reconcileStyle(node *Node, newStyle Style) bool {
 	// Check if layout-affecting properties changed
 	layoutChanged := old.Width != newStyle.Width ||
 		old.Height != newStyle.Height ||
+		old.WidthPercent != newStyle.WidthPercent ||
+		old.HeightPercent != newStyle.HeightPercent ||
+		old.WidthVW != newStyle.WidthVW ||
+		old.HeightVH != newStyle.HeightVH ||
 		old.Flex != newStyle.Flex ||
+		old.FlexShrink != newStyle.FlexShrink ||
+		old.FlexBasis != newStyle.FlexBasis ||
+		old.FlexWrap != newStyle.FlexWrap ||
 		old.Padding != newStyle.Padding ||
 		old.PaddingTop != newStyle.PaddingTop ||
 		old.PaddingBottom != newStyle.PaddingBottom ||
@@ -118,15 +125,34 @@ func reconcileStyle(node *Node, newStyle Style) bool {
 		old.MaxWidth != newStyle.MaxWidth ||
 		old.MinHeight != newStyle.MinHeight ||
 		old.MaxHeight != newStyle.MaxHeight ||
+		old.MinWidthPercent != newStyle.MinWidthPercent ||
+		old.MaxWidthPercent != newStyle.MaxWidthPercent ||
+		old.MinHeightPercent != newStyle.MinHeightPercent ||
+		old.MaxHeightPercent != newStyle.MaxHeightPercent ||
 		old.Justify != newStyle.Justify ||
 		old.Align != newStyle.Align ||
+		old.AlignSelf != newStyle.AlignSelf ||
+		old.Order != newStyle.Order ||
 		old.Border != newStyle.Border ||
 		old.Overflow != newStyle.Overflow ||
 		old.Position != newStyle.Position ||
 		old.Top != newStyle.Top ||
 		old.Left != newStyle.Left ||
 		old.Right != newStyle.Right ||
-		old.Bottom != newStyle.Bottom
+		old.Bottom != newStyle.Bottom ||
+		old.Display != newStyle.Display ||
+		old.TextAlign != newStyle.TextAlign ||
+		old.WhiteSpace != newStyle.WhiteSpace ||
+		old.GridTemplateColumns != newStyle.GridTemplateColumns ||
+		old.GridTemplateRows != newStyle.GridTemplateRows ||
+		old.GridColumnGap != newStyle.GridColumnGap ||
+		old.GridRowGap != newStyle.GridRowGap ||
+		old.GridColumn != newStyle.GridColumn ||
+		old.GridRow != newStyle.GridRow ||
+		old.GridColumnStart != newStyle.GridColumnStart ||
+		old.GridColumnEnd != newStyle.GridColumnEnd ||
+		old.GridRowStart != newStyle.GridRowStart ||
+		old.GridRowEnd != newStyle.GridRowEnd
 
 	node.Style = newStyle
 
