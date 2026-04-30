@@ -298,6 +298,21 @@ func (e *Engine) RemoveLayer(id string) {
 					}
 				}
 			}
+
+			// Clean up the layer's node tree
+			if l.Root != nil {
+				// Clear focus/hover if they belong to this layer
+				if e.focusedNode != nil && isDescendantOf(e.focusedNode, l.Root) {
+					e.focusedNode = nil
+				}
+				if e.hoveredNode != nil && isDescendantOf(e.hoveredNode, l.Root) {
+					e.hoveredNode = nil
+				}
+				// Mark nodes as removed and collect refs to free
+				markRemovedRecursive(l.Root)
+				collectNodeRefsRecursive(l.Root, &e.pendingUnrefs)
+			}
+
 			e.layers = append(e.layers[:i], e.layers[i+1:]...)
 			e.needsRender = true
 			return

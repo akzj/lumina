@@ -915,6 +915,38 @@ func alignedX(nodeX, availW, lineW int, textAlign string) int {
 	return x
 }
 
+// paintInputText paints input/textarea value. Native <input> is single-line: do not
+// use paintText's default wrap (would draw row+1 on top of siblings, e.g. Inline row).
+func paintInputText(buf *CellBuffer, node *Node) {
+	if node.Type == "input" {
+		s := &node.Style
+		saveWS, saveTO := s.WhiteSpace, s.TextOverflow
+		s.WhiteSpace = "nowrap"
+		if s.TextOverflow == "" {
+			s.TextOverflow = "ellipsis"
+		}
+		paintText(buf, node)
+		s.WhiteSpace, s.TextOverflow = saveWS, saveTO
+		return
+	}
+	paintText(buf, node)
+}
+
+func paintInputTextClipped(buf *CellBuffer, node *Node, clipX1, clipY1, clipX2, clipY2, offsetY int) {
+	if node.Type == "input" {
+		s := &node.Style
+		saveWS, saveTO := s.WhiteSpace, s.TextOverflow
+		s.WhiteSpace = "nowrap"
+		if s.TextOverflow == "" {
+			s.TextOverflow = "ellipsis"
+		}
+		paintTextClipped(buf, node, clipX1, clipY1, clipX2, clipY2, offsetY)
+		s.WhiteSpace, s.TextOverflow = saveWS, saveTO
+		return
+	}
+	paintTextClipped(buf, node, clipX1, clipY1, clipX2, clipY2, offsetY)
+}
+
 func paintInput(buf *CellBuffer, node *Node) {
 	if node.Content == "" && node.Placeholder != "" {
 		// Render placeholder with dim style
@@ -947,7 +979,7 @@ func paintInput(buf *CellBuffer, node *Node) {
 		}
 		return
 	}
-	paintText(buf, node)
+	paintInputText(buf, node)
 
 	// Show cursor if focused
 	if node.Focused {
@@ -1027,7 +1059,7 @@ func paintInputClipped(buf *CellBuffer, node *Node, clipX1, clipY1, clipX2, clip
 		return
 	}
 	// Render text content (clipped)
-	paintTextClipped(buf, node, clipX1, clipY1, clipX2, clipY2, offsetY)
+	paintInputTextClipped(buf, node, clipX1, clipY1, clipX2, clipY2, offsetY)
 
 	// Show cursor if focused
 	if node.Focused {

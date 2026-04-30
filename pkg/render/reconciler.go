@@ -407,6 +407,16 @@ func createNodeFromDesc(desc Descriptor) *Node {
 	return node
 }
 
+// isDescendantOf returns true if node is the root or a descendant of root.
+func isDescendantOf(node, root *Node) bool {
+	for n := node; n != nil; n = n.Parent {
+		if n == root {
+			return true
+		}
+	}
+	return false
+}
+
 // markRemovedRecursive sets Removed=true and Parent=nil on a node and all descendants.
 func markRemovedRecursive(node *Node) {
 	node.Removed = true
