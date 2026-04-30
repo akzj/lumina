@@ -315,10 +315,11 @@ func (e *Engine) HandleClick(x, y int) {
 		}
 	}
 
-	if focusTarget != nil {
+	// Check focusTarget is still valid (onOutsideClick handler may have removed it)
+	if focusTarget != nil && !focusTarget.Removed {
 		e.setFocus(focusTarget)
 	} else if e.focusedNode != nil {
-		// Clicked on non-focusable area → blur current
+		// Clicked on non-focusable area or target was removed → blur current
 		e.setFocus(nil)
 	}
 
