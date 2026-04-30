@@ -746,9 +746,14 @@ func paintTextClipped(buf *CellBuffer, node *Node, clipX1, clipY1, clipX2, clipY
 					existing := buf.Get(x, y)
 					bg = existing.BG
 				}
-				buf.Set(x, y, Cell{Ch: ch, FG: fg, BG: bg, Bold: bold, Dim: dim, Underline: underline, Italic: italic, Strikethrough: strikethrough, Inverse: inverse})
-				if w == 2 && x+1 >= clipX1 && x+1 < clipX2 {
-					buf.Set(x+1, y, Cell{Wide: true, BG: bg})
+				if w == 2 && x+1 >= clipX2 {
+					// Wide char doesn't fully fit in clip region — write space placeholder
+					buf.Set(x, y, Cell{Ch: ' ', FG: fg, BG: bg, Bold: bold, Dim: dim, Underline: underline, Italic: italic, Strikethrough: strikethrough, Inverse: inverse})
+				} else {
+					buf.Set(x, y, Cell{Ch: ch, FG: fg, BG: bg, Bold: bold, Dim: dim, Underline: underline, Italic: italic, Strikethrough: strikethrough, Inverse: inverse})
+					if w == 2 && x+1 >= clipX1 && x+1 < clipX2 {
+						buf.Set(x+1, y, Cell{Wide: true, BG: bg})
+					}
 				}
 			}
 			x += w
