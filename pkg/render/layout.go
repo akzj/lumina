@@ -834,12 +834,11 @@ func layoutVBox(node *Node, contentX, contentY, contentW, contentH int, style St
 					children[i].finalH = mnh + marginV
 				}
 			} else if len(child.Children) > 0 {
-				// Intrinsic height for vbox/box/hbox/etc. Min/max height floors/ceil the
-				// measured size — do not use minHeight alone or scroll content collapses
-				// to one panel when the inner column has minHeight + many children.
-				computeFlex(child, contentX, contentY, contentW, 99999, depth+1)
-				naturalH := laidOutFlowContentHeight(child)
-				children[i].finalH = naturalH + marginV
+				// Use pre-computed measurement from measure pass.
+				children[i].finalH = child.MeasuredH
+				if children[i].finalH < 1+marginV {
+					children[i].finalH = 1 + marginV
+				}
 				if mnh := resolveMinH(cs, contentH); mnh > 0 && children[i].finalH < mnh+marginV {
 					children[i].finalH = mnh + marginV
 				}
