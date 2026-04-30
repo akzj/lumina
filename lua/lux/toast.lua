@@ -7,7 +7,7 @@
 --   maxVisible: number (default 5)
 --   width: number (default 40)
 
-local Toast = lumina.defineComponent("Toast", function(props)
+local Toast = lumina.defineComponent("LuxToast", function(props)
     local t = lumina.getTheme and lumina.getTheme() or {}
     local items = props.items or {}
     local onDismiss = props.onDismiss
