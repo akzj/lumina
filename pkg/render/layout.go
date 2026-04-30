@@ -271,7 +271,7 @@ func computeFlex(node *Node, x, y, w, h int, depth int) {
 		if node.Parent != nil {
 			p := node.Parent
 			bw := 0
-			if p.Style.Border != "" && p.Style.Border != "none" {
+			if hasBorder(p.Style) {
 				bw = 1
 			}
 			parentX = p.X + bw + p.Style.PaddingLeft
