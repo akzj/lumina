@@ -60,6 +60,22 @@ local Tree = lumina.defineComponent("LuxTree", function(props)
 
     local function onKeyDown(e)
         if #flatList == 0 then return end
+        -- No selection yet: select first non-disabled item on any navigation key
+        if selectedIdx == 0 then
+            if e.key == "ArrowDown" or e.key == "Down" or e.key == "j"
+                or e.key == "ArrowUp" or e.key == "Up" or e.key == "k"
+                or e.key == "ArrowRight" or e.key == "Right" or e.key == "l"
+                or e.key == "ArrowLeft" or e.key == "Left" or e.key == "h"
+                or e.key == "Enter" then
+                for _, item in ipairs(flatList) do
+                    if not item.disabled then
+                        if onSelect then onSelect(item.id) end
+                        return
+                    end
+                end
+            end
+            return
+        end
         if e.key == "ArrowUp" or e.key == "Up" or e.key == "k" then
             local n = selectedIdx - 1
             if n < 1 then n = 1 end
