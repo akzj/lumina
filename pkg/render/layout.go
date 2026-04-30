@@ -67,6 +67,13 @@ func layoutDirtyWalkImpl(node *Node, visited map[*Node]bool) {
 	// Recompute using its CURRENT (cached) position and size as the container.
 	// Normalize entire subtree — newly-added children may have shorthand spacing only.
 	normalizeSpacingInTree(node)
+	// Re-measure subtree so MeasuredH/MeasuredW are fresh for computeFlex
+	measure(node, Constraints{
+		Width:      node.W,
+		WidthMode:  SizeModeExact,
+		Height:     node.H,
+		HeightMode: SizeModeExact,
+	})
 	computeFlex(node, node.X, node.Y, node.W, node.H, 0)
 	node.LayoutDirty = false
 	// All children within this subtree are now re-laid-out.
