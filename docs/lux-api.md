@@ -1,7 +1,8 @@
 # Lux Component Library — API Reference
 
 > Lux is the high-level component library for [Lumina](https://github.com/akzj/lumina).
-> All components are pure Lua, built on `lumina.defineComponent` and `lumina.createElement`.
+> 25 components, all pure Lua, built on `lumina.defineComponent` and `lumina.createElement`.
+> Includes layout primitives, form controls, data display, navigation, and overlays.
 
 ---
 
@@ -351,6 +352,15 @@ A full-featured data table with fixed header, scrollable body, sorting, and mult
 | `onChangeIndex` | function | `nil` | `function(newIndex)` |
 | `onSelectionChange` | function | `nil` | `function(selectedIds)` |
 | `onSortChange` | function | `nil` | `function(sort)` |
+| `editable` | boolean | `false` | Enable inline cell editing |
+| `editingCell` | table | `nil` | Currently editing cell: `{ rowIndex = N, columnId = "col" }` |
+| `editValue` | string | `nil` | Current value of the editing input (controlled) |
+| `editableColumns` | table | `nil` | Map of editable column IDs (nil = all editable) |
+| `onEditStart` | function | `nil` | `function(rowIndex, columnId)` — enter edit mode |
+| `onEditEnd` | function | `nil` | `function(rowIndex, columnId, value)` — commit edit |
+| `onEditCancel` | function | `nil` | `function(rowIndex, columnId)` — cancel edit |
+| `onCellChange` | function | `nil` | `function(rowIndex, columnId, value)` — cell value committed |
+| `onEditValueChange` | function | `nil` | `function(text)` — controlled input text change |
 
 **Column Definition:**
 ```lua
@@ -372,6 +382,26 @@ A full-featured data table with fixed header, scrollable body, sorting, and mult
 | `Enter` | Activate row |
 | `Space` | Toggle selection (multi-select mode) |
 | `a` | Select all / deselect all (multi-select mode) |
+| `Enter` | Start editing focused cell (when `editable = true`) |
+| `Escape` | Cancel editing |
+| `Tab` | Commit edit and move to next editable cell |
+
+**Editable Example:**
+```lua
+DataGrid {
+    columns = columns,
+    rows = data,
+    editable = true,
+    editingCell = editCell,
+    editValue = editVal,
+    editableColumns = { name = true, email = true },
+    onEditStart = function(row, col) setEditCell({ rowIndex = row, columnId = col }) end,
+    onEditEnd = function(row, col, val) commitEdit(row, col, val) end,
+    onEditCancel = function() setEditCell(nil) end,
+    onCellChange = function(row, col, val) updateData(row, col, val) end,
+    onEditValueChange = function(text) setEditVal(text) end,
+}
+```
 
 **Example:**
 ```lua
@@ -645,6 +675,266 @@ local mgr = WM.create("wm_state", {
 
 ---
 
+### Button
+
+A themed button wrapping the native Go Button widget.
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `id` | string | `nil` | Element ID |
+| `label` | string | `"Button"` | Button text |
+| `variant` | string | `"primary"` | Color variant: `"primary"`, `"secondary"`, `"danger"` |
+| `disabled` | boolean | `false` | Disable interaction |
+| `onClick` | function | `nil` | Called when button is clicked |
+| `style` | table | `nil` | Style overrides |
+
+**Example:**
+```lua
+local Button = require("lux.button")
+
+Button { label = "Save", variant = "primary", onClick = function() save() end }
+Button { label = "Delete", variant = "danger", disabled = isLoading }
+```
+
+---
+
+### Checkbox
+
+A themed checkbox wrapping the native Go Checkbox widget.
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `id` | string | `nil` | Element ID |
+| `label` | string | `nil` | Label text next to the checkbox |
+| `checked` | boolean | `false` | Whether the checkbox is checked |
+| `disabled` | boolean | `false` | Disable interaction |
+| `onChange` | function | `nil` | `function(checked)` — called on toggle |
+| `style` | table | `nil` | Style overrides |
+
+**Example:**
+```lua
+local Checkbox = require("lux.checkbox")
+
+Checkbox {
+    label = "Accept terms and conditions",
+    checked = accepted,
+    onChange = function(val) setAccepted(val) end,
+}
+```
+
+---
+
+### Radio
+
+A themed radio button wrapping the native Go Radio widget.
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `id` | string | `nil` | Element ID |
+| `label` | string | `nil` | Label text next to the radio button |
+| `value` | string | `nil` | Value this radio represents |
+| `checked` | boolean | `false` | Whether this radio is selected |
+| `disabled` | boolean | `false` | Disable interaction |
+| `onChange` | function | `nil` | `function(value)` — called when selected |
+| `style` | table | `nil` | Style overrides |
+
+**Example:**
+```lua
+local Radio = require("lux.radio")
+
+Radio { label = "Small", value = "sm", checked = size == "sm", onChange = setSize }
+Radio { label = "Medium", value = "md", checked = size == "md", onChange = setSize }
+Radio { label = "Large", value = "lg", checked = size == "lg", onChange = setSize }
+```
+
+---
+
+### Switch
+
+A themed toggle switch wrapping the native Go Switch widget.
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `id` | string | `nil` | Element ID |
+| `label` | string | `nil` | Label text next to the switch |
+| `checked` | boolean | `false` | Whether the switch is on |
+| `disabled` | boolean | `false` | Disable interaction |
+| `onChange` | function | `nil` | `function(checked)` — called on toggle |
+| `style` | table | `nil` | Style overrides |
+
+**Example:**
+```lua
+local Switch = require("lux.switch")
+
+Switch {
+    label = "Dark Mode",
+    checked = isDark,
+    onChange = function(val) setIsDark(val) end,
+}
+```
+
+---
+
+### Dropdown
+
+A themed dropdown selector wrapping the native Go Dropdown widget.
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `id` | string | `nil` | Element ID |
+| `label` | string | `nil` | Label text above the dropdown |
+| `items` | table | `{}` | Array of option strings |
+| `selectedIndex` | number | `1` | Currently selected item index (1-based) |
+| `onChange` | function | `nil` | `function(index)` — called when selection changes |
+| `disabled` | boolean | `false` | Disable interaction |
+| `width` | number | `nil` | Width in columns |
+| `style` | table | `nil` | Style overrides |
+
+**Example:**
+```lua
+local Dropdown = require("lux.dropdown")
+
+Dropdown {
+    label = "Region",
+    items = { "US East", "US West", "EU", "Asia" },
+    selectedIndex = regionIdx,
+    onChange = function(idx) setRegionIdx(idx) end,
+    width = 20,
+}
+```
+
+---
+
+### Toast
+
+A notification stack that displays dismissible messages with variant styling.
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `id` | string | `nil` | Element ID |
+| `items` | table | `{}` | Array of `{ id, message, variant? }` |
+| `onDismiss` | function | `nil` | `function(id)` — called when dismiss (✕) is clicked |
+| `maxVisible` | number | `5` | Maximum visible toasts (shows most recent) |
+| `width` | number | `40` | Width of each toast |
+
+**Variants:** `"info"` (default), `"success"`, `"warning"`, `"error"`
+
+**Example:**
+```lua
+local Toast = require("lux.toast")
+
+Toast {
+    items = toasts,
+    maxVisible = 3,
+    width = 50,
+    onDismiss = function(id) removeToast(id) end,
+}
+-- Each toast renders as: [icon] message [x]
+```
+
+---
+
+### Tree
+
+A hierarchical tree view with expand/collapse, keyboard navigation, and selection.
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `id` | string | `nil` | Element ID |
+| `items` | table | `{}` | Array of `{ id, label, children?, icon?, disabled? }` |
+| `expandedIds` | table | `{}` | Array of expanded node IDs |
+| `selectedId` | string | `nil` | Currently selected node ID |
+| `indent` | number | `2` | Indentation per depth level |
+| `autoFocus` | boolean | `false` | Auto-focus on mount |
+| `width` | number | `nil` | Width |
+| `height` | number | `nil` | Height |
+| `onToggle` | function | `nil` | `function(id, expanded, newExpandedIds)` |
+| `onSelect` | function | `nil` | `function(id)` — called on node click or keyboard select |
+| `onActivate` | function | `nil` | `function(id)` — Enter on a leaf node |
+
+**Keyboard:**
+| Key | Action |
+|-----|--------|
+| `↑` / `k` | Select previous node (skips disabled) |
+| `↓` / `j` | Select next node (skips disabled) |
+| `→` / `l` | Expand current node |
+| `←` / `h` | Collapse current node |
+| `Enter` | Toggle expand (branch) or activate (leaf) |
+
+**Example:**
+```lua
+local Tree = require("lux.tree")
+
+Tree {
+    items = {
+        { id = "src", label = "src/", children = {
+            { id = "main", label = "main.go" },
+            { id = "util", label = "util.go" },
+        }},
+        { id = "docs", label = "docs/", children = {
+            { id = "readme", label = "README.md" },
+        }},
+    },
+    expandedIds = expanded,
+    selectedId = selected,
+    onToggle = function(id, exp, newIds) setExpanded(newIds) end,
+    onSelect = function(id) setSelected(id) end,
+    onActivate = function(id) openFile(id) end,
+}
+```
+
+---
+
+### Form
+
+A composable form with field rendering, validation display, and submit/reset buttons.
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `id` | string | `nil` | Element ID |
+| `fields` | table | `{}` | Array of field definitions (see below) |
+| `values` | table | `{}` | Current values: `{ [fieldId] = value }` |
+| `errors` | table | `{}` | Validation errors: `{ [fieldId] = "message" }` |
+| `onFieldChange` | function | `nil` | `function(fieldId, newValue)` |
+| `onSubmit` | function | `nil` | `function(values)` — called on submit button click |
+| `onReset` | function | `nil` | `function()` — called on reset button click |
+| `submitLabel` | string | `"Submit"` | Submit button text |
+| `resetLabel` | string | `"Reset"` | Reset button text |
+| `width` | number | `40` | Form width |
+| `disabled` | boolean | `false` | Disable all inputs and buttons |
+
+**Field Definition:**
+```lua
+{
+    id = "email",              -- unique field identifier
+    type = "text",             -- "text" | "checkbox"
+    label = "Email",           -- field label
+    placeholder = "you@...",   -- placeholder (text fields)
+    required = true,           -- shows * indicator
+    defaultValue = "",         -- initial value
+}
+```
+
+**Example:**
+```lua
+local Form = require("lux.form")
+
+Form {
+    fields = {
+        { id = "name", type = "text", label = "Name", required = true },
+        { id = "email", type = "text", label = "Email", placeholder = "user@example.com" },
+        { id = "agree", type = "checkbox", label = "I agree to the terms" },
+    },
+    values = formValues,
+    errors = formErrors,
+    onFieldChange = function(id, val) updateField(id, val) end,
+    onSubmit = function(vals) handleSubmit(vals) end,
+    onReset = function() resetForm() end,
+}
+```
+
+---
+
 ### Slot (utility)
 
 A factory creator for slot-based composition patterns (used internally by Dialog, Layout).
@@ -660,21 +950,98 @@ Title { "Hello" }
 
 ---
 
-## Theming
+## Theme System
 
-All Lux components read theme colors from `lumina.getTheme()`. Default colors follow the **Catppuccin Mocha** palette:
+All Lux components read theme colors from `lumina.getTheme()`. The theme can be switched at runtime.
 
-| Token | Default | Usage |
-|-------|---------|-------|
-| `primary` | `#89B4FA` | Active/focused elements |
-| `text` | `#CDD6F4` | Default text |
-| `muted` | `#6C7086` | Disabled/dim text |
+### Built-in Themes
+
+Lumina ships with 4 built-in themes:
+
+| Name | Description |
+|------|-------------|
+| `mocha` | Catppuccin Mocha — dark (default) |
+| `latte` | Catppuccin Latte — light |
+| `nord` | Nord — dark blue |
+| `dracula` | Dracula — dark purple |
+
+### Theme API
+
+| Function | Description |
+|----------|-------------|
+| `lumina.getTheme()` | Returns current theme color table |
+| `lumina.setTheme(name)` | Switch to a built-in theme by name |
+| `lumina.setTheme(table)` | Set custom theme colors |
+
+### Theme Color Tokens
+
+| Token | Mocha Default | Usage |
+|-------|--------------|-------|
+| `base` | `#1E1E2E` | Base background |
 | `surface0` | `#313244` | Elevated surfaces |
 | `surface1` | `#45475A` | Active backgrounds |
-| `base` | `#1E1E2E` | Base background |
-| `success` | `#A6E3A1` | Success variant |
-| `warning` | `#F9E2AF` | Warning variant |
-| `error` | `#F38BA8` | Error variant |
+| `surface2` | `#585B70` | Highest elevation |
+| `text` | `#CDD6F4` | Primary text |
+| `muted` | `#6C7086` | Secondary/disabled text |
+| `primary` | `#89B4FA` | Accent / active elements |
+| `primaryDark` | `#1E1E2E` | Dark accent variant |
+| `hover` | `#B4BEFE` | Hover state |
+| `pressed` | `#74C7EC` | Active/pressed state |
+| `success` | `#A6E3A1` | Success indicator |
+| `warning` | `#F9E2AF` | Warning indicator |
+| `error` | `#F38BA8` | Error indicator |
+
+### Theme Example
+
+```lua
+-- Switch to light theme at runtime
+lumina.setTheme("latte")
+
+-- Use a custom theme
+lumina.setTheme({
+    base = "#282A36",
+    surface0 = "#44475A",
+    text = "#F8F8F2",
+    primary = "#BD93F9",
+    success = "#50FA7B",
+    warning = "#F1FA8C",
+    error = "#FF5555",
+})
+
+-- Read current theme in a component
+local t = lumina.getTheme()
+lumina.createElement("text", { foreground = t.primary }, "Themed text")
+```
+
+### Lua Theme Module
+
+The `theme` module provides a convenient wrapper:
+
+```lua
+local theme = require("theme")
+
+-- Get current theme colors
+local colors = theme.current()
+
+-- Switch theme
+theme.setTheme("nord")
+
+-- Available theme names
+print(table.concat(theme.themes, ", "))  -- "mocha, latte, nord, dracula"
+```
+
+---
+
+## Utility APIs
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `lumina.focusById(id)` | `(string) → boolean` | Programmatically focus a node by its element ID. Returns `true` if the node was found and focused. |
+| `lumina.setTheme(name\|table)` | `(string\|table)` | Switch the active theme at runtime (see Theme System above). |
+| `lumina.getTheme()` | `() → table` | Get the current theme color table. |
+| `lumina.quit()` | `()` | Gracefully exit the application. |
+| `lumina.setInterval(fn, ms)` | `(function, number) → id` | Call `fn` every `ms` milliseconds. Returns interval ID. |
+| `lumina.clearInterval(id)` | `(number)` | Cancel a previously set interval. |
 
 ---
 
@@ -685,3 +1052,4 @@ All Lux components read theme colors from `lumina.getTheme()`. Default colors fo
 - **Controlled components**: State is owned by the parent; components call callbacks to request changes
 - **Keyboard**: Components with `focusable = true` support keyboard navigation
 - **Children**: Passed via the array part of the props table or via named slots
+- **Naming**: Lux components use `LuxComponentName` internally to avoid colliding with Go widget names
