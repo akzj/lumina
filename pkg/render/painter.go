@@ -681,6 +681,13 @@ func paintNodeClipped(buf *CellBuffer, node *Node, clipX1, clipY1, clipX2, clipY
 	if node.Style.Display == "none" || node.Style.Visibility == "hidden" {
 		return
 	}
+	// Depth guard: prevent stack overflow from cyclic trees (same as paintNode)
+	paintDepth++
+	if paintDepth > maxPaintDepth {
+		paintDepth--
+		return
+	}
+	defer func() { paintDepth-- }()
 	// Skip entirely if the node is outside the clip rect
 	if node.Y >= clipY2 || node.Y+node.H <= clipY1 || node.X >= clipX2 || node.X+node.W <= clipX1 {
 		return
