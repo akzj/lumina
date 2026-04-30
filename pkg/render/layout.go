@@ -427,14 +427,26 @@ func computeFlex(node *Node, x, y, w, h int) {
 		}
 
 	case "vbox":
-		layoutVBox(node, contentX, contentY, layoutW, contentH, style)
+		if style.Display == "grid" {
+			layoutGrid(node, contentX, contentY, layoutW, contentH, style)
+		} else {
+			layoutVBox(node, contentX, contentY, layoutW, contentH, style)
+		}
 
 	case "hbox":
-		layoutHBox(node, contentX, contentY, layoutW, contentH, style)
+		if style.Display == "grid" {
+			layoutGrid(node, contentX, contentY, layoutW, contentH, style)
+		} else {
+			layoutHBox(node, contentX, contentY, layoutW, contentH, style)
+		}
 
 	default:
 		// Generic container (box, etc.) — stack children vertically like vbox
-		layoutVBox(node, contentX, contentY, layoutW, contentH, style)
+		if style.Display == "grid" {
+			layoutGrid(node, contentX, contentY, layoutW, contentH, style)
+		} else {
+			layoutVBox(node, contentX, contentY, layoutW, contentH, style)
+		}
 	}
 
 	// After normal layout, handle absolute/fixed positioned children.
@@ -541,6 +553,12 @@ func layoutText(node *Node, availW int) {
 // layoutVBox lays out children in a vertical stack with flex distribution.
 func layoutVBox(node *Node, contentX, contentY, contentW, contentH int, style Style) {
 	if len(node.Children) == 0 {
+		return
+	}
+
+	// flex-wrap: delegate to wrap layout
+	if style.FlexWrap == "wrap" || style.FlexWrap == "wrap-reverse" {
+		layoutVBoxWrap(node, contentX, contentY, contentW, contentH, style)
 		return
 	}
 
@@ -859,6 +877,12 @@ func layoutHBox(node *Node, contentX, contentY, contentW, contentH int, style St
 		return
 	}
 
+	// flex-wrap: delegate to wrap layout
+	if style.FlexWrap == "wrap" || style.FlexWrap == "wrap-reverse" {
+		layoutHBoxWrap(node, contentX, contentY, contentW, contentH, style)
+		return
+	}
+
 	type childInfo struct {
 		style      Style
 		fixedW     int
@@ -1107,5 +1131,718 @@ func layoutHBox(node *Node, contentX, contentY, contentW, contentH int, style St
 		if flowIdx < flowCount {
 			curX += gapSize
 		}
+	}
+}
+
+// --- flex-wrap layout ---
+
+// layoutHBoxWrap lays out children in a horizontal row with wrapping.
+// When children overflow the available width, they wrap to the next row.
+func layoutHBoxWrap(node *Node, contentX, contentY, contentW, contentH int, style Style) {
+	type rowItem struct {
+		childIdx int
+		desiredW int
+		style    Style
+	}
+
+	// Collect flow children and their desired widths
+	var allItems []rowItem
+	for i, child := range node.Children {
+		cs := child.Style
+		if isPositioned(cs) || cs.Display == "none" {
+			continue
+		}
+		marginH := cs.MarginLeft + cs.MarginRight
+
+		desiredW := 0
+		if rw := resolveWidth(cs, contentW); rw > 0 {
+			desiredW = clamp(rw, resolveMinW(cs, contentW), resolveMaxW(cs, contentW)) + marginH
+		} else if cs.FlexBasis > 0 {
+			desiredW = cs.FlexBasis + marginH
+		} else {
+			// Auto width
+			switch child.Type {
+			case "text":
+				naturalW := 1
+				if child.Content != "" {
+					naturalW = stringWidth(child.Content)
+					if naturalW < 1 {
+						naturalW = 1
+					}
+				}
+				desiredW = naturalW + marginH
+			default:
+				// Container with no explicit width: use flex later or minimum 1
+				if cs.Flex > 0 {
+					desiredW = 1 + marginH
+				} else {
+					desiredW = 1 + marginH
+				}
+			}
+		}
+		allItems = append(allItems, rowItem{childIdx: i, desiredW: desiredW, style: cs})
+	}
+
+	if len(allItems) == 0 {
+		return
+	}
+
+	// Build rows greedily
+	type row struct {
+		items []rowItem
+	}
+	var rows []row
+	var currentRow []rowItem
+	currentRowW := 0
+
+	for _, item := range allItems {
+		gap := 0
+		if len(currentRow) > 0 {
+			gap = style.Gap
+		}
+		if currentRowW+gap+item.desiredW > contentW && len(currentRow) > 0 {
+			rows = append(rows, row{items: currentRow})
+			currentRow = nil
+			currentRowW = 0
+			gap = 0
+		}
+		currentRow = append(currentRow, item)
+		currentRowW += gap + item.desiredW
+	}
+	if len(currentRow) > 0 {
+		rows = append(rows, row{items: currentRow})
+	}
+
+	// Layout each row
+	rowGap := style.Gap
+	curY := contentY
+
+	// For wrap-reverse, reverse the row order
+	if style.FlexWrap == "wrap-reverse" {
+		for i, j := 0, len(rows)-1; i < j; i, j = i+1, j-1 {
+			rows[i], rows[j] = rows[j], rows[i]
+		}
+	}
+
+	for ri, r := range rows {
+		// Determine row width usage and flex distribution
+		rowFlexTotal := 0
+		rowFixedTotal := 0
+		for _, item := range r.items {
+			if item.style.Flex > 0 && resolveWidth(item.style, contentW) == 0 && item.style.FlexBasis == 0 {
+				rowFlexTotal += item.style.Flex
+				// Flex items start with their minimum desired width
+			}
+			rowFixedTotal += item.desiredW
+		}
+		rowGaps := 0
+		if len(r.items) > 1 {
+			rowGaps = style.Gap * (len(r.items) - 1)
+		}
+		remainW := contentW - rowFixedTotal - rowGaps
+		if remainW < 0 {
+			remainW = 0
+		}
+
+		// Compute final widths
+		finalWidths := make([]int, len(r.items))
+		for idx, item := range r.items {
+			if item.style.Flex > 0 && resolveWidth(item.style, contentW) == 0 && item.style.FlexBasis == 0 && rowFlexTotal > 0 {
+				finalWidths[idx] = item.desiredW + (remainW*item.style.Flex)/rowFlexTotal
+			} else {
+				finalWidths[idx] = item.desiredW
+			}
+			if finalWidths[idx] < 1 {
+				finalWidths[idx] = 1
+			}
+		}
+
+		// Position children in this row
+		curX := contentX
+		rowH := 1
+
+		for idx, item := range r.items {
+			child := node.Children[item.childIdx]
+			childW := finalWidths[idx]
+			childH := contentH
+			if rh := resolveHeight(item.style, contentH); rh > 0 {
+				childH = rh
+			}
+
+			computeFlex(child, curX, curY, childW, childH)
+			applyRelativeOffset(child, item.style)
+
+			if child.H > rowH {
+				rowH = child.H
+			}
+			curX += childW
+			if idx < len(r.items)-1 {
+				curX += style.Gap
+			}
+		}
+
+		curY += rowH
+		if ri < len(rows)-1 {
+			curY += rowGap
+		}
+	}
+}
+
+// layoutVBoxWrap lays out children in a vertical column with wrapping.
+// When children overflow the available height, they wrap to the next column.
+func layoutVBoxWrap(node *Node, contentX, contentY, contentW, contentH int, style Style) {
+	type colItem struct {
+		childIdx int
+		desiredH int
+		style    Style
+	}
+
+	// Collect flow children and their desired heights
+	var allItems []colItem
+	for i, child := range node.Children {
+		cs := child.Style
+		if isPositioned(cs) || cs.Display == "none" {
+			continue
+		}
+		marginV := cs.MarginTop + cs.MarginBottom
+
+		desiredH := 0
+		if rh := resolveHeight(cs, contentH); rh > 0 {
+			desiredH = clamp(rh, resolveMinH(cs, contentH), resolveMaxH(cs, contentH)) + marginV
+		} else if cs.FlexBasis > 0 {
+			desiredH = cs.FlexBasis + marginV
+		} else {
+			// Auto height
+			switch child.Type {
+			case "text", "input", "textarea":
+				desiredH = 1 + marginV
+			default:
+				if cs.Flex > 0 {
+					desiredH = 1 + marginV
+				} else {
+					desiredH = 1 + marginV
+				}
+			}
+		}
+		allItems = append(allItems, colItem{childIdx: i, desiredH: desiredH, style: cs})
+	}
+
+	if len(allItems) == 0 {
+		return
+	}
+
+	// Build columns greedily
+	type col struct {
+		items []colItem
+	}
+	var cols []col
+	var currentCol []colItem
+	currentColH := 0
+
+	for _, item := range allItems {
+		gap := 0
+		if len(currentCol) > 0 {
+			gap = style.Gap
+		}
+		if currentColH+gap+item.desiredH > contentH && len(currentCol) > 0 {
+			cols = append(cols, col{items: currentCol})
+			currentCol = nil
+			currentColH = 0
+			gap = 0
+		}
+		currentCol = append(currentCol, item)
+		currentColH += gap + item.desiredH
+	}
+	if len(currentCol) > 0 {
+		cols = append(cols, col{items: currentCol})
+	}
+
+	// For wrap-reverse, reverse the column order
+	if style.FlexWrap == "wrap-reverse" {
+		for i, j := 0, len(cols)-1; i < j; i, j = i+1, j-1 {
+			cols[i], cols[j] = cols[j], cols[i]
+		}
+	}
+
+	// Layout each column
+	colGap := style.Gap
+	curX := contentX
+
+	for ci, c := range cols {
+		// Determine column height usage and flex distribution
+		colFlexTotal := 0
+		colFixedTotal := 0
+		for _, item := range c.items {
+			if item.style.Flex > 0 && resolveHeight(item.style, contentH) == 0 && item.style.FlexBasis == 0 {
+				colFlexTotal += item.style.Flex
+			}
+			colFixedTotal += item.desiredH
+		}
+		colGaps := 0
+		if len(c.items) > 1 {
+			colGaps = style.Gap * (len(c.items) - 1)
+		}
+		remainH := contentH - colFixedTotal - colGaps
+		if remainH < 0 {
+			remainH = 0
+		}
+
+		// Compute final heights
+		finalHeights := make([]int, len(c.items))
+		for idx, item := range c.items {
+			if item.style.Flex > 0 && resolveHeight(item.style, contentH) == 0 && item.style.FlexBasis == 0 && colFlexTotal > 0 {
+				finalHeights[idx] = item.desiredH + (remainH*item.style.Flex)/colFlexTotal
+			} else {
+				finalHeights[idx] = item.desiredH
+			}
+			if finalHeights[idx] < 1 {
+				finalHeights[idx] = 1
+			}
+		}
+
+		// Position children in this column
+		curY := contentY
+		colW := 1
+
+		for idx, item := range c.items {
+			child := node.Children[item.childIdx]
+			childH := finalHeights[idx]
+			childW := contentW
+			if rw := resolveWidth(item.style, contentW); rw > 0 {
+				childW = rw
+			}
+
+			computeFlex(child, curX, curY, childW, childH)
+			applyRelativeOffset(child, item.style)
+
+			if child.W > colW {
+				colW = child.W
+			}
+			curY += childH
+			if idx < len(c.items)-1 {
+				curY += style.Gap
+			}
+		}
+
+		curX += colW
+		if ci < len(cols)-1 {
+			curX += colGap
+		}
+	}
+}
+
+// --- CSS Grid layout ---
+
+// gridTrack represents a single track in a grid template.
+type gridTrack struct {
+	fr int // fractional unit (0 = not fr)
+	px int // pixel/cell value (0 = auto)
+}
+
+// parseGridTemplate parses a grid template string like "1fr 2fr 100" into track sizes.
+// available is the total space to distribute among tracks.
+// gapSize is the gap between tracks.
+func parseGridTemplate(template string, available int, gapSize int) []int {
+	if template == "" {
+		return nil
+	}
+	parts := strings.Fields(template)
+	if len(parts) == 0 {
+		return nil
+	}
+
+	tracks := make([]gridTrack, len(parts))
+	fixedTotal := 0
+	frTotal := 0
+
+	for i, part := range parts {
+		if strings.HasSuffix(part, "fr") {
+			nStr := strings.TrimSuffix(part, "fr")
+			n, err := strconv.Atoi(nStr)
+			if err != nil || n < 1 {
+				n = 1
+			}
+			tracks[i] = gridTrack{fr: n}
+			frTotal += n
+		} else if part == "auto" {
+			tracks[i] = gridTrack{px: 0} // auto = 0, will get remaining space
+			frTotal += 1
+			tracks[i] = gridTrack{fr: 1} // treat auto as 1fr
+		} else {
+			n, err := strconv.Atoi(part)
+			if err != nil || n < 0 {
+				n = 0
+			}
+			tracks[i] = gridTrack{px: n}
+			fixedTotal += n
+		}
+	}
+
+	// Subtract gaps from available space
+	totalGaps := 0
+	if len(tracks) > 1 {
+		totalGaps = gapSize * (len(tracks) - 1)
+	}
+	remainW := available - fixedTotal - totalGaps
+	if remainW < 0 {
+		remainW = 0
+	}
+
+	sizes := make([]int, len(tracks))
+	for i, t := range tracks {
+		if t.fr > 0 && frTotal > 0 {
+			sizes[i] = (remainW * t.fr) / frTotal
+		} else {
+			sizes[i] = t.px
+		}
+		if sizes[i] < 0 {
+			sizes[i] = 0
+		}
+	}
+	return sizes
+}
+
+// parseGridSpan parses "1 / 3" into (start=1, end=3) or "2" into (start=2, end=3).
+// Returns 1-based start and exclusive end.
+func parseGridSpan(s string) (int, int) {
+	if s == "" {
+		return 0, 0
+	}
+	parts := strings.Split(s, "/")
+	if len(parts) == 2 {
+		start, err1 := strconv.Atoi(strings.TrimSpace(parts[0]))
+		end, err2 := strconv.Atoi(strings.TrimSpace(parts[1]))
+		if err1 == nil && err2 == nil && start >= 1 && end > start {
+			return start, end
+		}
+	}
+	// Single number: occupies one cell
+	n, err := strconv.Atoi(strings.TrimSpace(s))
+	if err == nil && n >= 1 {
+		return n, n + 1
+	}
+	return 0, 0
+}
+
+// layoutGrid lays out children in a CSS Grid.
+func layoutGrid(node *Node, contentX, contentY, contentW, contentH int, style Style) {
+	if len(node.Children) == 0 {
+		return
+	}
+
+	// Determine gaps
+	colGap := style.GridColumnGap
+	if colGap == 0 {
+		colGap = style.Gap
+	}
+	rowGap := style.GridRowGap
+	if rowGap == 0 {
+		rowGap = style.Gap
+	}
+
+	// Parse column template
+	colSizes := parseGridTemplate(style.GridTemplateColumns, contentW, colGap)
+	if len(colSizes) == 0 {
+		// Default: single column
+		colSizes = []int{contentW}
+	}
+	numCols := len(colSizes)
+
+	// Collect flow children
+	type gridChild struct {
+		childIdx int
+		colStart int // 1-based
+		colEnd   int // exclusive
+		rowStart int // 1-based
+		rowEnd   int // exclusive
+	}
+	var flowChildren []gridChild
+	for i, child := range node.Children {
+		cs := child.Style
+		if isPositioned(cs) || cs.Display == "none" {
+			continue
+		}
+
+		colStart, colEnd := 0, 0
+		rowStart, rowEnd := 0, 0
+
+		// Explicit placement via gridColumn/gridRow strings
+		if cs.GridColumn != "" {
+			colStart, colEnd = parseGridSpan(cs.GridColumn)
+		}
+		if cs.GridRow != "" {
+			rowStart, rowEnd = parseGridSpan(cs.GridRow)
+		}
+
+		// Explicit placement via gridColumnStart/End fields
+		if colStart == 0 && cs.GridColumnStart > 0 {
+			colStart = cs.GridColumnStart
+			colEnd = cs.GridColumnEnd
+			if colEnd <= colStart {
+				colEnd = colStart + 1
+			}
+		}
+		if rowStart == 0 && cs.GridRowStart > 0 {
+			rowStart = cs.GridRowStart
+			rowEnd = cs.GridRowEnd
+			if rowEnd <= rowStart {
+				rowEnd = rowStart + 1
+			}
+		}
+
+		flowChildren = append(flowChildren, gridChild{
+			childIdx: i,
+			colStart: colStart,
+			colEnd:   colEnd,
+			rowStart: rowStart,
+			rowEnd:   rowEnd,
+		})
+	}
+
+	if len(flowChildren) == 0 {
+		return
+	}
+
+	// Auto-place children that don't have explicit positions
+	// Track which cells are occupied
+	// First pass: determine number of rows needed
+	maxRow := 0
+	for _, gc := range flowChildren {
+		if gc.rowEnd > maxRow {
+			maxRow = gc.rowEnd - 1
+		}
+	}
+	// Estimate rows from auto-placement
+	autoPlaceCount := 0
+	for _, gc := range flowChildren {
+		if gc.colStart == 0 {
+			autoPlaceCount++
+		}
+	}
+	estimatedRows := maxRow
+	if autoPlaceCount > 0 {
+		neededRows := (autoPlaceCount + numCols - 1) / numCols
+		if neededRows > estimatedRows {
+			estimatedRows = neededRows
+		}
+	}
+	if estimatedRows < 1 {
+		estimatedRows = 1
+	}
+
+	// Build occupancy grid and place explicitly positioned children
+	numRows := estimatedRows + maxRow // overestimate to be safe
+	if numRows < 1 {
+		numRows = 1
+	}
+	occupied := make([][]bool, numRows)
+	for r := range occupied {
+		occupied[r] = make([]bool, numCols)
+	}
+
+	// Place explicitly positioned children
+	for i := range flowChildren {
+		gc := &flowChildren[i]
+		if gc.colStart > 0 && gc.rowStart > 0 {
+			// Mark cells as occupied
+			for r := gc.rowStart - 1; r < gc.rowEnd-1 && r < numRows; r++ {
+				for c := gc.colStart - 1; c < gc.colEnd-1 && c < numCols; c++ {
+					occupied[r][c] = true
+				}
+			}
+		}
+	}
+
+	// Auto-place remaining children
+	autoRow, autoCol := 0, 0
+	for i := range flowChildren {
+		gc := &flowChildren[i]
+		if gc.colStart > 0 && gc.rowStart > 0 {
+			continue // already placed
+		}
+
+		// Find next available cell
+		span := 1
+		if gc.colStart > 0 && gc.colEnd > gc.colStart {
+			span = gc.colEnd - gc.colStart
+		}
+
+		for {
+			if autoCol+span <= numCols {
+				// Check if cells are free
+				free := true
+				for c := autoCol; c < autoCol+span; c++ {
+					if autoRow < numRows && occupied[autoRow][c] {
+						free = false
+						break
+					}
+				}
+				if free {
+					break
+				}
+			}
+			autoCol++
+			if autoCol+span > numCols {
+				autoCol = 0
+				autoRow++
+				// Expand occupied grid if needed
+				if autoRow >= numRows {
+					numRows++
+					occupied = append(occupied, make([]bool, numCols))
+				}
+			}
+		}
+
+		gc.colStart = autoCol + 1
+		gc.colEnd = autoCol + span + 1
+		if gc.colEnd > numCols+1 {
+			gc.colEnd = numCols + 1
+		}
+		gc.rowStart = autoRow + 1
+		gc.rowEnd = autoRow + 2
+		if gc.rowEnd-1 > gc.rowStart-1 {
+			// multi-row not supported in auto-place
+		}
+
+		// Mark occupied
+		for c := autoCol; c < autoCol+span && c < numCols; c++ {
+			if autoRow < numRows {
+				occupied[autoRow][c] = true
+			}
+		}
+
+		// Advance auto cursor
+		autoCol += span
+		if autoCol >= numCols {
+			autoCol = 0
+			autoRow++
+			if autoRow >= numRows {
+				numRows++
+				occupied = append(occupied, make([]bool, numCols))
+			}
+		}
+	}
+
+	// Determine actual number of rows used
+	actualRows := 0
+	for _, gc := range flowChildren {
+		if gc.rowEnd-1 > actualRows {
+			actualRows = gc.rowEnd - 1
+		}
+	}
+	if actualRows < 1 {
+		actualRows = 1
+	}
+
+	// Parse row template
+	rowSizes := parseGridTemplate(style.GridTemplateRows, contentH, rowGap)
+	// If row template doesn't cover all rows, extend with equal distribution
+	if len(rowSizes) < actualRows {
+		// Calculate remaining height after defined rows
+		definedH := 0
+		for _, h := range rowSizes {
+			definedH += h
+		}
+		definedGaps := 0
+		if len(rowSizes) > 0 {
+			definedGaps = rowGap * len(rowSizes)
+		}
+		remainH := contentH - definedH - definedGaps
+		if remainH < 0 {
+			remainH = 0
+		}
+		extraRows := actualRows - len(rowSizes)
+		extraGaps := 0
+		if extraRows > 1 {
+			extraGaps = rowGap * (extraRows - 1)
+		}
+		perRow := 1
+		if extraRows > 0 && remainH > extraGaps {
+			perRow = (remainH - extraGaps) / extraRows
+		}
+		if perRow < 1 {
+			perRow = 1
+		}
+		for len(rowSizes) < actualRows {
+			rowSizes = append(rowSizes, perRow)
+		}
+	}
+
+	// Compute column X positions
+	colX := make([]int, numCols)
+	cx := contentX
+	for c := 0; c < numCols; c++ {
+		colX[c] = cx
+		cx += colSizes[c]
+		if c < numCols-1 {
+			cx += colGap
+		}
+	}
+
+	// Compute row Y positions
+	rowY := make([]int, actualRows)
+	ry := contentY
+	for r := 0; r < actualRows; r++ {
+		rowY[r] = ry
+		ry += rowSizes[r]
+		if r < actualRows-1 {
+			ry += rowGap
+		}
+	}
+
+	// Position each child in its grid cell(s)
+	for _, gc := range flowChildren {
+		child := node.Children[gc.childIdx]
+
+		c0 := gc.colStart - 1
+		c1 := gc.colEnd - 2 // inclusive end column
+		r0 := gc.rowStart - 1
+		r1 := gc.rowEnd - 2 // inclusive end row
+
+		// Clamp to grid bounds
+		if c0 < 0 {
+			c0 = 0
+		}
+		if c1 >= numCols {
+			c1 = numCols - 1
+		}
+		if r0 < 0 {
+			r0 = 0
+		}
+		if r1 >= actualRows {
+			r1 = actualRows - 1
+		}
+
+		// Calculate cell position and size
+		cellX := colX[c0]
+		cellY := rowY[r0]
+
+		// Width spans from colStart to colEnd (inclusive of gaps between spanned columns)
+		cellW := 0
+		for c := c0; c <= c1; c++ {
+			cellW += colSizes[c]
+			if c < c1 {
+				cellW += colGap
+			}
+		}
+
+		// Height spans from rowStart to rowEnd
+		cellH := 0
+		for r := r0; r <= r1; r++ {
+			cellH += rowSizes[r]
+			if r < r1 {
+				cellH += rowGap
+			}
+		}
+
+		if cellW < 1 {
+			cellW = 1
+		}
+		if cellH < 1 {
+			cellH = 1
+		}
+
+		computeFlex(child, cellX, cellY, cellW, cellH)
+		applyRelativeOffset(child, child.Style)
 	}
 }
