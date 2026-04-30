@@ -142,7 +142,7 @@ func layoutHBox(node *Node, contentX, contentY, contentW, contentH int, style St
 					if children[i].finalW < 1 {
 						children[i].finalW = 1
 					}
-					children[i].finalW = clamp(children[i].finalW, children[i].style.MinWidth, 0)
+					children[i].finalW = clamp(children[i].finalW, children[i].style.MinWidth, children[i].style.MaxWidth)
 				}
 			}
 		}
