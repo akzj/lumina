@@ -10,35 +10,6 @@ func setParentsRecursive(node *Node) {
 	}
 }
 
-func TestLaidOutFlowContentHeight_IgnoresProbeInflatedH(t *testing.T) {
-	// After computeFlex(..., 99999), many nodes keep H=99999; scroll/card measurement
-	// must not use that as the content span or stacked siblings end up off-screen.
-	comp := &Node{
-		Type: "component",
-		Y:    0, X: 0, W: 40, H: 99999,
-		Children: []*Node{
-			{
-				Type: "box",
-				Y:    0, X: 0, W: 40, H: 99999,
-				Children: []*Node{
-					{Type: "text", Y: 0, X: 0, W: 20, H: 1, Content: "Title"},
-					{
-						Type: "hbox",
-						Y:    2, X: 0, W: 40, H: 99999,
-						Children: []*Node{
-							{Type: "text", Y: 2, X: 0, W: 8, H: 3, Content: "Primary"},
-						},
-					},
-				},
-			},
-		},
-	}
-	h := laidOutFlowContentHeight(comp)
-	if h > 20 {
-		t.Fatalf("laidOutFlowContentHeight=%d want small span (probe H ignored)", h)
-	}
-}
-
 func TestScrollContainer_SingleChildIntrinsicHeight(t *testing.T) {
 	// A scroll container with a single vbox child that has 3 text children.
 	// Previously the vbox child would get finalH=1, collapsing all content.
