@@ -699,7 +699,7 @@ func paintNodeClipped(buf *CellBuffer, node *Node, clipX1, clipY1, clipX2, clipY
 	case "box", "vbox", "hbox":
 		paintBoxClipped(buf, node, clipX1, clipY1, clipX2, clipY2)
 	case "input", "textarea":
-		paintTextClipped(buf, node, clipX1, clipY1, clipX2, clipY2)
+		paintInputClipped(buf, node, clipX1, clipY1, clipX2, clipY2)
 	case "component":
 		for _, child := range paintOrderChildren(node.Children) {
 			paintNodeClipped(buf, child, clipX1, clipY1, clipX2, clipY2)
@@ -1056,6 +1056,57 @@ func paintInputCursor(buf *CellBuffer, node *Node, x, y int) {
 	}
 	buf.Set(x, y, Cell{Ch: ch, FG: fg, BG: bg})
 }
+
+// paintInputClipped renders an input/textarea node inside a clip rect,
+// handling placeholder text, content text, and cursor correctly.
+func paintInputClipped(buf *CellBuffer, node *Node, clipX1, clipY1, clipX2, clipY2 int) {
+	if node.Content == "" && node.Placeholder != "" {
+		// Render placeholder with dim style (clipped)
+		fg := node.Style.Foreground
+		if fg == "" {
+			fg = "#585B70" // dim gray default
+		}
+		x := node.X
+		y := node.Y
+		for _, ch := range node.Placeholder {
+			w := runeWidth(ch)
+			if x+w-1 < node.X+node.W && y < node.Y+node.H {
+				if y >= clipY1 && y < clipY2 && x >= clipX1 && x < clipX2 {
+					bg := node.Style.Background
+					if bg == "" {
+						existing := buf.Get(x, y)
+						bg = existing.BG
+					}
+					buf.Set(x, y, Cell{Ch: ch, FG: fg, BG: bg, Dim: true})
+					if w == 2 && x+1 >= clipX1 && x+1 < clipX2 {
+						buf.Set(x+1, y, Cell{Wide: true, BG: bg})
+					}
+				}
+				x += w
+			}
+		}
+		// Show cursor at start if focused
+		if node.Focused {
+			cx, cy := node.X, node.Y
+			if cy >= clipY1 && cy < clipY2 && cx >= clipX1 && cx < clipX2 {
+				paintInputCursor(buf, node, cx, cy)
+			}
+		}
+		return
+	}
+	// Render text content (clipped)
+	paintTextClipped(buf, node, clipX1, clipY1, clipX2, clipY2)
+
+	// Show cursor if focused
+	if node.Focused {
+		cursorX := node.X + inputCursorScreenOffset(node)
+		cursorY := node.Y
+		if cursorY >= clipY1 && cursorY < clipY2 && cursorX >= clipX1 && cursorX < clipX2 {
+			paintInputCursor(buf, node, cursorX, cursorY)
+		}
+	}
+}
+
 
 func paintBorder(buf *CellBuffer, node *Node) {
 	x, y, w, h := node.X, node.Y, node.W, node.H

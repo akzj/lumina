@@ -222,45 +222,8 @@ func (e *Engine) HandleMouseMove(x, y int) {
 	}
 
 	// If a widget has captured the mouse (dragging), dispatch directly to it
-	if e.capturedComp != nil {
-		w, ok := e.widgets[e.capturedComp.Type]
-		if !ok {
-			e.capturedComp = nil
-		} else {
-			state, stateOk := e.widgetStates[e.capturedComp.ID]
-			if !stateOk {
-				e.capturedComp = nil
-			} else {
-				appW, appH := e.appBounds()
-				evt := &WidgetEvent{Type: "mousemove", X: x, Y: y, ScreenW: appW, ScreenH: appH}
-				if e.capturedComp.RootNode != nil {
-					evt.WidgetX = e.capturedComp.RootNode.X
-					evt.WidgetY = e.capturedComp.RootNode.Y
-					evt.WidgetW = e.capturedComp.RootNode.W
-					evt.WidgetH = e.capturedComp.RootNode.H
-					if scrollNode := findScrollNode(e.capturedComp.RootNode); scrollNode != nil {
-						evt.ScrollY = scrollNode.ScrollY
-						evt.ContentHeight = scrollNode.ScrollHeight
-					}
-				}
-				consumed := w.DoOnEvent(e.capturedComp.Props, state, evt)
-				if consumed {
-					if evt.ScrollBy == 0 {
-						e.capturedComp.Dirty = true
-					}
-					e.needsRender = true
-				}
-				// Fire onChange if widget requested it
-				if evt.FireOnChange != nil && e.capturedComp.RootNode != nil && e.capturedComp.RootNode.OnChange != 0 {
-					e.callLuaRefWithValue(e.capturedComp.RootNode.OnChange, evt.FireOnChange)
-				}
-				// Process scroll request from captured widget
-				if evt.ScrollBy != 0 && e.capturedComp.RootNode != nil {
-					e.scrollNodeBy(e.capturedComp.RootNode, evt.ScrollBy)
-				}
-				return // captured widget gets ALL mouse events, skip normal dispatch
-			}
-		}
+	if e.dispatchCapturedWidgetEvent("mousemove", x, y) {
+		return // captured widget gets ALL mouse events, skip normal dispatch
 	}
 
 	// Clear stale hovered pointer if node was removed from tree
@@ -725,6 +688,53 @@ func (e *Engine) callLuaRefSimple(ref LuaRef) {
 	if status := L.PCall(0, 0, 0); status != lua.OK {
 		L.Pop(1) // pop error message to prevent stack pollution
 	}
+}
+
+// dispatchCapturedWidgetEvent dispatches an event to the currently captured widget.
+// Returns true if capturedComp was set and the event was dispatched (regardless of consumed).
+// The caller is responsible for releasing capture (e.capturedComp = nil) if needed.
+func (e *Engine) dispatchCapturedWidgetEvent(eventType string, x, y int) bool {
+	if e.capturedComp == nil {
+		return false
+	}
+	w, ok := e.widgets[e.capturedComp.Type]
+	if !ok {
+		e.capturedComp = nil
+		return true
+	}
+	state, stateOk := e.widgetStates[e.capturedComp.ID]
+	if !stateOk {
+		e.capturedComp = nil
+		return true
+	}
+	appW, appH := e.appBounds()
+	evt := &WidgetEvent{Type: eventType, X: x, Y: y, ScreenW: appW, ScreenH: appH}
+	if e.capturedComp.RootNode != nil {
+		evt.WidgetX = e.capturedComp.RootNode.X
+		evt.WidgetY = e.capturedComp.RootNode.Y
+		evt.WidgetW = e.capturedComp.RootNode.W
+		evt.WidgetH = e.capturedComp.RootNode.H
+		if scrollNode := findScrollNode(e.capturedComp.RootNode); scrollNode != nil {
+			evt.ScrollY = scrollNode.ScrollY
+			evt.ContentHeight = scrollNode.ScrollHeight
+		}
+	}
+	consumed := w.DoOnEvent(e.capturedComp.Props, state, evt)
+	if consumed {
+		if evt.ScrollBy == 0 {
+			e.capturedComp.Dirty = true
+		}
+		e.needsRender = true
+	}
+	// Fire onChange if widget requested it
+	if evt.FireOnChange != nil && e.capturedComp.RootNode != nil && e.capturedComp.RootNode.OnChange != 0 {
+		e.callLuaRefWithValue(e.capturedComp.RootNode.OnChange, evt.FireOnChange)
+	}
+	// Process scroll request from captured widget
+	if evt.ScrollBy != 0 && e.capturedComp.RootNode != nil {
+		e.scrollNodeBy(e.capturedComp.RootNode, evt.ScrollBy)
+	}
+	return true
 }
 
 // dispatchWidgetEvent walks up from node to find an owning Go widget component,
