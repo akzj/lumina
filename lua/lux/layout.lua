@@ -80,15 +80,20 @@ local Layout = lumina.defineComponent("Layout", function(props)
         if mainOverflow ~= "" then
             mainStyle.overflow = mainOverflow
         end
+        local sbStyle = {
+            width = slotProp(sidebar, "_width", 20),
+            border = slotProp(sidebar, "_border", "none"),
+            background = slotProp(sidebar, "_bg", ""),
+        }
+        local sbBorderColor = slotProp(sidebar, "_borderColor", "")
+        if sbBorderColor ~= "" then
+            sbStyle.borderColor = sbBorderColor
+        end
         vboxChildren[#vboxChildren + 1] = lumina.createElement("hbox", {
             style = { flex = 1 },
         },
             lumina.createElement("vbox", {
-                style = {
-                    width = slotProp(sidebar, "_width", 20),
-                    border = slotProp(sidebar, "_border", "none"),
-                    background = slotProp(sidebar, "_bg", ""),
-                },
+                style = sbStyle,
             }, table.unpack(slotChildren(sidebar))),
             lumina.createElement("vbox", {
                 style = mainStyle,
@@ -154,6 +159,7 @@ function Layout.Sidebar(props)
         _layoutSlot = "sidebar",
         _width = props.width or 20,
         _border = props.border,
+        _borderColor = props.borderColor,
         _bg = props.background or props.bg,
     }, table.unpack(children))
 end

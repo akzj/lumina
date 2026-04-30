@@ -1,5 +1,5 @@
--- lua/lux/atlantis.lua — PrimeReact Atlantis–inspired TUI chrome (theme + shell pieces).
--- Terminal-native: uses flex + Layout Main scroll only (no engine changes).
+-- lua/lux/atlantis.lua — PrimeReact Atlantis–inspired TUI chrome.
+-- Styling follows docs/css-properties.md (percent/vw/vh, borderColor, grid, flex).
 
 local Layout = require("lux.layout")
 local Card = require("lux.card")
@@ -33,6 +33,7 @@ function M.applyTheme()
     end
 end
 
+--- App header: full width, flex row (menu + trail + actions).
 function M.TopBar(props)
     local t = lumina.getTheme and lumina.getTheme() or M.themeTable()
     local bg = props.background or t.surface0 or "#141C2C"
@@ -46,11 +47,13 @@ function M.TopBar(props)
         id = props.id,
         key = props.key,
         style = {
+            width = "100%",
             height = 1,
             paddingLeft = 1,
             paddingRight = 1,
             background = bg,
             gap = 1,
+            align = "center",
         },
     },
         lumina.createElement("text", {
@@ -62,24 +65,31 @@ function M.TopBar(props)
             id = props.breadcrumbId,
             items = items,
             barBackground = bg,
-            style = { flex = 1, height = 1 },
+            style = { flex = 1, height = 1, minWidth = "15%" },
             onNavigate = props.onNavigate,
         }),
         right or lumina.createElement("text", {
             foreground = t.primary or "#F5C842",
             background = bg,
             bold = true,
-            style = { height = 1 },
+            style = { height = 1, alignSelf = "center" },
         }, props.todayLabel or "Today")
     )
 end
 
+--- Sidebar list: optional bordered pills + left rail for active (borderColor + box model).
 function M.SideNav(props)
     local t = lumina.getTheme and lumina.getTheme() or M.themeTable()
     local bg = props.background or t.base or "#0B1220"
     local active = props.activeId
     local onSelect = props.onSelect
     local items = props.items or {}
+    local navBorder = props.itemBorder or "rounded"
+    local railW = props.railWidth or 1
+    -- Vertical gap between nav rows (cell count). Default 0 so items stack tight;
+    -- set itemGap = 1 if you want a clear strip between pills.
+    local itemGap = props.itemGap or 0
+    local brandGap = props.brandGap or 1
 
     local rows = {}
     if props.brand then
@@ -87,64 +97,98 @@ function M.SideNav(props)
             bold = true,
             foreground = t.primary or "#F5C842",
             background = bg,
-            style = { height = 1, paddingLeft = 1 },
+            style = { height = 1, paddingLeft = 1, marginBottom = brandGap, width = "100%" },
         }, props.brand)
-        rows[#rows + 1] = lumina.createElement("text", {
-            foreground = t.muted or "#8B9BB4",
-            background = bg,
-            style = { height = 1 },
-        }, "")
     end
 
     for _, it in ipairs(items) do
         local sel = (it.id == active)
-        local label = (sel and "▌ " or "  ") .. (it.label or it.id)
-        rows[#rows + 1] = lumina.createElement("text", {
+        local label = it.label or it.id
+        local railBg = sel and (t.primary or "#F5C842") or bg
+        local railFg = sel and (t.primary or "#F5C842") or bg
+
+        rows[#rows + 1] = lumina.createElement("hbox", {
             key = "nav-" .. tostring(it.id),
-            foreground = sel and (t.primary or "#F5C842") or (t.text or "#E8EDF7"),
-            background = sel and (t.surface1 or "#1B2639") or bg,
-            bold = sel,
-            style = { height = 1, paddingLeft = 1 },
-            onClick = onSelect and function()
-                onSelect(it.id)
-            end or nil,
-        }, label)
+            style = {
+                width = "100%",
+                height = 3,
+                gap = 0,
+                marginBottom = itemGap,
+            },
+        },
+            lumina.createElement("text", {
+                style = {
+                    width = railW,
+                    height = 3,
+                    background = railBg,
+                    foreground = railFg,
+                },
+            }, " "),
+            lumina.createElement("box", {
+                style = {
+                    flex = 1,
+                    height = 3,
+                    border = navBorder,
+                    borderColor = sel and (t.primary or "#F5C842") or (t.surface2 or "#2A3A56"),
+                    background = sel and (t.surface1 or "#1B2639") or (t.surface0 or "#141C2C"),
+                    paddingLeft = 1,
+                    justify = "center",
+                },
+                onClick = onSelect and function()
+                    onSelect(it.id)
+                end or nil,
+            },
+                lumina.createElement("text", {
+                    foreground = sel and (t.primary or "#F5C842") or (t.text or "#E8EDF7"),
+                    bold = sel,
+                    style = { height = 1 },
+                }, label)
+            )
+        )
     end
 
     rows[#rows + 1] = lumina.createElement("vbox", {
-        style = { flex = 1, background = bg },
+        style = { flex = 1, width = "100%", background = bg },
     })
 
     if props.footerHint then
         rows[#rows + 1] = lumina.createElement("text", {
             foreground = t.muted or "#8B9BB4",
             background = bg,
-            style = { height = 1, paddingLeft = 1 },
+            style = { height = 1, paddingLeft = 1, marginTop = 1, width = "100%" },
         }, props.footerHint)
     end
 
     return lumina.createElement("vbox", {
         id = props.id,
         key = props.key,
-        style = { background = bg, gap = 0 },
+        style = { background = bg, gap = 0, width = "100%", height = "100%" },
     }, table.unpack(rows))
 end
 
---- Label left, input right (single row). Input stretches with parent width.
+--- Horizontal label + input row (flexBasis label column, flex-grow field).
 function M.HorizontalField(props)
     local t = lumina.getTheme and lumina.getTheme() or M.themeTable()
     local lw = props.labelWidth or 14
     return lumina.createElement("hbox", {
         key = props.key,
         id = props.id,
-        style = { height = 1, gap = 1, align = "center" },
+        style = {
+            width = "100%",
+            height = 1,
+            gap = 1,
+            align = "center",
+        },
     },
         lumina.createElement("text", {
             foreground = t.text or "#E8EDF7",
-            style = { height = 1, width = lw },
+            style = {
+                height = 1,
+                width = lw,
+            },
         }, props.label or ""),
         lumina.createElement("vbox", {
-            style = { flex = 1, height = 1 },
+            style = { flex = 1, height = 1, minWidth = "20%" },
         },
             lumina.createElement("input", {
                 id = props.inputId,
@@ -153,7 +197,7 @@ function M.HorizontalField(props)
                 foreground = t.text or "#E8EDF7",
                 background = t.surface0 or "#141C2C",
                 focusable = props.focusable ~= false,
-                style = { height = 1 },
+                style = { height = 1, width = "100%" },
                 onChange = props.onChange,
             })
         )
@@ -163,13 +207,14 @@ end
 function M.Shell(props)
     local t = lumina.getTheme and lumina.getTheme() or M.themeTable()
     local sidebarW = props.sidebarWidth or 26
-    -- Main scroll defaults on: engine measures scroll children with intrinsic height.
     local mainScroll = props.mainScroll ~= false
     local innerOverflow = props.innerOverflow
     local top = props.topBar or M.TopBar({ title = props.title or "Form Layout" })
 
     local mainInnerStyle = {
         flex = 1,
+        width = "100%",
+        minHeight = "10%",
         padding = 1,
         gap = 1,
         background = t.base or "#0B1220",
@@ -180,8 +225,8 @@ function M.Shell(props)
 
     return lumina.createElement(Layout, {
         id = props.layoutId,
-        width = props.width,
-        height = props.height,
+        width = props.width or "100%",
+        height = props.height or "100%",
     },
         Layout.Header {
             top,
@@ -194,6 +239,7 @@ function M.Shell(props)
             width = sidebarW,
             background = t.base or "#0B1220",
             border = "single",
+            borderColor = t.surface2 or "#2A3A56",
         },
 
         Layout.Main {
@@ -213,9 +259,21 @@ function M.formShowcaseBlocks()
         return lumina.createElement("text", {
             foreground = t.surface2 or "#2A3A56",
             dim = true,
-            style = { height = 1 },
-        }, string.rep("─", 200))
+            style = {
+                height = 1,
+                width = "100%",
+                whiteSpace = "nowrap",
+                textOverflow = "clip",
+            },
+        }, string.rep("─", 400))
     end
+
+    local grid2 = {
+        display = "grid",
+        gridTemplateColumns = "1fr 1fr",
+        gap = 1,
+        width = "100%",
+    }
 
     return {
         lumina.createElement(Card, {
@@ -246,27 +304,34 @@ function M.formShowcaseBlocks()
             padding = 1,
         },
             lumina.createElement("hbox", {
-                style = { height = 1, gap = 1, align = "center" },
+                style = {
+                    width = "100%",
+                    height = 1,
+                    gap = 1,
+                    align = "center",
+                    justify = "start",
+                    flexWrap = "nowrap",
+                },
             },
                 lumina.createElement("input", {
                     id = "in-first",
                     placeholder = "Firstname",
                     foreground = t.text or "#E8EDF7",
                     background = t.surface0 or "#141C2C",
-                    style = { height = 1, flex = 1 },
+                    style = { height = 1, flex = 1, minWidth = "10%" },
                 }),
                 lumina.createElement("input", {
                     id = "in-last",
                     placeholder = "Lastname",
                     foreground = t.text or "#E8EDF7",
                     background = t.surface0 or "#141C2C",
-                    style = { height = 1, flex = 1 },
+                    style = { height = 1, flex = 1, minWidth = "10%" },
                 }),
                 lumina.createElement(Button, {
                     id = "btn-submit",
                     label = "Submit",
                     variant = "primary",
-                    style = { width = 10 },
+                    style = { width = 10, flexShrink = 0, alignSelf = "center" },
                 })
             )
         ),
@@ -277,15 +342,9 @@ function M.formShowcaseBlocks()
             variant = "elevated",
             padding = 1,
         },
-            lumina.createElement("hbox", {
-                style = { gap = 2, align = "start" },
-            },
-                lumina.createElement("vbox", { style = { flex = 1 } },
-                    TextInput { id = "g-name", label = "Name", placeholder = "Name", fill = true }
-                ),
-                lumina.createElement("vbox", { style = { flex = 1 } },
-                    TextInput { id = "g-email", label = "Email", placeholder = "Email", fill = true }
-                )
+            lumina.createElement("vbox", { style = grid2 },
+                TextInput { id = "g-name", label = "Name", placeholder = "Name", fill = true },
+                TextInput { id = "g-email", label = "Email", placeholder = "Email", fill = true }
             )
         ),
 
@@ -310,25 +369,35 @@ function M.formShowcaseBlocks()
             variant = "elevated",
             padding = 1,
         },
-            lumina.createElement("hbox", {
-                style = { gap = 2 },
+            lumina.createElement("vbox", {
+                style = {
+                    display = "grid",
+                    gridTemplateColumns = "1fr 1fr",
+                    gap = 1,
+                    width = "100%",
+                },
             },
-                lumina.createElement("vbox", { style = { flex = 1 } },
-                    TextInput { id = "a-fn", label = "Firstname", placeholder = "First", fill = true }
-                ),
-                lumina.createElement("vbox", { style = { flex = 1 } },
-                    TextInput { id = "a-ln", label = "Lastname", placeholder = "Last", fill = true }
+                TextInput { id = "a-fn", label = "Firstname", placeholder = "First", fill = true },
+                TextInput { id = "a-ln", label = "Lastname", placeholder = "Last", fill = true },
+                lumina.createElement("vbox", {
+                    style = { gridColumn = "1 / 3", width = "100%" },
+                },
+                    TextInput {
+                        id = "a-addr",
+                        label = "Address",
+                        placeholder = "Street, city",
+                        fill = true,
+                    }
                 )
-            ),
-            TextInput { id = "a-addr", label = "Address", placeholder = "Street, city", fill = true }
+            )
         ),
 
         rule(),
 
         lumina.createElement("text", {
             foreground = t.muted or "#8B9BB4",
-            style = { height = 1 },
-        }, "Resize terminal — layout reflows via flex. Main area scrolls when content overflows."),
+            style = { height = 1, width = "100%" },
+        }, "Resize terminal — layout uses % / vw / vh and grid per docs/css-properties.md."),
     }
 end
 

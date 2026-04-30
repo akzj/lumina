@@ -677,23 +677,43 @@ local mgr = WM.create("wm_state", {
 
 ### Button
 
-A themed button wrapping the native Go Button widget.
+Lux-native button (Lua + `style` / CSS properties from [`css-properties.md`](./css-properties.md)). Hover and pressed states are handled in Lua. Legacy `variant` values still map to severities/appearances.
 
 | Prop | Type | Default | Description |
 |------|------|---------|-------------|
-| `id` | string | `nil` | Element ID |
-| `label` | string | `"Button"` | Button text |
-| `variant` | string | `"primary"` | Color variant: `"primary"`, `"secondary"`, `"danger"` |
-| `disabled` | boolean | `false` | Disable interaction |
-| `onClick` | function | `nil` | Called when button is clicked |
-| `style` | table | `nil` | Style overrides |
+| `id` / `key` | string | `nil` | Element identity |
+| `label` | string | `""` | Caption |
+| `severity` | string | `"primary"` | `primary`, `secondary`, `success`, `danger`, `warning`, `info`, `help` |
+| `appearance` | string | `"solid"` | `solid`, `outlined`, `text`, `raised`, or `link` (underline text) |
+| `variant` | string | `nil` | **Legacy:** `primary` / `secondary` / `outline` / `ghost` → maps to severity + appearance |
+| `icon` | string | `nil` | Optional 1–2 character glyph |
+| `iconPosition` | string | `"left"` | `left` or `right` |
+| `iconOnly` | boolean | `false` | Square-ish hit target when only `icon` is set |
+| `shape` | string | `nil` | `square` → `border = "single"`; else rounded border |
+| `size` | string | `nil` | `sm` / `lg` adjusts horizontal padding (`paddingX` / `paddingY` override) |
+| `disabled` | boolean | `false` | Muted colors, no clicks |
+| `onClick` | function | `nil` | Click / Enter / Space |
+| `bold` | boolean | `true` | Label weight |
+| `link` | boolean | `false` | Underlined text button |
+| `style` | table | `nil` | Merged onto root `hbox` |
+
+**Composite helpers**
+
+- `Button.Group { items = { { label, onClick }, ... }, severity?, disabled?, style? }` — fused row with `gap = 0`.
+- `Button.Split { label, onClick, onMenuClick, severity?, ... }` — main label + `▼` menu target.
 
 **Example:**
 ```lua
 local Button = require("lux.button")
 
-Button { label = "Save", variant = "primary", onClick = function() save() end }
-Button { label = "Delete", variant = "danger", disabled = isLoading }
+Button { label = "Save", severity = "success", appearance = "solid", onClick = save }
+Button { label = "Cancel", appearance = "outlined", severity = "danger" }
+Button { appearance = "text", severity = "info", label = "Docs" }
+Button.Group { severity = "primary", items = {
+  { label = "Save", onClick = save },
+  { label = "Delete", onClick = del },
+} }
+Button.Split { label = "Run", onClick = run, onMenuClick = pickTarget, severity = "secondary" }
 ```
 
 ---

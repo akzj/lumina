@@ -12,12 +12,31 @@ local Card = lumina.defineComponent("Card", function(props)
         bg = ""
     end
 
+    local border = props.border
+    if border == nil or border == "" then
+        border = "rounded"
+    end
+    local borderColor = props.borderColor
+    if (borderColor == nil or borderColor == "") and props.variant == "elevated" then
+        borderColor = t.surface2 or "#585B70"
+    end
+
+    local boxStyle = {
+        border = border,
+        padding = props.padding or 1,
+        background = bg,
+    }
+    if borderColor and borderColor ~= "" then
+        boxStyle.borderColor = borderColor
+    end
+    if type(props.style) == "table" then
+        for k, v in pairs(props.style) do
+            boxStyle[k] = v
+        end
+    end
+
     return lumina.createElement("box", {
-        style = {
-            border = props.border or "rounded",
-            padding = props.padding or 1,
-            background = bg,
-        },
+        style = boxStyle,
     },
         props.title and lumina.createElement("text", {
             bold = true,

@@ -2,6 +2,8 @@
 
 Lumina 支持的 CSS 属性完整参考。所有属性通过 Lua table 的 `style` 字段设置。
 
+综合示例（Shell、Grid、`borderColor`、`%` / `vw` / `vh`）：[`lua/lux/atlantis.lua`](../lua/lux/atlantis.lua)。
+
 ```lua
 local el = lumina.createElement
 el("box", {

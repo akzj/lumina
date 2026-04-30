@@ -1,4 +1,4 @@
--- lux_widgets_test.lua — Tests for Lux wrappers of Go widgets
+-- lux_widgets_test.lua — Lux widgets (Button is native Lux + CSS; others wrap Go)
 
 test.describe("Lux widget wrappers", function()
     local app
@@ -268,5 +268,52 @@ test.describe("Lux widget wrappers", function()
         test.assert.eq(app:screenContains("LuxRad"), true)
         test.assert.eq(app:screenContains("LuxSw"), true)
         test.assert.eq(app:screenContains("LuxDD"), true)
+    end)
+
+    test.it("Lux Button.Group renders fused labels", function()
+        app:loadString([[
+            local Button = require("lux.button")
+            lumina.createComponent({
+                id = "test", name = "Test",
+                render = function()
+                    return lumina.createElement("vbox", {id = "root",
+                        style = {width = 80, height = 24}},
+                        Button.Group {
+                            key = "grp",
+                            severity = "primary",
+                            items = {
+                                { label = "Save", onClick = function() end },
+                                { label = "Del", onClick = function() end },
+                            },
+                        }
+                    )
+                end,
+            })
+        ]])
+        test.assert.eq(app:screenContains("Save"), true)
+        test.assert.eq(app:screenContains("Del"), true)
+    end)
+
+    test.it("Lux Button.Split renders label and chevron", function()
+        app:loadString([[
+            local Button = require("lux.button")
+            lumina.createComponent({
+                id = "test", name = "Test",
+                render = function()
+                    return lumina.createElement("vbox", {id = "root",
+                        style = {width = 80, height = 24}},
+                        Button.Split {
+                            key = "spl",
+                            label = "Options",
+                            severity = "secondary",
+                            onClick = function() end,
+                            onMenuClick = function() end,
+                        }
+                    )
+                end,
+            })
+        ]])
+        test.assert.eq(app:screenContains("Options"), true)
+        test.assert.eq(app:screenContains("▼"), true)
     end)
 end)
