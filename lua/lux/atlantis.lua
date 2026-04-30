@@ -37,9 +37,12 @@ end
 function M.TopBar(props)
     local t = lumina.getTheme and lumina.getTheme() or M.themeTable()
     local bg = props.background or t.surface0 or "#141C2C"
+    local pageTitle = props.title or "Form Layout"
     local items = props.breadcrumbItems or {
         { id = "ui", label = "UI Kit" },
-        { id = "page", label = props.title or "Form Layout" },
+        -- Id must track the title so breadcrumb segment keys change when only the
+        -- label updates (avoids stale last crumb under reconciliation).
+        { id = "page-" .. pageTitle, label = pageTitle },
     }
     local right = props.rightSlot
 
@@ -212,7 +215,6 @@ function M.Shell(props)
     local top = props.topBar or M.TopBar({ title = props.title or "Form Layout" })
 
     local mainInnerStyle = {
-        flex = 1,
         width = "100%",
         minHeight = "10%",
         padding = 1,

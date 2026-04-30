@@ -10,6 +10,35 @@ func setParentsRecursive(node *Node) {
 	}
 }
 
+func TestLaidOutFlowContentHeight_IgnoresProbeInflatedH(t *testing.T) {
+	// After computeFlex(..., 99999), many nodes keep H=99999; scroll/card measurement
+	// must not use that as the content span or stacked siblings end up off-screen.
+	comp := &Node{
+		Type: "component",
+		Y:    0, X: 0, W: 40, H: 99999,
+		Children: []*Node{
+			{
+				Type: "box",
+				Y:    0, X: 0, W: 40, H: 99999,
+				Children: []*Node{
+					{Type: "text", Y: 0, X: 0, W: 20, H: 1, Content: "Title"},
+					{
+						Type: "hbox",
+						Y:    2, X: 0, W: 40, H: 99999,
+						Children: []*Node{
+							{Type: "text", Y: 2, X: 0, W: 8, H: 3, Content: "Primary"},
+						},
+					},
+				},
+			},
+		},
+	}
+	h := laidOutFlowContentHeight(comp)
+	if h > 20 {
+		t.Fatalf("laidOutFlowContentHeight=%d want small span (probe H ignored)", h)
+	}
+}
+
 func TestScrollContainer_SingleChildIntrinsicHeight(t *testing.T) {
 	// A scroll container with a single vbox child that has 3 text children.
 	// Previously the vbox child would get finalH=1, collapsing all content.
@@ -315,6 +344,50 @@ func TestScrollContainer_InnerVBoxStacksManyComponentPanels(t *testing.T) {
 	LayoutFull(root, 0, 0, 40, 8)
 
 	inner := root.Children[0]
+	wantMin := 4 + 4 + 4
+	if inner.H < wantMin {
+		t.Errorf("inner vbox height got %d, want >= %d", inner.H, wantMin)
+	}
+	if root.ScrollHeight < wantMin {
+		t.Errorf("ScrollHeight got %d, want >= %d", root.ScrollHeight, wantMin)
+	}
+	c0, c1, c2 := inner.Children[0], inner.Children[1], inner.Children[2]
+	if c1.Y != c0.Y+c0.H {
+		t.Errorf("second panel Y: got %d want %d", c1.Y, c0.Y+c0.H)
+	}
+	if c2.Y != c1.Y+c1.H {
+		t.Errorf("third panel Y: got %d want %d", c2.Y, c1.Y+c1.H)
+	}
+}
+
+func TestScrollContainer_BoxBetweenScrollAndInner_StacksPanels(t *testing.T) {
+	// Real shells may insert a non-scroll wrapper between overflow:scroll and the
+	// content column; inner vbox must still use natural stacking (not flex-split).
+	root := &Node{
+		Type:  "vbox",
+		Style: Style{Overflow: "scroll"},
+		Children: []*Node{
+			{
+				Type:  "box",
+				Style: Style{},
+				Children: []*Node{
+					{
+						Type:  "vbox",
+						Style: Style{Width: 40},
+						Children: []*Node{
+							{Type: "vbox", Style: Style{Height: 4}, Children: []*Node{{Type: "text", Content: "A"}}},
+							{Type: "vbox", Style: Style{Height: 4}, Children: []*Node{{Type: "text", Content: "B"}}},
+							{Type: "vbox", Style: Style{Height: 4}, Children: []*Node{{Type: "text", Content: "C"}}},
+						},
+					},
+				},
+			},
+		},
+	}
+	setParentsRecursive(root)
+	LayoutFull(root, 0, 0, 40, 8)
+
+	inner := root.Children[0].Children[0]
 	wantMin := 4 + 4 + 4
 	if inner.H < wantMin {
 		t.Errorf("inner vbox height got %d, want >= %d", inner.H, wantMin)

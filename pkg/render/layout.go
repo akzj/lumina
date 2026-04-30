@@ -321,6 +321,45 @@ func applyRelativeOffset(child *Node, cs Style) {
 	}
 }
 
+// layoutProbeHMin is the smallest node.H value treated as an intrinsic-measurement
+// probe (see computeFlex(..., 99999)). laidOutFlowContentHeight must not treat
+// such heights as real content extent or scroll/card stacks get finalH≈99999 and
+// only the first row paints.
+const layoutProbeHMin = 99900
+
+// intrinsicFlowHeight returns the vertical extent of n for scroll / intrinsic
+// sizing when n.H may be a probe value (>= layoutProbeHMin) from unlimited-height
+// measurement. Uses flow children and absolute Y offsets from a completed layout.
+func intrinsicFlowHeight(n *Node) int {
+	if n == nil {
+		return 1
+	}
+	if n.H > 0 && n.H < layoutProbeHMin {
+		return n.H
+	}
+	if len(n.Children) == 0 {
+		if n.H >= layoutProbeHMin {
+			return 1
+		}
+		if n.H > 0 {
+			return n.H
+		}
+		return 1
+	}
+	maxSpan := 1
+	for _, c := range n.Children {
+		cs := c.Style
+		if isPositioned(cs) || cs.Display == "none" {
+			continue
+		}
+		span := (c.Y - n.Y) + intrinsicFlowHeight(c)
+		if span > maxSpan {
+			maxSpan = span
+		}
+	}
+	return maxSpan
+}
+
 // laidOutFlowContentHeight returns the vertical span from node.Y to the lowest
 // bottom among flow (non-positioned) descendants after layout. computeFlex(..., huge H)
 // sets node.H to the probe height; scroll sizing must not use that as content height
@@ -340,7 +379,7 @@ func laidOutFlowContentHeight(node *Node) int {
 			if isPositioned(cs) || cs.Display == "none" {
 				continue
 			}
-			if bb := c.Y + c.H; bb > maxB {
+			if bb := c.Y + intrinsicFlowHeight(c); bb > maxB {
 				maxB = bb
 			}
 			walk(c)
@@ -352,6 +391,20 @@ func laidOutFlowContentHeight(node *Node) int {
 		return 1
 	}
 	return h
+}
+
+// nodeHasScrollAncestor is true when any ancestor has overflow:scroll.
+// Scrollable main content is often not the direct parent of the inner column
+// (e.g. component placeholder, plain box). Using only the immediate parent for
+// scrollContentStack lets a post-intrinsic pass treat contentH as flex space and
+// split it across stacked cards so only the first panel appears.
+func nodeHasScrollAncestor(n *Node) bool {
+	for p := n.Parent; p != nil; p = p.Parent {
+		if p.Style.Overflow == "scroll" {
+			return true
+		}
+	}
+	return false
 }
 
 // --- Core flexbox layout ---
@@ -648,11 +701,10 @@ func layoutVBox(node *Node, contentX, contentY, contentW, contentH int, style St
 	// Scroll parents measure children with ~99999px height; nested non-scroll vboxes
 	// must not treat that as flex free space (else every flex child grows huge and
 	// stacked cards collapse visually to "first card only" with broken ScrollHeight).
-	intrinsicMeasure := !isScroll && contentH >= 99900
+	intrinsicMeasure := !isScroll && contentH >= layoutProbeHMin
 	// Second pass: inner content vbox gets real (tall) height from scroll but must still
 	// stack children at natural heights — not flex-split that height across cards.
-	scrollContentStack := !isScroll && !intrinsicMeasure &&
-		node.Parent != nil && node.Parent.Style.Overflow == "scroll"
+	scrollContentStack := !isScroll && !intrinsicMeasure && nodeHasScrollAncestor(node)
 
 	useNaturalHeights := isScroll || intrinsicMeasure || scrollContentStack
 
