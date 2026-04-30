@@ -599,31 +599,68 @@ func measureVBoxWrap(node *Node, c Constraints, contentW, padW, padH int) (int, 
 	return contentW + padW, totalH + padH
 }
 
-// measureGrid measures a grid container.
+// measureGrid measures a grid container by simulating auto-placement into rows.
 func measureGrid(node *Node, c Constraints, contentW, padW, padH int) (int, int) {
-	// Grid measurement: for now, use a simple heuristic.
-	// The grid layout is complex; we approximate by measuring children
-	// and using the grid template to determine row heights.
-	// This will be refined in a later pass.
-	totalH := 0
-	flowCount := 0
+	style := node.Style
 
+	// Determine column count from grid template
+	colGap := style.GridColumnGap
+	if colGap == 0 {
+		colGap = style.Gap
+	}
+	rowGap := style.GridRowGap
+	if rowGap == 0 {
+		rowGap = style.Gap
+	}
+
+	cols := parseGridTemplate(style.GridTemplateColumns, contentW, colGap)
+	numCols := len(cols)
+	if numCols == 0 {
+		numCols = 1
+		cols = []int{contentW}
+	}
+
+	// Measure all flow children
+	var flowChildren []*Node
 	for _, child := range node.Children {
 		cs := child.Style
 		if isPositioned(cs) || cs.Display == "none" {
 			continue
 		}
+		// Approximate column width for child measurement
+		colW := cols[len(flowChildren)%numCols]
 		childC := Constraints{
-			Width:      contentW,
+			Width:      colW,
 			WidthMode:  SizeModeAtMost,
 			Height:     0,
 			HeightMode: SizeModeUnbounded,
 		}
 		measure(child, childC)
-		if child.MeasuredH > totalH {
-			totalH = child.MeasuredH
+		flowChildren = append(flowChildren, child)
+	}
+
+	// Simulate auto-placement to determine row heights
+	numRows := (len(flowChildren) + numCols - 1) / numCols
+	if numRows < 1 {
+		numRows = 1
+	}
+
+	totalH := 0
+	for row := 0; row < numRows; row++ {
+		maxRowH := 0
+		for col := 0; col < numCols; col++ {
+			idx := row*numCols + col
+			if idx >= len(flowChildren) {
+				break
+			}
+			if flowChildren[idx].MeasuredH > maxRowH {
+				maxRowH = flowChildren[idx].MeasuredH
+			}
 		}
-		flowCount++
+		totalH += maxRowH
+		if row < numRows-1 {
+			totalH += rowGap
+		}
 	}
 
 	if totalH < 1 {
