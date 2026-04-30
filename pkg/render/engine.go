@@ -173,16 +173,23 @@ func (e *Engine) Destroy() {
 	// Free all component trees (hooks, event handlers, propFuncRefs, node refs).
 	if e.root != nil {
 		e.cleanupComponentTree(e.root)
-		delete(e.components, e.root.ID)
 		e.root = nil
 	}
 
-	// Free factory refs (skip goWidgetSentinel — not a real Lua ref).
+	// Clear ALL components (not just root — sub-components may have stale entries).
+	for id := range e.components {
+		delete(e.components, id)
+	}
+
+	// Free Lua factory refs but preserve Go widget sentinels.
+	// Go widgets are registered once in NewApp and must persist across reloads.
 	for name, ref := range e.factories {
 		if ref != goWidgetSentinel {
 			L.Unref(lua.RegistryIndex, int(ref))
+			delete(e.factories, name)
 		}
-		delete(e.factories, name)
+		// Keep goWidgetSentinel entries — they don't hold Lua refs
+		// and need to persist across reloads.
 	}
 
 	// Free factory metatable ref.

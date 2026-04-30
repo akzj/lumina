@@ -69,7 +69,7 @@ func (a *App) Run(cfg RunConfig) error {
 	if cfg.Watch && cfg.ScriptPath != "" {
 		absScript, _ := filepath.Abs(cfg.ScriptPath)
 		scriptDir := filepath.Dir(absScript)
-		watchPaths := append([]string{cfg.ScriptPath}, collectLuaFiles(scriptDir)...)
+		watchPaths := append([]string{absScript}, collectLuaFiles(scriptDir)...)
 		a.watcher = hotreload.NewWatcher(watchPaths, 500*time.Millisecond)
 		a.watcher.AddDir(scriptDir)
 

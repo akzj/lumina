@@ -39,9 +39,13 @@ func installRequireHook(L *lua.State, addPath func(string)) {
 	// 2. On success, resolves modname → file path via package.searchpath
 	// 3. Calls __lumina_require_hook(path) to notify the Go watcher
 	//
-	// We use pcall on the original require so errors propagate correctly.
+	// Uses __lumina_original_require to store the REAL original require on
+	// first install, preventing double-wrapping when called again after reload.
 	hookCode := `
-local _original_require = require
+if not __lumina_original_require then
+    __lumina_original_require = require
+end
+local _original_require = __lumina_original_require
 local _searchpath = package.searchpath
 
 require = function(modname)
