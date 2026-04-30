@@ -18,8 +18,10 @@ local Breadcrumb = lumina.defineComponent("Breadcrumb", function(props)
             fg = t.primary or "#89B4FA"
         end
 
+        -- Include item.id in the key so changing the active page (same index, new
+        -- label) does not reuse a stale text node when the reconciler keys match.
         children[#children + 1] = lumina.createElement("text", {
-            key = "bc-" .. tostring(i),
+            key = "bc-" .. tostring(item.id or i),
             foreground = fg,
             background = barBg,
             bold = isLast,
