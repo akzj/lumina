@@ -64,6 +64,21 @@ func (a *App) Run(cfg RunConfig) error {
 	a.luaState.SetGCParam("pause", 200)
 	a.luaState.SetGCParam("stepmul", 100)
 
+	// Set up hot reload watcher BEFORE executing the script so the require
+	// hook can track loaded files during initial script execution.
+	if cfg.Watch && cfg.ScriptPath != "" {
+		absScript, _ := filepath.Abs(cfg.ScriptPath)
+		scriptDir := filepath.Dir(absScript)
+		watchPaths := append([]string{cfg.ScriptPath}, collectLuaFiles(scriptDir)...)
+		a.watcher = hotreload.NewWatcher(watchPaths, 500*time.Millisecond)
+		a.watcher.AddDir(scriptDir)
+
+		// Install require hook so dynamically loaded modules are watched too.
+		installRequireHook(a.luaState, func(path string) {
+			a.watcher.AddPath(path)
+		})
+	}
+
 	// Load and execute the Lua script.
 	if cfg.ScriptPath != "" {
 		addScriptDirToPackagePath(a.luaState, cfg.ScriptPath)
@@ -168,21 +183,16 @@ func (a *App) eventLoop(cfg RunConfig) error {
 
 	// Set up hot reload watcher if enabled.
 	var reloadCh chan string
-	if cfg.Watch && cfg.ScriptPath != "" {
+	if a.watcher != nil {
 		reloadCh = make(chan string, 1)
-		// Watch the main script plus all .lua files in the script directory tree.
-		absScript, _ := filepath.Abs(cfg.ScriptPath)
-		scriptDir := filepath.Dir(absScript)
-		watchPaths := append([]string{cfg.ScriptPath}, collectLuaFiles(scriptDir)...)
-		watcher := hotreload.NewWatcher(watchPaths, 500*time.Millisecond)
-		watcher.SetOnChange(func(path string) {
+		a.watcher.SetOnChange(func(path string) {
 			select {
 			case reloadCh <- path:
 			default: // drop if already queued
 			}
 		})
-		watcher.Start()
-		defer watcher.Stop()
+		a.watcher.Start()
+		defer a.watcher.Stop()
 	}
 	// Provide a nil-safe channel that never receives when watch is disabled.
 	if reloadCh == nil {
@@ -263,6 +273,15 @@ func (a *App) reloadScript(path string) {
 
 	// Re-set package.path for the reloaded script.
 	addScriptDirToPackagePath(a.luaState, path)
+
+	// Reinstall require hook (full reload re-executes everything from scratch,
+	// so the previous hook wrapper is gone).
+	if a.watcher != nil {
+		installRequireHook(a.luaState, func(p string) {
+			a.watcher.AddPath(p)
+		})
+	}
+
 	if err := a.luaState.DoFile(path); err != nil {
 		log.Printf("[hotreload] error reloading %s: %v", path, err)
 		return
