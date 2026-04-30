@@ -89,11 +89,16 @@ func measure(node *Node, c Constraints) (int, int) {
 		measuredW, measuredH = measureContainer(node, c, contentW, padW, padH)
 	}
 
-	// Apply explicit outer dimensions (override intrinsic)
-	if outerW > 0 {
+	// Apply explicit outer dimensions (override intrinsic).
+	// Only override if the node has an explicit size set in style.
+	// For AtMost mode without explicit width, the node should shrink to content.
+	if hasExplicitWidth(style) && outerW > 0 {
+		measuredW = outerW
+	} else if c.WidthMode == SizeModeExact && outerW > 0 {
+		// Exact mode: node fills parent (standard block-level behavior)
 		measuredW = outerW
 	}
-	if outerH > 0 {
+	if hasExplicitHeight(style) && outerH > 0 {
 		measuredH = outerH
 	}
 
@@ -125,7 +130,8 @@ func measure(node *Node, c Constraints) (int, int) {
 }
 
 // resolveConstrainedWidth determines the outer width of a node from its style
-// and the parent constraints.
+// and the parent constraints. Returns (width, explicit) where explicit is true
+// if the width came from a style property (not from defaulting to constraint).
 func resolveConstrainedWidth(style Style, c Constraints) int {
 	// Explicit absolute width
 	if style.Width > 0 {
@@ -139,11 +145,25 @@ func resolveConstrainedWidth(style Style, c Constraints) int {
 	if style.WidthVW > 0 {
 		return (layoutViewportW * style.WidthVW) / 100
 	}
-	// Default: use constraint width (fill parent)
-	if c.WidthMode == SizeModeExact || c.WidthMode == SizeModeAtMost {
+	// Default: use constraint width (fill parent) — but only for Exact mode.
+	// For AtMost mode, the node should shrink to content unless explicitly sized.
+	if c.WidthMode == SizeModeExact {
 		return c.Width
 	}
+	if c.WidthMode == SizeModeAtMost {
+		return c.Width // still use as upper bound for content measurement
+	}
 	return 0
+}
+
+// hasExplicitWidth returns true if the node has an explicit width set in style.
+func hasExplicitWidth(style Style) bool {
+	return style.Width > 0 || style.WidthPercent > 0 || style.WidthVW > 0
+}
+
+// hasExplicitHeight returns true if the node has an explicit height set in style.
+func hasExplicitHeight(style Style) bool {
+	return style.Height > 0 || style.HeightPercent > 0 || style.HeightVH > 0
 }
 
 // resolveConstrainedHeight determines the outer height of a node from its style
@@ -226,14 +246,17 @@ func wrapTextLines(text string, maxWidth int) []string {
 }
 
 // measureComponent measures a component placeholder by measuring its grafted children.
+// Component placeholders are transparent — they pass the available content area
+// (after subtracting their own border/padding) to the grafted root.
 func measureComponent(node *Node, c Constraints, contentW, padW, padH int) (int, int) {
 	if len(node.Children) == 0 {
 		return contentW + padW, 1 + padH
 	}
 	// Component placeholder is transparent — measure the grafted root
+	// Use contentW (accounts for border/padding of the component node itself)
 	if len(node.Children) == 1 {
 		childC := Constraints{
-			Width:      c.Width,
+			Width:      contentW + padW, // outer width available to the child
 			WidthMode:  c.WidthMode,
 			Height:     c.Height,
 			HeightMode: c.HeightMode,
@@ -287,28 +310,28 @@ func measureContainer(node *Node, c Constraints, contentW, padW, padH int) (int,
 
 // measureVBox measures children stacked vertically.
 func measureVBox(node *Node, c Constraints, contentW, padW, padH int) (int, int) {
+	// For scroll containers, reserve 1 column for scrollbar
+	layoutW := contentW
+	if node.Style.Overflow == "scroll" && contentW > 1 {
+		layoutW = contentW - 1
+	}
+
 	totalH := 0
 	flowCount := 0
 
 	for _, child := range node.Children {
 		cs := child.Style
 		if isPositioned(cs) || cs.Display == "none" {
-			measure(child, Constraints{Width: contentW, WidthMode: SizeModeExact, Height: 0, HeightMode: SizeModeUnbounded})
+			measure(child, Constraints{Width: layoutW, WidthMode: SizeModeExact, Height: 0, HeightMode: SizeModeUnbounded})
 			continue
 		}
 
 		// Child constraints: full width, unbounded height (measure natural height)
 		childC := Constraints{
-			Width:     contentW,
-			WidthMode: SizeModeExact,
-		}
-		// If parent has unbounded height, children also get unbounded
-		if c.HeightMode == SizeModeUnbounded {
-			childC.Height = 0
-			childC.HeightMode = SizeModeUnbounded
-		} else {
-			childC.Height = 0
-			childC.HeightMode = SizeModeUnbounded
+			Width:      layoutW,
+			WidthMode:  SizeModeExact,
+			Height:     0,
+			HeightMode: SizeModeUnbounded,
 		}
 
 		_, childH := measure(child, childC)
@@ -325,37 +348,131 @@ func measureVBox(node *Node, c Constraints, contentW, padW, padH int) (int, int)
 }
 
 // measureHBox measures children laid out horizontally.
+// Mirrors layoutHBox's flex distribution to give each child its correct width.
 func measureHBox(node *Node, c Constraints, contentW, padW, padH int) (int, int) {
-	maxH := 0
-	flowCount := 0
-	totalFlexW := 0
+	if contentW <= 0 {
+		contentW = 1
+	}
 
-	for _, child := range node.Children {
+	type childMInfo struct {
+		style      Style
+		fixedW     int
+		flexGrow   int
+		finalW     int
+		positioned bool
+	}
+	children := make([]childMInfo, len(node.Children))
+
+	flowCount := 0
+	for i, child := range node.Children {
 		cs := child.Style
-		if isPositioned(cs) || cs.Display == "none" {
+		children[i].style = cs
+		children[i].positioned = isPositioned(cs) || cs.Display == "none"
+		if !children[i].positioned {
+			flowCount++
+		}
+		_ = child
+	}
+
+	totalGaps := 0
+	if flowCount > 1 {
+		totalGaps = node.Style.Gap * (flowCount - 1)
+	}
+	availW := contentW - totalGaps
+	if availW < 0 {
+		availW = 0
+	}
+
+	fixedTotal := 0
+	flexTotal := 0
+
+	for i, child := range node.Children {
+		if children[i].positioned {
+			continue
+		}
+		cs := children[i].style
+		marginH := cs.MarginLeft + cs.MarginRight
+
+		if rw := resolveWidth(cs, contentW); rw > 0 {
+			w := clamp(rw, cs.MinWidth, cs.MaxWidth)
+			children[i].fixedW = w + marginH
+			fixedTotal += children[i].fixedW
+		} else if cs.FlexBasis > 0 && cs.Flex > 0 {
+			children[i].fixedW = cs.FlexBasis + marginH
+			fixedTotal += children[i].fixedW
+			children[i].flexGrow = cs.Flex
+			flexTotal += cs.Flex
+		} else if cs.MinWidth > 0 && cs.Flex == 0 {
+			children[i].fixedW = cs.MinWidth + marginH
+			fixedTotal += children[i].fixedW
+		} else if cs.Flex > 0 {
+			children[i].flexGrow = cs.Flex
+			flexTotal += cs.Flex
+		} else {
+			switch child.Type {
+			case "text":
+				naturalW := 1
+				if child.Content != "" {
+					naturalW = stringWidth(child.Content)
+					if naturalW < 1 {
+						naturalW = 1
+					}
+				}
+				children[i].fixedW = naturalW + marginH
+				fixedTotal += children[i].fixedW
+			case "input", "textarea":
+				children[i].fixedW = 1 + marginH
+				fixedTotal += children[i].fixedW
+			default:
+				// Container — treat as flex=1
+				children[i].flexGrow = 1
+				flexTotal += 1
+			}
+		}
+	}
+
+	remainW := availW - fixedTotal
+	if remainW < 0 {
+		remainW = 0
+	}
+
+	for i := range children {
+		if children[i].positioned {
+			continue
+		}
+		if children[i].flexGrow > 0 {
+			baseW := children[i].fixedW
+			if flexTotal > 0 {
+				children[i].finalW = baseW + (remainW*children[i].flexGrow)/flexTotal
+			} else {
+				children[i].finalW = baseW
+			}
+			if children[i].finalW < 1 {
+				children[i].finalW = 1
+			}
+			children[i].finalW = clamp(children[i].finalW, children[i].style.MinWidth, children[i].style.MaxWidth)
+		} else {
+			children[i].finalW = children[i].fixedW
+		}
+	}
+
+	// Now measure each child with its allocated width to get correct height
+	maxH := 0
+	for i, child := range node.Children {
+		if children[i].positioned {
 			measure(child, Constraints{Width: contentW, WidthMode: SizeModeAtMost, Height: 0, HeightMode: SizeModeUnbounded})
 			continue
 		}
-
-		// For hbox children, measure with AtMost width to get natural width
 		childC := Constraints{
-			Width:      contentW,
-			WidthMode:  SizeModeAtMost,
+			Width:      children[i].finalW,
+			WidthMode:  SizeModeExact,
 			Height:     0,
 			HeightMode: SizeModeUnbounded,
 		}
 		_, childH := measure(child, childC)
-
 		if childH > maxH {
 			maxH = childH
 		}
-		totalFlexW += child.MeasuredW
-		flowCount++
-	}
-
-	// Add gaps
-	if flowCount > 1 {
-		totalFlexW += node.Style.Gap * (flowCount - 1)
 	}
 
 	if maxH < 1 {
