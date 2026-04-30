@@ -171,22 +171,32 @@ func reconcileChildrenImpl(parent *Node, descs []Descriptor, freedRefs *[]int64)
 	newChildren := make([]*Node, 0, len(descs))
 	usedOld := make(map[int]bool, len(oldChildren))
 
-	for _, desc := range descs {
+	for i, desc := range descs {
 		key := descKey(desc)
-		if idx, ok := oldByKey[key]; ok && oldChildren[idx].Type == desc.Type {
-			// Reuse existing node
-			usedOld[idx] = true
-			reconcileImpl(oldChildren[idx], desc, freedRefs)
-			newChildren = append(newChildren, oldChildren[idx])
+		if key != "" {
+			// Keyed matching: look up by key+type
+			if idx, ok := oldByKey[key]; ok && oldChildren[idx].Type == desc.Type {
+				usedOld[idx] = true
+				reconcileImpl(oldChildren[idx], desc, freedRefs)
+				newChildren = append(newChildren, oldChildren[idx])
+				continue
+			}
 		} else {
-			// Create new node
-			newNode := createNodeFromDesc(desc)
-			newNode.Parent = parent
-			newNode.PaintDirty = true
-			newNode.LayoutDirty = true
-			newChildren = append(newChildren, newNode)
-			changed = true
+			// Keyless: positional fallback — reuse old child at same index if also keyless and same type
+			if i < len(oldChildren) && !usedOld[i] && childKey(oldChildren[i]) == "" && oldChildren[i].Type == desc.Type {
+				usedOld[i] = true
+				reconcileImpl(oldChildren[i], desc, freedRefs)
+				newChildren = append(newChildren, oldChildren[i])
+				continue
+			}
 		}
+		// No match found — create new node
+		newNode := createNodeFromDesc(desc)
+		newNode.Parent = parent
+		newNode.PaintDirty = true
+		newNode.LayoutDirty = true
+		newChildren = append(newChildren, newNode)
+		changed = true
 	}
 
 	// Cleanup removed children
