@@ -757,15 +757,11 @@ func layoutVBox(node *Node, contentX, contentY, contentW, contentH int, style St
 	}
 
 	isScroll := style.Overflow == "scroll"
-	// Scroll parents measure children with ~99999px height; nested non-scroll vboxes
-	// must not treat that as flex free space (else every flex child grows huge and
-	// stacked cards collapse visually to "first card only" with broken ScrollHeight).
-	intrinsicMeasure := !isScroll && contentH >= layoutProbeHMin
-	// Second pass: inner content vbox gets real (tall) height from scroll but must still
-	// stack children at natural heights — not flex-split that height across cards.
-	scrollContentStack := !isScroll && !intrinsicMeasure && nodeHasScrollAncestor(node)
+	// Inner content vbox of a scroll container must stack children at natural heights
+	// rather than flex-distributing the scroll parent's real height across them.
+	scrollContentStack := !isScroll && nodeHasScrollAncestor(node)
 
-	useNaturalHeights := isScroll || intrinsicMeasure || scrollContentStack
+	useNaturalHeights := isScroll || scrollContentStack
 
 	type childInfo struct {
 		style      Style
@@ -825,10 +821,11 @@ func layoutVBox(node *Node, contentX, contentY, contentW, contentH int, style St
 				if graftedH > 0 {
 					children[i].finalH = graftedH + marginV
 				} else {
-					// Intrinsic height: measure by laying out with unlimited height.
-					computeFlex(child, contentX, contentY, contentW, 99999, depth+1)
-					naturalH := laidOutFlowContentHeight(child)
-					children[i].finalH = naturalH + marginV
+					// Use pre-computed measurement from measure pass.
+					children[i].finalH = child.MeasuredH
+					if children[i].finalH < 1+marginV {
+						children[i].finalH = 1 + marginV
+					}
 				}
 				if mnh := resolveMinH(cs, contentH); mnh > 0 && children[i].finalH < mnh+marginV {
 					children[i].finalH = mnh + marginV
@@ -976,7 +973,7 @@ func layoutVBox(node *Node, contentX, contentY, contentW, contentH int, style St
 	// Determine starting Y based on justify (skip for scroll / intrinsic / scroll-content stack)
 	curY := contentY
 	gapSize := style.Gap
-	if !isScroll && !intrinsicMeasure && !scrollContentStack {
+	if !isScroll && !scrollContentStack {
 		extraSpace := contentH - totalUsed
 		if extraSpace < 0 {
 			extraSpace = 0
