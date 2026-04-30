@@ -42,6 +42,11 @@ func registerLuxModules(L *lua.State) {
 	preloadLuaSource(L, "lux.accordion", mustReadLuxLua("accordion.lua"))
 	preloadLuaSource(L, "lux.breadcrumb", mustReadLuxLua("breadcrumb.lua"))
 	preloadLuaSource(L, "lux.text_input", mustReadLuxLua("text_input.lua"))
+	preloadLuaSource(L, "lux.button", mustReadLuxLua("button.lua"))
+	preloadLuaSource(L, "lux.checkbox", mustReadLuxLua("checkbox.lua"))
+	preloadLuaSource(L, "lux.radio", mustReadLuxLua("radio.lua"))
+	preloadLuaSource(L, "lux.switch", mustReadLuxLua("switch.lua"))
+	preloadLuaSource(L, "lux.dropdown", mustReadLuxLua("dropdown.lua"))
 
 	// Register the lux umbrella module (requires individual modules)
 	preloadLuaSource(L, "lux", mustReadLuxLua("init.lua"))

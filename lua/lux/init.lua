@@ -21,5 +21,10 @@ M.Alert = require("lux.alert")
 M.Accordion = require("lux.accordion")
 M.Breadcrumb = require("lux.breadcrumb")
 M.TextInput = require("lux.text_input")
+M.Button = require("lux.button")
+M.Checkbox = require("lux.checkbox")
+M.Radio = require("lux.radio")
+M.Switch = require("lux.switch")
+M.Dropdown = require("lux.dropdown")
 
 return M
