@@ -178,20 +178,25 @@ func (e *Engine) readDescriptor(L *lua.State, idx int) Descriptor {
 	desc.ID = getStringField(L, absIdx, "id")
 	desc.Key = getStringField(L, absIdx, "key")
 	desc.Content = getStringField(L, absIdx, "content")
-	// Check if "content" field exists (even if empty string) to mark controlled input
-	L.GetField(absIdx, "content")
-	if !L.IsNil(-1) {
-		desc.ContentSet = true
-	}
-	L.Pop(1)
-	// For input/textarea, also check "value" field
-	if !desc.ContentSet {
-		L.GetField(absIdx, "value")
+	// Only mark ContentSet for input/textarea types (controlled input pattern).
+	// Other element types (text, box, etc.) also have "content" set by createElement
+	// for string children, but they should NOT be treated as controlled inputs.
+	if desc.Type == "input" || desc.Type == "textarea" {
+		// Check if "content" field exists (even if empty string) to mark controlled
+		L.GetField(absIdx, "content")
 		if !L.IsNil(-1) {
-			desc.Content = getStringField(L, absIdx, "value")
 			desc.ContentSet = true
 		}
 		L.Pop(1)
+		// Also check "value" field as alternative
+		if !desc.ContentSet {
+			L.GetField(absIdx, "value")
+			if !L.IsNil(-1) {
+				desc.Content = getStringField(L, absIdx, "value")
+				desc.ContentSet = true
+			}
+			L.Pop(1)
+		}
 	}
 	desc.Placeholder = getStringField(L, absIdx, "placeholder")
 	desc.AutoFocus = getBoolField(L, absIdx, "autoFocus")
