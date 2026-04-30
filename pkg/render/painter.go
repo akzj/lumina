@@ -455,7 +455,7 @@ func paintBox(buf *CellBuffer, node *Node) {
 	}
 
 	// 2. Draw border
-	if node.Style.Border != "" && node.Style.Border != "none" {
+	if hasBorder(node.Style) {
 		paintBorder(buf, node)
 	}
 
@@ -507,7 +507,7 @@ func paintScrollChildrenClipped(buf *CellBuffer, node *Node, outerClipX1, outerC
 	// Inner clip: content area inside border + padding (using screen coordinates)
 	screenY := node.Y + parentOffsetY
 	bw := 0
-	if node.Style.Border != "" && node.Style.Border != "none" {
+	if hasBorder(node.Style) {
 		bw = 1
 	}
 	innerX1 := node.X + bw + node.Style.PaddingLeft
@@ -539,7 +539,7 @@ func paintScrollChildrenClipped(buf *CellBuffer, node *Node, outerClipX1, outerC
 func paintHiddenChildrenClipped(buf *CellBuffer, node *Node, outerClipX1, outerClipY1, outerClipX2, outerClipY2, offsetY int) {
 	screenY := node.Y + offsetY
 	bw := 0
-	if node.Style.Border != "" && node.Style.Border != "none" {
+	if hasBorder(node.Style) {
 		bw = 1
 	}
 	innerX1 := node.X + bw + node.Style.PaddingLeft
@@ -677,7 +677,7 @@ func paintBoxClipped(buf *CellBuffer, node *Node, clipX1, clipY1, clipX2, clipY2
 	// Border (must match paintBox): scroll/hidden parents paint children via
 	// paintNodeClipped → paintBoxClipped; omitting borders dropped LuxButton
 	// outlines inside overflow:scroll main regions.
-	if node.Style.Border != "" && node.Style.Border != "none" {
+	if hasBorder(node.Style) {
 		paintBorderClipped(buf, node, clipX1, clipY1, clipX2, clipY2, offsetY)
 	}
 
