@@ -44,6 +44,11 @@ func parseViewport(s string) (int, string, bool) {
 	return 0, "", false
 }
 
+// maxLayoutDepth is a safety limit to prevent infinite recursion from cycles
+// in the node tree (which can occur after hot reload with stale modules).
+// No real UI tree exceeds this depth.
+const maxLayoutDepth = 500
+
 // LayoutFull computes layout for the entire Node tree.
 // Used for initial render and after structural changes.
 // The root is positioned at (x, y) with available size (w, h).
@@ -54,7 +59,7 @@ func LayoutFull(root *Node, x, y, w, h int) {
 	layoutViewportW = w
 	layoutViewportH = h
 	normalizeSpacingInTree(root)
-	computeFlex(root, x, y, w, h)
+	computeFlex(root, x, y, w, h, 0)
 	clearLayoutDirty(root)
 }
 
@@ -70,11 +75,21 @@ func LayoutIncremental(root *Node) {
 // layoutDirtyWalk walks the tree looking for LayoutDirty nodes.
 // When found, it recomputes the subtree using the node's current cached position/size.
 func layoutDirtyWalk(node *Node) {
+	visited := make(map[*Node]bool)
+	layoutDirtyWalkImpl(node, visited)
+}
+
+func layoutDirtyWalkImpl(node *Node, visited map[*Node]bool) {
+	if node == nil || visited[node] {
+		return
+	}
+	visited[node] = true
+
 	if !node.LayoutDirty {
 		// This node's layout is cached and valid.
 		// But check children in case a descendant is dirty.
 		for _, child := range node.Children {
-			layoutDirtyWalk(child)
+			layoutDirtyWalkImpl(child, visited)
 		}
 		return
 	}
@@ -82,7 +97,7 @@ func layoutDirtyWalk(node *Node) {
 	// This node needs re-layout.
 	// Recompute using its CURRENT (cached) position and size as the container.
 	normalizeSpacing(node)
-	computeFlex(node, node.X, node.Y, node.W, node.H)
+	computeFlex(node, node.X, node.Y, node.W, node.H, 0)
 	node.LayoutDirty = false
 	// All children within this subtree are now re-laid-out.
 	clearLayoutDirtyBelow(node)
@@ -90,26 +105,57 @@ func layoutDirtyWalk(node *Node) {
 
 // clearLayoutDirty clears LayoutDirty on the entire tree.
 func clearLayoutDirty(node *Node) {
+	visited := make(map[*Node]bool)
+	clearLayoutDirtyImpl(node, visited)
+}
+
+func clearLayoutDirtyImpl(node *Node, visited map[*Node]bool) {
+	if node == nil || visited[node] {
+		return
+	}
+	visited[node] = true
 	node.LayoutDirty = false
 	for _, child := range node.Children {
-		clearLayoutDirty(child)
+		clearLayoutDirtyImpl(child, visited)
 	}
 }
 
 // clearLayoutDirtyBelow clears LayoutDirty on all children (not the node itself).
 func clearLayoutDirtyBelow(node *Node) {
+	visited := make(map[*Node]bool)
+	clearLayoutDirtyBelowImpl(node, visited)
+}
+
+func clearLayoutDirtyBelowImpl(node *Node, visited map[*Node]bool) {
+	if visited[node] {
+		return
+	}
+	visited[node] = true
 	for _, child := range node.Children {
+		if child == nil || visited[child] {
+			continue
+		}
 		child.LayoutDirty = false
-		clearLayoutDirtyBelow(child)
+		clearLayoutDirtyBelowImpl(child, visited)
 	}
 }
 
 // normalizeSpacingInTree expands Padding/Margin shorthand into per-side fields
-// for the entire tree.
+// for the entire tree. Uses a visited set to prevent infinite recursion from
+// cycles in the node tree (which can occur after hot reload with stale modules).
 func normalizeSpacingInTree(node *Node) {
+	visited := make(map[*Node]bool)
+	normalizeSpacingWalk(node, visited)
+}
+
+func normalizeSpacingWalk(node *Node, visited map[*Node]bool) {
+	if node == nil || visited[node] {
+		return
+	}
+	visited[node] = true
 	normalizeSpacing(node)
 	for _, child := range node.Children {
-		normalizeSpacingInTree(child)
+		normalizeSpacingWalk(child, visited)
 	}
 }
 
@@ -275,10 +321,46 @@ func applyRelativeOffset(child *Node, cs Style) {
 	}
 }
 
+// laidOutFlowContentHeight returns the vertical span from node.Y to the lowest
+// bottom among flow (non-positioned) descendants after layout. computeFlex(..., huge H)
+// sets node.H to the probe height; scroll sizing must not use that as content height
+// or siblings stack at Y += 99999 and only the first panel is visible.
+func laidOutFlowContentHeight(node *Node) int {
+	if node == nil {
+		return 1
+	}
+	maxB := node.Y
+	var walk func(*Node)
+	walk = func(n *Node) {
+		if n == nil {
+			return
+		}
+		for _, c := range n.Children {
+			cs := c.Style
+			if isPositioned(cs) || cs.Display == "none" {
+				continue
+			}
+			if bb := c.Y + c.H; bb > maxB {
+				maxB = bb
+			}
+			walk(c)
+		}
+	}
+	walk(node)
+	h := maxB - node.Y
+	if h < 1 {
+		return 1
+	}
+	return h
+}
+
 // --- Core flexbox layout ---
 
 // computeFlex computes the layout for a Node tree using flexbox semantics.
-func computeFlex(node *Node, x, y, w, h int) {
+func computeFlex(node *Node, x, y, w, h int, depth int) {
+	if depth > maxLayoutDepth {
+		return // cycle detected — break infinite recursion
+	}
 	style := node.Style
 
 	// display:none — node takes no space, not rendered
@@ -373,7 +455,7 @@ func computeFlex(node *Node, x, y, w, h int) {
 	switch node.Type {
 	case "fragment":
 		// Fragment: transparent container
-		layoutVBox(node, x, y, w, h, style)
+		layoutVBox(node, x, y, w, h, style, depth)
 		return
 
 	case "component":
@@ -411,9 +493,9 @@ func computeFlex(node *Node, x, y, w, h int) {
 				if cs.Bottom >= 0 && cs.Top == 0 {
 					cy = parentY + parentH - ch - cs.Bottom
 				}
-				computeFlex(child, cx, cy, cw, ch)
+				computeFlex(child, cx, cy, cw, ch, depth+1)
 			} else {
-				computeFlex(child, x, y, w, h)
+				computeFlex(child, x, y, w, h, depth+1)
 			}
 		}
 		return
@@ -428,24 +510,24 @@ func computeFlex(node *Node, x, y, w, h int) {
 
 	case "vbox":
 		if style.Display == "grid" {
-			layoutGrid(node, contentX, contentY, layoutW, contentH, style)
+			layoutGrid(node, contentX, contentY, layoutW, contentH, style, depth)
 		} else {
-			layoutVBox(node, contentX, contentY, layoutW, contentH, style)
+			layoutVBox(node, contentX, contentY, layoutW, contentH, style, depth)
 		}
 
 	case "hbox":
 		if style.Display == "grid" {
-			layoutGrid(node, contentX, contentY, layoutW, contentH, style)
+			layoutGrid(node, contentX, contentY, layoutW, contentH, style, depth)
 		} else {
-			layoutHBox(node, contentX, contentY, layoutW, contentH, style)
+			layoutHBox(node, contentX, contentY, layoutW, contentH, style, depth)
 		}
 
 	default:
 		// Generic container (box, etc.) — stack children vertically like vbox
 		if style.Display == "grid" {
-			layoutGrid(node, contentX, contentY, layoutW, contentH, style)
+			layoutGrid(node, contentX, contentY, layoutW, contentH, style, depth)
 		} else {
-			layoutVBox(node, contentX, contentY, layoutW, contentH, style)
+			layoutVBox(node, contentX, contentY, layoutW, contentH, style, depth)
 		}
 	}
 
@@ -481,7 +563,7 @@ func computeFlex(node *Node, x, y, w, h int) {
 			child.Y = cy
 			child.W = cw
 			child.H = ch
-			computeFlex(child, cx, cy, cw, ch)
+			computeFlex(child, cx, cy, cw, ch, depth+1)
 
 		case "fixed":
 			cx := cs.Left
@@ -506,7 +588,7 @@ func computeFlex(node *Node, x, y, w, h int) {
 			child.Y = cy
 			child.W = cw
 			child.H = ch
-			computeFlex(child, cx, cy, cw, ch)
+			computeFlex(child, cx, cy, cw, ch, depth+1)
 		}
 	}
 }
@@ -551,18 +633,28 @@ func layoutText(node *Node, availW int) {
 }
 
 // layoutVBox lays out children in a vertical stack with flex distribution.
-func layoutVBox(node *Node, contentX, contentY, contentW, contentH int, style Style) {
+func layoutVBox(node *Node, contentX, contentY, contentW, contentH int, style Style, depth int) {
 	if len(node.Children) == 0 {
 		return
 	}
 
 	// flex-wrap: delegate to wrap layout
 	if style.FlexWrap == "wrap" || style.FlexWrap == "wrap-reverse" {
-		layoutVBoxWrap(node, contentX, contentY, contentW, contentH, style)
+		layoutVBoxWrap(node, contentX, contentY, contentW, contentH, style, depth)
 		return
 	}
 
 	isScroll := style.Overflow == "scroll"
+	// Scroll parents measure children with ~99999px height; nested non-scroll vboxes
+	// must not treat that as flex free space (else every flex child grows huge and
+	// stacked cards collapse visually to "first card only" with broken ScrollHeight).
+	intrinsicMeasure := !isScroll && contentH >= 99900
+	// Second pass: inner content vbox gets real (tall) height from scroll but must still
+	// stack children at natural heights — not flex-split that height across cards.
+	scrollContentStack := !isScroll && !intrinsicMeasure &&
+		node.Parent != nil && node.Parent.Style.Overflow == "scroll"
+
+	useNaturalHeights := isScroll || intrinsicMeasure || scrollContentStack
 
 	type childInfo struct {
 		style      Style
@@ -589,8 +681,9 @@ func layoutVBox(node *Node, contentX, contentY, contentW, contentH int, style St
 		totalGaps = style.Gap * (flowCount - 1)
 	}
 
-	if isScroll {
-		// Scroll container: children get natural heights, no flex distribution.
+	if useNaturalHeights {
+		// Scroll slot, intrinsic probe, or scrollable main's inner column: children get
+		// natural heights, no flex distribution.
 		// Children may overflow the container's contentH.
 		for i, child := range node.Children {
 			if children[i].positioned {
@@ -607,8 +700,6 @@ func layoutVBox(node *Node, contentX, contentY, contentW, contentH int, style St
 				children[i].finalH = fragH
 			} else if rh := resolveHeight(cs, contentH); rh > 0 {
 				children[i].finalH = clamp(rh, cs.MinHeight, cs.MaxHeight) + marginV
-			} else if cs.MinHeight > 0 {
-				children[i].finalH = cs.MinHeight + marginV
 			} else if child.Type == "component" && len(child.Children) > 0 {
 				// Component placeholder with no explicit height: use the grafted
 				// child's height if it has one. This lets defineComponent children
@@ -624,26 +715,29 @@ func layoutVBox(node *Node, contentX, contentY, contentW, contentH int, style St
 					children[i].finalH = graftedH + marginV
 				} else {
 					// Intrinsic height: measure by laying out with unlimited height.
-					computeFlex(child, contentX, contentY, contentW, 99999)
-					naturalH := child.H
-					if naturalH < 1 {
-						naturalH = 1
-					}
+					computeFlex(child, contentX, contentY, contentW, 99999, depth+1)
+					naturalH := laidOutFlowContentHeight(child)
 					children[i].finalH = naturalH + marginV
 				}
+				if mnh := resolveMinH(cs, contentH); mnh > 0 && children[i].finalH < mnh+marginV {
+					children[i].finalH = mnh + marginV
+				}
+			} else if len(child.Children) > 0 {
+				// Intrinsic height for vbox/box/hbox/etc. Min/max height floors/ceil the
+				// measured size — do not use minHeight alone or scroll content collapses
+				// to one panel when the inner column has minHeight + many children.
+				computeFlex(child, contentX, contentY, contentW, 99999, depth+1)
+				naturalH := laidOutFlowContentHeight(child)
+				children[i].finalH = naturalH + marginV
+				if mnh := resolveMinH(cs, contentH); mnh > 0 && children[i].finalH < mnh+marginV {
+					children[i].finalH = mnh + marginV
+				}
+			} else if cs.MinHeight > 0 {
+				children[i].finalH = cs.MinHeight + marginV
+			} else if mnh := resolveMinH(cs, contentH); mnh > 0 {
+				children[i].finalH = mnh + marginV
 			} else {
-				// Intrinsic height: if the child has sub-children, lay it out with
-				// unlimited height to measure its natural size. Otherwise default to 1.
-				if len(child.Children) > 0 {
-					computeFlex(child, contentX, contentY, contentW, 99999)
-					naturalH := child.H
-					if naturalH < 1 {
-						naturalH = 1
-					}
-					children[i].finalH = naturalH + marginV
-				} else {
-					children[i].finalH = 1 + marginV
-				}
+				children[i].finalH = 1 + marginV
 			}
 		}
 	} else {
@@ -769,10 +863,10 @@ func layoutVBox(node *Node, contentX, contentY, contentW, contentH int, style St
 	}
 	totalUsed += totalGaps
 
-	// Determine starting Y based on justify (skip for scroll containers)
+	// Determine starting Y based on justify (skip for scroll / intrinsic / scroll-content stack)
 	curY := contentY
 	gapSize := style.Gap
-	if !isScroll {
+	if !isScroll && !intrinsicMeasure && !scrollContentStack {
 		extraSpace := contentH - totalUsed
 		if extraSpace < 0 {
 			extraSpace = 0
@@ -855,7 +949,7 @@ func layoutVBox(node *Node, contentX, contentY, contentW, contentH int, style St
 			}
 		}
 
-		computeFlex(child, childX, curY, childW, childH)
+		computeFlex(child, childX, curY, childW, childH, depth+1)
 		applyRelativeOffset(child, children[i].style)
 		lastFlowChildNode = child
 		curY += childH
@@ -872,14 +966,14 @@ func layoutVBox(node *Node, contentX, contentY, contentW, contentH int, style St
 }
 
 // layoutHBox lays out children in a horizontal row with flex distribution.
-func layoutHBox(node *Node, contentX, contentY, contentW, contentH int, style Style) {
+func layoutHBox(node *Node, contentX, contentY, contentW, contentH int, style Style, depth int) {
 	if len(node.Children) == 0 {
 		return
 	}
 
 	// flex-wrap: delegate to wrap layout
 	if style.FlexWrap == "wrap" || style.FlexWrap == "wrap-reverse" {
-		layoutHBoxWrap(node, contentX, contentY, contentW, contentH, style)
+		layoutHBoxWrap(node, contentX, contentY, contentW, contentH, style, depth)
 		return
 	}
 
@@ -1124,7 +1218,7 @@ func layoutHBox(node *Node, contentX, contentY, contentW, contentH int, style St
 			childW = maxChildW
 		}
 
-		computeFlex(child, curX, childY, childW, childH)
+		computeFlex(child, curX, childY, childW, childH, depth+1)
 		applyRelativeOffset(child, children[i].style)
 		curX += childW
 		flowIdx++
@@ -1209,7 +1303,7 @@ func wrapHBoxItemDesiredWidth(child *Node, parentContentW int) int {
 
 // layoutHBoxWrap lays out children in a horizontal row with wrapping.
 // When children overflow the available width, they wrap to the next row.
-func layoutHBoxWrap(node *Node, contentX, contentY, contentW, contentH int, style Style) {
+func layoutHBoxWrap(node *Node, contentX, contentY, contentW, contentH int, style Style, depth int) {
 	type rowItem struct {
 		childIdx int
 		desiredW int
@@ -1323,7 +1417,7 @@ func layoutHBoxWrap(node *Node, contentX, contentY, contentW, contentH int, styl
 				childH = rh
 			}
 
-			computeFlex(child, curX, curY, childW, childH)
+			computeFlex(child, curX, curY, childW, childH, depth+1)
 			applyRelativeOffset(child, item.style)
 
 			if child.H > rowH {
@@ -1344,7 +1438,7 @@ func layoutHBoxWrap(node *Node, contentX, contentY, contentW, contentH int, styl
 
 // layoutVBoxWrap lays out children in a vertical column with wrapping.
 // When children overflow the available height, they wrap to the next column.
-func layoutVBoxWrap(node *Node, contentX, contentY, contentW, contentH int, style Style) {
+func layoutVBoxWrap(node *Node, contentX, contentY, contentW, contentH int, style Style, depth int) {
 	type colItem struct {
 		childIdx int
 		desiredH int
@@ -1466,7 +1560,7 @@ func layoutVBoxWrap(node *Node, contentX, contentY, contentW, contentH int, styl
 				childW = rw
 			}
 
-			computeFlex(child, curX, curY, childW, childH)
+			computeFlex(child, curX, curY, childW, childH, depth+1)
 			applyRelativeOffset(child, item.style)
 
 			if child.W > colW {
@@ -1579,7 +1673,7 @@ func parseGridSpan(s string) (int, int) {
 }
 
 // layoutGrid lays out children in a CSS Grid.
-func layoutGrid(node *Node, contentX, contentY, contentW, contentH int, style Style) {
+func layoutGrid(node *Node, contentX, contentY, contentW, contentH int, style Style, depth int) {
 	if len(node.Children) == 0 {
 		return
 	}
@@ -1896,7 +1990,7 @@ func layoutGrid(node *Node, contentX, contentY, contentW, contentH int, style St
 			cellH = 1
 		}
 
-		computeFlex(child, cellX, cellY, cellW, cellH)
+		computeFlex(child, cellX, cellY, cellW, cellH, depth+1)
 		applyRelativeOffset(child, child.Style)
 	}
 }

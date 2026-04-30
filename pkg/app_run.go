@@ -274,6 +274,10 @@ func (a *App) reloadScript(path string) {
 	// Re-set package.path for the reloaded script.
 	addScriptDirToPackagePath(a.luaState, path)
 
+	// Clear file-based modules from package.loaded so they get re-required.
+	// Embedded modules (lux.*, theme, lumina) are kept cached since they don't change.
+	clearFileModulesFromPackageLoaded(a.luaState)
+
 	// Reinstall require hook (full reload re-executes everything from scratch,
 	// so the previous hook wrapper is gone).
 	if a.watcher != nil {
@@ -389,4 +393,56 @@ func collectLuaFiles(dir string) []string {
 		return nil
 	})
 	return files
+}
+
+// clearFileModulesFromPackageLoaded removes entries from package.loaded that
+// correspond to file-based modules (not embedded). This forces require() to
+// re-execute them during reload, getting fresh component factories instead of
+// returning stale cached objects that can cause cycles in the component tree.
+func clearFileModulesFromPackageLoaded(L *lua.State) {
+	top := L.GetTop()
+	defer L.SetTop(top)
+
+	L.GetGlobal("package")
+	if L.IsNil(-1) {
+		return
+	}
+	L.GetField(-1, "loaded")
+	if L.IsNil(-1) {
+		return
+	}
+	loadedIdx := L.AbsIndex(-1)
+
+	// Collect keys to remove (can't modify table during iteration).
+	var toRemove []string
+	L.PushNil()
+	for L.Next(loadedIdx) {
+		key, ok := L.ToString(-2)
+		if ok && key != "" {
+			// Keep embedded modules
+			if !isEmbeddedModule(key) {
+				toRemove = append(toRemove, key)
+			}
+		}
+		L.Pop(1) // pop value, keep key for next iteration
+	}
+
+	// Remove file-based modules.
+	for _, key := range toRemove {
+		L.PushNil()
+		L.SetField(loadedIdx, key)
+	}
+}
+
+// isEmbeddedModule returns true for modules that are embedded (preloaded from Go)
+// and should NOT be cleared during hot reload.
+func isEmbeddedModule(name string) bool {
+	// Keep: lumina, lux, lux.*, theme
+	if name == "lumina" || name == "theme" {
+		return true
+	}
+	if strings.HasPrefix(name, "lux") {
+		return true
+	}
+	return false
 }

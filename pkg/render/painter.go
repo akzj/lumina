@@ -406,6 +406,12 @@ func findRepaintParent(node *Node) *Node {
 	return nil
 }
 
+// paintDepth tracks recursion depth in paintNode to prevent stack overflow
+// from cycles in the node tree (e.g., after a hot reload).
+var paintDepth int
+
+const maxPaintDepth = 500
+
 func paintNode(buf *CellBuffer, node *Node) {
 	if node == nil || node.W <= 0 || node.H <= 0 {
 		return
@@ -413,6 +419,12 @@ func paintNode(buf *CellBuffer, node *Node) {
 	if node.Style.Display == "none" || node.Style.Visibility == "hidden" {
 		return
 	}
+	paintDepth++
+	if paintDepth > maxPaintDepth {
+		paintDepth--
+		return
+	}
+	defer func() { paintDepth-- }()
 
 	switch node.Type {
 	case "text":

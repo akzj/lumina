@@ -1845,22 +1845,28 @@ func (e *Engine) graftChildComponents() {
 	if e.root == nil || e.root.RootNode == nil {
 		return
 	}
-	e.graftWalk(e.root.RootNode)
+	visited := make(map[*Node]bool)
+	e.graftWalk(e.root.RootNode, visited)
 }
 
 // graftWalk recursively finds component placeholder nodes and grafts the
 // child component's RootNode as the placeholder's child.
 // Only marks dirty when the graft actually changes (new or different RootNode).
-func (e *Engine) graftWalk(node *Node) {
+// Uses a visited set to prevent infinite recursion from cycles.
+func (e *Engine) graftWalk(node *Node, visited map[*Node]bool) {
 	if node == nil {
 		return
 	}
+	if visited[node] {
+		return // cycle detected — break infinite recursion
+	}
+	visited[node] = true
 
 	// Handle the case where node itself is a component placeholder
 	// (happens when root render returns a defineComponent directly)
 	if node.Type == "component" && node.Component != nil {
 		comp := node.Component
-		if comp.RootNode != nil {
+		if comp.RootNode != nil && comp.RootNode != node {
 			alreadyGrafted := len(node.Children) == 1 && node.Children[0] == comp.RootNode
 			if !alreadyGrafted {
 				node.Children = []*Node{comp.RootNode}
@@ -1877,7 +1883,7 @@ func (e *Engine) graftWalk(node *Node) {
 	for _, child := range node.Children {
 		if child.Type == "component" && child.Component != nil {
 			comp := child.Component
-			if comp.RootNode != nil {
+			if comp.RootNode != nil && comp.RootNode != child {
 				// Only mark dirty if the grafted child actually changed
 				alreadyGrafted := len(child.Children) == 1 && child.Children[0] == comp.RootNode
 				if !alreadyGrafted {
@@ -1893,7 +1899,7 @@ func (e *Engine) graftWalk(node *Node) {
 			}
 		}
 		// Always recurse (component children may contain nested components)
-		e.graftWalk(child)
+		e.graftWalk(child, visited)
 	}
 }
 
