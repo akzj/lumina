@@ -401,6 +401,10 @@ func (e *Engine) HandleKeyDown(key string) {
 		e.FocusNext()
 		return
 	}
+	if key == "Shift+Tab" {
+		e.FocusPrev()
+		return
+	}
 
 	// If an input/textarea is focused, try input handling first
 	if e.focusedNode != nil {
