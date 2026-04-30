@@ -1243,6 +1243,30 @@ func TestLayoutHBoxWrap_BorderedButtonNotClampedToWidth1(t *testing.T) {
 	}
 }
 
+func TestLayoutHBoxNowrap_GrowsWhenGraftedChildTallerThanSlot(t *testing.T) {
+	// Non-wrap hbox (e.g. Lux SplitButton): row may pass a short cross-axis h while
+	// grafted inner hbox uses style.Height=3. Outer hbox must grow so border + fill
+	// are not shorter than text backgrounds.
+	inner := makeNode("hbox", Style{Height: 3, Width: 14, Border: "rounded"},
+		makeTextStyled("Action", Style{Height: 3, Flex: 1, PaddingLeft: 1}),
+		makeTextStyled("▼", Style{Height: 3, Width: 3}),
+	)
+	comp := makeNode("component", ds(), inner)
+	root := makeNode("hbox", ds(), comp)
+	setParentsRecursive(root)
+	layoutViewportW = 50
+	layoutViewportH = 24
+	normalizeSpacingInTree(root)
+	computeFlex(root, 0, 0, 50, 1, 0)
+
+	if inner.H < 3 {
+		t.Fatalf("inner split hbox H=%d, want >= 3", inner.H)
+	}
+	if comp.H < 3 {
+		t.Fatalf("component placeholder H=%d, want >= 3", comp.H)
+	}
+}
+
 func TestComponentPlaceholderSyncsSizeToGraftedRoot(t *testing.T) {
 	// Flex-wrap can pass a tiny cross-axis h (e.g. 1) into computeFlex for the row;
 	// LuxButton still lays out its grafted hbox at style.Height=3. The placeholder
