@@ -205,7 +205,7 @@ func (e *Engine) readDescriptor(L *lua.State, idx int) Descriptor {
 	}
 	L.Pop(1)
 
-	// Also read top-level style fields (they override if style sub-table didn't set them)
+	// Also read top-level style fields (they override the style sub-table)
 	e.readStyleFields(L, absIdx, &desc.Style)
 
 	// Read event handlers (store as Lua refs)
@@ -388,237 +388,224 @@ func (e *Engine) readStyle(L *lua.State, idx int) Style {
 	return s
 }
 
-// readStyleFields reads style fields from the top-level table (not a nested "style" sub-table).
-// Only sets fields that are still at their zero/default value.
+// readStyleFields reads style fields from the top-level element table.
+// Top-level fields override the style sub-table (more specific wins).
+// Only writes when the field is explicitly present in the Lua table.
 func (e *Engine) readStyleFields(L *lua.State, idx int, s *Style) {
 	absIdx := L.AbsIndex(idx)
 
-	if s.Width == 0 {
-		s.Width = int(getIntField(L, absIdx, "width"))
-	}
-	if s.Height == 0 {
-		s.Height = int(getIntField(L, absIdx, "height"))
-	}
-	// Parse percentage/viewport strings for width/height if still unset
-	if s.Width == 0 && s.WidthPercent == 0 && s.WidthVW == 0 {
-		if str := getStringField(L, absIdx, "width"); str != "" {
-			if pct, ok := parsePercent(str); ok {
-				s.WidthPercent = pct
-			} else if v, unit, ok := parseViewport(str); ok && unit == "vw" {
-				s.WidthVW = v
+	// Width/Height: check for int first, then string (percentage/viewport)
+	if n, ok := getIntFieldIfPresent(L, absIdx, "width"); ok {
+		if n != 0 {
+			s.Width = int(n)
+			s.WidthPercent = 0
+			s.WidthVW = 0
+		} else {
+			// Explicit width=0 could be a string value
+			if str, sok := getStringFieldIfPresent(L, absIdx, "width"); sok && str != "" {
+				if pct, pok := parsePercent(str); pok {
+					s.WidthPercent = pct
+					s.Width = 0
+				} else if v, unit, vok := parseViewport(str); vok && unit == "vw" {
+					s.WidthVW = v
+					s.Width = 0
+				}
 			}
 		}
 	}
-	if s.Height == 0 && s.HeightPercent == 0 && s.HeightVH == 0 {
-		if str := getStringField(L, absIdx, "height"); str != "" {
-			if pct, ok := parsePercent(str); ok {
-				s.HeightPercent = pct
-			} else if v, unit, ok := parseViewport(str); ok && unit == "vh" {
-				s.HeightVH = v
+	if n, ok := getIntFieldIfPresent(L, absIdx, "height"); ok {
+		if n != 0 {
+			s.Height = int(n)
+			s.HeightPercent = 0
+			s.HeightVH = 0
+		} else {
+			if str, sok := getStringFieldIfPresent(L, absIdx, "height"); sok && str != "" {
+				if pct, pok := parsePercent(str); pok {
+					s.HeightPercent = pct
+					s.Height = 0
+				} else if v, unit, vok := parseViewport(str); vok && unit == "vh" {
+					s.HeightVH = v
+					s.Height = 0
+				}
 			}
 		}
 	}
-	if s.MinWidth == 0 {
-		s.MinWidth = int(getIntField(L, absIdx, "minWidth"))
+	if n, ok := getIntFieldIfPresent(L, absIdx, "minWidth"); ok {
+		s.MinWidth = int(n)
 	}
-	if s.MinHeight == 0 {
-		s.MinHeight = int(getIntField(L, absIdx, "minHeight"))
+	if n, ok := getIntFieldIfPresent(L, absIdx, "minHeight"); ok {
+		s.MinHeight = int(n)
 	}
-	if s.MaxWidth == 0 {
-		s.MaxWidth = int(getIntField(L, absIdx, "maxWidth"))
+	if n, ok := getIntFieldIfPresent(L, absIdx, "maxWidth"); ok {
+		s.MaxWidth = int(n)
 	}
-	if s.MaxHeight == 0 {
-		s.MaxHeight = int(getIntField(L, absIdx, "maxHeight"))
+	if n, ok := getIntFieldIfPresent(L, absIdx, "maxHeight"); ok {
+		s.MaxHeight = int(n)
 	}
-	// Parse percentage strings for min/max
-	if s.MinWidth == 0 && s.MinWidthPercent == 0 {
-		if str := getStringField(L, absIdx, "minWidth"); str != "" {
-			if pct, ok := parsePercent(str); ok {
-				s.MinWidthPercent = pct
-			}
-		}
+	if n, ok := getIntFieldIfPresent(L, absIdx, "flex"); ok {
+		s.Flex = int(n)
 	}
-	if s.MaxWidth == 0 && s.MaxWidthPercent == 0 {
-		if str := getStringField(L, absIdx, "maxWidth"); str != "" {
-			if pct, ok := parsePercent(str); ok {
-				s.MaxWidthPercent = pct
-			}
-		}
+	if n, ok := getIntFieldIfPresent(L, absIdx, "flexShrink"); ok {
+		s.FlexShrink = int(n)
 	}
-	if s.MinHeight == 0 && s.MinHeightPercent == 0 {
-		if str := getStringField(L, absIdx, "minHeight"); str != "" {
-			if pct, ok := parsePercent(str); ok {
-				s.MinHeightPercent = pct
-			}
-		}
+	if n, ok := getIntFieldIfPresent(L, absIdx, "flexBasis"); ok {
+		s.FlexBasis = int(n)
 	}
-	if s.MaxHeight == 0 && s.MaxHeightPercent == 0 {
-		if str := getStringField(L, absIdx, "maxHeight"); str != "" {
-			if pct, ok := parsePercent(str); ok {
-				s.MaxHeightPercent = pct
-			}
-		}
+	if n, ok := getIntFieldIfPresent(L, absIdx, "gap"); ok {
+		s.Gap = int(n)
 	}
-	if s.Flex == 0 {
-		s.Flex = int(getIntField(L, absIdx, "flex"))
+	if n, ok := getIntFieldIfPresent(L, absIdx, "padding"); ok {
+		s.Padding = int(n)
 	}
-	if s.FlexShrink == 0 {
-		s.FlexShrink = int(getIntField(L, absIdx, "flexShrink"))
+	if n, ok := getIntFieldIfPresent(L, absIdx, "paddingTop"); ok {
+		s.PaddingTop = int(n)
 	}
-	if s.FlexBasis == 0 {
-		s.FlexBasis = int(getIntField(L, absIdx, "flexBasis"))
+	if n, ok := getIntFieldIfPresent(L, absIdx, "paddingRight"); ok {
+		s.PaddingRight = int(n)
 	}
-	if s.Gap == 0 {
-		s.Gap = int(getIntField(L, absIdx, "gap"))
+	if n, ok := getIntFieldIfPresent(L, absIdx, "paddingBottom"); ok {
+		s.PaddingBottom = int(n)
 	}
-	if s.Padding == 0 {
-		s.Padding = int(getIntField(L, absIdx, "padding"))
+	if n, ok := getIntFieldIfPresent(L, absIdx, "paddingLeft"); ok {
+		s.PaddingLeft = int(n)
 	}
-	if s.PaddingTop == 0 {
-		s.PaddingTop = int(getIntField(L, absIdx, "paddingTop"))
+	if n, ok := getIntFieldIfPresent(L, absIdx, "margin"); ok {
+		s.Margin = int(n)
 	}
-	if s.PaddingRight == 0 {
-		s.PaddingRight = int(getIntField(L, absIdx, "paddingRight"))
+	if n, ok := getIntFieldIfPresent(L, absIdx, "marginTop"); ok {
+		s.MarginTop = int(n)
 	}
-	if s.PaddingBottom == 0 {
-		s.PaddingBottom = int(getIntField(L, absIdx, "paddingBottom"))
+	if n, ok := getIntFieldIfPresent(L, absIdx, "marginRight"); ok {
+		s.MarginRight = int(n)
 	}
-	if s.PaddingLeft == 0 {
-		s.PaddingLeft = int(getIntField(L, absIdx, "paddingLeft"))
+	if n, ok := getIntFieldIfPresent(L, absIdx, "marginBottom"); ok {
+		s.MarginBottom = int(n)
 	}
-	if s.Margin == 0 {
-		s.Margin = int(getIntField(L, absIdx, "margin"))
+	if n, ok := getIntFieldIfPresent(L, absIdx, "marginLeft"); ok {
+		s.MarginLeft = int(n)
 	}
-	if s.MarginTop == 0 {
-		s.MarginTop = int(getIntField(L, absIdx, "marginTop"))
-	}
-	if s.MarginRight == 0 {
-		s.MarginRight = int(getIntField(L, absIdx, "marginRight"))
-	}
-	if s.MarginBottom == 0 {
-		s.MarginBottom = int(getIntField(L, absIdx, "marginBottom"))
-	}
-	if s.MarginLeft == 0 {
-		s.MarginLeft = int(getIntField(L, absIdx, "marginLeft"))
+	if str, ok := getStringFieldIfPresent(L, absIdx, "foreground"); ok {
+		s.Foreground = str
 	}
 	if s.Foreground == "" {
-		s.Foreground = getStringField(L, absIdx, "foreground")
-		if s.Foreground == "" {
-			s.Foreground = getStringField(L, absIdx, "fg")
+		if str, ok := getStringFieldIfPresent(L, absIdx, "fg"); ok {
+			s.Foreground = str
 		}
+	}
+	if str, ok := getStringFieldIfPresent(L, absIdx, "background"); ok {
+		s.Background = str
 	}
 	if s.Background == "" {
-		s.Background = getStringField(L, absIdx, "background")
-		if s.Background == "" {
-			s.Background = getStringField(L, absIdx, "bg")
+		if str, ok := getStringFieldIfPresent(L, absIdx, "bg"); ok {
+			s.Background = str
 		}
 	}
-	if s.Border == "" {
-		s.Border = getStringField(L, absIdx, "border")
+	if str, ok := getStringFieldIfPresent(L, absIdx, "border"); ok {
+		s.Border = str
 	}
-	if s.Justify == "" {
-		s.Justify = getStringField(L, absIdx, "justify")
+	if str, ok := getStringFieldIfPresent(L, absIdx, "justify"); ok {
+		s.Justify = str
 	}
-	if s.Align == "" {
-		s.Align = getStringField(L, absIdx, "align")
+	if str, ok := getStringFieldIfPresent(L, absIdx, "align"); ok {
+		s.Align = str
 	}
-	if s.AlignSelf == "" {
-		s.AlignSelf = getStringField(L, absIdx, "alignSelf")
+	if str, ok := getStringFieldIfPresent(L, absIdx, "alignSelf"); ok {
+		s.AlignSelf = str
 	}
-	if s.Order == 0 {
-		s.Order = int(getIntField(L, absIdx, "order"))
+	if n, ok := getIntFieldIfPresent(L, absIdx, "order"); ok {
+		s.Order = int(n)
 	}
-	if s.Overflow == "" {
-		s.Overflow = getStringField(L, absIdx, "overflow")
+	if str, ok := getStringFieldIfPresent(L, absIdx, "overflow"); ok {
+		s.Overflow = str
 	}
-	if s.Position == "" {
-		s.Position = getStringField(L, absIdx, "position")
+	if str, ok := getStringFieldIfPresent(L, absIdx, "position"); ok {
+		s.Position = str
 	}
-	if !s.Bold {
-		s.Bold = getBoolField(L, absIdx, "bold")
+	if b, ok := getBoolFieldIfPresent(L, absIdx, "bold"); ok {
+		s.Bold = b
 	}
-	if !s.Dim {
-		s.Dim = getBoolField(L, absIdx, "dim")
+	if b, ok := getBoolFieldIfPresent(L, absIdx, "dim"); ok {
+		s.Dim = b
 	}
-	if !s.Underline {
-		s.Underline = getBoolField(L, absIdx, "underline")
+	if b, ok := getBoolFieldIfPresent(L, absIdx, "underline"); ok {
+		s.Underline = b
 	}
-	if !s.Italic {
-		s.Italic = getBoolField(L, absIdx, "italic")
+	if b, ok := getBoolFieldIfPresent(L, absIdx, "italic"); ok {
+		s.Italic = b
 	}
-	if !s.Strikethrough {
-		s.Strikethrough = getBoolField(L, absIdx, "strikethrough")
+	if b, ok := getBoolFieldIfPresent(L, absIdx, "strikethrough"); ok {
+		s.Strikethrough = b
 	}
-	if !s.Inverse {
-		s.Inverse = getBoolField(L, absIdx, "inverse")
+	if b, ok := getBoolFieldIfPresent(L, absIdx, "inverse"); ok {
+		s.Inverse = b
 	}
-	if s.Top == 0 {
-		s.Top = int(getIntField(L, absIdx, "top"))
+	if n, ok := getIntFieldIfPresent(L, absIdx, "top"); ok {
+		s.Top = int(n)
 	}
-	if s.Left == 0 {
-		s.Left = int(getIntField(L, absIdx, "left"))
+	if n, ok := getIntFieldIfPresent(L, absIdx, "left"); ok {
+		s.Left = int(n)
 	}
-	if s.Right == -1 {
-		s.Right = int(getIntFieldDefault(L, absIdx, "right", -1))
+	if n, ok := getIntFieldIfPresent(L, absIdx, "right"); ok {
+		s.Right = int(n)
 	}
-	if s.Bottom == -1 {
-		s.Bottom = int(getIntFieldDefault(L, absIdx, "bottom", -1))
+	if n, ok := getIntFieldIfPresent(L, absIdx, "bottom"); ok {
+		s.Bottom = int(n)
 	}
-	if s.ZIndex == 0 {
-		s.ZIndex = int(getIntField(L, absIdx, "zIndex"))
+	if n, ok := getIntFieldIfPresent(L, absIdx, "zIndex"); ok {
+		s.ZIndex = int(n)
 	}
-	if s.TextAlign == "" {
-		s.TextAlign = getStringField(L, absIdx, "textAlign")
+	if str, ok := getStringFieldIfPresent(L, absIdx, "textAlign"); ok {
+		s.TextAlign = str
 	}
-	if s.TextOverflow == "" {
-		s.TextOverflow = getStringField(L, absIdx, "textOverflow")
+	if str, ok := getStringFieldIfPresent(L, absIdx, "textOverflow"); ok {
+		s.TextOverflow = str
 	}
-	if s.WhiteSpace == "" {
-		s.WhiteSpace = getStringField(L, absIdx, "whiteSpace")
+	if str, ok := getStringFieldIfPresent(L, absIdx, "whiteSpace"); ok {
+		s.WhiteSpace = str
 	}
-	if s.Display == "" {
-		s.Display = getStringField(L, absIdx, "display")
+	if str, ok := getStringFieldIfPresent(L, absIdx, "display"); ok {
+		s.Display = str
 	}
-	if s.Visibility == "" {
-		s.Visibility = getStringField(L, absIdx, "visibility")
+	if str, ok := getStringFieldIfPresent(L, absIdx, "visibility"); ok {
+		s.Visibility = str
 	}
-	if s.BorderColor == "" {
-		s.BorderColor = getStringField(L, absIdx, "borderColor")
+	if str, ok := getStringFieldIfPresent(L, absIdx, "borderColor"); ok {
+		s.BorderColor = str
 	}
-	if s.FlexWrap == "" {
-		s.FlexWrap = getStringField(L, absIdx, "flexWrap")
+	if str, ok := getStringFieldIfPresent(L, absIdx, "flexWrap"); ok {
+		s.FlexWrap = str
 	}
 	// Grid container properties
-	if s.GridTemplateColumns == "" {
-		s.GridTemplateColumns = getStringField(L, absIdx, "gridTemplateColumns")
+	if str, ok := getStringFieldIfPresent(L, absIdx, "gridTemplateColumns"); ok {
+		s.GridTemplateColumns = str
 	}
-	if s.GridTemplateRows == "" {
-		s.GridTemplateRows = getStringField(L, absIdx, "gridTemplateRows")
+	if str, ok := getStringFieldIfPresent(L, absIdx, "gridTemplateRows"); ok {
+		s.GridTemplateRows = str
 	}
-	if s.GridColumnGap == 0 {
-		s.GridColumnGap = int(getIntField(L, absIdx, "gridColumnGap"))
+	if n, ok := getIntFieldIfPresent(L, absIdx, "gridColumnGap"); ok {
+		s.GridColumnGap = int(n)
 	}
-	if s.GridRowGap == 0 {
-		s.GridRowGap = int(getIntField(L, absIdx, "gridRowGap"))
+	if n, ok := getIntFieldIfPresent(L, absIdx, "gridRowGap"); ok {
+		s.GridRowGap = int(n)
 	}
 	// Grid item properties
-	if s.GridColumn == "" {
-		s.GridColumn = getStringField(L, absIdx, "gridColumn")
+	if str, ok := getStringFieldIfPresent(L, absIdx, "gridColumn"); ok {
+		s.GridColumn = str
 	}
-	if s.GridRow == "" {
-		s.GridRow = getStringField(L, absIdx, "gridRow")
+	if str, ok := getStringFieldIfPresent(L, absIdx, "gridRow"); ok {
+		s.GridRow = str
 	}
-	if s.GridColumnStart == 0 {
-		s.GridColumnStart = int(getIntField(L, absIdx, "gridColumnStart"))
+	if n, ok := getIntFieldIfPresent(L, absIdx, "gridColumnStart"); ok {
+		s.GridColumnStart = int(n)
 	}
-	if s.GridColumnEnd == 0 {
-		s.GridColumnEnd = int(getIntField(L, absIdx, "gridColumnEnd"))
+	if n, ok := getIntFieldIfPresent(L, absIdx, "gridColumnEnd"); ok {
+		s.GridColumnEnd = int(n)
 	}
-	if s.GridRowStart == 0 {
-		s.GridRowStart = int(getIntField(L, absIdx, "gridRowStart"))
+	if n, ok := getIntFieldIfPresent(L, absIdx, "gridRowStart"); ok {
+		s.GridRowStart = int(n)
 	}
-	if s.GridRowEnd == 0 {
-		s.GridRowEnd = int(getIntField(L, absIdx, "gridRowEnd"))
+	if n, ok := getIntFieldIfPresent(L, absIdx, "gridRowEnd"); ok {
+		s.GridRowEnd = int(n)
 	}
 }
 
@@ -744,6 +731,45 @@ func getIntFieldDefault(L *lua.State, idx int, field string, def int64) int64 {
 
 func getBoolField(L *lua.State, idx int, field string) bool {
 	return L.GetFieldBool(idx, field)
+}
+
+// getIntFieldIfPresent reads an int field only if it exists (not nil) in the table.
+// Returns the value and true if present, or 0 and false if absent.
+func getIntFieldIfPresent(L *lua.State, idx int, field string) (int64, bool) {
+	L.GetField(idx, field)
+	if L.IsNoneOrNil(-1) {
+		L.Pop(1)
+		return 0, false
+	}
+	n, _ := L.ToInteger(-1)
+	L.Pop(1)
+	return n, true
+}
+
+// getStringFieldIfPresent reads a string field only if it exists (not nil) in the table.
+// Returns the value and true if present, or "" and false if absent.
+func getStringFieldIfPresent(L *lua.State, idx int, field string) (string, bool) {
+	L.GetField(idx, field)
+	if L.IsNoneOrNil(-1) {
+		L.Pop(1)
+		return "", false
+	}
+	s, _ := L.ToString(-1)
+	L.Pop(1)
+	return s, true
+}
+
+// getBoolFieldIfPresent reads a bool field only if it exists (not nil) in the table.
+// Returns the value and true if present, or false and false if absent.
+func getBoolFieldIfPresent(L *lua.State, idx int, field string) (bool, bool) {
+	L.GetField(idx, field)
+	if L.IsNoneOrNil(-1) {
+		L.Pop(1)
+		return false, false
+	}
+	b := L.ToBoolean(-1)
+	L.Pop(1)
+	return b, true
 }
 
 func getRefField(L *lua.State, idx int, field string) int64 {
