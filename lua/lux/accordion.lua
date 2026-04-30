@@ -58,7 +58,10 @@ local Accordion = lumina.defineComponent("Accordion", function(props)
                 if n < 1 then n = #items end
                 if not items[n].disabled then break end
             end
-            if props.onSelectedChange then props.onSelectedChange(n) end
+            -- Only change selection if we found a non-disabled item
+            if not items[n].disabled then
+                if props.onSelectedChange then props.onSelectedChange(n) end
+            end
         elseif e.key == "ArrowDown" or e.key == "Down" or e.key == "j" then
             local n = selectedIdx
             for i = 1, #items do
@@ -66,7 +69,10 @@ local Accordion = lumina.defineComponent("Accordion", function(props)
                 if n > #items then n = 1 end
                 if not items[n].disabled then break end
             end
-            if props.onSelectedChange then props.onSelectedChange(n) end
+            -- Only change selection if we found a non-disabled item
+            if not items[n].disabled then
+                if props.onSelectedChange then props.onSelectedChange(n) end
+            end
         elseif e.key == "Enter" or e.key == " " then
             local item = items[selectedIdx]
             if item and not item.disabled then
