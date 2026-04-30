@@ -412,6 +412,9 @@ var paintDepth int
 
 const maxPaintDepth = 500
 
+// unboundedClip is used as a "no clip" sentinel in clipped paint functions.
+const unboundedClip = 1 << 30
+
 func paintNode(buf *CellBuffer, node *Node) {
 	if node == nil || node.W <= 0 || node.H <= 0 {
 		return
@@ -473,19 +476,20 @@ func paintBox(buf *CellBuffer, node *Node) {
 // paintHiddenChildren paints overflow:hidden children clipped to the content area.
 // Delegates to paintHiddenChildrenClipped with unbounded outer clip.
 func paintHiddenChildren(buf *CellBuffer, node *Node) {
-	paintHiddenChildrenClipped(buf, node, 0, 0, 1<<30, 1<<30)
+	paintHiddenChildrenClipped(buf, node, 0, 0, unboundedClip, unboundedClip, 0)
 }
 
 // paintScrollChildren paints children with a scroll offset, clipping to the content area.
 // Delegates to paintScrollChildrenClipped with unbounded outer clip.
 func paintScrollChildren(buf *CellBuffer, node *Node) {
-	paintScrollChildrenClipped(buf, node, 0, 0, 1<<30, 1<<30)
+	paintScrollChildrenClipped(buf, node, 0, 0, unboundedClip, unboundedClip, 0)
 }
 
 // paintScrollChildrenClipped paints scroll container children with both the
 // inner scroll offset AND an outer clip rect (from a parent scroll container).
 // The effective clip is the intersection of the outer clip and the inner content area.
-func paintScrollChildrenClipped(buf *CellBuffer, node *Node, outerClipX1, outerClipY1, outerClipX2, outerClipY2 int) {
+// parentOffsetY is the cumulative paint offset from ancestor scroll containers.
+func paintScrollChildrenClipped(buf *CellBuffer, node *Node, outerClipX1, outerClipY1, outerClipX2, outerClipY2, parentOffsetY int) {
 	// Clamp scrollY to valid range
 	maxScroll := computeMaxScrollY(node)
 	if node.ScrollY > maxScroll {
@@ -497,19 +501,19 @@ func paintScrollChildrenClipped(buf *CellBuffer, node *Node, outerClipX1, outerC
 
 	scrollY := node.ScrollY
 
-	// Shift children by scroll offset
-	shiftNodeTreeY(node, -scrollY)
-	defer shiftNodeTreeY(node, scrollY)
+	// Combine parent offset with this container's scroll offset for children
+	childOffsetY := parentOffsetY - scrollY
 
-	// Inner clip: content area inside border + padding
+	// Inner clip: content area inside border + padding (using screen coordinates)
+	screenY := node.Y + parentOffsetY
 	bw := 0
 	if node.Style.Border != "" && node.Style.Border != "none" {
 		bw = 1
 	}
 	innerX1 := node.X + bw + node.Style.PaddingLeft
-	innerY1 := node.Y + bw + node.Style.PaddingTop
+	innerY1 := screenY + bw + node.Style.PaddingTop
 	innerX2 := node.X + node.W - bw - node.Style.PaddingRight
-	innerY2 := node.Y + node.H - bw - node.Style.PaddingBottom
+	innerY2 := screenY + node.H - bw - node.Style.PaddingBottom
 
 	// Effective clip = intersection of outer and inner
 	clipX1 := max(outerClipX1, innerX1)
@@ -522,7 +526,7 @@ func paintScrollChildrenClipped(buf *CellBuffer, node *Node, outerClipX1, outerC
 	}
 
 	for _, child := range paintOrderChildren(node.Children) {
-		paintNodeClipped(buf, child, clipX1, clipY1, clipX2, clipY2)
+		paintNodeClipped(buf, child, clipX1, clipY1, clipX2, clipY2, childOffsetY)
 	}
 
 	// Paint scrollbar in the reserved right column (use inner clip for position)
@@ -532,15 +536,16 @@ func paintScrollChildrenClipped(buf *CellBuffer, node *Node, outerClipX1, outerC
 // paintHiddenChildrenClipped paints overflow:hidden children with both the
 // inner content clip AND an outer clip rect (from a parent clipped container).
 // The effective clip is the intersection of the outer clip and the inner content area.
-func paintHiddenChildrenClipped(buf *CellBuffer, node *Node, outerClipX1, outerClipY1, outerClipX2, outerClipY2 int) {
+func paintHiddenChildrenClipped(buf *CellBuffer, node *Node, outerClipX1, outerClipY1, outerClipX2, outerClipY2, offsetY int) {
+	screenY := node.Y + offsetY
 	bw := 0
 	if node.Style.Border != "" && node.Style.Border != "none" {
 		bw = 1
 	}
 	innerX1 := node.X + bw + node.Style.PaddingLeft
-	innerY1 := node.Y + bw + node.Style.PaddingTop
+	innerY1 := screenY + bw + node.Style.PaddingTop
 	innerX2 := node.X + node.W - bw - node.Style.PaddingRight
-	innerY2 := node.Y + node.H - bw - node.Style.PaddingBottom
+	innerY2 := screenY + node.H - bw - node.Style.PaddingBottom
 
 	// Effective clip = intersection of outer and inner
 	clipX1 := max(outerClipX1, innerX1)
@@ -553,13 +558,10 @@ func paintHiddenChildrenClipped(buf *CellBuffer, node *Node, outerClipX1, outerC
 	}
 
 	for _, child := range paintOrderChildren(node.Children) {
-		paintNodeClipped(buf, child, clipX1, clipY1, clipX2, clipY2)
+		paintNodeClipped(buf, child, clipX1, clipY1, clipX2, clipY2, offsetY)
 	}
 }
 
-// shiftNodeTreeY shifts all children (recursively) of a node by dy.
-// Does NOT shift the node itself (only its children).
-//
 // paintScrollbar draws a vertical scrollbar in the reserved right column of a scroll container.
 // scrollbarX is the x-coordinate of the scrollbar column.
 // clipY1/clipY2 define the vertical extent of the content area.
@@ -617,26 +619,12 @@ func paintScrollbar(buf *CellBuffer, node *Node, scrollbarX, clipY1, clipY2, max
 	}
 }
 
-// SAFETY: This temporarily mutates node Y positions for scroll painting.
-// This is only safe because the engine is single-threaded. If concurrent
-// access is ever added, this must be replaced with a paint-time offset
-// parameter instead of mutating the tree.
-func shiftNodeTreeY(node *Node, dy int) {
-	for _, child := range node.Children {
-		shiftNodeY(child, dy)
-	}
-}
 
-// shiftNodeY shifts a node and all its descendants by dy.
-func shiftNodeY(node *Node, dy int) {
-	node.Y += dy
-	for _, child := range node.Children {
-		shiftNodeY(child, dy)
-	}
-}
 
 // paintNodeClipped paints a node, but only writes cells within the clip rect [clipX1, clipY1) to [clipX2, clipY2).
-func paintNodeClipped(buf *CellBuffer, node *Node, clipX1, clipY1, clipX2, clipY2 int) {
+// offsetY is a paint-time vertical offset (used for scroll containers: -scrollY).
+// The node's tree positions are NOT mutated; the offset is applied during painting only.
+func paintNodeClipped(buf *CellBuffer, node *Node, clipX1, clipY1, clipX2, clipY2, offsetY int) {
 	if node == nil || node.W <= 0 || node.H <= 0 {
 		return
 	}
@@ -650,29 +638,31 @@ func paintNodeClipped(buf *CellBuffer, node *Node, clipX1, clipY1, clipX2, clipY
 		return
 	}
 	defer func() { paintDepth-- }()
-	// Skip entirely if the node is outside the clip rect
-	if node.Y >= clipY2 || node.Y+node.H <= clipY1 || node.X >= clipX2 || node.X+node.W <= clipX1 {
+	// Skip entirely if the node is outside the clip rect (with offset applied)
+	screenY := node.Y + offsetY
+	if screenY >= clipY2 || screenY+node.H <= clipY1 || node.X >= clipX2 || node.X+node.W <= clipX1 {
 		return
 	}
 
 	switch node.Type {
 	case "text":
-		paintTextClipped(buf, node, clipX1, clipY1, clipX2, clipY2)
+		paintTextClipped(buf, node, clipX1, clipY1, clipX2, clipY2, offsetY)
 	case "box", "vbox", "hbox":
-		paintBoxClipped(buf, node, clipX1, clipY1, clipX2, clipY2)
+		paintBoxClipped(buf, node, clipX1, clipY1, clipX2, clipY2, offsetY)
 	case "input", "textarea":
-		paintInputClipped(buf, node, clipX1, clipY1, clipX2, clipY2)
+		paintInputClipped(buf, node, clipX1, clipY1, clipX2, clipY2, offsetY)
 	case "component":
 		for _, child := range paintOrderChildren(node.Children) {
-			paintNodeClipped(buf, child, clipX1, clipY1, clipX2, clipY2)
+			paintNodeClipped(buf, child, clipX1, clipY1, clipX2, clipY2, offsetY)
 		}
 	}
 }
 
-func paintBoxClipped(buf *CellBuffer, node *Node, clipX1, clipY1, clipX2, clipY2 int) {
+func paintBoxClipped(buf *CellBuffer, node *Node, clipX1, clipY1, clipX2, clipY2, offsetY int) {
+	screenY := node.Y + offsetY
 	// Fill background (clipped)
 	if node.Style.Background != "" {
-		for y := node.Y; y < node.Y+node.H; y++ {
+		for y := screenY; y < screenY+node.H; y++ {
 			if y < clipY1 || y >= clipY2 {
 				continue
 			}
@@ -688,29 +678,30 @@ func paintBoxClipped(buf *CellBuffer, node *Node, clipX1, clipY1, clipX2, clipY2
 	// paintNodeClipped → paintBoxClipped; omitting borders dropped LuxButton
 	// outlines inside overflow:scroll main regions.
 	if node.Style.Border != "" && node.Style.Border != "none" {
-		paintBorderClipped(buf, node, clipX1, clipY1, clipX2, clipY2)
+		paintBorderClipped(buf, node, clipX1, clipY1, clipX2, clipY2, offsetY)
 	}
 
 	// Paint children — handle nested scroll/hidden containers
 	if node.Style.Overflow == "scroll" {
 		// Nested scroll container inside an outer scroll: apply inner scroll
 		// offset and use the intersection of outer clip and inner content area.
-		paintScrollChildrenClipped(buf, node, clipX1, clipY1, clipX2, clipY2)
+		paintScrollChildrenClipped(buf, node, clipX1, clipY1, clipX2, clipY2, offsetY)
 	} else if node.Style.Overflow == "hidden" {
 		// overflow:hidden inside a clipped parent: use intersection of
 		// outer clip and inner content area.
-		paintHiddenChildrenClipped(buf, node, clipX1, clipY1, clipX2, clipY2)
+		paintHiddenChildrenClipped(buf, node, clipX1, clipY1, clipX2, clipY2, offsetY)
 	} else {
 		for _, child := range paintOrderChildren(node.Children) {
-			paintNodeClipped(buf, child, clipX1, clipY1, clipX2, clipY2)
+			paintNodeClipped(buf, child, clipX1, clipY1, clipX2, clipY2, offsetY)
 		}
 	}
 }
 
-func paintTextClipped(buf *CellBuffer, node *Node, clipX1, clipY1, clipX2, clipY2 int) {
+func paintTextClipped(buf *CellBuffer, node *Node, clipX1, clipY1, clipX2, clipY2, offsetY int) {
+	screenY := node.Y + offsetY
 	// Fill background (clipped)
 	if node.Style.Background != "" {
-		for y := node.Y; y < node.Y+node.H; y++ {
+		for y := screenY; y < screenY+node.H; y++ {
 			if y < clipY1 || y >= clipY2 {
 				continue
 			}
@@ -731,7 +722,7 @@ func paintTextClipped(buf *CellBuffer, node *Node, clipX1, clipY1, clipX2, clipY
 	underline := node.Style.Underline
 
 	x := node.X
-	y := node.Y
+	y := screenY
 	rightEdge := node.X + node.W
 	for _, ch := range node.Content {
 		if ch == '\n' {
@@ -745,7 +736,7 @@ func paintTextClipped(buf *CellBuffer, node *Node, clipX1, clipY1, clipX2, clipY
 			y++
 			x = node.X
 		}
-		if y >= node.Y+node.H {
+		if y >= screenY+node.H {
 			break
 		}
 		if x+w-1 < rightEdge {
@@ -999,7 +990,8 @@ func paintInputCursor(buf *CellBuffer, node *Node, x, y int) {
 
 // paintInputClipped renders an input/textarea node inside a clip rect,
 // handling placeholder text, content text, and cursor correctly.
-func paintInputClipped(buf *CellBuffer, node *Node, clipX1, clipY1, clipX2, clipY2 int) {
+func paintInputClipped(buf *CellBuffer, node *Node, clipX1, clipY1, clipX2, clipY2, offsetY int) {
+	screenY := node.Y + offsetY
 	if node.Content == "" && node.Placeholder != "" {
 		// Render placeholder with dim style (clipped)
 		fg := node.Style.Foreground
@@ -1007,10 +999,10 @@ func paintInputClipped(buf *CellBuffer, node *Node, clipX1, clipY1, clipX2, clip
 			fg = "#585B70" // dim gray default
 		}
 		x := node.X
-		y := node.Y
+		y := screenY
 		for _, ch := range node.Placeholder {
 			w := runeWidth(ch)
-			if x+w-1 < node.X+node.W && y < node.Y+node.H {
+			if x+w-1 < node.X+node.W && y < screenY+node.H {
 				if y >= clipY1 && y < clipY2 && x >= clipX1 && x < clipX2 {
 					bg := node.Style.Background
 					if bg == "" {
@@ -1027,7 +1019,7 @@ func paintInputClipped(buf *CellBuffer, node *Node, clipX1, clipY1, clipX2, clip
 		}
 		// Show cursor at start if focused
 		if node.Focused {
-			cx, cy := node.X, node.Y
+			cx, cy := node.X, screenY
 			if cy >= clipY1 && cy < clipY2 && cx >= clipX1 && cx < clipX2 {
 				paintInputCursor(buf, node, cx, cy)
 			}
@@ -1035,12 +1027,12 @@ func paintInputClipped(buf *CellBuffer, node *Node, clipX1, clipY1, clipX2, clip
 		return
 	}
 	// Render text content (clipped)
-	paintTextClipped(buf, node, clipX1, clipY1, clipX2, clipY2)
+	paintTextClipped(buf, node, clipX1, clipY1, clipX2, clipY2, offsetY)
 
 	// Show cursor if focused
 	if node.Focused {
 		cursorX := node.X + inputCursorScreenOffset(node)
-		cursorY := node.Y
+		cursorY := screenY
 		if cursorY >= clipY1 && cursorY < clipY2 && cursorX >= clipX1 && cursorX < clipX2 {
 			paintInputCursor(buf, node, cursorX, cursorY)
 		}
@@ -1094,8 +1086,8 @@ func paintBorder(buf *CellBuffer, node *Node) {
 
 // paintBorderClipped draws a box border like paintBorder but only writes cells
 // inside [clipX1,clipY1)–[clipX2,clipY2). Used from paintBoxClipped.
-func paintBorderClipped(buf *CellBuffer, node *Node, clipX1, clipY1, clipX2, clipY2 int) {
-	x, y, w, h := node.X, node.Y, node.W, node.H
+func paintBorderClipped(buf *CellBuffer, node *Node, clipX1, clipY1, clipX2, clipY2, offsetY int) {
+	x, y, w, h := node.X, node.Y+offsetY, node.W, node.H
 	if w < 2 || h < 2 {
 		return
 	}
