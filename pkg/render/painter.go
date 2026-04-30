@@ -844,15 +844,6 @@ func paintText(buf *CellBuffer, node *Node) {
 		}
 	}
 
-	// Write text content
-	fg := node.Style.Foreground
-	bold := node.Style.Bold
-	italic := node.Style.Italic
-	strikethrough := node.Style.Strikethrough
-	inverse := node.Style.Inverse
-	dim := node.Style.Dim
-	underline := node.Style.Underline
-
 	// Text alignment and overflow
 	textAlign := node.Style.TextAlign
 	noWrap := node.Style.WhiteSpace == "nowrap"
@@ -873,18 +864,7 @@ func paintText(buf *CellBuffer, node *Node) {
 			lineW := stringWidth(line)
 
 			// Calculate starting X based on alignment
-			x := node.X
-			if textAlign == "center" {
-				offset := (availW - lineW) / 2
-				if offset > 0 {
-					x += offset
-				}
-			} else if textAlign == "right" {
-				offset := availW - lineW
-				if offset > 0 {
-					x += offset
-				}
-			}
+			x := alignedX(node.X, availW, lineW, textAlign)
 
 			// Determine truncation point if ellipsis
 			var truncIdx int
@@ -898,31 +878,14 @@ func paintText(buf *CellBuffer, node *Node) {
 			for i, ch := range runes {
 				if truncated && i >= truncIdx {
 					// Paint ellipsis
-					bg := node.Style.Background
-					if bg == "" {
-						existing := buf.Get(col, y)
-						bg = existing.BG
-					}
-					buf.Set(col, y, Cell{Ch: '…', FG: fg, BG: bg, Bold: bold, Dim: dim, Underline: underline, Italic: italic, Strikethrough: strikethrough, Inverse: inverse})
-					col++
+					col += paintRuneCell(buf, col, y, '…', node, rightEdge)
 					break
 				}
-				w := runeWidth(ch)
-				if col+w > rightEdge {
-					break // clip
+				adv := paintRuneCell(buf, col, y, ch, node, rightEdge)
+				if adv == 0 {
+					break // clipped
 				}
-				bg := node.Style.Background
-				if bg == "" {
-					existing := buf.Get(col, y)
-					bg = existing.BG
-				}
-				buf.Set(col, y, Cell{Ch: ch, FG: fg, BG: bg, Bold: bold, Dim: dim, Underline: underline, Italic: italic, Strikethrough: strikethrough, Inverse: inverse})
-				if w == 2 {
-					if col+1 < rightEdge {
-						buf.Set(col+1, y, Cell{Wide: true, BG: bg})
-					}
-				}
-				col += w
+				col += adv
 			}
 		}
 	} else {
@@ -940,18 +903,8 @@ func paintText(buf *CellBuffer, node *Node) {
 				}
 				// TODO: wrapping + alignment is complex; for now, align first line of each \n-segment
 				lineW := stringWidth(line)
-				x = node.X
-				if textAlign == "center" {
-					offset := (availW - lineW) / 2
-					if offset > 0 {
-						x += offset
-					}
-				} else if textAlign == "right" {
-					offset := availW - lineW
-					if offset > 0 {
-						x += offset
-					}
-				}
+				x = alignedX(node.X, availW, lineW, textAlign)
+
 				for _, ch := range line {
 					w := runeWidth(ch)
 					if x+w > rightEdge {
@@ -961,19 +914,9 @@ func paintText(buf *CellBuffer, node *Node) {
 					if y >= node.Y+node.H {
 						break
 					}
-					if x+w-1 < rightEdge {
-						bg := node.Style.Background
-						if bg == "" {
-							existing := buf.Get(x, y)
-							bg = existing.BG
-						}
-						buf.Set(x, y, Cell{Ch: ch, FG: fg, BG: bg, Bold: bold, Dim: dim, Underline: underline, Italic: italic, Strikethrough: strikethrough, Inverse: inverse})
-						if w == 2 {
-							if x+1 < rightEdge {
-								buf.Set(x+1, y, Cell{Wide: true, BG: bg})
-							}
-						}
-						x += w
+					adv := paintRuneCell(buf, x, y, ch, node, rightEdge)
+					if adv > 0 {
+						x += adv
 					}
 				}
 			}
@@ -994,25 +937,29 @@ func paintText(buf *CellBuffer, node *Node) {
 				if y >= node.Y+node.H {
 					break
 				}
-				if x+w-1 < rightEdge {
-					bg := node.Style.Background
-					if bg == "" {
-						// Inherit background from existing cell (parent painted it)
-						existing := buf.Get(x, y)
-						bg = existing.BG
-					}
-					buf.Set(x, y, Cell{Ch: ch, FG: fg, BG: bg, Bold: bold, Dim: dim, Underline: underline, Italic: italic, Strikethrough: strikethrough, Inverse: inverse})
-					if w == 2 {
-						// Set padding cell for wide character
-						if x+1 < rightEdge {
-							buf.Set(x+1, y, Cell{Wide: true, BG: bg})
-						}
-					}
-					x += w
+				adv := paintRuneCell(buf, x, y, ch, node, rightEdge)
+				if adv > 0 {
+					x += adv
 				}
 			}
 		}
 	}
+}
+
+// alignedX returns the starting X position for a line of text given alignment.
+func alignedX(nodeX, availW, lineW int, textAlign string) int {
+	x := nodeX
+	switch textAlign {
+	case "center":
+		if offset := (availW - lineW) / 2; offset > 0 {
+			x += offset
+		}
+	case "right":
+		if offset := availW - lineW; offset > 0 {
+			x += offset
+		}
+	}
+	return x
 }
 
 func paintInput(buf *CellBuffer, node *Node) {
