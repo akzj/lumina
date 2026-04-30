@@ -357,3 +357,35 @@ func TestLuaE2E_TimerCallbackError(t *testing.T) {
 		t.Fatalf("expected second timer to fire despite first error, got count=%d", count)
 	}
 }
+
+func TestTimerManager_CancelFreesRef(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+
+	tm := newTimerManager()
+
+	// Create a real Lua ref.
+	L.PushFunction(func(L *lua.State) int { return 0 })
+	ref := L.Ref(lua.RegistryIndex)
+
+	id := tm.add(ref, 1000, true) // repeating, far in the future
+
+	// Cancel the timer.
+	tm.cancel(id)
+
+	// fireDue should return the canceled timer's ref in oneshotRefs.
+	_, oneshotRefs := tm.fireDue(0)
+	if len(oneshotRefs) != 1 || oneshotRefs[0] != ref {
+		t.Fatalf("expected canceled ref %d in oneshotRefs, got %v", ref, oneshotRefs)
+	}
+
+	// Unref should succeed without panic (ref is valid).
+	L.Unref(lua.RegistryIndex, ref)
+
+	// Verify the ref is now nil in the registry (freed).
+	L.RawGetI(lua.RegistryIndex, int64(ref))
+	if !L.IsNil(-1) {
+		t.Fatalf("expected nil after Unref, got non-nil")
+	}
+	L.Pop(1)
+}

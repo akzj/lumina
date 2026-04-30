@@ -161,6 +161,40 @@ func (e *Engine) drainPendingUnrefs() {
 	e.pendingUnrefs = e.pendingUnrefs[:0]
 }
 
+// Destroy releases all Lua registry refs held by the engine.
+// Call before discarding the engine (app shutdown, full hot-reload).
+func (e *Engine) Destroy() {
+	L := e.L
+	if L == nil {
+		return
+	}
+
+	// Free all component trees (hooks, event handlers, propFuncRefs, node refs).
+	if e.root != nil {
+		e.cleanupComponentTree(e.root)
+		delete(e.components, e.root.ID)
+		e.root = nil
+	}
+
+	// Free factory refs (skip goWidgetSentinel — not a real Lua ref).
+	for name, ref := range e.factories {
+		if ref != goWidgetSentinel {
+			L.Unref(lua.RegistryIndex, int(ref))
+		}
+		delete(e.factories, name)
+	}
+
+	// Free factory metatable ref.
+	if e.factoryMetaRef != 0 {
+		L.Unref(lua.RegistryIndex, int(e.factoryMetaRef))
+		e.factoryMetaRef = 0
+	}
+
+	// Drain any pending unrefs accumulated during cleanup.
+	e.drainPendingUnrefs()
+}
+
+
 
 // NewEngine creates a new render engine.
 func NewEngine(L *lua.State, width, height int) *Engine {

@@ -98,12 +98,31 @@ func (a *App) RunString(code string) error {
 	return a.luaState.DoString(code)
 }
 
-// Stop signals the event loop to exit.
+// Stop signals the event loop to exit and releases all Lua refs.
 func (a *App) Stop() {
 	// Cancel pending async coroutines.
 	if a.scheduler != nil {
 		a.scheduler.Destroy()
 	}
+
+	// Release timer refs.
+	if a.timerMgr != nil && a.luaState != nil {
+		a.timerMgr.releaseAll(a.luaState)
+	}
+
+	// Release engine refs (component tree, factories, metatable).
+	if a.engine != nil {
+		a.engine.Destroy()
+	}
+
+	// Release global key handler refs.
+	if a.luaState != nil {
+		for _, binding := range a.globalKeys {
+			a.luaState.Unref(lua.RegistryIndex, binding.ref)
+		}
+		a.globalKeys = nil
+	}
+
 	if a.quit != nil {
 		select {
 		case <-a.quit:
@@ -229,6 +248,18 @@ func (a *App) reloadScript(path string) {
 	if a.scheduler != nil {
 		a.scheduler.Destroy()
 	}
+
+	// Free all engine refs (component tree, factories, factory metatable).
+	if a.engine != nil {
+		a.engine.Destroy()
+	}
+
+	// Free global key handler refs.
+	L := a.luaState
+	for _, binding := range a.globalKeys {
+		L.Unref(lua.RegistryIndex, binding.ref)
+	}
+	a.globalKeys = nil
 
 	// Re-set package.path for the reloaded script.
 	addScriptDirToPackagePath(a.luaState, path)
