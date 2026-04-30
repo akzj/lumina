@@ -740,20 +740,30 @@ func paintTextClipped(buf *CellBuffer, node *Node, clipX1, clipY1, clipX2, clipY
 			break
 		}
 		if x+w-1 < rightEdge {
-			if y >= clipY1 && y < clipY2 && x >= clipX1 && x < clipX2 {
-				bg := node.Style.Background
-				if bg == "" {
-					existing := buf.Get(x, y)
-					bg = existing.BG
-				}
-				if w == 2 && x+1 >= clipX2 {
-					// Wide char doesn't fully fit in clip region — write space placeholder
-					buf.Set(x, y, Cell{Ch: ' ', FG: fg, BG: bg, Bold: bold, Dim: dim, Underline: underline, Italic: italic, Strikethrough: strikethrough, Inverse: inverse})
-				} else {
-					buf.Set(x, y, Cell{Ch: ch, FG: fg, BG: bg, Bold: bold, Dim: dim, Underline: underline, Italic: italic, Strikethrough: strikethrough, Inverse: inverse})
-					if w == 2 && x+1 >= clipX1 && x+1 < clipX2 {
-						buf.Set(x+1, y, Cell{Wide: true, BG: bg})
+			if y >= clipY1 && y < clipY2 {
+				if x >= clipX1 && x < clipX2 {
+					bg := node.Style.Background
+					if bg == "" {
+						existing := buf.Get(x, y)
+						bg = existing.BG
 					}
+					if w == 2 && x+1 >= clipX2 {
+						// Wide char doesn't fully fit at right clip boundary — write space
+						buf.Set(x, y, Cell{Ch: ' ', FG: fg, BG: bg, Bold: bold, Dim: dim, Underline: underline, Italic: italic, Strikethrough: strikethrough, Inverse: inverse})
+					} else {
+						buf.Set(x, y, Cell{Ch: ch, FG: fg, BG: bg, Bold: bold, Dim: dim, Underline: underline, Italic: italic, Strikethrough: strikethrough, Inverse: inverse})
+						if w == 2 && x+1 >= clipX1 && x+1 < clipX2 {
+							buf.Set(x+1, y, Cell{Wide: true, BG: bg})
+						}
+					}
+				} else if w == 2 && x == clipX1-1 && clipX1 < clipX2 {
+					// Wide char straddles left clip boundary — write space at clipX1
+					bg := node.Style.Background
+					if bg == "" {
+						existing := buf.Get(clipX1, y)
+						bg = existing.BG
+					}
+					buf.Set(clipX1, y, Cell{Ch: ' ', FG: fg, BG: bg, Bold: bold, Dim: dim, Underline: underline, Italic: italic, Strikethrough: strikethrough, Inverse: inverse})
 				}
 			}
 			x += w
