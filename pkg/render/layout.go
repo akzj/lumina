@@ -1054,10 +1054,42 @@ func layoutVBox(node *Node, contentX, contentY, contentW, contentH int, style St
 		computeFlex(child, childX, curY, childW, childH, depth+1)
 		applyRelativeOffset(child, children[i].style)
 		lastFlowChildNode = child
-		curY += childH
+		curY += child.H
 		flowIdx++
 		if flowIdx < flowCount {
 			curY += gapSize
+		}
+	}
+
+	// Scrollable main columns: grow outer height if flow children extend past the slot
+	// (e.g. flex-wrap hbox grew node.H after layout; this node still had the old H).
+	if scrollContentStack {
+		bw := 0
+		if hasBorder(style) {
+			bw = 1
+		}
+		pb := style.PaddingBottom
+		if style.Padding > 0 && pb == 0 {
+			pb = style.Padding
+		}
+		maxBottom := contentY
+		for _, ch := range node.Children {
+			cs := ch.Style
+			if isPositioned(cs) || cs.Display == "none" {
+				continue
+			}
+			b := ch.Y + ch.H
+			if b > maxBottom {
+				maxBottom = b
+			}
+		}
+		minOuterH := (maxBottom + pb + bw) - node.Y
+		if minOuterH > node.H {
+			node.H = minOuterH
+			node.PaintDirty = true
+			if node.Parent != nil {
+				node.Parent.PaintDirty = true
+			}
 		}
 	}
 
@@ -1563,6 +1595,35 @@ func layoutHBoxWrap(node *Node, contentX, contentY, contentW, contentH int, styl
 		curY += rowH
 		if ri < len(rows)-1 {
 			curY += rowGap
+		}
+	}
+
+	// Outer H from computeFlex can be too small (e.g. intrinsic measure returned 1 while
+	// rows use explicit child heights). Grow to the laid-out wrap span so parent vboxes
+	// and borders match painted content (Lux Card + flex-wrap button rows).
+	bw := 0
+	if hasBorder(style) {
+		bw = 1
+	}
+	pt, pb := style.PaddingTop, style.PaddingBottom
+	if style.Padding > 0 {
+		if pt == 0 {
+			pt = style.Padding
+		}
+		if pb == 0 {
+			pb = style.Padding
+		}
+	}
+	innerUsed := curY - contentY
+	if innerUsed < 1 {
+		innerUsed = 1
+	}
+	wantOuter := innerUsed + 2*bw + pt + pb
+	if wantOuter > node.H {
+		node.H = wantOuter
+		node.PaintDirty = true
+		if node.Parent != nil {
+			node.Parent.PaintDirty = true
 		}
 	}
 }
