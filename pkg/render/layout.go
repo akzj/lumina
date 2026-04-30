@@ -350,14 +350,14 @@ func applyRelativeOffset(child *Node, cs Style) {
 }
 
 // layoutProbeHMin is the smallest node.H value treated as an intrinsic-measurement
-// probe (see computeFlex(..., 99999)). laidOutFlowContentHeight must not treat
-// such heights as real content extent or scroll/card stacks get finalH≈99999 and
-// only the first row paints.
+// probe. DEPRECATED: The measure pass now provides intrinsic sizes via node.MeasuredH.
+// This constant is kept only for backward compatibility with existing test assertions.
 const layoutProbeHMin = 99900
 
 // intrinsicFlowHeight returns the vertical extent of n for scroll / intrinsic
-// sizing when n.H may be a probe value (>= layoutProbeHMin) from unlimited-height
-// measurement. Uses flow children and absolute Y offsets from a completed layout.
+// sizing when n.H may be a probe value (>= layoutProbeHMin).
+// DEPRECATED: Use node.MeasuredH from the measure pass instead.
+// Kept for backward compatibility with existing test assertions.
 func intrinsicFlowHeight(n *Node) int {
 	if n == nil {
 		return 1
@@ -399,9 +399,9 @@ func intrinsicFlowHeight(n *Node) int {
 }
 
 // laidOutFlowContentHeight returns the vertical span from node.Y to the lowest
-// bottom among flow (non-positioned) descendants after layout. computeFlex(..., huge H)
-// sets node.H to the probe height; scroll sizing must not use that as content height
-// or siblings stack at Y += 99999 and only the first panel is visible.
+// bottom among flow (non-positioned) descendants after layout.
+// DEPRECATED: Use node.MeasuredH from the measure pass instead.
+// Kept for backward compatibility with existing test assertions.
 func laidOutFlowContentHeight(node *Node) int {
 	if node == nil {
 		return 1
