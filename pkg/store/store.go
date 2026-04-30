@@ -48,6 +48,10 @@ func (s *Store) Set(key string, value any) {
 	s.mu.Unlock()
 
 	notify(subs, key, value)
+
+	s.mu.Lock()
+	s.compactIfNeeded()
+	s.mu.Unlock()
 }
 
 // Delete removes a key and notifies subscribers with value=nil.
@@ -63,6 +67,10 @@ func (s *Store) Delete(key string) {
 	s.mu.Unlock()
 
 	notify(subs, key, nil)
+
+	s.mu.Lock()
+	s.compactIfNeeded()
+	s.mu.Unlock()
 }
 
 // GetAll returns a shallow copy of all state.
@@ -114,6 +122,10 @@ func (s *Store) Batch(updates map[string]any) {
 	for k, v := range updates {
 		notify(subs, k, v)
 	}
+
+	s.mu.Lock()
+	s.compactIfNeeded()
+	s.mu.Unlock()
 }
 
 // snapshotSubscribers returns a filtered copy of active subscribers.
@@ -126,6 +138,22 @@ func (s *Store) snapshotSubscribers() []*subscriber {
 		}
 	}
 	return result
+}
+
+// compactIfNeeded removes unsubscribed entries from the subscribers slice
+// to prevent unbounded growth in long-running apps. Must be called with s.mu held.
+func (s *Store) compactIfNeeded() {
+	if len(s.removed) == 0 {
+		return
+	}
+	var compacted []*subscriber
+	for i, sub := range s.subscribers {
+		if !s.removed[i] {
+			compacted = append(compacted, sub)
+		}
+	}
+	s.subscribers = compacted
+	s.removed = make(map[int]bool)
 }
 
 // notify calls each subscriber with the given key and value.
