@@ -271,6 +271,45 @@ func layoutHBox(node *Node, contentX, contentY, contentW, contentH int, style St
 		}
 	}
 
+	// Cross-axis: children may end taller than the slot (e.g. explicit style.Height on
+	// text while parent passed a short contentH). Grow outer H so fill + border match
+	// painted descendants (Lux SplitButton in flex rows).
+	maxChildBottom := contentY
+	for i, child := range node.Children {
+		if children[i].positioned {
+			continue
+		}
+		b := child.Y + child.H
+		if b > maxChildBottom {
+			maxChildBottom = b
+		}
+	}
+	bw := 0
+	if hasBorder(style) {
+		bw = 1
+	}
+	pt, pb := style.PaddingTop, style.PaddingBottom
+	if style.Padding > 0 {
+		if pt == 0 {
+			pt = style.Padding
+		}
+		if pb == 0 {
+			pb = style.Padding
+		}
+	}
+	innerUsed := maxChildBottom - contentY
+	if innerUsed < 1 {
+		innerUsed = 1
+	}
+	wantOuter := innerUsed + 2*bw + pt + pb
+	if wantOuter > node.H {
+		node.H = wantOuter
+		node.PaintDirty = true
+		if node.Parent != nil {
+			node.Parent.PaintDirty = true
+		}
+	}
+
 	// For scroll containers, store the total content height (cross-axis)
 	if style.Overflow == "scroll" || style.Overflow == "auto" {
 		maxBottom := 0
