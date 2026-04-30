@@ -270,6 +270,21 @@ func layoutHBox(node *Node, contentX, contentY, contentW, contentH int, style St
 			curX += gapSize
 		}
 	}
+
+	// For scroll containers, store the total content height (cross-axis)
+	if style.Overflow == "scroll" || style.Overflow == "auto" {
+		maxBottom := 0
+		for i, child := range node.Children {
+			if children[i].positioned {
+				continue
+			}
+			bottom := child.Y + child.H - contentY
+			if bottom > maxBottom {
+				maxBottom = bottom
+			}
+		}
+		node.ScrollHeight = maxBottom
+	}
 }
 
 // wrapHBoxItemDesiredWidth estimates a flex item's outer width along the main axis
