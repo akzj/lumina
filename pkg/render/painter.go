@@ -1087,6 +1087,10 @@ func paintInputCursor(buf *CellBuffer, node *Node, x, y int) {
 		ch = ' ' // cursor on empty space shows as block
 	}
 	buf.Set(x, y, Cell{Ch: ch, FG: fg, BG: bg})
+	// If the character under cursor is wide (CJK), also write the padding cell
+	if runeWidth(ch) == 2 && x+1 < node.X+node.W {
+		buf.Set(x+1, y, Cell{Wide: true, BG: bg})
+	}
 }
 
 // paintInputClipped renders an input/textarea node inside a clip rect,
