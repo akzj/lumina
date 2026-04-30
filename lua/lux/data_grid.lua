@@ -252,7 +252,29 @@ local DataGrid = lumina.defineComponent("DataGrid", function(props)
 			background = t.base or "#1E1E2E",
 		}, "  " .. emptyText)
 	else
-		for i, row in ipairs(rows) do
+		-- Determine row range to render
+		local renderStart = 1
+		local renderEnd = #rows
+
+		if props.virtualScroll then
+			local buffer = props.virtualBuffer or 3
+			local visibleCount = math.ceil(bodyHeight / rowHeight)
+			local windowStart = math.floor(scrollY / rowHeight) + 1
+			renderStart = math.max(1, windowStart - buffer)
+			renderEnd = math.min(#rows, windowStart + visibleCount + buffer)
+
+			-- Top spacer (represents rows above rendered window)
+			local topHeight = (renderStart - 1) * rowHeight
+			if topHeight > 0 then
+				bodyChildren[#bodyChildren + 1] = lumina.createElement("vbox", {
+					key = "vs-top",
+					style = { height = topHeight },
+				})
+			end
+		end
+
+		for i = renderStart, renderEnd do
+			local row = rows[i]
 			local rowId = getRowId(row, i)
 			local ctx = {
 				selected = (i == selectedIdx),
@@ -271,6 +293,17 @@ local DataGrid = lumina.defineComponent("DataGrid", function(props)
 				key = "r-" .. tostring(i),
 				style = { height = rowHeight },
 			}, table.unpack(cells))
+		end
+
+		if props.virtualScroll then
+			-- Bottom spacer (represents rows below rendered window)
+			local bottomHeight = (#rows - renderEnd) * rowHeight
+			if bottomHeight > 0 then
+				bodyChildren[#bodyChildren + 1] = lumina.createElement("vbox", {
+					key = "vs-bottom",
+					style = { height = bottomHeight },
+				})
+			end
 		end
 	end
 
