@@ -2,10 +2,63 @@
 -- See lua/lux/data_grid.md for design and P0/P1 scope.
 -- Usage: local DataGrid = require("lux.data_grid")
 
--- Pad/truncate text to a given width with alignment.
+-- UTF-8 helpers: count characters and truncate safely.
+-- utf8Len returns the number of UTF-8 characters (not bytes) in a string.
+local function utf8Len(s)
+	local count = 0
+	local i = 1
+	local n = #s
+	while i <= n do
+		local b = s:byte(i)
+		if b < 0x80 then
+			i = i + 1
+		elseif b < 0xC0 then
+			-- Continuation byte (shouldn't start a char) — skip
+			i = i + 1
+		elseif b < 0xE0 then
+			i = i + 2
+		elseif b < 0xF0 then
+			i = i + 3
+		else
+			i = i + 4
+		end
+		count = count + 1
+	end
+	return count
+end
+
+-- utf8Sub returns the substring from character position i to j (1-based, inclusive).
+-- Like string.sub but operates on UTF-8 characters, not bytes.
+local function utf8Sub(s, i, j)
+	local n = #s
+	local charIdx = 0
+	local byteStart = nil
+	local byteEnd = nil
+	local pos = 1
+	while pos <= n do
+		charIdx = charIdx + 1
+		if charIdx == i then byteStart = pos end
+		local b = s:byte(pos)
+		local charLen = 1
+		if b >= 0xF0 then charLen = 4
+		elseif b >= 0xE0 then charLen = 3
+		elseif b >= 0xC0 then charLen = 2
+		end
+		if charIdx == j then
+			byteEnd = pos + charLen - 1
+			break
+		end
+		pos = pos + charLen
+	end
+	if not byteStart then return "" end
+	if not byteEnd then byteEnd = n end
+	return s:sub(byteStart, byteEnd)
+end
+
+-- Pad/truncate text to a given width (in characters) with alignment.
 local function padText(str, width, align)
-	local len = #str
-	if len >= width then return str:sub(1, width) end
+	local len = utf8Len(str)
+	if len >= width then return utf8Sub(str, 1, width) end
 	local pad = width - len
 	if align == "right" then
 		return string.rep(" ", pad) .. str

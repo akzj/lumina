@@ -63,6 +63,7 @@ func (w *Watcher) Start() {
 		w.mu.Unlock()
 		return
 	}
+	w.stopCh = make(chan struct{}) // recreate channel to allow restart after Stop
 	w.running = true
 
 	// Initialize mod times for all known paths.
