@@ -114,6 +114,44 @@ func descriptorFromMap(m map[string]any) Descriptor {
 		desc.AutoFocus = af
 	}
 
+	// Event handlers (stored as propFuncRef by readPropValueFromStack)
+	if ref, ok := m["onClick"].(propFuncRef); ok {
+		desc.OnClick = LuaRef(ref)
+	}
+	if ref, ok := m["onMouseEnter"].(propFuncRef); ok {
+		desc.OnMouseEnter = LuaRef(ref)
+	}
+	if ref, ok := m["onMouseLeave"].(propFuncRef); ok {
+		desc.OnMouseLeave = LuaRef(ref)
+	}
+	if ref, ok := m["onKeyDown"].(propFuncRef); ok {
+		desc.OnKeyDown = LuaRef(ref)
+	}
+	if ref, ok := m["onChange"].(propFuncRef); ok {
+		desc.OnChange = LuaRef(ref)
+	}
+	if ref, ok := m["onScroll"].(propFuncRef); ok {
+		desc.OnScroll = LuaRef(ref)
+	}
+	if ref, ok := m["onMouseDown"].(propFuncRef); ok {
+		desc.OnMouseDown = LuaRef(ref)
+	}
+	if ref, ok := m["onMouseUp"].(propFuncRef); ok {
+		desc.OnMouseUp = LuaRef(ref)
+	}
+	if ref, ok := m["onFocus"].(propFuncRef); ok {
+		desc.OnFocus = LuaRef(ref)
+	}
+	if ref, ok := m["onBlur"].(propFuncRef); ok {
+		desc.OnBlur = LuaRef(ref)
+	}
+	if ref, ok := m["onSubmit"].(propFuncRef); ok {
+		desc.OnSubmit = LuaRef(ref)
+	}
+	if ref, ok := m["onOutsideClick"].(propFuncRef); ok {
+		desc.OnOutsideClick = LuaRef(ref)
+	}
+
 	// Children (recursive)
 	if children, ok := m["children"].([]any); ok {
 		for _, child := range children {
@@ -752,7 +790,15 @@ func luaPropTableKeyString(L *lua.State, keyIdx int) string {
 // readPropValueFromStack reads the Lua value at stack index -1 (without popping it).
 // Used for ComponentProps so nested descriptor tables keep onClick etc. as propFuncRef.
 // (L.ToAny maps Lua functions to nil.)
+// maxPropDepth limits recursion depth when reading nested Lua tables.
+// Prevents stack overflow from self-referencing tables.
+const maxPropDepth = 20
+
 func readPropValueFromStack(L *lua.State) any {
+	return readPropValueFromStackDepth(L, 0)
+}
+
+func readPropValueFromStackDepth(L *lua.State, depth int) any {
 	switch L.Type(-1) {
 	case lua.TypeNil:
 		return nil
@@ -775,7 +821,7 @@ func readPropValueFromStack(L *lua.State) any {
 	case lua.TypeTable:
 		L.PushValue(-1)
 		tIdx := L.AbsIndex(-1)
-		out := readPropTable(L, tIdx)
+		out := readPropTableDepth(L, tIdx, depth+1)
 		L.Pop(1)
 		return out
 	default:
@@ -784,6 +830,13 @@ func readPropValueFromStack(L *lua.State) any {
 }
 
 func readPropTable(L *lua.State, idx int) any {
+	return readPropTableDepth(L, idx, 0)
+}
+
+func readPropTableDepth(L *lua.State, idx int, depth int) any {
+	if depth > maxPropDepth {
+		return nil // prevent infinite recursion from circular tables
+	}
 	idx = L.AbsIndex(idx)
 	length := int(L.LenI(idx))
 	if length > 0 {
@@ -797,7 +850,7 @@ func readPropTable(L *lua.State, idx int) any {
 			arr := make([]any, length)
 			for i := 1; i <= length; i++ {
 				L.RawGetI(idx, int64(i))
-				arr[i-1] = readPropValueFromStack(L)
+				arr[i-1] = readPropValueFromStackDepth(L, depth)
 				L.Pop(1)
 			}
 			return arr
@@ -807,7 +860,7 @@ func readPropTable(L *lua.State, idx int) any {
 	L.PushNil()
 	for L.Next(idx) {
 		key := luaPropTableKeyString(L, -2)
-		m[key] = readPropValueFromStack(L)
+		m[key] = readPropValueFromStackDepth(L, depth)
 		L.Pop(1)
 	}
 	return m
