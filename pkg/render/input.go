@@ -280,6 +280,52 @@ func (e *Engine) HandleInputKeyDown(key string) bool {
 		}
 		return false
 
+	case "Delete":
+		// Forward delete: remove character at cursor position
+		runes := []rune(node.Content)
+		if node.CursorPos < len(runes) {
+			runes = append(runes[:node.CursorPos], runes[node.CursorPos+1:]...)
+			node.Content = string(runes)
+			node.PaintDirty = true
+			e.needsRender = true
+			e.fireOnChange(node)
+		}
+		return true
+
+	case "Home":
+		// Move cursor to start of current line
+		runes := []rune(node.Content)
+		pos := node.CursorPos
+		if pos > len(runes) {
+			pos = len(runes)
+		}
+		for pos > 0 && runes[pos-1] != '\n' {
+			pos--
+		}
+		if pos != node.CursorPos {
+			node.CursorPos = pos
+			node.PaintDirty = true
+			e.needsRender = true
+		}
+		return true
+
+	case "End":
+		// Move cursor to end of current line
+		runes := []rune(node.Content)
+		pos := node.CursorPos
+		if pos > len(runes) {
+			pos = len(runes)
+		}
+		for pos < len(runes) && runes[pos] != '\n' {
+			pos++
+		}
+		if pos != node.CursorPos {
+			node.CursorPos = pos
+			node.PaintDirty = true
+			e.needsRender = true
+		}
+		return true
+
 	default:
 		// Printable character (ASCII or Unicode/CJK)
 		r, size := utf8.DecodeRuneInString(key)
