@@ -60,6 +60,10 @@ function M.create(storeKey, initialWindows)
             title = frame.title or id,
             open = true,
         }
+        -- Remove from order if already present (prevent duplicates)
+        for i, oid in ipairs(s.order) do
+            if oid == id then table.remove(s.order, i); break end
+        end
         s.order[#s.order + 1] = id
         s.activeId = id
         lumina.store.set(storeKey, s)
@@ -91,6 +95,10 @@ function M.create(storeKey, initialWindows)
         local s = lumina.store.get(storeKey)
         if not s.frames[id] then return end
         s.frames[id].open = true
+        -- Remove from order if already present (prevent duplicates)
+        for i, oid in ipairs(s.order) do
+            if oid == id then table.remove(s.order, i); break end
+        end
         s.order[#s.order + 1] = id
         s.activeId = id
         lumina.store.set(storeKey, s)
