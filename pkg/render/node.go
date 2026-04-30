@@ -12,6 +12,23 @@ type Style struct {
 	MinWidth, MaxWidth   int
 	MinHeight, MaxHeight int
 	Flex                 int // flex grow factor
+	FlexShrink           int // 0 = default (no shrink), >0 = shrink factor
+	FlexBasis            int // 0 = auto (use width/height), >0 = initial size before grow/shrink
+
+	// Percentage sizing (0 = not set, 50 = 50% of parent content area)
+	WidthPercent     int
+	HeightPercent    int
+	MinWidthPercent  int
+	MaxWidthPercent  int
+	MinHeightPercent int
+	MaxHeightPercent int
+
+	// Viewport units (0 = not set, 50 = 50vw or 50vh)
+	WidthVW  int // percentage of viewport width
+	HeightVH int // percentage of viewport height
+
+	// Ordering
+	Order int // 0 = default, lower values laid out first
 
 	// Spacing
 	Padding                    int
@@ -23,8 +40,9 @@ type Style struct {
 	Gap                        int
 
 	// Alignment
-	Justify string // "start", "center", "end", "space-between", "space-around"
-	Align   string // "stretch", "start", "center", "end"
+	Justify   string // "start", "center", "end", "space-between", "space-around"
+	Align     string // "stretch", "start", "center", "end"
+	AlignSelf string // "" (inherit parent align), "start", "center", "end", "stretch"
 
 	// Visual
 	Border      string // "none", "single", "double", "rounded"

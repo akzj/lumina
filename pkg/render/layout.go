@@ -1,10 +1,47 @@
 package render
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/mattn/go-runewidth"
 )
+
+// layoutViewportW and layoutViewportH hold the root layout dimensions (viewport).
+// Set at the start of LayoutFull. Used to resolve vw/vh units.
+// Thread-safe because layout is single-threaded.
+var layoutViewportW, layoutViewportH int
+
+// parsePercent parses "50%" → (50, true).
+func parsePercent(s string) (int, bool) {
+	if strings.HasSuffix(s, "%") {
+		v := strings.TrimSuffix(s, "%")
+		n, err := strconv.Atoi(strings.TrimSpace(v))
+		if err == nil && n >= 0 {
+			return n, true
+		}
+	}
+	return 0, false
+}
+
+// parseViewport parses "50vw" → (50, "vw", true) or "50vh" → (50, "vh", true).
+func parseViewport(s string) (int, string, bool) {
+	if strings.HasSuffix(s, "vw") {
+		v := strings.TrimSuffix(s, "vw")
+		n, err := strconv.Atoi(strings.TrimSpace(v))
+		if err == nil && n >= 0 {
+			return n, "vw", true
+		}
+	}
+	if strings.HasSuffix(s, "vh") {
+		v := strings.TrimSuffix(s, "vh")
+		n, err := strconv.Atoi(strings.TrimSpace(v))
+		if err == nil && n >= 0 {
+			return n, "vh", true
+		}
+	}
+	return 0, "", false
+}
 
 // LayoutFull computes layout for the entire Node tree.
 // Used for initial render and after structural changes.
@@ -13,6 +50,8 @@ func LayoutFull(root *Node, x, y, w, h int) {
 	if root == nil {
 		return
 	}
+	layoutViewportW = w
+	layoutViewportH = h
 	normalizeSpacingInTree(root)
 	computeFlex(root, x, y, w, h)
 	clearLayoutDirty(root)
@@ -107,6 +146,80 @@ func normalizeSpacing(node *Node) {
 	}
 }
 
+// resolveWidth returns the effective width for a style, resolving percentage
+// and viewport units against parentW. Returns 0 if no width is set.
+func resolveWidth(s Style, parentW int) int {
+	if s.Width > 0 {
+		return s.Width
+	}
+	if s.WidthPercent > 0 {
+		return (parentW * s.WidthPercent) / 100
+	}
+	if s.WidthVW > 0 {
+		return (layoutViewportW * s.WidthVW) / 100
+	}
+	return 0
+}
+
+// resolveHeight returns the effective height for a style, resolving percentage
+// and viewport units against parentH. Returns 0 if no height is set.
+func resolveHeight(s Style, parentH int) int {
+	if s.Height > 0 {
+		return s.Height
+	}
+	if s.HeightPercent > 0 {
+		return (parentH * s.HeightPercent) / 100
+	}
+	if s.HeightVH > 0 {
+		return (layoutViewportH * s.HeightVH) / 100
+	}
+	return 0
+}
+
+// resolveMinW returns the effective minWidth, resolving percentage against parentW.
+func resolveMinW(s Style, parentW int) int {
+	if s.MinWidth > 0 {
+		return s.MinWidth
+	}
+	if s.MinWidthPercent > 0 {
+		return (parentW * s.MinWidthPercent) / 100
+	}
+	return 0
+}
+
+// resolveMaxW returns the effective maxWidth, resolving percentage against parentW.
+func resolveMaxW(s Style, parentW int) int {
+	if s.MaxWidth > 0 {
+		return s.MaxWidth
+	}
+	if s.MaxWidthPercent > 0 {
+		return (parentW * s.MaxWidthPercent) / 100
+	}
+	return 0
+}
+
+// resolveMinH returns the effective minHeight, resolving percentage against parentH.
+func resolveMinH(s Style, parentH int) int {
+	if s.MinHeight > 0 {
+		return s.MinHeight
+	}
+	if s.MinHeightPercent > 0 {
+		return (parentH * s.MinHeightPercent) / 100
+	}
+	return 0
+}
+
+// resolveMaxH returns the effective maxHeight, resolving percentage against parentH.
+func resolveMaxH(s Style, parentH int) int {
+	if s.MaxHeight > 0 {
+		return s.MaxHeight
+	}
+	if s.MaxHeightPercent > 0 {
+		return (parentH * s.MaxHeightPercent) / 100
+	}
+	return 0
+}
+
 // --- Core layout helpers ---
 
 // clamp constrains v to [lo, hi]. If hi is 0, no upper bound is applied.
@@ -188,7 +301,10 @@ func computeFlex(node *Node, x, y, w, h int) {
 		h = 0
 	}
 
-	// Apply fixed sizing with min/max constraints
+	// Apply fixed sizing with min/max constraints.
+	// Percentage/viewport sizing is resolved by the parent layout functions
+	// (layoutVBox/layoutHBox) which pass correctly resolved w/h values.
+	// Here we only apply absolute constraints.
 	if style.Width > 0 {
 		w = clamp(style.Width, style.MinWidth, style.MaxWidth)
 	} else if style.MinWidth > 0 || style.MaxWidth > 0 {
@@ -274,11 +390,11 @@ func computeFlex(node *Node, x, y, w, h int) {
 			if isPositioned(cs) {
 				// Position relative to parent container's content area
 				cx, cy, cw, ch := parentX+cs.Left, parentY+cs.Top, parentW, parentH
-				if cs.Width > 0 {
-					cw = cs.Width
+				if rw := resolveWidth(cs, parentW); rw > 0 {
+					cw = rw
 				}
-				if cs.Height > 0 {
-					ch = cs.Height
+				if rh := resolveHeight(cs, parentH); rh > 0 {
+					ch = rh
 				}
 				if cs.Right >= 0 && cs.Left == 0 {
 					cx = parentX + parentW - cw - cs.Right
@@ -321,11 +437,11 @@ func computeFlex(node *Node, x, y, w, h int) {
 			cy := contentY + cs.Top
 			cw := child.W
 			ch := child.H
-			if cs.Width > 0 {
-				cw = cs.Width
+			if rw := resolveWidth(cs, contentW); rw > 0 {
+				cw = rw
 			}
-			if cs.Height > 0 {
-				ch = cs.Height
+			if rh := resolveHeight(cs, contentH); rh > 0 {
+				ch = rh
 			}
 			// Default to remaining parent dimensions when no explicit size
 			if cw <= 0 {
@@ -351,11 +467,11 @@ func computeFlex(node *Node, x, y, w, h int) {
 			cy := cs.Top
 			cw := child.W
 			ch := child.H
-			if cs.Width > 0 {
-				cw = cs.Width
+			if rw := resolveWidth(cs, node.W); rw > 0 {
+				cw = rw
 			}
-			if cs.Height > 0 {
-				ch = cs.Height
+			if rh := resolveHeight(cs, node.H); rh > 0 {
+				ch = rh
 			}
 			// Default to parent dimensions for fixed-positioned elements
 			// that don't have explicit width/height set
@@ -462,8 +578,8 @@ func layoutVBox(node *Node, contentX, contentY, contentW, contentH int, style St
 					fragH = 1
 				}
 				children[i].finalH = fragH
-			} else if cs.Height > 0 {
-				children[i].finalH = clamp(cs.Height, cs.MinHeight, cs.MaxHeight) + marginV
+			} else if rh := resolveHeight(cs, contentH); rh > 0 {
+				children[i].finalH = clamp(rh, cs.MinHeight, cs.MaxHeight) + marginV
 			} else if cs.MinHeight > 0 {
 				children[i].finalH = cs.MinHeight + marginV
 			} else if child.Type == "component" && len(child.Children) > 0 {
@@ -529,10 +645,16 @@ func layoutVBox(node *Node, contentX, contentY, contentW, contentH int, style St
 				}
 				children[i].fixedH = fragH
 				fixedTotal += children[i].fixedH
-			} else if cs.Height > 0 {
-				h := clamp(cs.Height, cs.MinHeight, cs.MaxHeight)
+			} else if rh := resolveHeight(cs, contentH); rh > 0 {
+				h := clamp(rh, cs.MinHeight, cs.MaxHeight)
 				children[i].fixedH = h + marginV
 				fixedTotal += children[i].fixedH
+			} else if cs.FlexBasis > 0 && cs.Flex > 0 {
+				// flexBasis: use as initial main size, still participate in flex-grow
+				children[i].fixedH = cs.FlexBasis + marginV
+				fixedTotal += children[i].fixedH
+				children[i].flexGrow = cs.Flex
+				flexTotal += cs.Flex
 			} else if cs.MinHeight > 0 && cs.Flex == 0 {
 				children[i].fixedH = cs.MinHeight + marginV
 				fixedTotal += children[i].fixedH
@@ -637,31 +759,28 @@ func layoutVBox(node *Node, contentX, contentY, contentW, contentH int, style St
 
 		childH := children[i].finalH
 		childW := contentW
-
-		// Cross-axis alignment (align)
 		childX := contentX
-		switch style.Align {
-		case "center":
-			cs := children[i].style
-			if cs.Width > 0 {
-				cw := clamp(cs.Width, cs.MinWidth, cs.MaxWidth)
-				childX = contentX + (contentW-cw)/2
-				childW = cw
+
+		// Cross-axis: resolve child's effective width (percent/viewport/absolute)
+		cs := children[i].style
+		rw := resolveWidth(cs, contentW)
+		cMinW := resolveMinW(cs, contentW)
+		cMaxW := resolveMaxW(cs, contentW)
+		if rw > 0 {
+			rw = clamp(rw, cMinW, cMaxW)
+			childW = rw
+		} else if cMinW > 0 || cMaxW > 0 {
+			childW = clamp(contentW, cMinW, cMaxW)
+		}
+
+		// Cross-axis alignment
+		if childW < contentW {
+			switch style.Align {
+			case "center":
+				childX = contentX + (contentW-childW)/2
+			case "end":
+				childX = contentX + contentW - childW
 			}
-		case "end":
-			cs := children[i].style
-			if cs.Width > 0 {
-				cw := clamp(cs.Width, cs.MinWidth, cs.MaxWidth)
-				childX = contentX + contentW - cw
-				childW = cw
-			}
-		case "start":
-			cs := children[i].style
-			if cs.Width > 0 {
-				cw := clamp(cs.Width, cs.MinWidth, cs.MaxWidth)
-				childW = cw
-			}
-		default: // "stretch" — use full width
 		}
 
 		computeFlex(child, childX, curY, childW, childH)
@@ -725,8 +844,8 @@ func layoutHBox(node *Node, contentX, contentY, contentW, contentH int, style St
 		cs := children[i].style
 
 		marginH := cs.MarginLeft + cs.MarginRight
-		if cs.Width > 0 {
-			w := clamp(cs.Width, cs.MinWidth, cs.MaxWidth)
+		if rw := resolveWidth(cs, contentW); rw > 0 {
+			w := clamp(rw, cs.MinWidth, cs.MaxWidth)
 			children[i].fixedW = w + marginH
 			fixedTotal += children[i].fixedW
 		} else if cs.MinWidth > 0 && cs.Flex == 0 {
@@ -838,28 +957,30 @@ func layoutHBox(node *Node, contentX, contentY, contentW, contentH int, style St
 		childH := contentH
 
 		childY := contentY
-		switch style.Align {
-		case "center":
-			cs := children[i].style
-			if cs.Height > 0 {
-				ch := clamp(cs.Height, cs.MinHeight, cs.MaxHeight)
-				childY = contentY + (contentH-ch)/2
-				childH = ch
+		cs := children[i].style
+		rh := resolveHeight(cs, contentH)
+		cMinH := resolveMinH(cs, contentH)
+		cMaxH := resolveMaxH(cs, contentH)
+		if rh > 0 {
+			rh = clamp(rh, cMinH, cMaxH)
+		} else if cMinH > 0 || cMaxH > 0 {
+			rh = clamp(contentH, cMinH, cMaxH)
+		}
+		if rh > 0 && rh < contentH {
+			switch style.Align {
+			case "center":
+				childY = contentY + (contentH-rh)/2
+				childH = rh
+			case "end":
+				childY = contentY + contentH - rh
+				childH = rh
+			case "start":
+				childH = rh
+			default: // "stretch"
+				childH = rh
 			}
-		case "end":
-			cs := children[i].style
-			if cs.Height > 0 {
-				ch := clamp(cs.Height, cs.MinHeight, cs.MaxHeight)
-				childY = contentY + contentH - ch
-				childH = ch
-			}
-		case "start":
-			cs := children[i].style
-			if cs.Height > 0 {
-				ch := clamp(cs.Height, cs.MinHeight, cs.MaxHeight)
-				childH = ch
-			}
-		default: // "stretch"
+		} else if rh > 0 {
+			childH = rh
 		}
 
 		// Clamp child width so it doesn't extend beyond the parent's content area
