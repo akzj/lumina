@@ -60,7 +60,7 @@ func hitTestWithOffset(node *Node, x, y int, scrollOffsetY int) *Node {
 
 		// Clip: only process clicks within content area (not border/padding)
 		bw := 0
-		if node.Style.Border != "" && node.Style.Border != "none" {
+		if hasBorder(node.Style) {
 			bw = 1
 		}
 		visTop := screenY + bw + node.Style.PaddingTop
@@ -80,7 +80,7 @@ func hitTestWithOffset(node *Node, x, y int, scrollOffsetY int) *Node {
 				childScreenY := child.Y - childScrollOffset
 				childScreenBottom := childScreenY + child.H
 				bw := 0
-				if node.Style.Border != "" && node.Style.Border != "none" {
+				if hasBorder(node.Style) {
 					bw = 1
 				}
 				visTop := screenY + bw + node.Style.PaddingTop
@@ -104,7 +104,7 @@ func hitTestWithOffset(node *Node, x, y int, scrollOffsetY int) *Node {
 				childScreenY := child.Y - childScrollOffset
 				childScreenBottom := childScreenY + child.H
 				bw := 0
-				if node.Style.Border != "" && node.Style.Border != "none" {
+				if hasBorder(node.Style) {
 					bw = 1
 				}
 				visTop := screenY + bw + node.Style.PaddingTop
@@ -569,7 +569,7 @@ func findScrollNode(node *Node) *Node {
 // Uses the stored ScrollHeight (set by layout) minus the visible content height.
 func computeMaxScrollY(node *Node) int {
 	bw := 0
-	if node.Style.Border != "" && node.Style.Border != "none" {
+	if hasBorder(node.Style) {
 		bw = 1
 	}
 	contentH := node.H - 2*bw - node.Style.PaddingTop - node.Style.PaddingBottom
