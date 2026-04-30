@@ -803,6 +803,37 @@ func paintTextClipped(buf *CellBuffer, node *Node, clipX1, clipY1, clipX2, clipY
 	}
 }
 
+// paintRuneCell writes a single rune to the buffer at (x, y) with the node's
+// style attributes. It resolves background from the node or inherits from the
+// existing cell. Returns the rune's display width. If rightEdge is exceeded,
+// the cell is not written and 0 is returned.
+func paintRuneCell(buf *CellBuffer, x, y int, ch rune, node *Node, rightEdge int) int {
+	w := runeWidth(ch)
+	if x+w > rightEdge {
+		return 0
+	}
+	bg := node.Style.Background
+	if bg == "" {
+		existing := buf.Get(x, y)
+		bg = existing.BG
+	}
+	buf.Set(x, y, Cell{
+		Ch:            ch,
+		FG:            node.Style.Foreground,
+		BG:            bg,
+		Bold:          node.Style.Bold,
+		Dim:           node.Style.Dim,
+		Underline:     node.Style.Underline,
+		Italic:        node.Style.Italic,
+		Strikethrough: node.Style.Strikethrough,
+		Inverse:       node.Style.Inverse,
+	})
+	if w == 2 && x+1 < rightEdge {
+		buf.Set(x+1, y, Cell{Wide: true, BG: bg})
+	}
+	return w
+}
+
 func paintText(buf *CellBuffer, node *Node) {
 	// DON'T fill background if not set (preserve parent's background)
 	if node.Style.Background != "" {
