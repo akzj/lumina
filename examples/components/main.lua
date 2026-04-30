@@ -4,8 +4,8 @@
 -- Quit: q  or  Ctrl+C
 --
 -- Note: There is no lumina.getTerminalSize() for Lua; width/height follow the
--- engine root layout after terminal resize. Shell uses flex (no Main scroll by
--- default) due to scroll+height quirks in pkg/render/layout.go for plain vboxes.
+-- engine root layout after terminal resize. lux.Atlantis.Shell enables Main
+-- scroll by default so long form content scrolls inside the main column.
 
 local lux = require("lux")
 local Atlantis = lux.Atlantis

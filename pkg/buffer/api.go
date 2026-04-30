@@ -10,6 +10,9 @@ type Cell struct {
 	Bold       bool
 	Dim        bool
 	Underline  bool
+	Italic        bool
+	Strikethrough bool
+	Inverse       bool
 	Wide       bool // true if this char occupies 2 columns (CJK, emoji)
 }
 

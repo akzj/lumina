@@ -2,10 +2,9 @@
 -- Layout: standard TUI app structure with Header, Sidebar, Main, Footer slots.
 --
 -- Main scroll: `Layout.Main { scroll = true }` sets overflow=scroll on the main
--- slot. The engine assigns natural height 1 to a single plain vbox child inside
--- a scroll parent (see pkg/render/layout.go scroll branch), so avoid one tall
--- inner vbox as the only child; use multiple children, components with measured
--- height, or keep scroll off and rely on flex (e.g. lux.atlantis Shell defaults).
+-- slot. Scroll containers lay out flow children at natural height: containers with
+-- children get an intrinsic-height pass (see pkg/render/layout.go scroll branch),
+-- so a single inner vbox of cards is valid.
 --
 -- Usage:
 --   local Layout = require("lux.layout")

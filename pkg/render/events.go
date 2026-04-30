@@ -19,6 +19,11 @@ func hitTestWithOffset(node *Node, x, y int, scrollOffsetY int) *Node {
 		return nil
 	}
 
+	// display:none and visibility:hidden nodes are not interactive
+	if node.Style.Display == "none" || node.Style.Visibility == "hidden" {
+		return nil
+	}
+
 	// Component placeholders are transparent containers — their bounds from
 	// parent layout don't reflect absolute-positioned children's actual positions.
 	// Skip bounds check and go straight to checking children.

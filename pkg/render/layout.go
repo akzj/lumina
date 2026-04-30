@@ -167,6 +167,15 @@ func applyRelativeOffset(child *Node, cs Style) {
 func computeFlex(node *Node, x, y, w, h int) {
 	style := node.Style
 
+	// display:none — node takes no space, not rendered
+	if style.Display == "none" {
+		node.X = x
+		node.Y = y
+		node.W = 0
+		node.H = 0
+		return
+	}
+
 	// Apply margin — shrinks the area this node occupies
 	x += style.MarginLeft
 	y += style.MarginTop
@@ -375,6 +384,18 @@ func layoutText(node *Node, availW int) {
 		node.H = 1
 		return
 	}
+
+	// whiteSpace: "nowrap" — no wrapping, height = number of \n lines
+	if node.Style.WhiteSpace == "nowrap" {
+		lines := strings.Split(node.Content, "\n")
+		totalH := len(lines)
+		if totalH < 1 {
+			totalH = 1
+		}
+		node.H = totalH
+		return
+	}
+
 	// Split by newlines and calculate height for each line (with wrapping)
 	lines := strings.Split(node.Content, "\n")
 	totalH := 0
@@ -409,12 +430,12 @@ func layoutVBox(node *Node, contentX, contentY, contentW, contentH int, style St
 	}
 	children := make([]childInfo, len(node.Children))
 
-	// Count flow children (not absolute/fixed)
+	// Count flow children (not absolute/fixed, not display:none)
 	flowCount := 0
 	for i, child := range node.Children {
 		cs := child.Style
 		children[i].style = cs
-		children[i].positioned = isPositioned(cs)
+		children[i].positioned = isPositioned(cs) || cs.Display == "none"
 		if !children[i].positioned {
 			flowCount++
 		}
@@ -678,7 +699,7 @@ func layoutHBox(node *Node, contentX, contentY, contentW, contentH int, style St
 	for i, child := range node.Children {
 		cs := child.Style
 		children[i].style = cs
-		children[i].positioned = isPositioned(cs)
+		children[i].positioned = isPositioned(cs) || cs.Display == "none"
 		if !children[i].positioned {
 			flowCount++
 		}

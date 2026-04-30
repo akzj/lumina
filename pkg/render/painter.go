@@ -410,6 +410,9 @@ func paintNode(buf *CellBuffer, node *Node) {
 	if node == nil || node.W <= 0 || node.H <= 0 {
 		return
 	}
+	if node.Style.Display == "none" || node.Style.Visibility == "hidden" {
+		return
+	}
 
 	switch node.Type {
 	case "text":
@@ -663,6 +666,9 @@ func paintNodeClipped(buf *CellBuffer, node *Node, clipX1, clipY1, clipX2, clipY
 	if node == nil || node.W <= 0 || node.H <= 0 {
 		return
 	}
+	if node.Style.Display == "none" || node.Style.Visibility == "hidden" {
+		return
+	}
 	// Skip entirely if the node is outside the clip rect
 	if node.Y >= clipY2 || node.Y+node.H <= clipY1 || node.X >= clipX2 || node.X+node.W <= clipX1 {
 		return
@@ -730,6 +736,11 @@ func paintTextClipped(buf *CellBuffer, node *Node, clipX1, clipY1, clipX2, clipY
 
 	fg := node.Style.Foreground
 	bold := node.Style.Bold
+	italic := node.Style.Italic
+	strikethrough := node.Style.Strikethrough
+	inverse := node.Style.Inverse
+	dim := node.Style.Dim
+	underline := node.Style.Underline
 
 	x := node.X
 	y := node.Y
@@ -756,7 +767,7 @@ func paintTextClipped(buf *CellBuffer, node *Node, clipX1, clipY1, clipX2, clipY
 					existing := buf.Get(x, y)
 					bg = existing.BG
 				}
-				buf.SetChar(x, y, ch, fg, bg, bold)
+				buf.Set(x, y, Cell{Ch: ch, FG: fg, BG: bg, Bold: bold, Dim: dim, Underline: underline, Italic: italic, Strikethrough: strikethrough, Inverse: inverse})
 				if w == 2 && x+1 >= clipX1 && x+1 < clipX2 {
 					buf.Set(x+1, y, Cell{Wide: true, BG: bg})
 				}
@@ -779,40 +790,170 @@ func paintText(buf *CellBuffer, node *Node) {
 	// Write text content
 	fg := node.Style.Foreground
 	bold := node.Style.Bold
+	italic := node.Style.Italic
+	strikethrough := node.Style.Strikethrough
+	inverse := node.Style.Inverse
+	dim := node.Style.Dim
+	underline := node.Style.Underline
 
-	x := node.X
-	y := node.Y
+	// Text alignment and overflow
+	textAlign := node.Style.TextAlign
+	noWrap := node.Style.WhiteSpace == "nowrap"
+	ellipsis := node.Style.TextOverflow == "ellipsis"
+
 	rightEdge := node.X + node.W
-	for _, ch := range node.Content {
-		if ch == '\n' {
-			y++
-			x = node.X
-			continue
-		}
-		w := runeWidth(ch)
-		// Wrap to next line if character doesn't fit
-		if x+w > rightEdge {
-			y++
-			x = node.X
-		}
-		if y >= node.Y+node.H {
-			break
-		}
-		if x+w-1 < rightEdge {
-			bg := node.Style.Background
-			if bg == "" {
-				// Inherit background from existing cell (parent painted it)
-				existing := buf.Get(x, y)
-				bg = existing.BG
+	availW := node.W
+
+	if noWrap {
+		// No-wrap mode: render each line without wrapping, clip or ellipsis
+		lines := splitLines(node.Content)
+		for lineIdx, line := range lines {
+			y := node.Y + lineIdx
+			if y >= node.Y+node.H {
+				break
 			}
-			buf.SetChar(x, y, ch, fg, bg, bold)
-			if w == 2 {
-				// Set padding cell for wide character
-				if x+1 < rightEdge {
-					buf.Set(x+1, y, Cell{Wide: true, BG: bg})
+			runes := []rune(line)
+			lineW := stringWidth(line)
+
+			// Calculate starting X based on alignment
+			x := node.X
+			if textAlign == "center" {
+				offset := (availW - lineW) / 2
+				if offset > 0 {
+					x += offset
+				}
+			} else if textAlign == "right" {
+				offset := availW - lineW
+				if offset > 0 {
+					x += offset
 				}
 			}
-			x += w
+
+			// Determine truncation point if ellipsis
+			var truncIdx int
+			var truncated bool
+			if ellipsis && lineW > availW {
+				truncated = true
+				truncIdx = truncateRunesForWidth(runes, availW-1) // leave room for "…"
+			}
+
+			col := x
+			for i, ch := range runes {
+				if truncated && i >= truncIdx {
+					// Paint ellipsis
+					bg := node.Style.Background
+					if bg == "" {
+						existing := buf.Get(col, y)
+						bg = existing.BG
+					}
+					buf.Set(col, y, Cell{Ch: '…', FG: fg, BG: bg, Bold: bold, Dim: dim, Underline: underline, Italic: italic, Strikethrough: strikethrough, Inverse: inverse})
+					col++
+					break
+				}
+				w := runeWidth(ch)
+				if col+w > rightEdge {
+					break // clip
+				}
+				bg := node.Style.Background
+				if bg == "" {
+					existing := buf.Get(col, y)
+					bg = existing.BG
+				}
+				buf.Set(col, y, Cell{Ch: ch, FG: fg, BG: bg, Bold: bold, Dim: dim, Underline: underline, Italic: italic, Strikethrough: strikethrough, Inverse: inverse})
+				if w == 2 {
+					if col+1 < rightEdge {
+						buf.Set(col+1, y, Cell{Wide: true, BG: bg})
+					}
+				}
+				col += w
+			}
+		}
+	} else {
+		// Normal wrapping mode (existing behavior + alignment + decorations)
+		x := node.X
+		y := node.Y
+
+		// For alignment in wrapping mode, we need to process line by line
+		if textAlign == "center" || textAlign == "right" {
+			lines := splitLines(node.Content)
+			for lineIdx, line := range lines {
+				y = node.Y + lineIdx
+				if y >= node.Y+node.H {
+					break
+				}
+				// TODO: wrapping + alignment is complex; for now, align first line of each \n-segment
+				lineW := stringWidth(line)
+				x = node.X
+				if textAlign == "center" {
+					offset := (availW - lineW) / 2
+					if offset > 0 {
+						x += offset
+					}
+				} else if textAlign == "right" {
+					offset := availW - lineW
+					if offset > 0 {
+						x += offset
+					}
+				}
+				for _, ch := range line {
+					w := runeWidth(ch)
+					if x+w > rightEdge {
+						y++
+						x = node.X
+					}
+					if y >= node.Y+node.H {
+						break
+					}
+					if x+w-1 < rightEdge {
+						bg := node.Style.Background
+						if bg == "" {
+							existing := buf.Get(x, y)
+							bg = existing.BG
+						}
+						buf.Set(x, y, Cell{Ch: ch, FG: fg, BG: bg, Bold: bold, Dim: dim, Underline: underline, Italic: italic, Strikethrough: strikethrough, Inverse: inverse})
+						if w == 2 {
+							if x+1 < rightEdge {
+								buf.Set(x+1, y, Cell{Wide: true, BG: bg})
+							}
+						}
+						x += w
+					}
+				}
+			}
+		} else {
+			// Default left-aligned wrapping (original behavior + decorations)
+			for _, ch := range node.Content {
+				if ch == '\n' {
+					y++
+					x = node.X
+					continue
+				}
+				w := runeWidth(ch)
+				// Wrap to next line if character doesn't fit
+				if x+w > rightEdge {
+					y++
+					x = node.X
+				}
+				if y >= node.Y+node.H {
+					break
+				}
+				if x+w-1 < rightEdge {
+					bg := node.Style.Background
+					if bg == "" {
+						// Inherit background from existing cell (parent painted it)
+						existing := buf.Get(x, y)
+						bg = existing.BG
+					}
+					buf.Set(x, y, Cell{Ch: ch, FG: fg, BG: bg, Bold: bold, Dim: dim, Underline: underline, Italic: italic, Strikethrough: strikethrough, Inverse: inverse})
+					if w == 2 {
+						// Set padding cell for wide character
+						if x+1 < rightEdge {
+							buf.Set(x+1, y, Cell{Wide: true, BG: bg})
+						}
+					}
+					x += w
+				}
+			}
 		}
 	}
 }
@@ -896,7 +1037,10 @@ func paintBorder(buf *CellBuffer, node *Node) {
 		return
 	}
 
-	fg := node.Style.Foreground
+	fg := node.Style.BorderColor
+	if fg == "" {
+		fg = node.Style.Foreground
+	}
 	bg := node.Style.Background
 
 	// Border characters based on style
@@ -929,4 +1073,34 @@ func paintBorder(buf *CellBuffer, node *Node) {
 		buf.SetChar(x, row, vt, fg, bg, false)
 		buf.SetChar(x+w-1, row, vt, fg, bg, false)
 	}
+}
+
+// splitLines splits text by newline characters.
+func splitLines(s string) []string {
+	if s == "" {
+		return []string{""}
+	}
+	lines := make([]string, 0, 4)
+	start := 0
+	for i, ch := range s {
+		if ch == '\n' {
+			lines = append(lines, s[start:i])
+			start = i + 1
+		}
+	}
+	lines = append(lines, s[start:])
+	return lines
+}
+
+// truncateRunesForWidth returns the number of runes from the slice that fit in maxW display columns.
+func truncateRunesForWidth(runes []rune, maxW int) int {
+	w := 0
+	for i, r := range runes {
+		rw := runeWidth(r)
+		if w+rw > maxW {
+			return i
+		}
+		w += rw
+	}
+	return len(runes)
 }
