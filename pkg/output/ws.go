@@ -129,8 +129,9 @@ func (ws *WSAdapter) WriteFull(screen *buffer.Buffer) error {
 }
 
 // WriteDirty sends only the changed regions to all connected clients.
+// Only cells within dirty rects are serialized, reducing payload size.
 func (ws *WSAdapter) WriteDirty(screen *buffer.Buffer, dirtyRects []buffer.Rect) error {
-	result := bufferToRenderResult(screen)
+	result := bufferToDirtyRenderResult(screen, dirtyRects)
 	result.DirtyRects = make([]RectJSON, len(dirtyRects))
 	for i, r := range dirtyRects {
 		result.DirtyRects[i] = RectJSON{X: r.X, Y: r.Y, W: r.W, H: r.H}
@@ -348,8 +349,11 @@ const indexHTML = `<!DOCTYPE html>
         ctx.textBaseline = 'top';
 
         for (var y = ry; y < ry + rh && y < data.height; y++) {
+            var row = data.cells[y];
+            if (!row) continue;
             for (var x = rx; x < rx + rw && x < data.width; x++) {
-                var cell = data.cells[y][x];
+                var cell = row[x];
+                if (!cell) continue;
                 var px = x * CELL_W;
                 var py = y * CELL_H;
 
