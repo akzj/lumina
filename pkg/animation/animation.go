@@ -82,8 +82,9 @@ func (a *Animation) Tick(nowMs int64) float64 {
 
 	if elapsed >= a.duration {
 		if a.loop {
-			a.startTime = nowMs
-			elapsed = 0
+			// Preserve overshoot for smooth looping
+			a.startTime += a.duration
+			elapsed = nowMs - a.startTime
 		} else {
 			a.current = a.to
 			a.done = true
