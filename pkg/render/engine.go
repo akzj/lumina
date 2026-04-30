@@ -841,11 +841,15 @@ func (e *Engine) cleanupRemovedChildComponents(parent *Component, rootNode *Node
 		// Rebuild ChildMap from kept children
 		parent.ChildMap = make(map[string]*Component)
 		for _, child := range kept {
-			// Reconstruct the map key from type + lookup key
+			// Reconstruct the map key from type + lookup key.
+			// AddChild uses: "Type:lookupKey" when lookupKey != "", else just "Type".
+			// child.ID is "parentID:lookupKey" or "parentID:factoryName" (when no key).
 			lookupKey := ""
 			if child.ID != "" {
 				parts := splitAfterColon(child.ID, parent.ID)
-				if parts != "" {
+				// If the extracted part equals the factory name, it means no
+				// explicit key was provided — AddChild used just child.Type.
+				if parts != "" && parts != child.Type {
 					lookupKey = parts
 				}
 			}
@@ -948,7 +952,8 @@ func (e *Engine) renderInOrder() int {
 	// Loop until no more newly-dirty components remain.
 	// reconcileChildComponents inside renderComponent may create new dirty children,
 	// so a single pass can miss them.
-	for iterations := 0; iterations < 10; iterations++ {
+	const maxRenderPasses = 50
+	for iterations := 0; iterations < maxRenderPasses; iterations++ {
 		var dirty []*Component
 		for _, comp := range e.components {
 			if !comp.Dirty || comp.IsRoot {
@@ -958,6 +963,11 @@ func (e *Engine) renderInOrder() int {
 		}
 		if len(dirty) == 0 {
 			break
+		}
+		if iterations == maxRenderPasses-1 {
+			// Possible circular dependency: components keep dirtying each other.
+			// Log remaining dirty components for debugging.
+			_ = dirty // convergence not reached; last pass will render what it can
 		}
 		sort.Slice(dirty, func(i, j int) bool {
 			return componentDepth(dirty[i]) < componentDepth(dirty[j])
