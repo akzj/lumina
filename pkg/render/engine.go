@@ -324,6 +324,11 @@ func (e *Engine) Layers() []*Layer {
 // DefineComponent registers a component factory.
 // Called from Lua: lumina.defineComponent("Cell", renderFn)
 func (e *Engine) DefineComponent(name string, renderFnRef int64) {
+	// Free the old factory ref if redefining (e.g. module-level hot-reload).
+	// Skip goWidgetSentinel — not a real Lua ref.
+	if old, exists := e.factories[name]; exists && old != goWidgetSentinel {
+		e.L.Unref(lua.RegistryIndex, int(old))
+	}
 	e.factories[name] = renderFnRef
 }
 
