@@ -2,6 +2,7 @@ package render
 
 import (
 	"reflect"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -1711,6 +1712,48 @@ func (e *Engine) RegisterLuaAPI() {
 	// lumina.setTheme(nameOrTable) → switch theme by name or set custom
 	L.PushFunction(e.luaSetTheme)
 	L.SetField(tblIdx, "setTheme")
+
+	// lumina.memStats() → {goHeap, goObjects, goGCCycles, goTotalAlloc, goSys, luaBytes}
+	L.PushFunction(func(L *lua.State) int {
+		var ms runtime.MemStats
+		runtime.ReadMemStats(&ms)
+
+		L.NewTable()
+		L.PushInteger(int64(ms.HeapAlloc))
+		L.SetField(-2, "goHeap")
+		L.PushInteger(int64(ms.HeapObjects))
+		L.SetField(-2, "goObjects")
+		L.PushInteger(int64(ms.NumGC))
+		L.SetField(-2, "goGCCycles")
+		L.PushInteger(int64(ms.TotalAlloc))
+		L.SetField(-2, "goTotalAlloc")
+		L.PushInteger(int64(ms.Sys))
+		L.SetField(-2, "goSys")
+		L.PushInteger(L.GCTotalBytes())
+		L.SetField(-2, "luaBytes")
+		return 1
+	})
+	L.SetField(tblIdx, "memStats")
+
+	// lumina.gc() → force Go GC + Lua GC, return post-GC stats
+	L.PushFunction(func(L *lua.State) int {
+		L.GCCollect()
+		runtime.GC()
+		var ms runtime.MemStats
+		runtime.ReadMemStats(&ms)
+
+		L.NewTable()
+		L.PushInteger(int64(ms.HeapAlloc))
+		L.SetField(-2, "goHeap")
+		L.PushInteger(int64(ms.HeapObjects))
+		L.SetField(-2, "goObjects")
+		L.PushInteger(int64(ms.NumGC))
+		L.SetField(-2, "goGCCycles")
+		L.PushInteger(L.GCTotalBytes())
+		L.SetField(-2, "luaBytes")
+		return 1
+	})
+	L.SetField(tblIdx, "gc")
 
 	L.SetGlobal("lumina")
 }
