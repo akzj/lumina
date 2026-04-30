@@ -81,6 +81,100 @@ func TestV2E2E_BoxWithText(t *testing.T) {
 	}
 }
 
+// Lux outlined buttons use rounded box-drawing borders on the grafted hbox;
+// regression guard: they must appear in the output buffer, not only as plain text.
+func TestV2E2E_LuxButtonOutlinedBorderPainted(t *testing.T) {
+	app, ta, _ := newV2App(t, 80, 24)
+
+	err := app.RunString(`
+		local Button = require("lux.button")
+		lumina.createComponent({
+			id = "root",
+			render = function()
+				return lumina.createElement("box", { style = { background = "#0B1220", padding = 2 } },
+					lumina.createElement(Button, {
+						key = "b",
+						label = "Primary",
+						severity = "primary",
+						appearance = "outlined",
+					})
+				)
+			end,
+		})
+	`)
+	if err != nil {
+		t.Fatalf("RunString: %v", err)
+	}
+	app.RenderAll()
+	if ta.LastScreen == nil {
+		t.Fatal("LastScreen is nil")
+	}
+	if !screenHasString(ta, "Primary") {
+		t.Fatal("expected Primary label on screen")
+	}
+	if !screenHasChar(ta, '╭') && !screenHasChar(ta, '╮') {
+		t.Error("expected rounded border corner runes (╭/╮) on screen for outlined LuxButton")
+	}
+}
+
+// Mirrors examples/components/main.lua: Card + flex-wrap row inside Atlantis Shell
+// (scrollable main). Outlined LuxButton borders must still reach the screen buffer.
+func TestV2E2E_LuxOutlinedButtonInAtlantisScrollShell(t *testing.T) {
+	app, ta, _ := newV2App(t, 100, 30)
+
+	err := app.RunString(`
+		local Card = require("lux.card")
+		local Button = require("lux.button")
+		local Atlantis = require("lux.atlantis")
+		Atlantis.applyTheme()
+
+		lumina.createComponent({
+			id = "root",
+			render = function()
+				return Atlantis.Shell {
+					title = "Button",
+					sidebar = lumina.createElement("text", {
+						foreground = "#8B9BB4",
+						style = { height = 1, width = "100%", paddingLeft = 1 },
+					}, "Nav"),
+					mainChildren = {
+						lumina.createElement(Card, {
+							key = "c-out",
+							title = "Outlined",
+							variant = "elevated",
+							padding = 1,
+						},
+							lumina.createElement("hbox", {
+								style = { gap = 1, flexWrap = "wrap", width = "100%" },
+							},
+								lumina.createElement(Button, {
+									key = "bo-p",
+									label = "Primary",
+									severity = "primary",
+									appearance = "outlined",
+								})
+							)
+						),
+					},
+				}
+			end,
+		})
+	`)
+	if err != nil {
+		t.Fatalf("RunString: %v", err)
+	}
+	app.RenderAll()
+	if ta.LastScreen == nil {
+		t.Fatal("LastScreen is nil")
+	}
+	if !screenHasString(ta, "Primary") {
+		t.Fatal("expected Primary label")
+	}
+	if !screenHasChar(ta, '╭') && !screenHasChar(ta, '╮') {
+		t.Error("expected rounded border corners in scroll-shell layout")
+	}
+}
+
 func TestV2E2E_MultipleTextChildren(t *testing.T) {
 	app, ta, _ := newV2App(t, 40, 10)
 

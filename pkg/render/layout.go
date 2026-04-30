@@ -300,6 +300,25 @@ func hasBorder(s Style) bool {
 	return s.Border == "single" || s.Border == "double" || s.Border == "rounded"
 }
 
+// minBorderPaintW is the smallest outer width for which paintBorder draws a box
+// (see painter.paintBorder). Flex rows must not clamp bordered widgets below this.
+const minBorderPaintW = 2
+
+// minOuterWidthForBorderPaint returns the minimum main-axis width a node needs so
+// its visible border can render. Unwraps a single-graft component to the real root.
+func minOuterWidthForBorderPaint(n *Node) int {
+	if n == nil {
+		return 0
+	}
+	if n.Type == "component" && len(n.Children) == 1 {
+		return minOuterWidthForBorderPaint(n.Children[0])
+	}
+	if hasBorder(n.Style) {
+		return minBorderPaintW
+	}
+	return 0
+}
+
 // isPositioned returns true if the style has absolute or fixed positioning.
 func isPositioned(s Style) bool {
 	return s.Position == "absolute" || s.Position == "fixed"
@@ -549,6 +568,23 @@ func computeFlex(node *Node, x, y, w, h int, depth int) {
 				computeFlex(child, cx, cy, cw, ch, depth+1)
 			} else {
 				computeFlex(child, x, y, w, h, depth+1)
+			}
+		}
+		// Graft is a single root laid out in the placeholder's box; the root may end
+		// taller/wider than the slot (e.g. LuxButton style.Height=3 while flex-wrap
+		// passes childH=1). Keep placeholder W/H in sync so layoutHBoxWrap row height,
+		// parent vbox totals, and hit-testing match what paint draws.
+		if len(node.Children) == 1 {
+			root := node.Children[0]
+			if root.X == node.X && root.Y == node.Y {
+				if root.W > node.W {
+					node.W = root.W
+					node.PaintDirty = true
+				}
+				if root.H > node.H {
+					node.H = root.H
+					node.PaintDirty = true
+				}
 			}
 		}
 		return
@@ -1266,8 +1302,16 @@ func layoutHBox(node *Node, contentX, contentY, contentW, contentH int, style St
 		if maxChildW < 0 {
 			maxChildW = 0
 		}
+		if mw := minOuterWidthForBorderPaint(child); mw > 0 && childW < mw {
+			childW = mw
+		}
 		if childW > maxChildW {
-			childW = maxChildW
+			if mw := minOuterWidthForBorderPaint(child); mw > maxChildW {
+				// Row tail too narrow for border paint; keep drawable width (may extend past clip).
+				childW = mw
+			} else {
+				childW = maxChildW
+			}
 		}
 
 		computeFlex(child, curX, childY, childW, childH, depth+1)
@@ -1456,6 +1500,12 @@ func layoutHBoxWrap(node *Node, contentX, contentY, contentW, contentH int, styl
 				finalWidths[idx] = 1
 			}
 		}
+		for idx, item := range r.items {
+			child := node.Children[item.childIdx]
+			if mw := minOuterWidthForBorderPaint(child); mw > finalWidths[idx] {
+				finalWidths[idx] = mw
+			}
+		}
 
 		// Position children in this row
 		curX := contentX
@@ -1467,6 +1517,21 @@ func layoutHBoxWrap(node *Node, contentX, contentY, contentW, contentH int, styl
 			childH := contentH
 			if rh := resolveHeight(item.style, contentH); rh > 0 {
 				childH = rh
+			}
+
+			maxChildW := (contentX + contentW) - curX
+			if maxChildW < 0 {
+				maxChildW = 0
+			}
+			if mw := minOuterWidthForBorderPaint(child); mw > 0 && childW < mw {
+				childW = mw
+			}
+			if childW > maxChildW {
+				if mw := minOuterWidthForBorderPaint(child); mw > maxChildW {
+					childW = mw
+				} else {
+					childW = maxChildW
+				}
 			}
 
 			computeFlex(child, curX, curY, childW, childH, depth+1)

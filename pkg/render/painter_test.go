@@ -472,6 +472,34 @@ func TestPaintFull_RoundedBorder(t *testing.T) {
 	}
 }
 
+// Bordered descendants of overflow:scroll are painted via paintBoxClipped; borders
+// must not be omitted (regression: Lux outlined buttons in scrollable main).
+func TestPaintFull_ScrollVBox_DrawsNestedRoundedBorder(t *testing.T) {
+	buf := NewCellBuffer(24, 10)
+	inner := makeNode("hbox", Style{
+		Border: "rounded", BorderColor: "#F5C842", Foreground: "#F5C842",
+		Height: 3, PaddingLeft: 1, PaddingRight: 1, Right: -1, Bottom: -1,
+	}, makeText("OK"))
+	root := makeNode("vbox", Style{
+		Overflow: "scroll", Background: "#0B1220", Right: -1, Bottom: -1,
+	}, inner)
+	LayoutFull(root, 0, 0, 24, 10)
+	PaintFull(buf, root)
+
+	found := false
+	for py := 0; py < 10; py++ {
+		for px := 0; px < 24; px++ {
+			if buf.Get(px, py).Ch == '╭' {
+				found = true
+				break
+			}
+		}
+	}
+	if !found {
+		t.Error("expected at least one '╭' from nested bordered hbox inside scroll vbox")
+	}
+}
+
 func TestPaintFull_DoubleBorder(t *testing.T) {
 	buf := NewCellBuffer(10, 5)
 	node := &Node{
