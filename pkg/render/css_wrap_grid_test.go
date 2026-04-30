@@ -52,6 +52,34 @@ func TestFlexWrap_HBox_WithGap(t *testing.T) {
 	}
 }
 
+func TestFlexWrap_HBox_NestedHBoxIntrinsicWidth(t *testing.T) {
+	// Wrapped row must not collapse auto-width nested hboxes (e.g. Lux buttons) to width 1.
+	root := &Node{Type: "hbox", Style: Style{FlexWrap: "wrap", Gap: 1}}
+	makeBtn := func(label string) *Node {
+		btn := &Node{Type: "hbox", Style: Style{
+			Height:        3,
+			Border:        "rounded",
+			PaddingLeft:   2,
+			PaddingRight:  2,
+			PaddingTop:    0,
+			PaddingBottom: 0,
+		}, Parent: root}
+		txt := &Node{Type: "text", Content: label, Parent: btn}
+		btn.Children = []*Node{txt}
+		return btn
+	}
+	root.Children = []*Node{
+		makeBtn("Primary"), makeBtn("Secondary"), makeBtn("OK"),
+	}
+
+	LayoutFull(root, 0, 0, 120, 20)
+
+	b0 := root.Children[0]
+	if b0.W < 8 {
+		t.Errorf("nested button width: got W=%d, want >= 8 (label + padding + border)", b0.W)
+	}
+}
+
 func TestFlexWrap_HBox_RowHeight(t *testing.T) {
 	// Children in same row with different heights — row height = max
 	root := &Node{Type: "hbox", Style: Style{FlexWrap: "wrap"}}

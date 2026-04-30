@@ -1134,6 +1134,77 @@ func layoutHBox(node *Node, contentX, contentY, contentW, contentH int, style St
 	}
 }
 
+// wrapHBoxItemDesiredWidth estimates a flex item's outer width along the main axis
+// for flex-wrap row packing when the item has no explicit width or flex-basis.
+// It includes the item's horizontal margin. Nested hbox widths sum children; stacked
+// containers (vbox, box, component, …) use the max child width.
+func wrapHBoxItemDesiredWidth(child *Node, parentContentW int) int {
+	cs := child.Style
+	marginH := cs.MarginLeft + cs.MarginRight
+	if isPositioned(cs) || cs.Display == "none" {
+		return 0
+	}
+	if rw := resolveWidth(cs, parentContentW); rw > 0 {
+		return clamp(rw, resolveMinW(cs, parentContentW), resolveMaxW(cs, parentContentW)) + marginH
+	}
+	if cs.FlexBasis > 0 {
+		w := cs.FlexBasis
+		return clamp(w, resolveMinW(cs, parentContentW), resolveMaxW(cs, parentContentW)) + marginH
+	}
+
+	borderW := 0
+	if hasBorder(cs) {
+		borderW = 1
+	}
+	hpad := cs.PaddingLeft + cs.PaddingRight + 2*borderW
+
+	switch child.Type {
+	case "text":
+		n := 1
+		if child.Content != "" {
+			n = stringWidth(child.Content)
+			if n < 1 {
+				n = 1
+			}
+		}
+		return clamp(n+hpad, resolveMinW(cs, parentContentW), resolveMaxW(cs, parentContentW)) + marginH
+	case "input", "textarea":
+		return clamp(1+hpad, resolveMinW(cs, parentContentW), resolveMaxW(cs, parentContentW)) + marginH
+	case "hbox":
+		inner := 0
+		flow := 0
+		for _, ch := range child.Children {
+			if isPositioned(ch.Style) || ch.Style.Display == "none" {
+				continue
+			}
+			inner += wrapHBoxItemDesiredWidth(ch, parentContentW)
+			flow++
+		}
+		if flow > 1 {
+			inner += child.Style.Gap * (flow - 1)
+		}
+		out := inner + hpad
+		return clamp(out, resolveMinW(cs, parentContentW), resolveMaxW(cs, parentContentW)) + marginH
+	default:
+		// vbox, box, fragment, component, scroll, etc. — vertical stack: width ≈ max child
+		maxW := 0
+		for _, ch := range child.Children {
+			if isPositioned(ch.Style) || ch.Style.Display == "none" {
+				continue
+			}
+			w := wrapHBoxItemDesiredWidth(ch, parentContentW)
+			if w > maxW {
+				maxW = w
+			}
+		}
+		if maxW < 1 {
+			maxW = 1
+		}
+		out := maxW + hpad
+		return clamp(out, resolveMinW(cs, parentContentW), resolveMaxW(cs, parentContentW)) + marginH
+	}
+}
+
 // --- flex-wrap layout ---
 
 // layoutHBoxWrap lays out children in a horizontal row with wrapping.
@@ -1160,25 +1231,8 @@ func layoutHBoxWrap(node *Node, contentX, contentY, contentW, contentH int, styl
 		} else if cs.FlexBasis > 0 {
 			desiredW = cs.FlexBasis + marginH
 		} else {
-			// Auto width
-			switch child.Type {
-			case "text":
-				naturalW := 1
-				if child.Content != "" {
-					naturalW = stringWidth(child.Content)
-					if naturalW < 1 {
-						naturalW = 1
-					}
-				}
-				desiredW = naturalW + marginH
-			default:
-				// Container with no explicit width: use flex later or minimum 1
-				if cs.Flex > 0 {
-					desiredW = 1 + marginH
-				} else {
-					desiredW = 1 + marginH
-				}
-			}
+			// Auto width — intrinsic measure for nested flex rows (e.g. Lux Button hbox)
+			desiredW = wrapHBoxItemDesiredWidth(child, contentW)
 		}
 		allItems = append(allItems, rowItem{childIdx: i, desiredW: desiredW, style: cs})
 	}
