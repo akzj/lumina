@@ -210,7 +210,7 @@ func layoutVBox(node *Node, contentX, contentY, contentW, contentH int, style St
 						if children[i].finalH < 1 {
 							children[i].finalH = 1
 						}
-						children[i].finalH = clamp(children[i].finalH, children[i].style.MinHeight, 0)
+						children[i].finalH = clamp(children[i].finalH, children[i].style.MinHeight, children[i].style.MaxHeight)
 					}
 				}
 			}
