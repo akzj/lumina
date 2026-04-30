@@ -100,12 +100,16 @@ local DataGrid = lumina.defineComponent("DataGrid", function(props)
 	local lastEditValue = editValueProp
 
 	-- Focus the edit input after it's rendered
+	-- Use a comparable string key as dep (Lua tables are not comparable in Go's depsEqual)
+	local editingKey = editingCell
+		and (tostring(editingCell.rowIndex) .. "-" .. tostring(editingCell.columnId))
+		or nil
 	lumina.useEffect(function()
 		if editingCell then
 			local editId = "edit-" .. tostring(editingCell.rowIndex) .. "-" .. tostring(editingCell.columnId)
 			lumina.focusById(editId)
 		end
-	end)
+	end, {editingKey})
 
 	-- Build selectedIds lookup set for O(1) membership test
 	local selectedIdSet = {}
