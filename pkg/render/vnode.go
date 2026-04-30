@@ -119,7 +119,7 @@ func styleToMap(s Style) map[string]any {
 	if s.Align != "" {
 		m["align"] = s.Align
 	}
-	if s.Border != "" && s.Border != "none" {
+	if hasBorder(s) {
 		m["border"] = s.Border
 	}
 	if s.Foreground != "" {
