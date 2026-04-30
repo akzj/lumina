@@ -984,12 +984,66 @@ func paintInput(buf *CellBuffer, node *Node) {
 		}
 		return
 	}
-	paintInputText(buf, node)
+
+	// Compute horizontal scroll offset to keep cursor visible
+	cursorOffset := inputCursorScreenOffset(node)
+	availW := node.W
+	scrollX := 0
+	if cursorOffset >= availW {
+		scrollX = cursorOffset - availW + 1
+	}
+
+	if scrollX > 0 {
+		// Paint text with horizontal scroll offset
+		paintInputTextScrolled(buf, node, scrollX)
+	} else {
+		paintInputText(buf, node)
+	}
 
 	// Show cursor if focused
 	if node.Focused {
-		cursorX := node.X + inputCursorScreenOffset(node)
+		cursorX := node.X + cursorOffset - scrollX
 		paintInputCursor(buf, node, cursorX, node.Y)
+	}
+}
+
+// paintInputTextScrolled renders input text with a horizontal scroll offset,
+// skipping the first scrollX display columns of content.
+func paintInputTextScrolled(buf *CellBuffer, node *Node, scrollX int) {
+	content := node.Content
+	fg := node.Style.Foreground
+	bg := node.Style.Background
+	bold := node.Style.Bold
+	dim := node.Style.Dim
+	underline := node.Style.Underline
+	italic := node.Style.Italic
+	strikethrough := node.Style.Strikethrough
+	inverse := node.Style.Inverse
+
+	x := node.X
+	maxX := node.X + node.W
+	colOffset := 0
+
+	for _, ch := range content {
+		w := runeWidth(ch)
+		if colOffset+w <= scrollX {
+			colOffset += w
+			continue // skip scrolled-off characters
+		}
+		if x >= maxX {
+			break
+		}
+		cellBG := bg
+		if cellBG == "" {
+			existing := buf.Get(x, node.Y)
+			cellBG = existing.BG
+		}
+		buf.Set(x, node.Y, Cell{Ch: ch, FG: fg, BG: cellBG, Bold: bold, Dim: dim, Underline: underline, Italic: italic, Strikethrough: strikethrough, Inverse: inverse})
+		if w == 2 && x+1 < maxX {
+			buf.Set(x+1, node.Y, Cell{Wide: true, BG: cellBG})
+		}
+		x += w
+		colOffset += w
 	}
 }
 
