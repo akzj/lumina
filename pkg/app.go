@@ -344,8 +344,10 @@ func (a *App) Screen() *buffer.Buffer {
 // FocusedID returns the currently focused VNode ID.
 // Delegates to the engine's focus tracking.
 func (a *App) FocusedID() string {
-	// The engine doesn't expose focus tracking yet.
-	// TODO: Add focus tracking to the engine.
+	node := a.engine.FocusedNode()
+	if node != nil {
+		return node.ID
+	}
 	return ""
 }
 

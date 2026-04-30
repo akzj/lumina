@@ -77,6 +77,104 @@ func (e *Engine) FocusNext() {
 	e.setFocus(focusable[nextIdx])
 }
 
+// FocusPrev cycles focus to the previous focusable node.
+// If nothing is focused, focuses the last focusable node.
+func (e *Engine) FocusPrev() {
+	if len(e.layers) == 0 {
+		return
+	}
+
+	// Find active root: topmost modal layer, or main layer
+	activeRoot := e.layers[0].Root
+	for i := len(e.layers) - 1; i >= 0; i-- {
+		if e.layers[i].Root != nil && e.layers[i].Modal {
+			activeRoot = e.layers[i].Root
+			break
+		}
+	}
+	focusable := collectFocusable(activeRoot)
+	if len(focusable) == 0 {
+		return
+	}
+
+	// Find current index
+	idx := -1
+	for i, n := range focusable {
+		if n == e.focusedNode {
+			idx = i
+			break
+		}
+	}
+
+	// Go to previous (wrap around)
+	prevIdx := idx - 1
+	if prevIdx < 0 {
+		prevIdx = len(focusable) - 1
+	}
+	e.setFocus(focusable[prevIdx])
+}
+
+// FocusByID finds a node by ID and focuses it, firing blur/focus callbacks.
+// Returns true if the node was found and focused.
+func (e *Engine) FocusByID(id string) bool {
+	node := e.FindNodeByID(id)
+	if node != nil && node.Focusable && !node.Disabled {
+		e.setFocus(node)
+		return true
+	}
+	return false
+}
+
+// FindNodeByID searches all layers for a node with the given ID.
+func (e *Engine) FindNodeByID(id string) *Node {
+	if id == "" {
+		return nil
+	}
+	for _, layer := range e.layers {
+		if layer.Root != nil {
+			if found := findNodeByID(layer.Root, id); found != nil {
+				return found
+			}
+		}
+	}
+	return nil
+}
+
+func findNodeByID(node *Node, id string) *Node {
+	if node.ID == id {
+		return node
+	}
+	for _, child := range node.Children {
+		if found := findNodeByID(child, id); found != nil {
+			return found
+		}
+	}
+	return nil
+}
+
+// FocusableIDs returns the ordered list of focusable node IDs in the active layer.
+func (e *Engine) FocusableIDs() []string {
+	if len(e.layers) == 0 {
+		return nil
+	}
+	activeRoot := e.layers[0].Root
+	for i := len(e.layers) - 1; i >= 0; i-- {
+		if e.layers[i].Root != nil && e.layers[i].Modal {
+			activeRoot = e.layers[i].Root
+			break
+		}
+	}
+	focusable := collectFocusable(activeRoot)
+	ids := make([]string, 0, len(focusable))
+	for _, n := range focusable {
+		if n.ID != "" {
+			ids = append(ids, n.ID)
+		}
+	}
+	return ids
+}
+
+
 // FocusAutoFocus focuses the first node with AutoFocus=true.
 // Called after initial render.
 func (e *Engine) FocusAutoFocus() {

@@ -26,5 +26,7 @@ M.Checkbox = require("lux.checkbox")
 M.Radio = require("lux.radio")
 M.Switch = require("lux.switch")
 M.Dropdown = require("lux.dropdown")
+M.Toast = require("lux.toast")
+M.Tree = require("lux.tree")
 
 return M
