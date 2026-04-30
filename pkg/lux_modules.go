@@ -47,6 +47,8 @@ func registerLuxModules(L *lua.State) {
 	preloadLuaSource(L, "lux.radio", mustReadLuxLua("radio.lua"))
 	preloadLuaSource(L, "lux.switch", mustReadLuxLua("switch.lua"))
 	preloadLuaSource(L, "lux.dropdown", mustReadLuxLua("dropdown.lua"))
+	preloadLuaSource(L, "lux.toast", mustReadLuxLua("toast.lua"))
+	preloadLuaSource(L, "lux.tree", mustReadLuxLua("tree.lua"))
 
 	// Register the lux umbrella module (requires individual modules)
 	preloadLuaSource(L, "lux", mustReadLuxLua("init.lua"))

@@ -89,25 +89,32 @@ func (a *App) MCPEval(code string) (any, error) {
 
 // MCPFocusNext moves focus to the next focusable VNode and returns the new focused ID.
 func (a *App) MCPFocusNext() string {
-	// TODO: Implement focus management in engine.
+	a.engine.FocusNext()
+	node := a.engine.FocusedNode()
+	if node != nil {
+		return node.ID
+	}
 	return ""
 }
 
 // MCPFocusPrev moves focus to the previous focusable VNode and returns the new focused ID.
 func (a *App) MCPFocusPrev() string {
-	// TODO: Implement focus management in engine.
+	a.engine.FocusPrev()
+	node := a.engine.FocusedNode()
+	if node != nil {
+		return node.ID
+	}
 	return ""
 }
 
 // MCPSetFocus sets focus to a specific VNode by ID.
 func (a *App) MCPSetFocus(id string) {
-	// TODO: Implement focus management in engine.
+	a.engine.FocusByID(id)
 }
 
 // MCPGetFocusableIDs returns the ordered list of focusable VNode IDs.
 func (a *App) MCPGetFocusableIDs() []string {
-	// TODO: Implement focus management in engine.
-	return nil
+	return a.engine.FocusableIDs()
 }
 
 // MCPGetFocusedID returns the currently focused VNode ID.
