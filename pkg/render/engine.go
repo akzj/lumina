@@ -838,11 +838,23 @@ func styleFromMap(m map[string]any) Style {
 		s.Width = int(w)
 	} else if w, ok := m["width"].(float64); ok {
 		s.Width = int(w)
+	} else if w, ok := m["width"].(string); ok && w != "" {
+		if pct, pok := parsePercent(w); pok {
+			s.WidthPercent = pct
+		} else if v, unit, vok := parseViewport(w); vok && unit == "vw" {
+			s.WidthVW = v
+		}
 	}
 	if h, ok := m["height"].(int64); ok {
 		s.Height = int(h)
 	} else if h, ok := m["height"].(float64); ok {
 		s.Height = int(h)
+	} else if h, ok := m["height"].(string); ok && h != "" {
+		if pct, pok := parsePercent(h); pok {
+			s.HeightPercent = pct
+		} else if v, unit, vok := parseViewport(h); vok && unit == "vh" {
+			s.HeightVH = v
+		}
 	}
 	if bg, ok := m["background"].(string); ok {
 		s.Background = bg
@@ -1104,7 +1116,28 @@ func (e *Engine) readStyle(L *lua.State, idx int) Style {
 	var s Style
 	s.Width = int(getIntField(L, absIdx, "width"))
 	s.Height = int(getIntField(L, absIdx, "height"))
+	// Parse percentage/viewport string values for width/height
+	if s.Width == 0 {
+		if str := getStringField(L, absIdx, "width"); str != "" {
+			if pct, ok := parsePercent(str); ok {
+				s.WidthPercent = pct
+			} else if v, unit, ok := parseViewport(str); ok && unit == "vw" {
+				s.WidthVW = v
+			}
+		}
+	}
+	if s.Height == 0 {
+		if str := getStringField(L, absIdx, "height"); str != "" {
+			if pct, ok := parsePercent(str); ok {
+				s.HeightPercent = pct
+			} else if v, unit, ok := parseViewport(str); ok && unit == "vh" {
+				s.HeightVH = v
+			}
+		}
+	}
 	s.Flex = int(getIntField(L, absIdx, "flex"))
+	s.FlexShrink = int(getIntField(L, absIdx, "flexShrink"))
+	s.FlexBasis = int(getIntField(L, absIdx, "flexBasis"))
 	s.Padding = int(getIntField(L, absIdx, "padding"))
 	s.PaddingTop = int(getIntField(L, absIdx, "paddingTop"))
 	s.PaddingBottom = int(getIntField(L, absIdx, "paddingBottom"))
@@ -1120,8 +1153,39 @@ func (e *Engine) readStyle(L *lua.State, idx int) Style {
 	s.MaxWidth = int(getIntField(L, absIdx, "maxWidth"))
 	s.MinHeight = int(getIntField(L, absIdx, "minHeight"))
 	s.MaxHeight = int(getIntField(L, absIdx, "maxHeight"))
+	// Parse percentage string values for min/max
+	if s.MinWidth == 0 {
+		if str := getStringField(L, absIdx, "minWidth"); str != "" {
+			if pct, ok := parsePercent(str); ok {
+				s.MinWidthPercent = pct
+			}
+		}
+	}
+	if s.MaxWidth == 0 {
+		if str := getStringField(L, absIdx, "maxWidth"); str != "" {
+			if pct, ok := parsePercent(str); ok {
+				s.MaxWidthPercent = pct
+			}
+		}
+	}
+	if s.MinHeight == 0 {
+		if str := getStringField(L, absIdx, "minHeight"); str != "" {
+			if pct, ok := parsePercent(str); ok {
+				s.MinHeightPercent = pct
+			}
+		}
+	}
+	if s.MaxHeight == 0 {
+		if str := getStringField(L, absIdx, "maxHeight"); str != "" {
+			if pct, ok := parsePercent(str); ok {
+				s.MaxHeightPercent = pct
+			}
+		}
+	}
 	s.Justify = getStringField(L, absIdx, "justify")
 	s.Align = getStringField(L, absIdx, "align")
+	s.AlignSelf = getStringField(L, absIdx, "alignSelf")
+	s.Order = int(getIntField(L, absIdx, "order"))
 	s.Border = getStringField(L, absIdx, "border")
 	s.Foreground = getStringField(L, absIdx, "foreground")
 	if fg := getStringField(L, absIdx, "fg"); fg != "" && s.Foreground == "" {
@@ -1164,6 +1228,25 @@ func (e *Engine) readStyleFields(L *lua.State, idx int, s *Style) {
 	if s.Height == 0 {
 		s.Height = int(getIntField(L, absIdx, "height"))
 	}
+	// Parse percentage/viewport strings for width/height if still unset
+	if s.Width == 0 && s.WidthPercent == 0 && s.WidthVW == 0 {
+		if str := getStringField(L, absIdx, "width"); str != "" {
+			if pct, ok := parsePercent(str); ok {
+				s.WidthPercent = pct
+			} else if v, unit, ok := parseViewport(str); ok && unit == "vw" {
+				s.WidthVW = v
+			}
+		}
+	}
+	if s.Height == 0 && s.HeightPercent == 0 && s.HeightVH == 0 {
+		if str := getStringField(L, absIdx, "height"); str != "" {
+			if pct, ok := parsePercent(str); ok {
+				s.HeightPercent = pct
+			} else if v, unit, ok := parseViewport(str); ok && unit == "vh" {
+				s.HeightVH = v
+			}
+		}
+	}
 	if s.MinWidth == 0 {
 		s.MinWidth = int(getIntField(L, absIdx, "minWidth"))
 	}
@@ -1176,8 +1259,43 @@ func (e *Engine) readStyleFields(L *lua.State, idx int, s *Style) {
 	if s.MaxHeight == 0 {
 		s.MaxHeight = int(getIntField(L, absIdx, "maxHeight"))
 	}
+	// Parse percentage strings for min/max
+	if s.MinWidth == 0 && s.MinWidthPercent == 0 {
+		if str := getStringField(L, absIdx, "minWidth"); str != "" {
+			if pct, ok := parsePercent(str); ok {
+				s.MinWidthPercent = pct
+			}
+		}
+	}
+	if s.MaxWidth == 0 && s.MaxWidthPercent == 0 {
+		if str := getStringField(L, absIdx, "maxWidth"); str != "" {
+			if pct, ok := parsePercent(str); ok {
+				s.MaxWidthPercent = pct
+			}
+		}
+	}
+	if s.MinHeight == 0 && s.MinHeightPercent == 0 {
+		if str := getStringField(L, absIdx, "minHeight"); str != "" {
+			if pct, ok := parsePercent(str); ok {
+				s.MinHeightPercent = pct
+			}
+		}
+	}
+	if s.MaxHeight == 0 && s.MaxHeightPercent == 0 {
+		if str := getStringField(L, absIdx, "maxHeight"); str != "" {
+			if pct, ok := parsePercent(str); ok {
+				s.MaxHeightPercent = pct
+			}
+		}
+	}
 	if s.Flex == 0 {
 		s.Flex = int(getIntField(L, absIdx, "flex"))
+	}
+	if s.FlexShrink == 0 {
+		s.FlexShrink = int(getIntField(L, absIdx, "flexShrink"))
+	}
+	if s.FlexBasis == 0 {
+		s.FlexBasis = int(getIntField(L, absIdx, "flexBasis"))
 	}
 	if s.Gap == 0 {
 		s.Gap = int(getIntField(L, absIdx, "gap"))
@@ -1232,6 +1350,12 @@ func (e *Engine) readStyleFields(L *lua.State, idx int, s *Style) {
 	}
 	if s.Align == "" {
 		s.Align = getStringField(L, absIdx, "align")
+	}
+	if s.AlignSelf == "" {
+		s.AlignSelf = getStringField(L, absIdx, "alignSelf")
+	}
+	if s.Order == 0 {
+		s.Order = int(getIntField(L, absIdx, "order"))
 	}
 	if s.Overflow == "" {
 		s.Overflow = getStringField(L, absIdx, "overflow")
