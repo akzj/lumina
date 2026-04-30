@@ -47,13 +47,35 @@ type ComponentInfo struct {
 
 // ComponentDetail is a detailed view of a single component.
 type ComponentDetail struct {
-	ID      string         `json:"id"`
-	Name    string         `json:"name"`
-	State   map[string]any `json:"state"`
-	Focused bool           `json:"focused"`
-	Dirty   bool           `json:"dirty"`
-	Rect    [4]int         `json:"rect"` // x, y, w, h
-	ZIndex  int            `json:"zIndex"`
+	ID          string         `json:"id"`
+	Name        string         `json:"name"`
+	Props       map[string]any `json:"props"`
+	State       map[string]any `json:"state"`
+	Focused     bool           `json:"focused"`
+	Dirty       bool           `json:"dirty"`
+	Rect        [4]int         `json:"rect"` // x, y, w, h
+	ZIndex      int            `json:"zIndex"`
+	RenderCount int            `json:"renderCount"`
+	Hooks       HookSummary    `json:"hooks"`
+	Children    []string       `json:"children"` // child component IDs
+}
+
+// HookSummary summarizes the hooks used by a component.
+type HookSummary struct {
+	Effects int `json:"effects"`
+	Memos   int `json:"memos"`
+	Refs    int `json:"refs"`
+}
+
+// ComponentSummary is a lightweight summary for listing all components.
+type ComponentSummary struct {
+	ID          string         `json:"id"`
+	Name        string         `json:"name"`
+	Props       map[string]any `json:"props,omitempty"`
+	State       map[string]any `json:"state,omitempty"`
+	HookCount   int            `json:"hookCount"`
+	RenderCount int            `json:"renderCount"`
+	Children    []string       `json:"children"`
 }
 
 // --- AppInspector interface ---
@@ -63,6 +85,8 @@ type ComponentDetail struct {
 type AppInspector interface {
 	MCPInspectTree() []ComponentInfo
 	MCPInspectComponent(id string) (*ComponentDetail, error)
+	MCPInspectComponents(filter string) []ComponentSummary
+	MCPGetComponentProps(id string) (map[string]any, error)
 	MCPGetState(compID, key string) (any, error)
 	MCPSetState(compID, key string, value any) error
 	MCPSimulateClick(id string) error
@@ -100,6 +124,10 @@ func (h *Handler) Handle(req Request) Response {
 		result = h.handleInspectTree()
 	case "inspectComponent":
 		result, err = h.handleInspectComponent(req.Params)
+	case "inspectComponents":
+		result = h.handleInspectComponents(req.Params)
+	case "getComponentProps":
+		result, err = h.handleGetComponentProps(req.Params)
 	case "getState":
 		result, err = h.handleGetState(req.Params)
 	case "setState":
@@ -165,6 +193,34 @@ func (h *Handler) handleInspectComponent(params json.RawMessage) (any, error) {
 		return nil, err
 	}
 	return h.app.MCPInspectComponent(p.ID)
+}
+
+func (h *Handler) handleInspectComponents(params json.RawMessage) map[string]any {
+	var p struct {
+		Filter string `json:"filter"`
+	}
+	if params != nil {
+		_ = json.Unmarshal(params, &p)
+	}
+	comps := h.app.MCPInspectComponents(p.Filter)
+	return map[string]any{
+		"components": comps,
+		"total":      len(comps),
+	}
+}
+
+func (h *Handler) handleGetComponentProps(params json.RawMessage) (any, error) {
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(params, &p); err != nil {
+		return nil, err
+	}
+	props, err := h.app.MCPGetComponentProps(p.ID)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"props": props}, nil
 }
 
 func (h *Handler) handleGetState(params json.RawMessage) (any, error) {
@@ -275,7 +331,25 @@ func (h *Handler) Tools() []Tool {
 		{
 			Name:        "lumina.inspectComponent",
 			Title:       "Inspect component",
-			Description: "Get details (state, focused, dirty, rect, zIndex) for a component by ID.",
+			Description: "Get detailed component info: props, state, hooks, children, render count, dirty/focused state.",
+			InputSchema: idParam,
+		},
+		{
+			Name:        "lumina.inspectComponents",
+			Title:       "List all components",
+			Description: "List all rendered Lux components with props, state, hooks, and render metrics. Optional name filter.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"filter": map[string]any{"type": "string", "description": "Optional component name filter (substring match)"},
+				},
+				"additionalProperties": false,
+			},
+		},
+		{
+			Name:        "lumina.getComponentProps",
+			Title:       "Get component props",
+			Description: "Get the current props of a specific component by ID.",
 			InputSchema: idParam,
 		},
 		{

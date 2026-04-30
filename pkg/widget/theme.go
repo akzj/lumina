@@ -46,6 +46,23 @@ var DefaultTheme = &Theme{
 // Can be changed at runtime via lumina.setTheme().
 var CurrentTheme = DefaultTheme
 
+// LatteTheme is Catppuccin Latte (light).
+var LatteTheme = &Theme{
+	Base:        "#EFF1F5",
+	Surface0:    "#CCD0DA",
+	Surface1:    "#BCC0CC",
+	Surface2:    "#ACB0BE",
+	Text:        "#4C4F69",
+	Muted:       "#8C8FA1",
+	Primary:     "#1E66F5",
+	PrimaryDark: "#EFF1F5",
+	Hover:       "#7287FD",
+	Pressed:     "#209FB5",
+	Success:     "#40A02B",
+	Warning:     "#DF8E1D",
+	Error:       "#D20F39",
+}
+
 // NordTheme is the Nord color scheme.
 var NordTheme = &Theme{
 	Base:        "#2E3440",
@@ -78,4 +95,41 @@ var DraculaTheme = &Theme{
 	Success:     "#50FA7B",
 	Warning:     "#F1FA8C",
 	Error:       "#FF5555",
+}
+
+// BuiltinThemes maps theme names to Theme pointers.
+var BuiltinThemes = map[string]*Theme{
+	"mocha":   DefaultTheme,
+	"latte":   LatteTheme,
+	"nord":    NordTheme,
+	"dracula": DraculaTheme,
+}
+
+// ThemeToMap converts a Theme struct to a map[string]string for the Lua API.
+func ThemeToMap(t *Theme) map[string]string {
+	return map[string]string{
+		"base":        t.Base,
+		"surface0":    t.Surface0,
+		"surface1":    t.Surface1,
+		"surface2":    t.Surface2,
+		"text":        t.Text,
+		"muted":       t.Muted,
+		"primary":     t.Primary,
+		"primaryDark": t.PrimaryDark,
+		"hover":       t.Hover,
+		"pressed":     t.Pressed,
+		"success":     t.Success,
+		"warning":     t.Warning,
+		"error":       t.Error,
+	}
+}
+
+// SetThemeByName sets CurrentTheme to a built-in theme by name.
+// Returns true if the theme was found, false otherwise.
+func SetThemeByName(name string) bool {
+	if t, ok := BuiltinThemes[name]; ok {
+		CurrentTheme = t
+		return true
+	}
+	return false
 }
