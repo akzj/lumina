@@ -31,10 +31,16 @@ func zSortedChildren(children []*Node) []*Node {
 // paintOrderChildren returns children in paint order (ascending ZIndex, stable).
 // If no child has non-zero ZIndex, returns the original slice (zero allocation).
 func paintOrderChildren(children []*Node) []*Node {
-	if sorted := zSortedChildren(children); sorted != nil {
-		return sorted
+	// Fast path: no z-index used — return original slice (no allocation, no sort)
+	if !hasNonZeroZIndex(children) {
+		return children
 	}
-	return children
+	sorted := make([]*Node, len(children))
+	copy(sorted, children)
+	sort.SliceStable(sorted, func(i, j int) bool {
+		return sorted[i].Style.ZIndex < sorted[j].Style.ZIndex
+	})
+	return sorted
 }
 
 // hitTestOrderChildren returns children in hit-test order: highest ZIndex first,
