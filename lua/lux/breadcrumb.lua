@@ -6,6 +6,7 @@ local Breadcrumb = lumina.defineComponent("Breadcrumb", function(props)
     local items = props.items or {}
     local separator = props.separator or " › "
     local onNavigate = props.onNavigate
+    local barBg = props.barBackground or props.background or t.base or "#1E1E2E"
 
     local children = {}
     for i, item in ipairs(items) do
@@ -20,7 +21,7 @@ local Breadcrumb = lumina.defineComponent("Breadcrumb", function(props)
         children[#children + 1] = lumina.createElement("text", {
             key = "bc-" .. tostring(i),
             foreground = fg,
-            background = t.base or "#1E1E2E",
+            background = barBg,
             bold = isLast,
             underline = not isLast,
             style = { height = 1 },
@@ -34,7 +35,7 @@ local Breadcrumb = lumina.defineComponent("Breadcrumb", function(props)
             children[#children + 1] = lumina.createElement("text", {
                 key = "sep-" .. tostring(i),
                 foreground = t.muted or "#6C7086",
-                background = t.base or "#1E1E2E",
+                background = barBg,
                 style = { height = 1 },
             }, separator)
         end
@@ -42,6 +43,12 @@ local Breadcrumb = lumina.defineComponent("Breadcrumb", function(props)
 
     local rootStyle = { height = 1 }
     if props.width then rootStyle.width = props.width end
+    local extra = props.style
+    if type(extra) == "table" then
+        for k, v in pairs(extra) do
+            rootStyle[k] = v
+        end
+    end
 
     return lumina.createElement("hbox", {
         id = props.id,

@@ -22,10 +22,11 @@ local TextInput = lumina.defineComponent("TextInput", function(props)
         inputFg = t.muted or "#6C7086"
     end
 
-    local inputStyle = {
-        height = 1,
-        width = props.width or 30,
-    }
+    local fill = props.fill == true
+    local inputStyle = { height = 1 }
+    if not fill then
+        inputStyle.width = props.width or 30
+    end
 
     children[#children + 1] = lumina.createElement("input", {
         id = props.inputId or (props.id and (props.id .. "-input")),
@@ -61,10 +62,15 @@ local TextInput = lumina.defineComponent("TextInput", function(props)
         rootHeight = rootHeight + 1
     end
 
+    local rootStyle = { height = rootHeight }
+    if not fill then
+        rootStyle.width = props.width or 30
+    end
+
     return lumina.createElement("vbox", {
         id = props.id,
         key = props.key,
-        style = { height = rootHeight, width = props.width or 30 },
+        style = rootStyle,
     }, table.unpack(children))
 end)
 

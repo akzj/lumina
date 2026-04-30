@@ -459,11 +459,27 @@ func layoutVBox(node *Node, contentX, contentY, contentW, contentH int, style St
 				if graftedH > 0 {
 					children[i].finalH = graftedH + marginV
 				} else {
-					children[i].finalH = 1 + marginV
+					// Intrinsic height: measure by laying out with unlimited height.
+					computeFlex(child, contentX, contentY, contentW, 99999)
+					naturalH := child.H
+					if naturalH < 1 {
+						naturalH = 1
+					}
+					children[i].finalH = naturalH + marginV
 				}
 			} else {
-				// Natural height: 1 for all types (flex children get 1, not distributed)
-				children[i].finalH = 1 + marginV
+				// Intrinsic height: if the child has sub-children, lay it out with
+				// unlimited height to measure its natural size. Otherwise default to 1.
+				if len(child.Children) > 0 {
+					computeFlex(child, contentX, contentY, contentW, 99999)
+					naturalH := child.H
+					if naturalH < 1 {
+						naturalH = 1
+					}
+					children[i].finalH = naturalH + marginV
+				} else {
+					children[i].finalH = 1 + marginV
+				}
 			}
 		}
 	} else {

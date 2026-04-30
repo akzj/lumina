@@ -29,5 +29,6 @@ M.Dropdown = require("lux.dropdown")
 M.Toast = require("lux.toast")
 M.Tree = require("lux.tree")
 M.Form = require("lux.form")
+M.Atlantis = require("lux.atlantis")
 
 return M

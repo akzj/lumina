@@ -1,5 +1,12 @@
 -- lua/lux/layout.lua
 -- Layout: standard TUI app structure with Header, Sidebar, Main, Footer slots.
+--
+-- Main scroll: `Layout.Main { scroll = true }` sets overflow=scroll on the main
+-- slot. The engine assigns natural height 1 to a single plain vbox child inside
+-- a scroll parent (see pkg/render/layout.go scroll branch), so avoid one tall
+-- inner vbox as the only child; use multiple children, components with measured
+-- height, or keep scroll off and rely on flex (e.g. lux.atlantis Shell defaults).
+--
 -- Usage:
 --   local Layout = require("lux.layout")
 --   Layout {
@@ -69,6 +76,11 @@ local Layout = lumina.defineComponent("Layout", function(props)
 
     if sidebar then
         -- Horizontal: sidebar | main
+        local mainStyle = { flex = 1 }
+        local mainOverflow = slotProp(main, "_overflow", "")
+        if mainOverflow ~= "" then
+            mainStyle.overflow = mainOverflow
+        end
         vboxChildren[#vboxChildren + 1] = lumina.createElement("hbox", {
             style = { flex = 1 },
         },
@@ -80,7 +92,7 @@ local Layout = lumina.defineComponent("Layout", function(props)
                 },
             }, table.unpack(slotChildren(sidebar))),
             lumina.createElement("vbox", {
-                style = { flex = 1 },
+                style = mainStyle,
             }, table.unpack(mainChildren))
         )
     else
@@ -152,8 +164,13 @@ function Layout.Main(props)
     for i, v in ipairs(props) do
         children[i] = v
     end
+    local overflow = props.overflow
+    if overflow == nil and props.scroll then
+        overflow = "scroll"
+    end
     return lumina.createElement("vbox", {
         _layoutSlot = "main",
+        _overflow = overflow or "",
     }, table.unpack(children))
 end
 
