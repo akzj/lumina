@@ -418,16 +418,28 @@ func (e *Engine) HandleKeyDown(key string) {
 		}
 	}
 
-	// Fall through to onKeyDown handler — search from top layer down
+	// Fall through to onKeyDown handler.
+	// Priority: walk up from focused node first (bubble), then DFS fallback.
 	var keyHandlerNode *Node
-	for i := len(e.layers) - 1; i >= 0; i-- {
-		if e.layers[i].Root != nil {
-			keyHandlerNode = e.findKeyHandler(e.layers[i].Root)
-			if keyHandlerNode != nil {
+	if e.focusedNode != nil && !e.focusedNode.Removed {
+		for n := e.focusedNode; n != nil; n = n.Parent {
+			if n.OnKeyDown != 0 {
+				keyHandlerNode = n
 				break
 			}
-			if e.layers[i].Modal {
-				break // Don't pass through modal
+		}
+	}
+	// Fallback: DFS search from top layer down (for apps with no focused node)
+	if keyHandlerNode == nil {
+		for i := len(e.layers) - 1; i >= 0; i-- {
+			if e.layers[i].Root != nil {
+				keyHandlerNode = e.findKeyHandler(e.layers[i].Root)
+				if keyHandlerNode != nil {
+					break
+				}
+				if e.layers[i].Modal {
+					break // Don't pass through modal
+				}
 			}
 		}
 	}
