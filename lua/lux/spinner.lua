@@ -8,9 +8,11 @@ local Spinner = lumina.defineComponent("Spinner", function(props)
     local frame, setFrame = lumina.useState("frame", 1)
     local label = props.label or "Loading..."
 
-    lumina.useEffect("spin", function()
+    lumina.useEffect(function()
+        local currentFrame = frame
         local timer = lumina.setInterval(function()
-            setFrame(function(f) return (f % #frames) + 1 end)
+            currentFrame = (currentFrame % #frames) + 1
+            setFrame(currentFrame)
         end, 80)
         return function() lumina.clearInterval(timer) end
     end, {})
