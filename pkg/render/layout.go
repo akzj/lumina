@@ -216,21 +216,15 @@ func computeFlex(node *Node, x, y, w, h int, depth int) {
 		h = clamp(h, style.MinHeight, style.MaxHeight)
 	}
 
-	// Mark PaintDirty if position/size changed
-	if node.X != x || node.Y != y || node.W != w || node.H != h {
-		node.PaintDirty = true
-		// Parent must repaint to clear the old position area
-		// (ClearRect on old pos alone would leave a hole in parent's background)
-		if node.Parent != nil {
-			node.Parent.PaintDirty = true
-		}
-	}
-
-	// Track position changes for clearing old region during paint
+	// Mark PaintDirty and track position changes for clearing old region during paint
 	if node.X != x || node.Y != y || node.W != w || node.H != h {
 		node.OldX, node.OldY, node.OldW, node.OldH = node.X, node.Y, node.W, node.H
 		node.PositionChanged = true
 		node.PaintDirty = true
+		// Parent must repaint to clear the old position area
+		if node.Parent != nil {
+			node.Parent.PaintDirty = true
+		}
 	}
 
 	node.X = x
