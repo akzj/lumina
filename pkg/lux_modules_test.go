@@ -67,6 +67,8 @@ func TestV2E2E_RequireLux(t *testing.T) {
 		assert(lux.ListView ~= nil, "lux.ListView missing")
 		assert(lux.Atlantis ~= nil, "lux.Atlantis missing")
 		assert(lux.Atlantis.applyTheme ~= nil, "lux.Atlantis.applyTheme missing")
+		assert(lux.AtlantisFormDemo ~= nil, "lux.AtlantisFormDemo missing")
+		assert(lux.AtlantisFormDemo.formShowcaseBlocks ~= nil, "lux.AtlantisFormDemo.formShowcaseBlocks missing")
 	`)
 	if err != nil {
 		t.Fatalf("RunString failed: %v", err)
