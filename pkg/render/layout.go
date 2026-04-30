@@ -1,6 +1,7 @@
 package render
 
 import (
+	"sort"
 	"strconv"
 	"strings"
 
@@ -305,13 +306,21 @@ func computeFlex(node *Node, x, y, w, h int) {
 	// Percentage/viewport sizing is resolved by the parent layout functions
 	// (layoutVBox/layoutHBox) which pass correctly resolved w/h values.
 	// Here we only apply absolute constraints.
+	// Exception: if the parent has applied flexShrink and passed a smaller h/w,
+	// respect the parent's decision (don't override with explicit size).
 	if style.Width > 0 {
-		w = clamp(style.Width, style.MinWidth, style.MaxWidth)
+		cw := clamp(style.Width, style.MinWidth, style.MaxWidth)
+		if style.FlexShrink == 0 || cw <= w {
+			w = cw
+		}
 	} else if style.MinWidth > 0 || style.MaxWidth > 0 {
 		w = clamp(w, style.MinWidth, style.MaxWidth)
 	}
 	if style.Height > 0 {
-		h = clamp(style.Height, style.MinHeight, style.MaxHeight)
+		ch := clamp(style.Height, style.MinHeight, style.MaxHeight)
+		if style.FlexShrink == 0 || ch <= h {
+			h = ch
+		}
 	} else if style.MinHeight > 0 || style.MaxHeight > 0 {
 		h = clamp(h, style.MinHeight, style.MaxHeight)
 	}
@@ -687,8 +696,11 @@ func layoutVBox(node *Node, contentX, contentY, contentW, contentH int, style St
 				continue
 			}
 			if children[i].flexGrow > 0 {
+				baseH := children[i].fixedH // flexBasis base (0 if no basis)
 				if flexTotal > 0 {
-					children[i].finalH = (remainH * children[i].flexGrow) / flexTotal
+					children[i].finalH = baseH + (remainH*children[i].flexGrow)/flexTotal
+				} else {
+					children[i].finalH = baseH
 				}
 				if children[i].finalH < 1 {
 					children[i].finalH = 1
@@ -696,6 +708,35 @@ func layoutVBox(node *Node, contentX, contentY, contentW, contentH int, style St
 				children[i].finalH = clamp(children[i].finalH, children[i].style.MinHeight, children[i].style.MaxHeight)
 			} else {
 				children[i].finalH = children[i].fixedH
+			}
+		}
+
+		// flexShrink: if total sizes exceed available space, shrink proportionally
+		totalAfterGrow := 0
+		for i := range children {
+			if !children[i].positioned {
+				totalAfterGrow += children[i].finalH
+			}
+		}
+		overflow := totalAfterGrow - availH
+		if overflow > 0 {
+			shrinkTotal := 0
+			for i := range children {
+				if !children[i].positioned && children[i].style.FlexShrink > 0 {
+					shrinkTotal += children[i].style.FlexShrink
+				}
+			}
+			if shrinkTotal > 0 {
+				for i := range children {
+					if !children[i].positioned && children[i].style.FlexShrink > 0 {
+						shrink := (overflow * children[i].style.FlexShrink) / shrinkTotal
+						children[i].finalH -= shrink
+						if children[i].finalH < 1 {
+							children[i].finalH = 1
+						}
+						children[i].finalH = clamp(children[i].finalH, children[i].style.MinHeight, 0)
+					}
+				}
 			}
 		}
 	}
@@ -749,13 +790,22 @@ func layoutVBox(node *Node, contentX, contentY, contentW, contentH int, style St
 		}
 	}
 
-	// Position each child (skip absolute/fixed)
+	// Build order-sorted index for positioning
+	orderIndices := make([]int, 0, len(node.Children))
+	for i := range node.Children {
+		if !children[i].positioned {
+			orderIndices = append(orderIndices, i)
+		}
+	}
+	sort.SliceStable(orderIndices, func(a, b int) bool {
+		return children[orderIndices[a]].style.Order < children[orderIndices[b]].style.Order
+	})
+
+	// Position each child in order-sorted sequence
 	flowIdx := 0
 	var lastFlowChildNode *Node
-	for i, child := range node.Children {
-		if children[i].positioned {
-			continue
-		}
+	for _, i := range orderIndices {
+		child := node.Children[i]
 
 		childH := children[i].finalH
 		childW := contentW
@@ -773,9 +823,13 @@ func layoutVBox(node *Node, contentX, contentY, contentW, contentH int, style St
 			childW = clamp(contentW, cMinW, cMaxW)
 		}
 
-		// Cross-axis alignment
+		// Cross-axis alignment: check alignSelf first, fall back to parent's align
+		align := style.Align
+		if cs.AlignSelf != "" {
+			align = cs.AlignSelf
+		}
 		if childW < contentW {
-			switch style.Align {
+			switch align {
 			case "center":
 				childX = contentX + (contentW-childW)/2
 			case "end":
@@ -848,6 +902,12 @@ func layoutHBox(node *Node, contentX, contentY, contentW, contentH int, style St
 			w := clamp(rw, cs.MinWidth, cs.MaxWidth)
 			children[i].fixedW = w + marginH
 			fixedTotal += children[i].fixedW
+		} else if cs.FlexBasis > 0 && cs.Flex > 0 {
+			// flexBasis: use as initial main size, still participate in flex-grow
+			children[i].fixedW = cs.FlexBasis + marginH
+			fixedTotal += children[i].fixedW
+			children[i].flexGrow = cs.Flex
+			flexTotal += cs.Flex
 		} else if cs.MinWidth > 0 && cs.Flex == 0 {
 			children[i].fixedW = cs.MinWidth + marginH
 			fixedTotal += children[i].fixedW
@@ -890,8 +950,11 @@ func layoutHBox(node *Node, contentX, contentY, contentW, contentH int, style St
 			continue
 		}
 		if children[i].flexGrow > 0 {
+			baseW := children[i].fixedW // flexBasis base (0 if no basis)
 			if flexTotal > 0 {
-				children[i].finalW = (remainW * children[i].flexGrow) / flexTotal
+				children[i].finalW = baseW + (remainW*children[i].flexGrow)/flexTotal
+			} else {
+				children[i].finalW = baseW
 			}
 			if children[i].finalW < 1 {
 				children[i].finalW = 1
@@ -899,6 +962,35 @@ func layoutHBox(node *Node, contentX, contentY, contentW, contentH int, style St
 			children[i].finalW = clamp(children[i].finalW, children[i].style.MinWidth, children[i].style.MaxWidth)
 		} else {
 			children[i].finalW = children[i].fixedW
+		}
+	}
+
+	// flexShrink: if total sizes exceed available space, shrink proportionally
+	totalAfterGrow := 0
+	for i := range children {
+		if !children[i].positioned {
+			totalAfterGrow += children[i].finalW
+		}
+	}
+	overflowW := totalAfterGrow - availW
+	if overflowW > 0 {
+		shrinkTotal := 0
+		for i := range children {
+			if !children[i].positioned && children[i].style.FlexShrink > 0 {
+				shrinkTotal += children[i].style.FlexShrink
+			}
+		}
+		if shrinkTotal > 0 {
+			for i := range children {
+				if !children[i].positioned && children[i].style.FlexShrink > 0 {
+					shrink := (overflowW * children[i].style.FlexShrink) / shrinkTotal
+					children[i].finalW -= shrink
+					if children[i].finalW < 1 {
+						children[i].finalW = 1
+					}
+					children[i].finalW = clamp(children[i].finalW, children[i].style.MinWidth, 0)
+				}
+			}
 		}
 	}
 
@@ -947,11 +1039,21 @@ func layoutHBox(node *Node, contentX, contentY, contentW, contentH int, style St
 		}
 	}
 
-	flowIdx := 0
-	for i, child := range node.Children {
-		if children[i].positioned {
-			continue
+	// Build order-sorted index for positioning
+	orderIndicesH := make([]int, 0, len(node.Children))
+	for i := range node.Children {
+		if !children[i].positioned {
+			orderIndicesH = append(orderIndicesH, i)
 		}
+	}
+	sort.SliceStable(orderIndicesH, func(a, b int) bool {
+		return children[orderIndicesH[a]].style.Order < children[orderIndicesH[b]].style.Order
+	})
+
+	// Position each child in order-sorted sequence
+	flowIdx := 0
+	for _, i := range orderIndicesH {
+		child := node.Children[i]
 
 		childW := children[i].finalW
 		childH := contentH
@@ -966,8 +1068,14 @@ func layoutHBox(node *Node, contentX, contentY, contentW, contentH int, style St
 		} else if cMinH > 0 || cMaxH > 0 {
 			rh = clamp(contentH, cMinH, cMaxH)
 		}
+
+		// Cross-axis alignment: check alignSelf first, fall back to parent's align
+		align := style.Align
+		if cs.AlignSelf != "" {
+			align = cs.AlignSelf
+		}
 		if rh > 0 && rh < contentH {
-			switch style.Align {
+			switch align {
 			case "center":
 				childY = contentY + (contentH-rh)/2
 				childH = rh
