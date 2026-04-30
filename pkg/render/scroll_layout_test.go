@@ -241,3 +241,123 @@ func TestScrollContainer_ScrollHeightReflectsIntrinsic(t *testing.T) {
 		t.Errorf("ScrollHeight expected >= 5, got %d", root.ScrollHeight)
 	}
 }
+
+func TestScrollContainer_InnerVBoxStacksManyPanels(t *testing.T) {
+	// Shell pattern: scroll > inner vbox (flex=1) > many panels. Intrinsic measure
+	// used ~99999h on the inner vbox; children must not each flex-grow to split that.
+	root := &Node{
+		Type:  "vbox",
+		Style: Style{Overflow: "scroll"},
+		Children: []*Node{
+			{
+				Type:  "vbox",
+				Style: Style{Flex: 1, Width: 40},
+				Children: []*Node{
+					{Type: "vbox", Style: Style{Height: 4}, Children: []*Node{{Type: "text", Content: "A"}}},
+					{Type: "vbox", Style: Style{Height: 4}, Children: []*Node{{Type: "text", Content: "B"}}},
+					{Type: "vbox", Style: Style{Height: 4}, Children: []*Node{{Type: "text", Content: "C"}}},
+				},
+			},
+		},
+	}
+	setParentsRecursive(root)
+	LayoutFull(root, 0, 0, 40, 8)
+
+	inner := root.Children[0]
+	wantMin := 4 + 4 + 4 // three h=4 panels (no gap on inner vbox in this tree)
+	if inner.H < wantMin {
+		t.Errorf("inner vbox height got %d, want >= %d (stacked panels, not flex-stretched)", inner.H, wantMin)
+	}
+	if root.ScrollHeight < wantMin {
+		t.Errorf("ScrollHeight got %d, want >= %d", root.ScrollHeight, wantMin)
+	}
+	// Stacked vertically (not three equal flex slices of the viewport).
+	c0, c1, c2 := inner.Children[0], inner.Children[1], inner.Children[2]
+	if c1.Y != c0.Y+c0.H {
+		t.Errorf("second panel Y: got %d want %d (first Y+H)", c1.Y, c0.Y+c0.H)
+	}
+	if c2.Y != c1.Y+c1.H {
+		t.Errorf("third panel Y: got %d want %d", c2.Y, c1.Y+c1.H)
+	}
+}
+
+func TestScrollContainer_InnerVBoxStacksManyComponentPanels(t *testing.T) {
+	// Same as InnerVBoxStacksManyPanels but children are component placeholders
+	// with grafted roots (mirrors Lux Card / defineComponent).
+	panel := func(label string) *Node {
+		return &Node{
+			Type: "component",
+			Children: []*Node{
+				{
+					Type:     "vbox",
+					Style:    Style{Height: 4},
+					Children: []*Node{{Type: "text", Content: label}},
+				},
+			},
+		}
+	}
+	root := &Node{
+		Type:  "vbox",
+		Style: Style{Overflow: "scroll"},
+		Children: []*Node{
+			{
+				Type:  "vbox",
+				Style: Style{Flex: 1, Width: 40},
+				Children: []*Node{
+					panel("A"),
+					panel("B"),
+					panel("C"),
+				},
+			},
+		},
+	}
+	setParentsRecursive(root)
+	LayoutFull(root, 0, 0, 40, 8)
+
+	inner := root.Children[0]
+	wantMin := 4 + 4 + 4
+	if inner.H < wantMin {
+		t.Errorf("inner vbox height got %d, want >= %d", inner.H, wantMin)
+	}
+	if root.ScrollHeight < wantMin {
+		t.Errorf("ScrollHeight got %d, want >= %d", root.ScrollHeight, wantMin)
+	}
+	c0, c1, c2 := inner.Children[0], inner.Children[1], inner.Children[2]
+	if c1.Y != c0.Y+c0.H {
+		t.Errorf("second panel Y: got %d want %d", c1.Y, c0.Y+c0.H)
+	}
+	if c2.Y != c1.Y+c1.H {
+		t.Errorf("third panel Y: got %d want %d", c2.Y, c1.Y+c1.H)
+	}
+}
+
+func TestScrollContainer_InnerVBoxMinHeightDoesNotTruncateStack(t *testing.T) {
+	// Pixel minHeight on the scroll content column must floor intrinsic height, not
+	// replace it (otherwise only the first card fits and the rest look "unrendered").
+	root := &Node{
+		Type:  "vbox",
+		Style: Style{Overflow: "scroll"},
+		Children: []*Node{
+			{
+				Type:  "vbox",
+				Style: Style{Flex: 1, Width: 40, MinHeight: 3},
+				Children: []*Node{
+					{Type: "vbox", Style: Style{Height: 4}, Children: []*Node{{Type: "text", Content: "A"}}},
+					{Type: "vbox", Style: Style{Height: 4}, Children: []*Node{{Type: "text", Content: "B"}}},
+					{Type: "vbox", Style: Style{Height: 4}, Children: []*Node{{Type: "text", Content: "C"}}},
+				},
+			},
+		},
+	}
+	setParentsRecursive(root)
+	LayoutFull(root, 0, 0, 40, 8)
+
+	inner := root.Children[0]
+	wantMin := 4 + 4 + 4
+	if inner.H < wantMin {
+		t.Errorf("inner vbox height got %d, want >= %d (minHeight=3 must not replace intrinsic)", inner.H, wantMin)
+	}
+	if root.ScrollHeight < wantMin {
+		t.Errorf("ScrollHeight got %d, want >= %d", root.ScrollHeight, wantMin)
+	}
+}

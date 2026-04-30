@@ -22,6 +22,24 @@ local function themeStr(v, fallback)
     return v
 end
 
+--- #RRGGBB only: multiply RGB by mult (<1 darkens, >1 lightens). Invalid input returns hex unchanged.
+local function adjustHexBrightness(hex, mult)
+    if type(hex) ~= "string" or #hex ~= 7 or string.sub(hex, 1, 1) ~= "#" then
+        return hex
+    end
+    local function byte(i)
+        return tonumber(string.sub(hex, i, i + 1), 16)
+    end
+    local r, g, b = byte(2), byte(4), byte(6)
+    if not r or not g or not b then
+        return hex
+    end
+    r = math.max(0, math.min(255, math.floor(r * mult + 0.5)))
+    g = math.max(0, math.min(255, math.floor(g * mult + 0.5)))
+    b = math.max(0, math.min(255, math.floor(b * mult + 0.5)))
+    return string.format("#%02X%02X%02X", r, g, b)
+end
+
 local function theme()
     if lumina.getTheme then
         return lumina.getTheme()
@@ -52,10 +70,11 @@ local function palette(sev, t)
             themeStr(t.primaryDark, "#0B1220"),
             themeStr(t.primary, "#F5C842"),
         },
+        -- Use surface2 (not surface1): on dark shells surface1 blends into surface0/base.
         secondary = {
-            themeStr(t.surface1, "#45475A"),
+            themeStr(t.surface2, "#334B6B"),
             themeStr(t.text, "#E8EDF7"),
-            themeStr(t.surface2, "#585B70"),
+            themeStr(t.muted, "#8B9BB4"),
         },
         success = { themeStr(t.success, "#4ADE80"), "#0B1220", themeStr(t.success, "#4ADE80") },
         danger = { err, "#0B1220", err },
@@ -66,19 +85,25 @@ local function palette(sev, t)
     return table.unpack(p[sev] or p.primary)
 end
 
+-- Solid/raised: darken fill on hover/press. Secondary is already dark slate — lighten slightly on hover so it does not sink into the page.
 local function hoverPressedBg(sev, t, baseBg, hovered, pressed)
     if pressed then
         if sev == "primary" then
             return themeStr(t.pressed, themeStr(t.primary, baseBg))
         end
-        return themeStr(t.surface2, themeStr(t.surface0, baseBg))
+        if sev == "secondary" then
+            return adjustHexBrightness(baseBg, 0.9)
+        end
+        return adjustHexBrightness(baseBg, 0.72)
     end
     if hovered then
         if sev == "primary" then
             return themeStr(t.hover, baseBg)
         end
-        -- Prefer elevated surface, then base severity tint (never "" — avoids empty background on repaint)
-        return themeStr(t.surface1, themeStr(t.surface0, baseBg))
+        if sev == "secondary" then
+            return adjustHexBrightness(baseBg, 1.07)
+        end
+        return adjustHexBrightness(baseBg, 0.86)
     end
     return baseBg
 end
