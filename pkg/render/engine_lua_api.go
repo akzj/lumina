@@ -158,6 +158,14 @@ func (e *Engine) RegisterLuaAPI() {
 	})
 	L.SetField(tblIdx, "gc")
 
+	// lumina.createLayer(id, element, options?)
+	L.PushFunction(e.luaCreateLayer)
+	L.SetField(tblIdx, "createLayer")
+
+	// lumina.removeLayer(id)
+	L.PushFunction(e.luaRemoveLayer)
+	L.SetField(tblIdx, "removeLayer")
+
 	L.SetGlobal("lumina")
 }
 
@@ -611,3 +619,39 @@ func (e *Engine) luaUseState(L *lua.State) int {
 // Plain int64 in props would round-trip as a Lua number via PushAny; propFuncRef
 // is restored in pushMap via RawGetI(registry, ref).
 type propFuncRef int64
+
+// luaCreateLayer implements lumina.createLayer(id, element, options?)
+// Creates an overlay layer from a Lua element descriptor (result of createElement).
+// Options: { modal = bool }
+func (e *Engine) luaCreateLayer(L *lua.State) int {
+	id := L.CheckString(1)
+	L.CheckType(2, lua.TypeTable)
+
+	// Read optional options table (arg 3)
+	modal := false
+	if L.GetTop() >= 3 && L.IsTable(3) {
+		L.GetField(3, "modal")
+		if L.IsBoolean(-1) {
+			modal = L.ToBoolean(-1)
+		}
+		L.Pop(1)
+	}
+
+	// Read the element descriptor from the Lua table and build a Node tree
+	desc := e.readDescriptor(L, 2)
+	root := createNodeFromDesc(desc)
+	root.LayoutDirty = true
+	root.PaintDirty = true
+
+	// Create the layer
+	e.CreateLayer(id, root, modal)
+	return 0
+}
+
+// luaRemoveLayer implements lumina.removeLayer(id)
+// Removes an overlay layer by ID. The main app layer (index 0) cannot be removed.
+func (e *Engine) luaRemoveLayer(L *lua.State) int {
+	id := L.CheckString(1)
+	e.RemoveLayer(id)
+	return 0
+}
