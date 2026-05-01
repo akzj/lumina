@@ -23,8 +23,8 @@ Go widgets (`pkg/widget/`) should only be used when Lua cannot provide the neede
 - **Virtual scrolling**: Table, ScrollView (performance-critical)
 - **System integration**: Menu (OS-level menus)
 
-### Deprecated Go Widgets
-The following Go widgets have superior Lua replacements and should not be used in new code:
+### Removed Go Widgets
+The following Go widgets have been fully removed. Use the Lua replacements:
 - `lumina.Button` → `require("lux.button")`
 - `lumina.Dialog` → `require("lux.dialog")`
 - `lumina.Toast` → `require("lux.toast")`
@@ -33,6 +33,7 @@ The following Go widgets have superior Lua replacements and should not be used i
 - `lumina.Checkbox` → `require("lux.checkbox")`
 - `lumina.Switch` → `require("lux.switch")`
 - `lumina.Radio` → `require("lux.radio")`
+- `lux.Dropdown` → use `lumina.Dropdown` (Go widget) directly (no lux wrapper)
 
 ## Creating New Lua Components
 
