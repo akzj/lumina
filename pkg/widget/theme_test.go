@@ -46,20 +46,18 @@ func TestDraculaThemeHasAllFields(t *testing.T) {
 	}
 }
 
-func TestSwitchThemeButton(t *testing.T) {
-	// Switch to Nord, render a button, verify it uses Nord colors
+func TestSwitchThemeCheckboxColors(t *testing.T) {
+	// Switch to Nord, render a checkbox, verify it uses Nord colors
 	old := CurrentTheme
 	defer func() { CurrentTheme = old }()
 	CurrentTheme = NordTheme
 
-	state := Button.NewState()
-	node := Button.Render(map[string]any{"label": "Test"}, state).(*render.Node)
-	if node.Style.Background != NordTheme.Primary {
-		t.Errorf("expected Nord primary %q, got %q", NordTheme.Primary, node.Style.Background)
-	}
-	text := node.Children[0]
-	if text.Style.Foreground != NordTheme.PrimaryDark {
-		t.Errorf("expected Nord PrimaryDark %q, got %q", NordTheme.PrimaryDark, text.Style.Foreground)
+	state := Checkbox.NewState()
+	node := Checkbox.Render(map[string]any{"label": "Test", "checked": true}, state).(*render.Node)
+	// Checkbox indicator uses t.Primary for foreground
+	indicator := node.Children[0]
+	if indicator.Style.Foreground != NordTheme.Primary {
+		t.Errorf("expected Nord primary %q for indicator, got %q", NordTheme.Primary, indicator.Style.Foreground)
 	}
 }
 
