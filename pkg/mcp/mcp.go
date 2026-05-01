@@ -101,6 +101,7 @@ type AppInspector interface {
 	MCPGetScreenText() string
 	MCPGetVersion() string
 	MCPHotReload() error
+	MCPGetFrameDetailed() map[string]any
 }
 
 // --- Handler ---
@@ -164,6 +165,8 @@ func (h *Handler) Handle(req Request) Response {
 		if err == nil {
 			result = map[string]any{"ok": true}
 		}
+	case "getFrameDetailed":
+		result = map[string]any{"frame": h.app.MCPGetFrameDetailed()}
 	default:
 		return Response{
 			ID:    req.ID,
@@ -465,6 +468,12 @@ func (h *Handler) Tools() []Tool {
 			Name:        "lumina.hotReload",
 			Title:       "Hot reload",
 			Description: "Trigger immediate hot reload of the current script (same as file watcher detecting a change).",
+			InputSchema: noParams,
+		},
+		{
+			Name:        "lumina.getFrameDetailed",
+			Title:       "Get frame (detailed)",
+			Description: "Get the current screen as structured data with per-cell character, foreground, background, and style attributes.",
 			InputSchema: noParams,
 		},
 	}

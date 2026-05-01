@@ -118,6 +118,10 @@ func (m *mockApp) MCPHotReload() error {
 	return nil
 }
 
+func (m *mockApp) MCPGetFrameDetailed() map[string]any {
+	return map[string]any{"width": 80, "height": 24, "rows": []any{}}
+}
+
 // --- Tests ---
 
 func TestHandler_InspectTree(t *testing.T) {
