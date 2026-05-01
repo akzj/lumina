@@ -228,6 +228,60 @@ func (a *App) MCPGetScreenText() string {
 	return sb.String()
 }
 
+// MCPGetFrameDetailed returns structured per-cell data including character, colors, and style attributes.
+func (a *App) MCPGetFrameDetailed() map[string]any {
+	buf := a.Screen()
+	if buf == nil {
+		return map[string]any{"width": 0, "height": 0, "rows": []any{}}
+	}
+
+	rows := make([]any, buf.Height())
+	for y := 0; y < buf.Height(); y++ {
+		cells := make([]map[string]any, 0, buf.Width())
+		for x := 0; x < buf.Width(); x++ {
+			cell := buf.Get(x, y)
+			ch := cell.Char
+			if ch == 0 {
+				ch = ' '
+			}
+			c := map[string]any{"char": string(ch)}
+			if cell.Foreground != "" {
+				c["fg"] = cell.Foreground
+			}
+			if cell.Background != "" {
+				c["bg"] = cell.Background
+			}
+			if cell.Bold {
+				c["bold"] = true
+			}
+			if cell.Dim {
+				c["dim"] = true
+			}
+			if cell.Underline {
+				c["underline"] = true
+			}
+			if cell.Italic {
+				c["italic"] = true
+			}
+			if cell.Strikethrough {
+				c["strikethrough"] = true
+			}
+			if cell.Inverse {
+				c["inverse"] = true
+			}
+			cells = append(cells, c)
+		}
+		rows[y] = cells
+	}
+
+	return map[string]any{
+		"width":     buf.Width(),
+		"height":    buf.Height(),
+		"rows":      rows,
+		"focusedID": a.MCPGetFocusedID(),
+	}
+}
+
 // MCPGetVersion returns the Lumina v2 version string.
 func (a *App) MCPGetVersion() string {
 	return "lumina-v2"
