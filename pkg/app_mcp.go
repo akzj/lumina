@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/akzj/go-lua/pkg/lua"
 	"github.com/akzj/lumina/pkg/event"
 	"github.com/akzj/lumina/pkg/mcp"
+	"github.com/akzj/lumina/pkg/output"
 )
 
 // Verify at compile time that *App implements mcp.AppInspector.
@@ -280,6 +282,61 @@ func (a *App) MCPGetFrameDetailed() map[string]any {
 		"rows":      rows,
 		"focusedID": a.MCPGetFocusedID(),
 	}
+}
+
+// MCPPreview renders a Lua component in isolation and returns the screen output.
+// The code should contain a lumina.createComponent() call.
+func (a *App) MCPPreview(code string, width, height int) (map[string]any, error) {
+	if width <= 0 {
+		width = 40
+	}
+	if height <= 0 {
+		height = 10
+	}
+
+	// Create a fresh isolated Lua state + App for the preview
+	previewL := lua.NewState()
+	defer previewL.Close()
+
+	ta := output.NewTestAdapter()
+	previewApp := NewApp(previewL, width, height, ta)
+
+	// Load the component code
+	if err := previewL.DoString(code); err != nil {
+		return nil, fmt.Errorf("preview eval: %w", err)
+	}
+
+	// Render once
+	previewApp.engine.RenderAll()
+
+	// Capture screen text
+	buf := previewApp.Screen()
+	if buf == nil {
+		return map[string]any{
+			"screen": "",
+			"width":  width,
+			"height": height,
+		}, nil
+	}
+
+	var sb strings.Builder
+	for y := 0; y < buf.Height(); y++ {
+		for x := 0; x < buf.Width(); x++ {
+			cell := buf.Get(x, y)
+			if cell.Char == 0 {
+				sb.WriteRune(' ')
+			} else {
+				sb.WriteRune(cell.Char)
+			}
+		}
+		sb.WriteRune('\n')
+	}
+
+	return map[string]any{
+		"screen": sb.String(),
+		"width":  width,
+		"height": height,
+	}, nil
 }
 
 // MCPGetVersion returns the Lumina v2 version string.

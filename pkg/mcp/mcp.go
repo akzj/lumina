@@ -102,6 +102,7 @@ type AppInspector interface {
 	MCPGetVersion() string
 	MCPHotReload() error
 	MCPGetFrameDetailed() map[string]any
+	MCPPreview(code string, width, height int) (map[string]any, error)
 }
 
 // --- Handler ---
@@ -167,6 +168,8 @@ func (h *Handler) Handle(req Request) Response {
 		}
 	case "getFrameDetailed":
 		result = map[string]any{"frame": h.app.MCPGetFrameDetailed()}
+	case "preview":
+		result, err = h.handlePreview(req.Params)
 	default:
 		return Response{
 			ID:    req.ID,
@@ -310,6 +313,18 @@ func (h *Handler) handleSetFocus(params json.RawMessage) (any, error) {
 	}
 	h.app.MCPSetFocus(p.ID)
 	return map[string]any{"focused": p.ID}, nil
+}
+
+func (h *Handler) handlePreview(params json.RawMessage) (any, error) {
+	var p struct {
+		Code   string `json:"code"`
+		Width  int    `json:"width"`
+		Height int    `json:"height"`
+	}
+	if err := json.Unmarshal(params, &p); err != nil {
+		return nil, err
+	}
+	return h.app.MCPPreview(p.Code, p.Width, p.Height)
 }
 
 // --- Tool definitions ---
@@ -475,6 +490,20 @@ func (h *Handler) Tools() []Tool {
 			Title:       "Get frame (detailed)",
 			Description: "Get the current screen as structured data with per-cell character, foreground, background, and style attributes.",
 			InputSchema: noParams,
+		},
+		{
+			Name:        "lumina.preview",
+			Title:       "Preview component",
+			Description: "Render a Lua component in isolation and return the screen output. Code should contain a lumina.createComponent() call.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"code":   map[string]any{"type": "string", "description": "Lua code containing a lumina.createComponent() call"},
+					"width":  map[string]any{"type": "integer", "description": "Preview width (default: 40)"},
+					"height": map[string]any{"type": "integer", "description": "Preview height (default: 10)"},
+				},
+				"required": []string{"code"},
+			},
 		},
 	}
 }

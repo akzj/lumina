@@ -122,6 +122,10 @@ func (m *mockApp) MCPGetFrameDetailed() map[string]any {
 	return map[string]any{"width": 80, "height": 24, "rows": []any{}}
 }
 
+func (m *mockApp) MCPPreview(code string, width, height int) (map[string]any, error) {
+	return map[string]any{"screen": "", "width": width, "height": height}, nil
+}
+
 // --- Tests ---
 
 func TestHandler_InspectTree(t *testing.T) {
