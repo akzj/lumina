@@ -100,6 +100,7 @@ type AppInspector interface {
 	MCPToggleDevTools() bool
 	MCPGetScreenText() string
 	MCPGetVersion() string
+	MCPHotReload() error
 }
 
 // --- Handler ---
@@ -158,6 +159,11 @@ func (h *Handler) Handle(req Request) Response {
 		result = map[string]any{"visible": visible}
 	case "getVersion":
 		result = map[string]string{"version": h.app.MCPGetVersion()}
+	case "hotReload":
+		err = h.app.MCPHotReload()
+		if err == nil {
+			result = map[string]any{"ok": true}
+		}
 	default:
 		return Response{
 			ID:    req.ID,
@@ -453,6 +459,12 @@ func (h *Handler) Tools() []Tool {
 			Name:        "lumina.getVersion",
 			Title:       "Get version",
 			Description: "Get the Lumina version string.",
+			InputSchema: noParams,
+		},
+		{
+			Name:        "lumina.hotReload",
+			Title:       "Hot reload",
+			Description: "Trigger immediate hot reload of the current script (same as file watcher detecting a change).",
 			InputSchema: noParams,
 		},
 	}

@@ -114,6 +114,10 @@ func (m *mockApp) MCPGetVersion() string {
 	return m.version
 }
 
+func (m *mockApp) MCPHotReload() error {
+	return nil
+}
+
 // --- Tests ---
 
 func TestHandler_InspectTree(t *testing.T) {

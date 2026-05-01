@@ -38,7 +38,8 @@ type App struct {
 	scheduler *lua.Scheduler
 	quit      chan struct{}
 	running   bool
-	watcher   *hotreload.Watcher // hot reload file watcher (nil when --watch is off)
+	watcher    *hotreload.Watcher // hot reload file watcher (nil when --watch is off)
+	scriptPath string             // path of the loaded script (for hot reload via MCP)
 
 	// Render engine — the single rendering path.
 	engine *render.Engine
