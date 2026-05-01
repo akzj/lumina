@@ -1442,3 +1442,109 @@ func TestEngine_RemoveLayer_NonExistent(t *testing.T) {
 		t.Error("layer count should not change when removing non-existent layer")
 	}
 }
+
+func TestEngine_UseAnimation_NoManager(t *testing.T) {
+	// Without AnimManager, useAnimation returns the "to" value immediately
+	e, L := newTestEngine(t)
+
+	err := L.DoString(`
+		lumina.createComponent({
+			id = "anim-test",
+			name = "AnimTest",
+			render = function(props)
+				local val = lumina.useAnimation("fade", {
+					from = 0,
+					to = 1,
+					duration = 300,
+				})
+				return lumina.createElement("text", {id = "out"}, "val:" .. tostring(val))
+			end,
+		})
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	e.RenderAll()
+	comp := e.GetComponent("anim-test")
+	if comp == nil || comp.RootNode == nil {
+		t.Fatal("component or root node is nil")
+	}
+	// Without AnimManager, should return "to" value (1)
+	if comp.RootNode.Content != "val:1.0" && comp.RootNode.Content != "val:1" {
+		t.Errorf("expected 'val:1.0' or 'val:1', got %q", comp.RootNode.Content)
+	}
+}
+
+type mockAnimManager struct {
+	started map[string]float64 // id → from value
+}
+
+func (m *mockAnimManager) StartAnim(id string, from, to float64, duration int64, easing string, loop bool, onUpdate func(float64), onDone func(), nowMs int64) float64 {
+	if m.started == nil {
+		m.started = make(map[string]float64)
+	}
+	m.started[id] = from
+	return from
+}
+
+func (m *mockAnimManager) GetAnimValue(id string) (float64, bool) {
+	if m.started == nil {
+		return 0, false
+	}
+	val, ok := m.started[id]
+	return val, ok
+}
+
+func (m *mockAnimManager) StopAnim(id string) {
+	delete(m.started, id)
+}
+
+func TestEngine_UseAnimation_WithManager(t *testing.T) {
+	e, L := newTestEngine(t)
+	mock := &mockAnimManager{}
+	e.AnimManager = mock
+	e.NowMs = func() int64 { return 1000 }
+
+	err := L.DoString(`
+		lumina.createComponent({
+			id = "anim-test2",
+			name = "AnimTest2",
+			render = function(props)
+				local val = lumina.useAnimation("slide", {
+					from = 0,
+					to = 100,
+					duration = 500,
+					easing = "easeOutCubic",
+				})
+				return lumina.createElement("text", {id = "out"}, "val:" .. tostring(val))
+			end,
+		})
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	e.RenderAll()
+
+	// The mock returns "from" value on StartAnim
+	comp := e.GetComponent("anim-test2")
+	if comp == nil || comp.RootNode == nil {
+		t.Fatal("component or root node is nil")
+	}
+	if comp.RootNode.Content != "val:0.0" && comp.RootNode.Content != "val:0" {
+		t.Errorf("expected 'val:0.0' or 'val:0', got %q", comp.RootNode.Content)
+	}
+
+	// Verify the animation was started with correct scoped ID
+	expectedID := "anim-test2:slide"
+	if _, ok := mock.started[expectedID]; !ok {
+		t.Errorf("expected animation '%s' to be started, got %v", expectedID, mock.started)
+	}
+
+	// On second render, GetAnimValue returns the cached value (no new Start)
+	e.RenderAll()
+	if len(mock.started) != 1 {
+		t.Errorf("expected 1 animation (reused), got %d", len(mock.started))
+	}
+}

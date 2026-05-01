@@ -107,6 +107,12 @@ func NewApp(L *lua.State, w, h int, adapter output.Adapter) *App {
 		store:     store.New(nil),
 	}
 
+	// Wire animation manager into engine for lumina.useAnimation() hook
+	eng.AnimManager = a.animMgr
+	eng.NowMs = func() int64 {
+		return time.Now().UnixMilli()
+	}
+
 	// Register app-level APIs that the engine doesn't provide:
 	// quit, setInterval, setTimeout, clearInterval, clearTimeout
 	a.registerAppLuaAPIs()
