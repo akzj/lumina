@@ -3,8 +3,8 @@
 -- Usage: local lux = require("lux")
 --
 -- Architecture: Lua-first. All components are pure Lua implementations using
--- lumina.createElement() with CSS-style properties. Go widgets (lumina.Checkbox,
--- lumina.Switch, etc.) are deprecated in favor of these Lua versions.
+-- lumina.createElement() with CSS-style properties. The old Go widgets
+-- (lumina.Checkbox, lumina.Switch, etc.) have been removed in favor of these.
 -- See docs/WIDGET_MIGRATION.md for details.
 
 local M = {}
