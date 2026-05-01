@@ -6,7 +6,7 @@ local Card = lumina.defineComponent("Card", function(props)
     local t = lumina.getTheme and lumina.getTheme() or {}
     local bg = props.bg
     if (bg == nil or bg == "") and props.variant == "elevated" then
-        bg = t.surface0 or "#313244"
+        bg = t.surface0 or "#141C2C"
     end
     if bg == nil then
         bg = ""
@@ -18,7 +18,7 @@ local Card = lumina.defineComponent("Card", function(props)
     end
     local borderColor = props.borderColor
     if (borderColor == nil or borderColor == "") and props.variant == "elevated" then
-        borderColor = t.surface2 or "#585B70"
+        borderColor = t.surface2 or "#2A3A56"
     end
 
     local boxStyle = {

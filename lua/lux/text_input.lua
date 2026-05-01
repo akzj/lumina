@@ -9,17 +9,17 @@ local TextInput = lumina.defineComponent("TextInput", function(props)
     -- Optional label
     if props.label and props.label ~= "" then
         children[#children + 1] = lumina.createElement("text", {
-            foreground = t.text or "#CDD6F4",
+            foreground = t.text or "#E8EDF7",
             style = { height = 1 },
             bold = true,
         }, props.label)
     end
 
     -- Input element (native)
-    local inputFg = t.text or "#CDD6F4"
-    local inputBg = t.surface0 or "#313244"
+    local inputFg = t.text or "#E8EDF7"
+    local inputBg = t.surface0 or "#141C2C"
     if props.disabled then
-        inputFg = t.muted or "#6C7086"
+        inputFg = t.muted or "#8B9BB4"
     end
 
     local fill = props.fill == true
@@ -46,12 +46,12 @@ local TextInput = lumina.defineComponent("TextInput", function(props)
     -- Helper text or error message
     if props.error and type(props.error) == "string" then
         children[#children + 1] = lumina.createElement("text", {
-            foreground = t.error or "#F38BA8",
+            foreground = t.error or "#F87171",
             style = { height = 1 },
         }, props.error)
     elseif props.helperText and props.helperText ~= "" then
         children[#children + 1] = lumina.createElement("text", {
-            foreground = t.muted or "#6C7086",
+            foreground = t.muted or "#8B9BB4",
             style = { height = 1 },
         }, props.helperText)
     end

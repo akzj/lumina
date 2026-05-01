@@ -56,7 +56,7 @@ local Dialog = lumina.defineComponent("LuxDialog", function(props)
         local titleText = titleSlot.children[1]
         if type(titleText) == "string" then
             dialogChildren[#dialogChildren + 1] = lumina.createElement("text", {
-                foreground = t.primary or "#89B4FA",
+                foreground = t.primary or "#F5C842",
                 bold = true,
             }, titleText)
         else
@@ -64,7 +64,7 @@ local Dialog = lumina.defineComponent("LuxDialog", function(props)
         end
     else
         dialogChildren[#dialogChildren + 1] = lumina.createElement("text", {
-            foreground = t.primary or "#89B4FA",
+            foreground = t.primary or "#F5C842",
             bold = true,
         }, title)
     end
@@ -73,7 +73,7 @@ local Dialog = lumina.defineComponent("LuxDialog", function(props)
     local divWidth = width - 4
     if divWidth < 1 then divWidth = 1 end
     dialogChildren[#dialogChildren + 1] = lumina.createElement("text", {
-        foreground = t.muted or "#6C7086",
+        foreground = t.muted or "#8B9BB4",
         dim = true,
     }, string.rep("-", divWidth))
 
@@ -82,7 +82,7 @@ local Dialog = lumina.defineComponent("LuxDialog", function(props)
         for _, child in ipairs(contentSlot.children) do
             if type(child) == "string" then
                 dialogChildren[#dialogChildren + 1] = lumina.createElement("text", {
-                    foreground = t.text or "#CDD6F4",
+                    foreground = t.text or "#E8EDF7",
                 }, child)
             else
                 dialogChildren[#dialogChildren + 1] = child
@@ -90,7 +90,7 @@ local Dialog = lumina.defineComponent("LuxDialog", function(props)
         end
     elseif props.message then
         dialogChildren[#dialogChildren + 1] = lumina.createElement("text", {
-            foreground = t.text or "#CDD6F4",
+            foreground = t.text or "#E8EDF7",
         }, props.message)
     end
 
@@ -103,7 +103,7 @@ local Dialog = lumina.defineComponent("LuxDialog", function(props)
     if actionsSlot and actionsSlot.children and #actionsSlot.children > 0 then
         -- Divider before actions
         dialogChildren[#dialogChildren + 1] = lumina.createElement("text", {
-            foreground = t.muted or "#6C7086",
+            foreground = t.muted or "#8B9BB4",
             dim = true,
         }, string.rep("-", divWidth))
 
@@ -119,7 +119,7 @@ local Dialog = lumina.defineComponent("LuxDialog", function(props)
             border = "rounded",
             padding = 1,
             width = width,
-            background = t.surface0 or "#313244",
+            background = t.surface0 or "#141C2C",
         },
     }, table.unpack(dialogChildren))
 end)

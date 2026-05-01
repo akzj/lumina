@@ -25,16 +25,16 @@ local Toast = lumina.defineComponent("LuxToast", function(props)
         local variant = item.variant or "info"
         local icon, fg
         if variant == "error" then
-            icon = "x "; fg = t.error or "#F38BA8"
+            icon = "x "; fg = t.error or "#F87171"
         elseif variant == "warning" then
-            icon = "! "; fg = t.warning or "#F9E2AF"
+            icon = "! "; fg = t.warning or "#F5C842"
         elseif variant == "success" then
-            icon = "v "; fg = t.success or "#A6E3A1"
+            icon = "v "; fg = t.success or "#4ADE80"
         else
-            icon = "i "; fg = t.primary or "#89B4FA"
+            icon = "i "; fg = t.primary or "#F5C842"
         end
 
-        local bg = t.surface0 or "#313244"
+        local bg = t.surface0 or "#141C2C"
         local width = props.width or 40
 
         children[#children + 1] = lumina.createElement("hbox", {
@@ -48,12 +48,12 @@ local Toast = lumina.defineComponent("LuxToast", function(props)
                 style = { width = 3, height = 1 },
             }, " " .. icon),
             lumina.createElement("text", {
-                foreground = t.text or "#CDD6F4",
+                foreground = t.text or "#E8EDF7",
                 background = bg,
                 style = { flex = 1, height = 1 },
             }, item.message or ""),
             lumina.createElement("text", {
-                foreground = t.muted or "#6C7086",
+                foreground = t.muted or "#8B9BB4",
                 background = bg,
                 style = { width = 3, height = 1 },
                 onClick = onDismiss and function()

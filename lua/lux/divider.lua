@@ -7,7 +7,7 @@ local Divider = lumina.defineComponent("Divider", function(props)
     local char = props.char or "─"
     local width = props.width or 40
     return lumina.createElement("text", {
-        foreground = props.fg or t.surface1 or "#45475A",
+        foreground = props.fg or t.surface1 or "#1B2639",
         dim = true,
     }, string.rep(char, width))
 end)

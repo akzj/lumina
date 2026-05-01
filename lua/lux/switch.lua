@@ -11,9 +11,9 @@ local Switch = lumina.defineComponent("LuxSwitch", function(props)
 
     -- Switch visual
     local indicator = checked and "(●)" or "( )"
-    local trackFg = disabled and (t.muted or "#6C7086")
-        or (checked and (t.primary or "#89B4FA") or (t.surface2 or "#585B70"))
-    local fg = disabled and (t.muted or "#6C7086") or (t.text or "#CDD6F4")
+    local trackFg = disabled and (t.muted or "#8B9BB4")
+        or (checked and (t.primary or "#F5C842") or (t.surface2 or "#2A3A56"))
+    local fg = disabled and (t.muted or "#8B9BB4") or (t.text or "#E8EDF7")
 
     local children = {
         lumina.createElement("text", {

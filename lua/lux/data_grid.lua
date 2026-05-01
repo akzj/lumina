@@ -249,9 +249,9 @@ local DataGrid = lumina.defineComponent("DataGrid", function(props)
 	local headerCells = {}
 	if ncols == 0 then
 		headerCells[1] = lumina.createElement("text", {
-			foreground = t.error or "#F38BA8",
+			foreground = t.error or "#F87171",
 			style = { height = 1 },
-			background = t.surface0 or "#313244",
+			background = t.surface0 or "#141C2C",
 		}, "  DataGrid: columns required")
 	else
 		if props.renderHeaderCell then
@@ -276,13 +276,13 @@ local DataGrid = lumina.defineComponent("DataGrid", function(props)
 				end
 
 				local headerFg = (sort and sort.columnId == col.id)
-					and (t.primary or "#89B4FA")
-					or (t.text or "#CDD6F4")
+					and (t.primary or "#F5C842")
+					or (t.text or "#E8EDF7")
 
 				headerCells[#headerCells + 1] = lumina.createElement("text", {
 					bold = true,
 					foreground = headerFg,
-					background = t.surface0 or "#313244",
+					background = t.surface0 or "#141C2C",
 					style = { width = w, height = 1 },
 					onClick = col.sortable and function()
 						if props.onSortChange then
@@ -303,9 +303,9 @@ local DataGrid = lumina.defineComponent("DataGrid", function(props)
 	}, table.unpack(headerCells))
 
 	local sep = lumina.createElement("text", {
-		foreground = t.surface1 or "#45475A",
+		foreground = t.surface1 or "#1B2639",
 		dim = true,
-		style = { height = sepH, background = t.base or "#1E1E2E" },
+		style = { height = sepH, background = t.base or "#0B1220" },
 	}, string.rep("\226\148\128", sepW))
 
 	-- Default renderCell when none provided
@@ -320,10 +320,10 @@ local DataGrid = lumina.defineComponent("DataGrid", function(props)
 			if v == nil then v = "" end
 			if type(v) ~= "string" then v = tostring(v) end
 
-			local fg = ctx.selected and (t.primary or "#89B4FA") or (t.text or "#CDD6F4")
-			local bg = ctx.selected and (t.surface1 or "#45475A") or (t.base or "#1E1E2E")
+			local fg = ctx.selected and (t.primary or "#F5C842") or (t.text or "#E8EDF7")
+			local bg = ctx.selected and (t.surface1 or "#1B2639") or (t.base or "#0B1220")
 			if ctx.multiSelected then
-				bg = t.surface0 or "#313244"
+				bg = t.surface0 or "#141C2C"
 			end
 			local w = columnWidth(col)
 			-- Selection indicator prefix in multi mode
@@ -348,9 +348,9 @@ local DataGrid = lumina.defineComponent("DataGrid", function(props)
 	local bodyChildren = {}
 	if ncols == 0 then
 		bodyChildren[1] = lumina.createElement("text", {
-			foreground = t.error or "#F38BA8",
+			foreground = t.error or "#F87171",
 			style = { height = 1 },
-			background = t.base or "#1E1E2E",
+			background = t.base or "#0B1220",
 		}, "  DataGrid: columns required")
 	elseif #rows == 0 then
 		local emptyText = props.empty
@@ -358,9 +358,9 @@ local DataGrid = lumina.defineComponent("DataGrid", function(props)
 			emptyText = "No rows"
 		end
 		bodyChildren[1] = lumina.createElement("text", {
-			foreground = t.muted or "#6C7086",
+			foreground = t.muted or "#8B9BB4",
 			style = { height = 1 },
-			background = t.base or "#1E1E2E",
+			background = t.base or "#0B1220",
 		}, "  " .. emptyText)
 	else
 		-- Determine row range to render
@@ -419,8 +419,8 @@ local DataGrid = lumina.defineComponent("DataGrid", function(props)
 						id = "edit-" .. tostring(i) .. "-" .. colId,
 						value = inputValue,
 						focusable = true,
-						foreground = t.text or "#CDD6F4",
-						background = t.surface1 or "#45475A",
+						foreground = t.text or "#E8EDF7",
+						background = t.surface1 or "#1B2639",
 						style = { height = 1, width = cw },
 						onChange = function(text)
 							lastEditValue = text

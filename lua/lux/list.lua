@@ -33,13 +33,13 @@ local ListView = lumina.defineComponent("ListView", function(props)
 			emptyText = "No items"
 		end
 		items[1] = lumina.createElement("text", {
-			foreground = t.muted or "#6C7086",
+			foreground = t.muted or "#8B9BB4",
 			style = { height = 1 },
 		}, "  " .. emptyText)
 	else
 		if type(renderRow) ~= "function" then
 			items[1] = lumina.createElement("text", {
-				foreground = t.error or "#F38BA8",
+				foreground = t.error or "#F87171",
 				style = { height = 1 },
 			}, "  ListView: renderRow function required")
 		else

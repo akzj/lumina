@@ -85,8 +85,8 @@ local Pagination = lumina.defineComponent("LuxPagination", function(props)
     local prevDisabled = (currentPage <= 1)
     children[#children + 1] = lumina.createElement("text", {
         key = "prev",
-        foreground = prevDisabled and (t.muted or "#6C7086") or (t.text or "#CDD6F4"),
-        background = t.base or "#1E1E2E",
+        foreground = prevDisabled and (t.muted or "#8B9BB4") or (t.text or "#E8EDF7"),
+        background = t.base or "#0B1220",
         dim = prevDisabled,
         onClick = not prevDisabled and function() goTo(currentPage - 1) end or nil,
         style = { height = 1 },
@@ -97,8 +97,8 @@ local Pagination = lumina.defineComponent("LuxPagination", function(props)
         if item == "break" then
             children[#children + 1] = lumina.createElement("text", {
                 key = "brk-" .. tostring(idx),
-                foreground = t.muted or "#6C7086",
-                background = t.base or "#1E1E2E",
+                foreground = t.muted or "#8B9BB4",
+                background = t.base or "#0B1220",
                 dim = true,
                 style = { height = 1 },
             }, " " .. breakLabel .. " ")
@@ -106,8 +106,8 @@ local Pagination = lumina.defineComponent("LuxPagination", function(props)
             local isCurrent = (item == currentPage)
             children[#children + 1] = lumina.createElement("text", {
                 key = "p-" .. tostring(item),
-                foreground = isCurrent and (t.primary or "#89B4FA") or (t.text or "#CDD6F4"),
-                background = isCurrent and (t.surface1 or "#45475A") or (t.base or "#1E1E2E"),
+                foreground = isCurrent and (t.primary or "#F5C842") or (t.text or "#E8EDF7"),
+                background = isCurrent and (t.surface1 or "#1B2639") or (t.base or "#0B1220"),
                 bold = isCurrent,
                 onClick = not isCurrent and function() goTo(item) end or nil,
                 style = { height = 1 },
@@ -119,8 +119,8 @@ local Pagination = lumina.defineComponent("LuxPagination", function(props)
     local nextDisabled = (currentPage >= pageCount)
     children[#children + 1] = lumina.createElement("text", {
         key = "next",
-        foreground = nextDisabled and (t.muted or "#6C7086") or (t.text or "#CDD6F4"),
-        background = t.base or "#1E1E2E",
+        foreground = nextDisabled and (t.muted or "#8B9BB4") or (t.text or "#E8EDF7"),
+        background = t.base or "#0B1220",
         dim = nextDisabled,
         onClick = not nextDisabled and function() goTo(currentPage + 1) end or nil,
         style = { height = 1 },

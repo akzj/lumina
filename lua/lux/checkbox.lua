@@ -11,9 +11,9 @@ local Checkbox = lumina.defineComponent("LuxCheckbox", function(props)
 
     -- Visual
     local indicator = checked and "[x]" or "[ ]"
-    local fg = disabled and (t.muted or "#6C7086") or (t.text or "#CDD6F4")
-    local indicatorFg = disabled and (t.muted or "#6C7086")
-        or (hovered and (t.hover or "#B4BEFE") or (t.primary or "#89B4FA"))
+    local fg = disabled and (t.muted or "#8B9BB4") or (t.text or "#E8EDF7")
+    local indicatorFg = disabled and (t.muted or "#8B9BB4")
+        or (hovered and (t.hover or "#FFD35A") or (t.primary or "#F5C842"))
 
     local children = {
         lumina.createElement("text", {

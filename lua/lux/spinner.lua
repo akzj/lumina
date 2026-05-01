@@ -19,10 +19,10 @@ local Spinner = lumina.defineComponent("Spinner", function(props)
 
     return lumina.createElement("hbox", {},
         lumina.createElement("text", {
-            foreground = t.primary or "#89B4FA",
+            foreground = t.primary or "#F5C842",
         }, frames[frame] .. " "),
         lumina.createElement("text", {
-            foreground = t.text or "#CDD6F4",
+            foreground = t.text or "#E8EDF7",
         }, label)
     )
 end)
