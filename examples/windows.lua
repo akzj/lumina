@@ -7,7 +7,7 @@
 --   • Keyboard movement of active window
 --   • Per-window click counters
 --
--- See also: examples/windows_widget.lua for the Window widget version
+-- Pure Lua window management (no Go Window widget needed)
 -- with mouse drag-to-move and drag-to-resize support.
 --
 -- Features showcased:

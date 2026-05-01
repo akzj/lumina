@@ -30,7 +30,7 @@ M.Button = require("lux.button")
 M.Checkbox = require("lux.checkbox")
 M.Radio = require("lux.radio")
 M.Switch = require("lux.switch")
--- Dropdown: use lumina.Dropdown (Go widget) directly — no lux wrapper needed
+-- All Go widgets removed — use engine primitives (vbox/hbox/text/input) + lux components
 M.Toast = require("lux.toast")
 M.Tree = require("lux.tree")
 M.Form = require("lux.form")

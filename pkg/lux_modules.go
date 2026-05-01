@@ -5,7 +5,7 @@ package v2
 //
 // Layering (see README + docs/DESIGN-widgets.md):
 //   - Radix-style primitives: Go widgets in pkg/widget/, exposed as lumina.Button,
-//     lumina.Checkbox, lumina.Select, … (registered in NewApp, not here).
+//     All Go widgets have been removed; only engine primitives remain.
 //   - Lux: Lua-only presentation templates under lua/lux/*.lua, embedded at build
 //     time (see lua/lux/embed.go) so require() works without shipping files beside
 //     the binary.
@@ -46,7 +46,7 @@ func registerLuxModules(L *lua.State) {
 	preloadLuaSource(L, "lux.checkbox", mustReadLuxLua("checkbox.lua"))
 	preloadLuaSource(L, "lux.radio", mustReadLuxLua("radio.lua"))
 	preloadLuaSource(L, "lux.switch", mustReadLuxLua("switch.lua"))
-	// lux.dropdown removed — use lumina.Dropdown (Go widget) directly
+	// All Go widgets removed — UI is built with lux components or engine primitives
 	preloadLuaSource(L, "lux.toast", mustReadLuxLua("toast.lua"))
 	preloadLuaSource(L, "lux.tree", mustReadLuxLua("tree.lua"))
 	preloadLuaSource(L, "lux.form", mustReadLuxLua("form.lua"))

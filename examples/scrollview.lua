@@ -1,14 +1,11 @@
--- examples/scrollview.lua — ScrollView Widget Demo
+-- examples/scrollview.lua — Scroll Demo
 --
--- Demonstrates the ScrollView widget with:
+-- Demonstrates scrollable content with:
 --   • Automatic vertical scrolling for overflowing content
 --   • Keyboard scrolling: ↑/↓ (1 line), PageUp/PageDown (1 page), Home/End
 --   • Mouse wheel scrolling (built-in engine support)
---   • Visual scrollbar (thumb + track)
 --
 -- Press q or Ctrl+C to quit.
-
-local ScrollView = lumina.ScrollView
 
 lumina.app {
     id = "scrollview-demo",
@@ -23,6 +20,7 @@ lumina.app {
         local items = {}
         for i = 1, 50 do
             items[#items + 1] = lumina.createElement("text", {
+                key = "line" .. i,
                 style = {
                     foreground = (i % 2 == 0) and t.text or t.subtext1,
                     background = (i % 2 == 0) and t.surface0 or t.base,
@@ -36,17 +34,17 @@ lumina.app {
             -- Header
             lumina.createElement("text", {
                 style = { foreground = t.lavender, bold = true, height = 1 },
-            }, " 📜 ScrollView Demo — Use ↑↓ PageUp/PageDown Home/End to scroll"),
+            }, " 📜 Scroll Demo — Use ↑↓ PageUp/PageDown Home/End to scroll"),
 
-            -- ScrollView with 50 lines in a 20-row visible area
-            ScrollView {
+            -- Scrollable vbox with 50 lines in a flex visible area
+            lumina.createElement("vbox", {
                 style = {
                     flex = 1,
+                    overflow = "scroll",
                     border = "single",
                     background = t.base,
                 },
-                table.unpack(items),
-            },
+            }, table.unpack(items)),
 
             -- Footer
             lumina.createElement("text", {

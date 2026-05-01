@@ -76,19 +76,11 @@ lumina.createComponent({
                 onChange = function() setPlan("enterprise") end,
             },
 
-            -- Actions dropdown
-            lumina.Dropdown {
-                key = "actions",
-                label = "More Actions",
-                items = {
-                    { label = "Export as CSV" },
-                    { label = "Print" },
-                    { label = "Share" },
-                },
-                onChange = function(idx)
-                    -- handle action selection
-                end,
-            },
+            -- Actions (placeholder — dropdown widget removed, use lux components)
+            lumina.createElement("text", {key = "actions",
+                style = {foreground = t.subtext1}},
+                "▼ More Actions: Export | Print | Share"
+            ),
 
             -- Submit button
             lux.Button {

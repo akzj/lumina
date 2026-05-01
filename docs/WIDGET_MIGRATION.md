@@ -1,14 +1,41 @@
-# Widget Architecture: Lua-First
+# Widget Architecture: Lua-First (Zero Go Widgets)
 
 ## Principle
-> Go provides mechanisms (layout, paint, events, layers, focus, cursor).
+> Go provides mechanisms (layout, paint, events, layers, focus, cursor, animation).
 > Lua provides policy (appearance, interaction, theming).
 
-## Widget Layers
+## Architecture
 
-### Lua Lux Components (Preferred)
-All new UI components should be implemented in `lua/lux/` as pure Lua components.
+### Engine Primitives (Go)
+The Go engine provides only layout primitives — no UI widgets:
+- `vbox`, `hbox`, `box` — flex layout containers
+- `text` — text rendering
+- `input`, `textarea` — text input with cursor/selection
+- Style system (CSS-like properties: position, flex, overflow, border, etc.)
+- Event system (click, hover, keydown, scroll, focus)
+- Layer management (z-order, absolute/fixed positioning)
+- Animation hooks (`lumina.useAnimation()`)
+- Theme system (`lumina.getTheme()`, `lumina.setTheme()`)
+
+### Lua Lux Components (All UI)
+All UI components are implemented in `lua/lux/` as pure Lua components.
 They use `lumina.createElement("vbox"/"hbox"/"text"/...)` with CSS-style properties.
+
+Available components:
+- `lux.Button` — buttons with hover/press states
+- `lux.Checkbox` — checkbox with label
+- `lux.Radio` — radio button with label
+- `lux.Switch` — toggle switch with label
+- `lux.Dialog` — modal dialog
+- `lux.Toast` — toast notifications
+- `lux.List` — scrollable list with row rendering
+- `lux.Pagination` — page navigation
+- `lux.Card` — card container with title
+- `lux.Badge` — status badge
+- `lux.Divider` — horizontal divider
+- `lux.Progress` — progress bar
+- `lux.Form` — form layout
+- `lux.Tree` — tree view
 
 Benefits:
 - Hot-reloadable
@@ -16,15 +43,8 @@ Benefits:
 - Composable via slots
 - No Go rebuild required
 
-### Go Widgets (Capability Layer)
-Go widgets (`pkg/widget/`) should only be used when Lua cannot provide the needed capability:
-- **Layer management**: Select, Dropdown, Tooltip, Window (create overlays)
-- **Complex input**: TextInput (cursor, selection, IME)
-- **Virtual scrolling**: Table, ScrollView (performance-critical)
-- **System integration**: Menu (OS-level menus)
-
 ### Removed Go Widgets
-The following Go widgets have been fully removed. Use the Lua replacements:
+ALL Go widgets have been removed. The following migrations apply:
 - `lumina.Button` → `require("lux.button")`
 - `lumina.Dialog` → `require("lux.dialog")`
 - `lumina.Toast` → `require("lux.toast")`
@@ -33,7 +53,15 @@ The following Go widgets have been fully removed. Use the Lua replacements:
 - `lumina.Checkbox` → `require("lux.checkbox")`
 - `lumina.Switch` → `require("lux.switch")`
 - `lumina.Radio` → `require("lux.radio")`
-- `lux.Dropdown` → use `lumina.Dropdown` (Go widget) directly (no lux wrapper)
+- `lumina.Label` → `lumina.createElement("text", {...}, "content")`
+- `lumina.Spacer` → `lumina.createElement("box", {style = {flex = 1}})`
+- `lumina.Select` → build with vbox/text + state management
+- `lumina.Dropdown` → build with vbox/text + layer management
+- `lumina.Table` → build with hbox/vbox/text rows
+- `lumina.Menu` → build with vbox/text items
+- `lumina.Tooltip` → build with absolute-positioned text
+- `lumina.Window` → build with vbox + absolute positioning (see `lua/lux/wm.lua`)
+- `lumina.ScrollView` → use `overflow = "scroll"` style on any container
 
 ## Creating New Lua Components
 
