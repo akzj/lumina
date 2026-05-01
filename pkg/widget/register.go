@@ -1,16 +1,7 @@
 package widget
 
 // All returns all built-in widgets.
+// All Go widgets have been removed in favor of Lua lux components.
 func All() []*Widget {
-	return []*Widget{
-		Label,
-		Select,
-		Tooltip,
-		Table,
-		Menu,
-		Dropdown,
-		Spacer,
-		Window,
-		ScrollView,
-	}
+	return nil
 }
