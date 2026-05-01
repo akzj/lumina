@@ -180,7 +180,7 @@ lumina.app {
                         foreground = isSelected and t.primary or t.text,
                         bold = isSelected,
                     }, prefix),
-                    lumina.createElement(lumina.Checkbox, {
+                    lumina.createElement(lux.Checkbox, {
                         key = "cb-" .. tostring(todo.id),
                         label = todo.text,
                         checked = todo.done,

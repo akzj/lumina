@@ -1,4 +1,4 @@
--- radio_test.lua — Tests for the Radio widget (rendering + interaction)
+-- radio_test.lua — Tests for the Radio widget (lux version, rendering + interaction)
 
 test.describe("Radio widget", function()
     local app
@@ -13,12 +13,17 @@ test.describe("Radio widget", function()
 
     test.it("renders checked and unchecked radios", function()
         app:loadString([[
+            local Radio = require("lux.radio")
             lumina.createComponent({
                 id = "test", name = "Test",
                 render = function()
                     return lumina.createElement("vbox", {id = "root"},
-                        lumina.Radio { label = "Red", value = "red", checked = true, key = "r1" },
-                        lumina.Radio { label = "Blue", value = "blue", checked = false, key = "r2" }
+                        lumina.createElement(Radio, {
+                            label = "Red", value = "red", checked = true, key = "r1",
+                        }),
+                        lumina.createElement(Radio, {
+                            label = "Blue", value = "blue", checked = false, key = "r2",
+                        })
                     )
                 end,
             })
@@ -30,13 +35,20 @@ test.describe("Radio widget", function()
 
     test.it("renders radio group", function()
         app:loadString([[
+            local Radio = require("lux.radio")
             lumina.createComponent({
                 id = "test", name = "Test",
                 render = function()
                     return lumina.createElement("vbox", {id = "root"},
-                        lumina.Radio { label = "Small", value = "s", checked = false, key = "r3" },
-                        lumina.Radio { label = "Medium", value = "m", checked = true, key = "r4" },
-                        lumina.Radio { label = "Large", value = "l", checked = false, key = "r5" }
+                        lumina.createElement(Radio, {
+                            label = "Small", value = "s", checked = false, key = "r3",
+                        }),
+                        lumina.createElement(Radio, {
+                            label = "Medium", value = "m", checked = true, key = "r4",
+                        }),
+                        lumina.createElement(Radio, {
+                            label = "Large", value = "l", checked = false, key = "r5",
+                        })
                     )
                 end,
             })
@@ -48,11 +60,14 @@ test.describe("Radio widget", function()
 
     test.it("renders disabled radio", function()
         app:loadString([[
+            local Radio = require("lux.radio")
             lumina.createComponent({
                 id = "test", name = "Test",
                 render = function()
                     return lumina.createElement("vbox", {id = "root"},
-                        lumina.Radio { label = "Disabled", value = "d", disabled = true, key = "r6" }
+                        lumina.createElement(Radio, {
+                            label = "Disabled", value = "d", disabled = true, key = "r6",
+                        })
                     )
                 end,
             })
@@ -62,6 +77,7 @@ test.describe("Radio widget", function()
 
     test.it("controlled selection via store", function()
         app:loadString([[
+            local Radio = require("lux.radio")
             lumina.store.set("selected", "a")
             lumina.createComponent({
                 id = "test", name = "Test",
@@ -69,12 +85,12 @@ test.describe("Radio widget", function()
                     local selected = lumina.useStore("selected")
                     return lumina.createElement("vbox", {id = "root",
                         style = {width = 80, height = 24}},
-                        lumina.createElement(lumina.Radio, {
+                        lumina.createElement(Radio, {
                             label = "Option A", value = "a",
                             checked = (selected == "a"),
                             key = "ra",
                         }),
-                        lumina.createElement(lumina.Radio, {
+                        lumina.createElement(Radio, {
                             label = "Option B", value = "b",
                             checked = (selected == "b"),
                             key = "rb",

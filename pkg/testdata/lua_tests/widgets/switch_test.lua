@@ -1,4 +1,4 @@
--- switch_test.lua — Tests for the Switch widget (rendering + interaction)
+-- switch_test.lua — Tests for the Switch widget (lux version, rendering + interaction)
 
 test.describe("Switch widget", function()
     local app
@@ -13,12 +13,17 @@ test.describe("Switch widget", function()
 
     test.it("renders on/off states", function()
         app:loadString([[
+            local Switch = require("lux.switch")
             lumina.createComponent({
                 id = "test", name = "Test",
                 render = function()
                     return lumina.createElement("vbox", {id = "root"},
-                        lumina.Switch { label = "Dark Mode", checked = false, key = "sw1" },
-                        lumina.Switch { label = "Notifications", checked = true, key = "sw2" }
+                        lumina.createElement(Switch, {
+                            label = "Dark Mode", checked = false, key = "sw1",
+                        }),
+                        lumina.createElement(Switch, {
+                            label = "Notifications", checked = true, key = "sw2",
+                        })
                     )
                 end,
             })
@@ -29,6 +34,7 @@ test.describe("Switch widget", function()
 
     test.it("toggles on click via onChange", function()
         app:loadString([[
+            local Switch = require("lux.switch")
             lumina.store.set("on", false)
             lumina.createComponent({
                 id = "test", name = "Test",
@@ -36,7 +42,7 @@ test.describe("Switch widget", function()
                     local on = lumina.useStore("on")
                     return lumina.createElement("vbox", {id = "root",
                         style = {width = 80, height = 24}},
-                        lumina.createElement(lumina.Switch, {
+                        lumina.createElement(Switch, {
                             label = "Toggle",
                             checked = on,
                             key = "sw3",
@@ -64,6 +70,7 @@ test.describe("Switch widget", function()
 
     test.it("disabled switch does not toggle", function()
         app:loadString([[
+            local Switch = require("lux.switch")
             lumina.store.set("on", false)
             lumina.createComponent({
                 id = "test", name = "Test",
@@ -71,7 +78,7 @@ test.describe("Switch widget", function()
                     local on = lumina.useStore("on")
                     return lumina.createElement("vbox", {id = "root",
                         style = {width = 80, height = 24}},
-                        lumina.createElement(lumina.Switch, {
+                        lumina.createElement(Switch, {
                             label = "Locked",
                             checked = on,
                             disabled = true,

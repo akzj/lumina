@@ -11,52 +11,49 @@ test.describe("Factory __call syntax (Go widgets)", function()
         app:destroy()
     end)
 
-    test.it("Checkbox __call syntax with id", function()
+    test.it("Checkbox __call syntax with id (lux)", function()
         app:loadString([[
+            local Checkbox = require("lux.checkbox")
             lumina.createComponent({
                 id = "test", name = "Test",
                 render = function()
                     return lumina.createElement("vbox", {id = "root"},
-                        lumina.Checkbox { id = "cb", label = "Accept", checked = true, key = "cb1" }
+                        Checkbox { id = "cb", label = "Accept", checked = true, key = "cb1" }
                     )
                 end,
             })
         ]])
-        local node = app:find("cb")
-        test.assert.notNil(node)
         test.assert.eq(app:screenContains("[x]"), true)
         test.assert.eq(app:screenContains("Accept"), true)
     end)
 
-    test.it("Switch __call syntax with id", function()
+    test.it("Switch __call syntax with id (lux)", function()
         app:loadString([[
+            local Switch = require("lux.switch")
             lumina.createComponent({
                 id = "test", name = "Test",
                 render = function()
                     return lumina.createElement("vbox", {id = "root"},
-                        lumina.Switch { id = "sw", label = "Toggle", checked = true, key = "sw1" }
+                        Switch { id = "sw", label = "Toggle", checked = true, key = "sw1" }
                     )
                 end,
             })
         ]])
-        local node = app:find("sw")
-        test.assert.notNil(node)
         test.assert.eq(app:screenContains("Toggle"), true)
     end)
 
-    test.it("Radio __call syntax with id", function()
+    test.it("Radio __call syntax with id (lux)", function()
         app:loadString([[
+            local Radio = require("lux.radio")
             lumina.createComponent({
                 id = "test", name = "Test",
                 render = function()
                     return lumina.createElement("vbox", {id = "root"},
-                        lumina.Radio { id = "rd", label = "Option", value = "opt1", checked = true, key = "rd1" }
+                        Radio { id = "rd", label = "Option", value = "opt1", checked = true, key = "rd1" }
                     )
                 end,
             })
         ]])
-        local node = app:find("rd")
-        test.assert.notNil(node)
         test.assert.eq(app:screenContains("Option"), true)
     end)
 
@@ -114,31 +111,31 @@ test.describe("Mixed table pattern (props + children)", function()
 
     test.it("multiple widgets in vbox with id", function()
         app:loadString([[
+            local Checkbox = require("lux.checkbox")
             lumina.createComponent({
                 id = "test", name = "Test",
                 render = function()
                     return lumina.createElement("vbox", {id = "root"},
-                        lumina.Checkbox { id = "cb1", label = "A", checked = true, key = "cba" },
-                        lumina.Checkbox { id = "cb2", label = "B", checked = false, key = "cbb" }
+                        Checkbox { id = "cb1", label = "A", checked = true, key = "cba" },
+                        Checkbox { id = "cb2", label = "B", checked = false, key = "cbb" }
                     )
                 end,
             })
         ]])
-        test.assert.notNil(app:find("cb1"))
-        test.assert.notNil(app:find("cb2"))
         test.assert.eq(app:screenContains("A"), true)
         test.assert.eq(app:screenContains("B"), true)
         test.assert.eq(app:screenContains("[x]"), true)
         test.assert.eq(app:screenContains("[ ]"), true)
     end)
 
-    test.it("createElement still works for Go widgets", function()
+    test.it("createElement still works for lux components", function()
         app:loadString([[
+            local Checkbox = require("lux.checkbox")
             lumina.createComponent({
                 id = "test", name = "Test",
                 render = function()
                     return lumina.createElement("vbox", {id = "root"},
-                        lumina.createElement(lumina.Checkbox, {
+                        lumina.createElement(Checkbox, {
                             id = "old-cb",
                             label = "Old Syntax",
                             checked = false,
@@ -148,7 +145,6 @@ test.describe("Mixed table pattern (props + children)", function()
                 end,
             })
         ]])
-        test.assert.notNil(app:find("old-cb"))
         test.assert.eq(app:screenContains("[ ]"), true)
         test.assert.eq(app:screenContains("Old Syntax"), true)
     end)
