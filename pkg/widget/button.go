@@ -1,5 +1,9 @@
 package widget
 
+// Deprecated: This Go widget is superseded by lua/lux/button.lua which provides
+// richer features (severity, appearance, group, split) without Go dependency.
+// The Go widget remains for backward compatibility but will be removed in a future version.
+
 import "github.com/akzj/lumina/pkg/render"
 
 // ButtonState is the internal state for a Button widget.

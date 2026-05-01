@@ -1,5 +1,9 @@
 package widget
 
+// Deprecated: This Go widget is superseded by lua/lux/dialog.lua which provides
+// richer features (slot-based content, custom actions) without Go dependency.
+// The Go widget remains for backward compatibility but will be removed in a future version.
+
 import (
 	"strings"
 

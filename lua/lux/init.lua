@@ -1,6 +1,11 @@
 -- lua/lux/init.lua
 -- Lux: component library for Lumina
 -- Usage: local lux = require("lux")
+--
+-- Architecture: Lua-first. All components are pure Lua implementations using
+-- lumina.createElement() with CSS-style properties. Go widgets (lumina.Checkbox,
+-- lumina.Switch, etc.) are deprecated in favor of these Lua versions.
+-- See docs/WIDGET_MIGRATION.md for details.
 
 local M = {}
 
