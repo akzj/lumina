@@ -32,6 +32,7 @@ local Switch = lumina.defineComponent("LuxSwitch", function(props)
     return lumina.createElement("hbox", {
         id = props.id,
         key = props.key,
+        role = "switch",
         focusable = not disabled,
         disabled = disabled,
         style = props.style,

@@ -103,6 +103,9 @@ func descriptorFromMap(m map[string]any) Descriptor {
 	if d, ok := m["disabled"].(bool); ok {
 		desc.Disabled = d
 	}
+	if r, ok := m["role"].(string); ok {
+		desc.Role = r
+	}
 
 	// Placeholder
 	if p, ok := m["placeholder"].(string); ok {
@@ -233,6 +236,7 @@ func (e *Engine) readDescriptor(L *lua.State, idx int) Descriptor {
 	desc.OnOutsideClick = getRefField(L, absIdx, "onOutsideClick")
 	desc.Focusable = getBoolField(L, absIdx, "focusable")
 	desc.Disabled = getBoolField(L, absIdx, "disabled")
+	desc.Role = getStringField(L, absIdx, "role")
 
 	// Read children
 	L.GetField(absIdx, "children")
