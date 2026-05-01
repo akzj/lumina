@@ -32,6 +32,7 @@ local Checkbox = lumina.defineComponent("LuxCheckbox", function(props)
     return lumina.createElement("hbox", {
         id = props.id,
         key = props.key,
+        role = "checkbox",
         focusable = not disabled,
         disabled = disabled,
         style = props.style,

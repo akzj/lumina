@@ -129,8 +129,9 @@ type Node struct {
 	Focused   bool // true when this node has input focus
 
 	// Widget support
-	Focusable bool // true = can receive focus via Tab cycling
-	Disabled  bool // true = skip events, skip focus
+	Focusable bool   // true = can receive focus via Tab cycling
+	Disabled  bool   // true = skip events, skip focus
+	Role      string // accessibility role (e.g. "button", "checkbox", "dialog")
 
 	// Events (persistent references, not re-registered per frame)
 	OnClick        LuaRef

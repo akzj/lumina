@@ -17,6 +17,7 @@ type Descriptor struct {
 	AutoFocus   bool
 	Focusable   bool
 	Disabled    bool
+	Role        string // accessibility role (e.g. "button", "checkbox", "dialog")
 
 	// Scroll state
 	ScrollY    int

@@ -281,6 +281,7 @@ local LuxButton = lumina.defineComponent("LuxButton", function(props)
     return lumina.createElement("hbox", {
         id = props.id,
         key = props.key,
+        role = "button",
         focusable = not disabled,
         disabled = disabled,
         style = rootStyle,

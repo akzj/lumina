@@ -118,6 +118,7 @@ local CommandPalette = lumina.defineComponent("CommandPalette", function(props)
             background = t.surface0 or "#141C2C",
         },
         onKeyDown = handleKey,
+        role = "listbox",
         focusable = true,
     },
         -- Search input display

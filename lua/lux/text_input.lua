@@ -34,6 +34,7 @@ local TextInput = lumina.defineComponent("TextInput", function(props)
         placeholder = props.placeholder or "",
         foreground = inputFg,
         background = inputBg,
+        role = "textbox",
         focusable = not props.disabled,
         autoFocus = props.autoFocus,
         style = inputStyle,

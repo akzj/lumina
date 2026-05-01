@@ -88,6 +88,9 @@ func reconcileImpl(node *Node, desc Descriptor, freedRefs *[]int64) bool {
 		node.PaintDirty = true
 		changed = true
 	}
+	if desc.Role != node.Role {
+		node.Role = desc.Role
+	}
 
 	// 5. Reconcile children (skip for component nodes — children are grafted)
 	if node.Type != "component" {
@@ -387,6 +390,7 @@ func createNodeFromDesc(desc Descriptor) *Node {
 	node.ComponentProps = desc.ComponentProps
 	node.Focusable = desc.Focusable
 	node.Disabled = desc.Disabled
+	node.Role = desc.Role
 	node.OnClick = desc.OnClick
 	node.OnMouseEnter = desc.OnMouseEnter
 	node.OnMouseLeave = desc.OnMouseLeave

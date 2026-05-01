@@ -35,6 +35,7 @@ local Radio = lumina.defineComponent("LuxRadio", function(props)
     return lumina.createElement("hbox", {
         id = props.id,
         key = props.key,
+        role = "radio",
         focusable = not disabled,
         disabled = disabled,
         style = props.style,

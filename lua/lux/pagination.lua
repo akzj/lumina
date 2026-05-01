@@ -132,6 +132,7 @@ local Pagination = lumina.defineComponent("LuxPagination", function(props)
     return lumina.createElement("hbox", {
         id = props.id,
         key = props.key,
+        role = "navigation",
         style = rootStyle,
         focusable = true,
         autoFocus = props.autoFocus == true,

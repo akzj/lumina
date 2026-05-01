@@ -137,6 +137,7 @@ local Accordion = lumina.defineComponent("Accordion", function(props)
     return lumina.createElement("vbox", {
         id = props.id,
         key = props.key,
+        role = "tablist",
         style = rootStyle,
         focusable = true,
         autoFocus = props.autoFocus == true,
