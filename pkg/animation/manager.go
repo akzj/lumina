@@ -70,3 +70,34 @@ func (m *Manager) Count() int {
 func (m *Manager) IsRunning() bool {
 	return len(m.animations) > 0
 }
+
+// StartAnim implements render.AnimationManager interface.
+// Starts a new animation and returns its initial value.
+func (m *Manager) StartAnim(id string, from, to float64, duration int64, easing string, loop bool, onUpdate func(float64), onDone func(), nowMs int64) float64 {
+	anim := m.Start(Config{
+		ID:       id,
+		From:     from,
+		To:       to,
+		Duration: duration,
+		Easing:   easing,
+		Loop:     loop,
+		OnUpdate: onUpdate,
+		OnDone:   onDone,
+	}, nowMs)
+	return anim.Current()
+}
+
+// GetAnimValue implements render.AnimationManager interface.
+// Returns the current value of an animation, or (0, false) if not found.
+func (m *Manager) GetAnimValue(id string) (float64, bool) {
+	anim := m.Get(id)
+	if anim == nil {
+		return 0, false
+	}
+	return anim.Current(), true
+}
+
+// StopAnim implements render.AnimationManager interface.
+func (m *Manager) StopAnim(id string) {
+	m.Stop(id)
+}

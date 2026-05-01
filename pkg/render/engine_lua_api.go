@@ -166,6 +166,10 @@ func (e *Engine) RegisterLuaAPI() {
 	L.PushFunction(e.luaRemoveLayer)
 	L.SetField(tblIdx, "removeLayer")
 
+	// lumina.useAnimation(id, config) → current value
+	L.PushFunction(e.luaUseAnimation)
+	L.SetField(tblIdx, "useAnimation")
+
 	L.SetGlobal("lumina")
 }
 
@@ -654,4 +658,78 @@ func (e *Engine) luaRemoveLayer(L *lua.State) int {
 	id := L.CheckString(1)
 	e.RemoveLayer(id)
 	return 0
+}
+
+// luaUseAnimation implements lumina.useAnimation(id, config) → current value
+// Config: { from = number, to = number, duration = ms, easing = string, loop = bool }
+// Must be called inside a component render function (like useState).
+func (e *Engine) luaUseAnimation(L *lua.State) int {
+	comp := e.currentComp
+	if comp == nil {
+		L.PushNumber(0)
+		return 1
+	}
+
+	id := L.CheckString(1)
+	L.CheckType(2, lua.TypeTable)
+
+	// Scope animation ID to the current component
+	fullID := comp.ID + ":" + id
+
+	// If animation already running, return current value
+	if e.AnimManager != nil {
+		if val, ok := e.AnimManager.GetAnimValue(fullID); ok {
+			L.PushNumber(val)
+			return 1
+		}
+	}
+
+	// Read config
+	L.GetField(2, "from")
+	from := L.OptNumber(-1, 0)
+	L.Pop(1)
+
+	L.GetField(2, "to")
+	to := L.OptNumber(-1, 1)
+	L.Pop(1)
+
+	L.GetField(2, "duration")
+	duration := int64(L.OptNumber(-1, 300))
+	L.Pop(1)
+
+	L.GetField(2, "easing")
+	easing := L.OptString(-1, "linear")
+	L.Pop(1)
+
+	L.GetField(2, "loop")
+	loop := false
+	if L.IsBoolean(-1) {
+		loop = L.ToBoolean(-1)
+	}
+	L.Pop(1)
+
+	// If no animation manager, return target value immediately
+	if e.AnimManager == nil {
+		L.PushNumber(to)
+		return 1
+	}
+
+	// Get current time
+	var nowMs int64
+	if e.NowMs != nil {
+		nowMs = e.NowMs()
+	}
+
+	// Start animation — onUpdate marks the component dirty for re-render
+	compID := comp.ID
+	val := e.AnimManager.StartAnim(fullID, from, to, duration, easing, loop, func(value float64) {
+		// Mark component dirty so it re-renders with updated value
+		if c, ok := e.components[compID]; ok {
+			c.Dirty = true
+			e.needsRender = true
+		}
+	}, nil, nowMs)
+
+	L.PushNumber(val)
+	return 1
 }

@@ -49,6 +49,17 @@ type LayerRequest struct {
 	Modal bool
 }
 
+// AnimationManager is the interface for animation management.
+// Implemented by animation.Manager to avoid import cycles (render cannot import animation).
+type AnimationManager interface {
+	// StartAnim begins a new animation. Returns the created animation's initial value.
+	StartAnim(id string, from, to float64, duration int64, easing string, loop bool, onUpdate func(float64), onDone func(), nowMs int64) float64
+	// GetAnimValue returns the current value of an animation, or (0, false) if not found.
+	GetAnimValue(id string) (float64, bool)
+	// StopAnim stops and removes an animation by ID.
+	StopAnim(id string)
+}
+
 // WidgetDef is the interface for Go-native widgets.
 // Implemented by widget.Widget (in pkg/widget) to avoid import cycles.
 type WidgetDef interface {
@@ -117,6 +128,14 @@ type Engine struct {
 
 	// customTheme holds a user-provided theme table (from Lua setTheme(table)).
 	customTheme map[string]string
+
+	// AnimManager is the animation manager (set by App after construction).
+	// Nil if animations are not supported (e.g., in tests without App).
+	AnimManager AnimationManager
+
+	// NowMs returns the current time in milliseconds.
+	// Set by App; defaults to 0 if not set.
+	NowMs func() int64
 }
 
 // SetTracker sets the performance tracker for recording render-engine metrics.
