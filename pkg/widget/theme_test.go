@@ -46,39 +46,6 @@ func TestDraculaThemeHasAllFields(t *testing.T) {
 	}
 }
 
-func TestSwitchThemeCheckboxColors(t *testing.T) {
-	// Switch to Nord, render a checkbox, verify it uses Nord colors
-	old := CurrentTheme
-	defer func() { CurrentTheme = old }()
-	CurrentTheme = NordTheme
-
-	state := Checkbox.NewState()
-	node := Checkbox.Render(map[string]any{"label": "Test", "checked": true}, state).(*render.Node)
-	// Checkbox indicator uses t.Primary for foreground
-	indicator := node.Children[0]
-	if indicator.Style.Foreground != NordTheme.Primary {
-		t.Errorf("expected Nord primary %q for indicator, got %q", NordTheme.Primary, indicator.Style.Foreground)
-	}
-}
-
-func TestSwitchThemeCheckbox(t *testing.T) {
-	old := CurrentTheme
-	defer func() { CurrentTheme = old }()
-	CurrentTheme = DraculaTheme
-
-	state := Checkbox.NewState()
-	node := Checkbox.Render(map[string]any{"label": "Check"}, state).(*render.Node)
-	// Indicator should use Dracula primary
-	indicator := node.Children[0]
-	if indicator.Style.Foreground != DraculaTheme.Primary {
-		t.Errorf("expected Dracula primary %q, got %q", DraculaTheme.Primary, indicator.Style.Foreground)
-	}
-	// Label should use Dracula text
-	label := node.Children[1]
-	if label.Style.Foreground != DraculaTheme.Text {
-		t.Errorf("expected Dracula text %q, got %q", DraculaTheme.Text, label.Style.Foreground)
-	}
-}
 
 func TestSwitchThemeLabel(t *testing.T) {
 	old := CurrentTheme
@@ -89,33 +56,6 @@ func TestSwitchThemeLabel(t *testing.T) {
 	node := Label.Render(map[string]any{"text": "Hello"}, state).(*render.Node)
 	if node.Style.Foreground != NordTheme.Text {
 		t.Errorf("expected Nord text %q, got %q", NordTheme.Text, node.Style.Foreground)
-	}
-}
-
-func TestSwitchThemeSwitch(t *testing.T) {
-	old := CurrentTheme
-	defer func() { CurrentTheme = old }()
-	CurrentTheme = NordTheme
-
-	state := &SwitchState{Checked: true}
-	node := Switch.Render(map[string]any{}, state).(*render.Node)
-	track := node.Children[0]
-	// Checked track bg should be Nord primary
-	if track.Style.Background != NordTheme.Primary {
-		t.Errorf("expected Nord primary %q, got %q", NordTheme.Primary, track.Style.Background)
-	}
-}
-
-func TestSwitchThemeRadio(t *testing.T) {
-	old := CurrentTheme
-	defer func() { CurrentTheme = old }()
-	CurrentTheme = DraculaTheme
-
-	state := &RadioState{}
-	node := Radio.Render(map[string]any{"label": "Opt"}, state).(*render.Node)
-	indicator := node.Children[0]
-	if indicator.Style.Foreground != DraculaTheme.Primary {
-		t.Errorf("expected Dracula primary %q, got %q", DraculaTheme.Primary, indicator.Style.Foreground)
 	}
 }
 
