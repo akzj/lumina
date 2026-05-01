@@ -1,4 +1,4 @@
--- list_test.lua — Tests for the List widget (rendering + interaction)
+-- list_test.lua — Tests for the Lux ListView component (rendering)
 
 test.describe("List widget", function()
     local app
@@ -13,14 +13,20 @@ test.describe("List widget", function()
 
     test.it("renders string items", function()
         app:loadString([[
+            local ListView = require("lux.list")
             lumina.createComponent({
                 id = "test", name = "Test",
                 render = function()
-                    return lumina.createElement("vbox", {id = "root"},
-                        lumina.createElement(lumina.List, {
-                            items = {"Alpha", "Beta", "Gamma"},
+                    return lumina.createElement("vbox", {id = "root",
+                        style = {width = 80, height = 24}},
+                        ListView {
+                            rows = {{label = "Alpha"}, {label = "Beta"}, {label = "Gamma"}},
+                            renderRow = function(row, idx, ctx)
+                                return lumina.createElement("text", {key = "r" .. idx}, row.label)
+                            end,
+                            height = 10,
                             key = "list1",
-                        })
+                        }
                     )
                 end,
             })
@@ -32,17 +38,23 @@ test.describe("List widget", function()
 
     test.it("renders map items with label key", function()
         app:loadString([[
+            local ListView = require("lux.list")
             lumina.createComponent({
                 id = "test", name = "Test",
                 render = function()
-                    return lumina.createElement("vbox", {id = "root"},
-                        lumina.createElement(lumina.List, {
-                            items = {
+                    return lumina.createElement("vbox", {id = "root",
+                        style = {width = 80, height = 24}},
+                        ListView {
+                            rows = {
                                 {label = "Item A"},
                                 {label = "Item B"},
                             },
+                            renderRow = function(row, idx, ctx)
+                                return lumina.createElement("text", {key = "r" .. idx}, row.label)
+                            end,
+                            height = 10,
                             key = "list2",
-                        })
+                        }
                     )
                 end,
             })
@@ -53,15 +65,21 @@ test.describe("List widget", function()
 
     test.it("renders with showIndex", function()
         app:loadString([[
+            local ListView = require("lux.list")
             lumina.createComponent({
                 id = "test", name = "Test",
                 render = function()
-                    return lumina.createElement("vbox", {id = "root"},
-                        lumina.createElement(lumina.List, {
-                            items = {"First", "Second"},
-                            showIndex = true,
+                    return lumina.createElement("vbox", {id = "root",
+                        style = {width = 80, height = 24}},
+                        ListView {
+                            rows = {{label = "First"}, {label = "Second"}},
+                            renderRow = function(row, idx, ctx)
+                                return lumina.createElement("text", {key = "r" .. idx},
+                                    tostring(idx) .. ". " .. row.label)
+                            end,
+                            height = 10,
                             key = "list3",
-                        })
+                        }
                     )
                 end,
             })
@@ -72,14 +90,20 @@ test.describe("List widget", function()
 
     test.it("renders empty list without error", function()
         app:loadString([[
+            local ListView = require("lux.list")
             lumina.createComponent({
                 id = "test", name = "Test",
                 render = function()
-                    return lumina.createElement("vbox", {id = "root"},
-                        lumina.createElement(lumina.List, {
-                            items = {},
+                    return lumina.createElement("vbox", {id = "root",
+                        style = {width = 80, height = 24}},
+                        ListView {
+                            rows = {},
+                            renderRow = function(row, idx, ctx)
+                                return lumina.createElement("text", {key = "r" .. idx}, row.label)
+                            end,
+                            height = 10,
                             key = "list4",
-                        })
+                        }
                     )
                 end,
             })
@@ -90,15 +114,20 @@ test.describe("List widget", function()
 
     test.it("non-selectable list renders without selection prefix", function()
         app:loadString([[
+            local ListView = require("lux.list")
             lumina.createComponent({
                 id = "test", name = "Test",
                 render = function()
-                    return lumina.createElement("vbox", {id = "root"},
-                        lumina.createElement(lumina.List, {
-                            items = {"X", "Y"},
-                            selectable = false,
+                    return lumina.createElement("vbox", {id = "root",
+                        style = {width = 80, height = 24}},
+                        ListView {
+                            rows = {{label = "X"}, {label = "Y"}},
+                            renderRow = function(row, idx, ctx)
+                                return lumina.createElement("text", {key = "r" .. idx}, row.label)
+                            end,
+                            height = 10,
                             key = "list5",
-                        })
+                        }
                     )
                 end,
             })

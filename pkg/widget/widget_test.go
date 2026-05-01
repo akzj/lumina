@@ -226,7 +226,7 @@ func TestAllWidgets(t *testing.T) {
 	if len(all) == 0 {
 		t.Fatal("All() returned empty")
 	}
-	if all[0].Name != "Button" {
-		t.Errorf("first widget should be Button, got %q", all[0].Name)
+	if all[0].Name != "Checkbox" {
+		t.Errorf("first widget should be Checkbox, got %q", all[0].Name)
 	}
 }

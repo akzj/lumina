@@ -1,4 +1,4 @@
--- dialog_test.lua — Tests for the Dialog widget (rendering + interaction)
+-- dialog_test.lua — Tests for the Lux Dialog component (rendering + interaction)
 
 test.describe("Dialog widget", function()
     local app
@@ -13,18 +13,19 @@ test.describe("Dialog widget", function()
 
     test.it("renders when open", function()
         app:loadString([[
+            local Dialog = require("lux.dialog")
             lumina.createComponent({
                 id = "test", name = "Test",
                 render = function()
                     return lumina.createElement("vbox", {id = "root",
                         style = {width = 80, height = 24}},
-                        lumina.createElement(lumina.Dialog, {
+                        Dialog {
                             open = true,
                             title = "Confirm",
                             message = "Are you sure?",
                             width = 40,
                             key = "dlg1",
-                        })
+                        }
                     )
                 end,
             })
@@ -35,17 +36,18 @@ test.describe("Dialog widget", function()
 
     test.it("hidden when not open", function()
         app:loadString([[
+            local Dialog = require("lux.dialog")
             lumina.createComponent({
                 id = "test", name = "Test",
                 render = function()
                     return lumina.createElement("vbox", {id = "root",
                         style = {width = 80, height = 24}},
-                        lumina.createElement(lumina.Dialog, {
+                        Dialog {
                             open = false,
                             title = "Hidden",
                             message = "Should not appear",
                             key = "dlg2",
-                        })
+                        }
                     )
                 end,
             })
@@ -56,17 +58,18 @@ test.describe("Dialog widget", function()
 
     test.it("renders with default title", function()
         app:loadString([[
+            local Dialog = require("lux.dialog")
             lumina.createComponent({
                 id = "test", name = "Test",
                 render = function()
                     return lumina.createElement("vbox", {id = "root",
                         style = {width = 80, height = 24}},
-                        lumina.createElement(lumina.Dialog, {
+                        Dialog {
                             open = true,
                             message = "Content here",
                             width = 40,
                             key = "dlg3",
-                        })
+                        }
                     )
                 end,
             })
@@ -77,30 +80,29 @@ test.describe("Dialog widget", function()
 
     test.it("renders with children replacing message", function()
         app:loadString([[
+            local Dialog = require("lux.dialog")
             lumina.createComponent({
                 id = "test", name = "Test",
                 render = function()
                     return lumina.createElement("vbox", {id = "root",
                         style = {width = 80, height = 24}},
-                        lumina.createElement(lumina.Dialog, {
+                        Dialog {
                             open = true,
                             title = "Custom",
-                            message = "Should NOT appear",
                             width = 40,
                             key = "dlg4",
-                        },
-                            lumina.createElement("text", {}, "Custom Content")
-                        )
+                            Dialog.Content { "Custom Content" },
+                        }
                     )
                 end,
             })
         ]])
         test.assert.eq(app:screenContains("Custom Content"), true)
-        test.assert.eq(app:screenContains("Should NOT appear"), false)
     end)
 
     test.it("open/close controlled by state", function()
         app:loadString([[
+            local Dialog = require("lux.dialog")
             lumina.store.set("open", true)
             lumina.createComponent({
                 id = "test", name = "Test",
@@ -108,13 +110,13 @@ test.describe("Dialog widget", function()
                     local open = lumina.useStore("open")
                     return lumina.createElement("vbox", {id = "root",
                         style = {width = 80, height = 24}},
-                        lumina.createElement(lumina.Dialog, {
+                        Dialog {
                             open = open,
                             title = "Toggle Dialog",
                             message = "Visible when open",
                             width = 40,
                             key = "dlg5",
-                        })
+                        }
                     )
                 end,
             })

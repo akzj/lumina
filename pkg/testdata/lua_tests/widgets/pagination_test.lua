@@ -1,4 +1,4 @@
--- pagination_test.lua — Tests for the Pagination widget (rendering)
+-- pagination_test.lua — Tests for the Lux Pagination component (rendering)
 
 test.describe("Pagination widget", function()
     local app
@@ -13,16 +13,17 @@ test.describe("Pagination widget", function()
 
     test.it("renders without error", function()
         app:loadString([[
+            local Pagination = require("lux.pagination")
             lumina.createComponent({
                 id = "test", name = "Test",
                 render = function()
                     return lumina.createElement("vbox", {id = "root",
                         style = {width = 80, height = 24}},
-                        lumina.createElement(lumina.Pagination, {
-                            page = 3,
-                            totalPages = 10,
+                        Pagination {
+                            currentPage = 3,
+                            pageCount = 10,
                             key = "pg1",
-                        }),
+                        },
                         lumina.createElement("text", {id = "marker"}, "END")
                     )
                 end,
@@ -35,16 +36,17 @@ test.describe("Pagination widget", function()
 
     test.it("renders single page", function()
         app:loadString([[
+            local Pagination = require("lux.pagination")
             lumina.createComponent({
                 id = "test", name = "Test",
                 render = function()
                     return lumina.createElement("vbox", {id = "root",
                         style = {width = 80, height = 24}},
-                        lumina.createElement(lumina.Pagination, {
-                            page = 1,
-                            totalPages = 1,
+                        Pagination {
+                            currentPage = 1,
+                            pageCount = 1,
                             key = "pg2",
-                        }),
+                        },
                         lumina.createElement("text", {id = "marker"}, "DONE")
                     )
                 end,
@@ -57,6 +59,7 @@ test.describe("Pagination widget", function()
 
     test.it("updates when page changes via store", function()
         app:loadString([[
+            local Pagination = require("lux.pagination")
             lumina.store.set("page", 1)
             lumina.createComponent({
                 id = "test", name = "Test",
@@ -64,11 +67,11 @@ test.describe("Pagination widget", function()
                     local page = lumina.useStore("page")
                     return lumina.createElement("vbox", {id = "root",
                         style = {width = 80, height = 24}},
-                        lumina.createElement(lumina.Pagination, {
-                            page = page,
-                            totalPages = 5,
+                        Pagination {
+                            currentPage = page,
+                            pageCount = 5,
                             key = "pg3",
-                        }),
+                        },
                         lumina.createElement("text", {id = "out"},
                             "page:" .. tostring(page))
                     )
