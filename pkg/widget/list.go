@@ -1,5 +1,9 @@
 package widget
 
+// Deprecated: This Go widget is superseded by lua/lux/list.lua which provides
+// richer features (scrollable, searchable) without Go dependency.
+// The Go widget remains for backward compatibility but will be removed in a future version.
+
 import (
 	"fmt"
 

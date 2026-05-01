@@ -1,5 +1,9 @@
 package widget
 
+// Prefer lua/lux/checkbox.lua for new code (pure Lua, no Go dependency).
+// This Go widget remains functional for backward compatibility and direct usage
+// via lumina.Checkbox, but new applications should use the Lua version.
+
 import "github.com/akzj/lumina/pkg/render"
 
 // CheckboxState is the internal state for a Checkbox widget.

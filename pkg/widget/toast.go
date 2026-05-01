@@ -1,5 +1,8 @@
 package widget
 
+// Deprecated: This Go widget is superseded by lua/lux/toast.lua (pure Lua).
+// The Go widget remains for backward compatibility but will be removed in a future version.
+
 import "github.com/akzj/lumina/pkg/render"
 
 // ToastState is the internal state for a Toast widget.

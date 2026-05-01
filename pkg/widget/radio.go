@@ -1,5 +1,9 @@
 package widget
 
+// Prefer lua/lux/radio.lua for new code (pure Lua, no Go dependency).
+// This Go widget remains functional for backward compatibility and direct usage
+// via lumina.Radio, but new applications should use the Lua version.
+
 import "github.com/akzj/lumina/pkg/render"
 
 // RadioState is the internal state for a Radio widget.
