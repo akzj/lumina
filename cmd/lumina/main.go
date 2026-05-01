@@ -16,10 +16,11 @@ import (
 )
 
 func main() {
-	// Parse simple flags: --web :8080, --watch, --mcp :8088
+	// Parse simple flags: --web :8080, --watch, --mcp :8088, --test
 	var webAddr string
 	var mcpAddr string
 	var watchMode bool
+	var testMode bool
 	var scriptPath string
 	var args []string
 
@@ -36,13 +37,24 @@ func main() {
 			mcpAddr = strings.TrimPrefix(os.Args[i], "--mcp=")
 		} else if os.Args[i] == "--watch" {
 			watchMode = true
+		} else if os.Args[i] == "--test" {
+			testMode = true
 		} else {
 			args = append(args, os.Args[i])
 		}
 	}
 
+	if testMode {
+		if len(args) < 1 {
+			fmt.Println("Usage: lumina --test <test_file.lua|test_dir/> [...]")
+			os.Exit(1)
+		}
+		runTest(args)
+		return
+	}
+
 	if len(args) < 1 {
-		fmt.Println("Usage: lumina [--web :8080] [--mcp :8088] [--watch] <script.lua>")
+		fmt.Println("Usage: lumina [--web :8080] [--mcp :8088] [--watch] [--test] <script.lua|test_dir/>")
 		os.Exit(1)
 	}
 	scriptPath = args[0]
@@ -51,6 +63,51 @@ func main() {
 		runWeb(webAddr, scriptPath, watchMode, mcpAddr)
 	} else {
 		runTerminal(scriptPath, watchMode, mcpAddr)
+	}
+}
+
+// runTest executes Lua test files and prints results to stdout.
+func runTest(paths []string) {
+	runner := v2.NewTestRunner()
+	var allResults []v2.TestResult
+	var hasFailure bool
+
+	for _, p := range paths {
+		info, err := os.Stat(p)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+
+		var results []v2.TestResult
+		if info.IsDir() {
+			results, err = runner.RunDir(p)
+		} else {
+			results, err = runner.RunFile(p)
+		}
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error running %s: %v\n", p, err)
+			os.Exit(1)
+		}
+		allResults = append(allResults, results...)
+	}
+
+	// Print results
+	passed, failed := 0, 0
+	for _, r := range allResults {
+		if r.Passed {
+			fmt.Printf("  ✓ %s / %s (%v)\n", r.Suite, r.Name, r.Duration)
+			passed++
+		} else {
+			fmt.Printf("  ✗ %s / %s: %s\n", r.Suite, r.Name, r.Error)
+			failed++
+			hasFailure = true
+		}
+	}
+
+	fmt.Printf("\n%d passed, %d failed, %d total\n", passed, failed, passed+failed)
+	if hasFailure {
+		os.Exit(1)
 	}
 }
 
