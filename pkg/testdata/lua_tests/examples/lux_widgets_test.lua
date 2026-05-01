@@ -220,28 +220,8 @@ test.describe("Lux widget wrappers", function()
 
     -- Dropdown tests
 
-    test.it("Dropdown renders with label", function()
-        app:loadString([[
-            lumina.createComponent({
-                id = "test", name = "Test",
-                render = function()
-                    return lumina.createElement("vbox", {id = "root",
-                        style = {width = 80, height = 24}},
-                        lumina.Dropdown {
-                            label = "Actions",
-                            key = "dd1",
-                            items = {
-                                {label = "Cut"},
-                                {label = "Copy"},
-                                {label = "Paste"},
-                            },
-                        }
-                    )
-                end,
-            })
-        ]])
-        test.assert.eq(app:screenContains("Actions"), true)
-    end)
+    -- Dropdown Go widget has been removed.
+    -- Use lumina.createElement("vbox", ...) with text children for dropdown-like UI.
 
     -- Umbrella access via require("lux")
 

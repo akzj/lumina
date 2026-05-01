@@ -57,45 +57,8 @@ test.describe("Factory __call syntax (Go widgets)", function()
         test.assert.eq(app:screenContains("Option"), true)
     end)
 
-    test.it("Label __call syntax with id", function()
-        app:loadString([[
-            lumina.createComponent({
-                id = "test", name = "Test",
-                render = function()
-                    return lumina.createElement("vbox", {id = "root"},
-                        lumina.Label { id = "lbl", text = "Hello Label", key = "lbl1" }
-                    )
-                end,
-            })
-        ]])
-        local node = app:find("lbl")
-        test.assert.notNil(node)
-        test.assert.eq(app:screenContains("Hello Label"), true)
-    end)
-
-    test.it("Select __call syntax with id", function()
-        app:loadString([[
-            lumina.createComponent({
-                id = "test", name = "Test",
-                render = function()
-                    return lumina.createElement("vbox", {id = "root"},
-                        lumina.Select {
-                            id = "sel",
-                            placeholder = "Pick...",
-                            options = {
-                                {label = "A", value = "a"},
-                                {label = "B", value = "b"},
-                            },
-                            key = "sel1",
-                        }
-                    )
-                end,
-            })
-        ]])
-        local node = app:find("sel")
-        test.assert.notNil(node)
-        test.assert.eq(app:screenContains("Pick..."), true)
-    end)
+    -- Label and Select Go widgets have been removed.
+    -- Use lux components or plain text/vbox elements instead.
 end)
 
 test.describe("Mixed table pattern (props + children)", function()

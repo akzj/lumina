@@ -3,8 +3,6 @@ package widget
 import (
 	"reflect"
 	"testing"
-
-	"github.com/akzj/lumina/pkg/render"
 )
 
 func TestDefaultThemeHasAllFields(t *testing.T) {
@@ -47,29 +45,8 @@ func TestDraculaThemeHasAllFields(t *testing.T) {
 }
 
 
-func TestSwitchThemeLabel(t *testing.T) {
-	old := CurrentTheme
-	defer func() { CurrentTheme = old }()
-	CurrentTheme = NordTheme
-
-	state := Label.NewState()
-	node := Label.Render(map[string]any{"text": "Hello"}, state).(*render.Node)
-	if node.Style.Foreground != NordTheme.Text {
-		t.Errorf("expected Nord text %q, got %q", NordTheme.Text, node.Style.Foreground)
-	}
-}
-
-func TestSwitchThemeSelect(t *testing.T) {
-	old := CurrentTheme
-	defer func() { CurrentTheme = old }()
-	CurrentTheme = NordTheme
-
-	state := Select.NewState()
-	node := Select.Render(map[string]any{}, state).(*render.Node)
-	if node.Style.Background != NordTheme.Surface0 {
-		t.Errorf("expected Nord Surface0 %q, got %q", NordTheme.Surface0, node.Style.Background)
-	}
-}
+// All widget-specific theme tests have been removed (widgets deleted).
+// Theme system is still tested via ThemeToMap, SetThemeByName, etc.
 
 func TestCurrentThemeDefaultsToDefault(t *testing.T) {
 	if CurrentTheme != DefaultTheme {
