@@ -36,10 +36,10 @@ func TestWidgetDefInterface(t *testing.T) {
 
 func TestAllWidgets(t *testing.T) {
 	all := All()
-	if len(all) == 0 {
-		t.Fatal("All() returned empty")
+	if len(all) != 9 {
+		t.Fatalf("All() should return 9 widgets, got %d", len(all))
 	}
-	if all[0].Name != "Checkbox" {
-		t.Errorf("first widget should be Checkbox, got %q", all[0].Name)
+	if all[0].Name != "Label" {
+		t.Errorf("first widget should be Label, got %q", all[0].Name)
 	}
 }

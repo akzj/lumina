@@ -5,11 +5,12 @@ import (
 )
 
 // TestFactoryCallSyntax_GoWidget verifies that Factory { props } syntax works
-// for Go widgets (e.g., lumina.Checkbox).
+// for lux components (previously Go widgets).
 func TestFactoryCallSyntax_GoWidget(t *testing.T) {
 	app, ta, _ := newLuaApp(t, 80, 10)
 
 	err := app.RunString(`
+		local Checkbox = require("lux.checkbox")
 		lumina.createComponent({
 			id = "call-test",
 			name = "CallTest",
@@ -18,8 +19,8 @@ func TestFactoryCallSyntax_GoWidget(t *testing.T) {
 				return lumina.createElement("vbox", {
 					style = {width = 80, height = 10},
 				},
-					-- Use __call syntax for Go widget
-					lumina.Checkbox { label = "Call Syntax", checked = true, key = "cb1" }
+					-- Use __call syntax for lux component
+					Checkbox { label = "Call Syntax", checked = true, key = "cb1" }
 				)
 			end,
 		})
@@ -118,11 +119,12 @@ func TestFactoryCallSyntax_WithChildren(t *testing.T) {
 }
 
 // TestFactoryCallSyntax_CreateElementStillWorks verifies backward compatibility:
-// lumina.createElement(factory, props) still works.
+// lumina.createElement(factory, props) still works with lux components.
 func TestFactoryCallSyntax_CreateElementStillWorks(t *testing.T) {
 	app, ta, _ := newLuaApp(t, 80, 10)
 
 	err := app.RunString(`
+		local Checkbox = require("lux.checkbox")
 		lumina.createComponent({
 			id = "compat-test",
 			name = "CompatTest",
@@ -131,8 +133,8 @@ func TestFactoryCallSyntax_CreateElementStillWorks(t *testing.T) {
 				return lumina.createElement("vbox", {
 					style = {width = 80, height = 10},
 				},
-					-- Old syntax still works
-					lumina.createElement(lumina.Checkbox, {
+					-- createElement with lux component
+					lumina.createElement(Checkbox, {
 						label = "Old Syntax",
 						checked = false,
 						key = "compat-cb",
@@ -205,6 +207,7 @@ func TestFactoryCallSyntax_MixedTablePropsOnly(t *testing.T) {
 	app, ta, _ := newLuaApp(t, 80, 10)
 
 	err := app.RunString(`
+		local Checkbox = require("lux.checkbox")
 		lumina.createComponent({
 			id = "mixed-props-only",
 			name = "MixedPropsOnly",
@@ -213,7 +216,7 @@ func TestFactoryCallSyntax_MixedTablePropsOnly(t *testing.T) {
 				return lumina.createElement("vbox", {
 					style = {width = 80, height = 10},
 				},
-					lumina.Checkbox { label = "PropsOnly", checked = false, key = "po1" }
+					Checkbox { label = "PropsOnly", checked = false, key = "po1" }
 				)
 			end,
 		})

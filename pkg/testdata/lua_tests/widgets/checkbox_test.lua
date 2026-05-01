@@ -1,4 +1,4 @@
--- checkbox_test.lua — Tests for the Checkbox widget (rendering + interaction)
+-- checkbox_test.lua — Tests for the Checkbox widget (lux version, rendering + interaction)
 
 test.describe("Checkbox widget", function()
     local app
@@ -13,15 +13,16 @@ test.describe("Checkbox widget", function()
 
     test.it("renders checked state with label", function()
         app:loadString([[
+            local Checkbox = require("lux.checkbox")
             lumina.createComponent({
                 id = "test", name = "Test",
                 render = function()
                     return lumina.createElement("vbox", {id = "root"},
-                        lumina.Checkbox {
+                        lumina.createElement(Checkbox, {
                             label = "Option A",
                             checked = true,
                             key = "cb1",
-                        }
+                        })
                     )
                 end,
             })
@@ -32,15 +33,16 @@ test.describe("Checkbox widget", function()
 
     test.it("renders unchecked state", function()
         app:loadString([[
+            local Checkbox = require("lux.checkbox")
             lumina.createComponent({
                 id = "test", name = "Test",
                 render = function()
                     return lumina.createElement("vbox", {id = "root"},
-                        lumina.Checkbox {
+                        lumina.createElement(Checkbox, {
                             label = "Option B",
                             checked = false,
                             key = "cb2",
-                        }
+                        })
                     )
                 end,
             })
@@ -51,6 +53,7 @@ test.describe("Checkbox widget", function()
 
     test.it("toggles on click via onChange", function()
         app:loadString([[
+            local Checkbox = require("lux.checkbox")
             lumina.store.set("checked", false)
             lumina.createComponent({
                 id = "test", name = "Test",
@@ -58,7 +61,7 @@ test.describe("Checkbox widget", function()
                     local checked = lumina.useStore("checked")
                     return lumina.createElement("vbox", {id = "root",
                         style = {width = 80, height = 24}},
-                        lumina.createElement(lumina.Checkbox, {
+                        lumina.createElement(Checkbox, {
                             label = "Toggle Me",
                             checked = checked,
                             key = "cb3",
@@ -89,6 +92,7 @@ test.describe("Checkbox widget", function()
 
     test.it("disabled checkbox does not toggle on click", function()
         app:loadString([[
+            local Checkbox = require("lux.checkbox")
             lumina.store.set("checked", false)
             lumina.createComponent({
                 id = "test", name = "Test",
@@ -96,7 +100,7 @@ test.describe("Checkbox widget", function()
                     local checked = lumina.useStore("checked")
                     return lumina.createElement("vbox", {id = "root",
                         style = {width = 80, height = 24}},
-                        lumina.createElement(lumina.Checkbox, {
+                        lumina.createElement(Checkbox, {
                             label = "Disabled",
                             checked = checked,
                             disabled = true,
