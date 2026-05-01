@@ -127,13 +127,32 @@ func (a *App) MCPSimulateKey(key string) error {
 }
 
 // MCPEval executes Lua code in the app's Lua state.
+// If the code is an expression, its value is returned in the "value" field.
 func (a *App) MCPEval(code string) (any, error) {
 	if a.luaState == nil {
 		return nil, fmt.Errorf("no Lua state available")
 	}
-	if err := a.luaState.DoString(code); err != nil {
-		return nil, err
+	L := a.luaState
+	top := L.GetTop()
+
+	// Try as expression first (prepend "return") to capture the result
+	err := L.DoString("return " + code)
+	if err != nil {
+		// Not an expression — try as statement
+		err = L.DoString(code)
+		if err != nil {
+			return nil, err
+		}
 	}
+
+	// Check if anything was returned
+	newTop := L.GetTop()
+	if newTop > top {
+		val := L.ToAny(-1)
+		L.SetTop(top) // restore stack
+		return map[string]any{"ok": true, "value": val}, nil
+	}
+
 	return map[string]any{"ok": true}, nil
 }
 
