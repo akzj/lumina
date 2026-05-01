@@ -1,17 +1,27 @@
--- keyboard_test.lua — Tests for Go widget keyboard dispatch via HandleKeyDown
+-- keyboard_test.lua — Tests for widget keyboard dispatch via HandleKeyDown
 
 test.describe("Widget keyboard dispatch", function()
-    test.it("List: j navigation moves selection down", function()
+    test.it("ListView: j navigation moves selection down", function()
         local app = test.createApp(80, 24)
         app:loadString([[
+            local ListView = require("lux.list")
             lumina.createComponent({
                 id = "test", name = "Test",
                 render = function()
-                    return lumina.createElement("vbox", {id = "root"},
-                        lumina.createElement(lumina.List, {
-                            items = {"Alpha", "Beta", "Gamma"},
+                    local sel, setSel = lumina.useState("sel", 1)
+                    return lumina.createElement("vbox", {id = "root",
+                        style = {width = 80, height = 24}},
+                        ListView {
+                            rows = {{label = "Alpha"}, {label = "Beta"}, {label = "Gamma"}},
+                            selectedIndex = sel,
+                            renderRow = function(row, idx, ctx)
+                                local prefix = ctx.selected and "> " or "  "
+                                return lumina.createElement("text", {key = "r" .. idx}, prefix .. row.label)
+                            end,
+                            onChangeIndex = function(idx) setSel(idx) end,
+                            height = 10,
                             key = "list1",
-                        })
+                        }
                     )
                 end,
             })
@@ -27,17 +37,27 @@ test.describe("Widget keyboard dispatch", function()
         app:destroy()
     end)
 
-    test.it("List: ArrowDown moves selection", function()
+    test.it("ListView: ArrowDown moves selection", function()
         local app = test.createApp(80, 24)
         app:loadString([[
+            local ListView = require("lux.list")
             lumina.createComponent({
                 id = "test", name = "Test",
                 render = function()
-                    return lumina.createElement("vbox", {id = "root"},
-                        lumina.createElement(lumina.List, {
-                            items = {"Alpha", "Beta", "Gamma"},
+                    local sel, setSel = lumina.useState("sel", 1)
+                    return lumina.createElement("vbox", {id = "root",
+                        style = {width = 80, height = 24}},
+                        ListView {
+                            rows = {{label = "Alpha"}, {label = "Beta"}, {label = "Gamma"}},
+                            selectedIndex = sel,
+                            renderRow = function(row, idx, ctx)
+                                local prefix = ctx.selected and "> " or "  "
+                                return lumina.createElement("text", {key = "r" .. idx}, prefix .. row.label)
+                            end,
+                            onChangeIndex = function(idx) setSel(idx) end,
+                            height = 10,
                             key = "list1",
-                        })
+                        }
                     )
                 end,
             })
@@ -113,49 +133,63 @@ test.describe("Widget keyboard dispatch", function()
         app:destroy()
     end)
 
-    test.it("List: onChange fires on j with selected index", function()
+    test.it("ListView: onChangeIndex fires on j with selected index", function()
         local app = test.createApp(80, 24)
         app:loadString([[
+            local ListView = require("lux.list")
             lumina.createComponent({
                 id = "test", name = "Test",
                 render = function()
-                    local selected, setSelected = lumina.useState("sel", 0)
-                    return lumina.createElement("vbox", {id = "root"},
-                        lumina.createElement(lumina.List, {
-                            items = {"Alpha", "Beta", "Gamma"},
-                            key = "list1",
-                            onChange = function(val)
-                                setSelected(val)
+                    local sel, setSel = lumina.useState("sel", 1)
+                    return lumina.createElement("vbox", {id = "root",
+                        style = {width = 80, height = 24}},
+                        ListView {
+                            rows = {{label = "Alpha"}, {label = "Beta"}, {label = "Gamma"}},
+                            selectedIndex = sel,
+                            renderRow = function(row, idx, ctx)
+                                return lumina.createElement("text", {key = "r" .. idx}, row.label)
                             end,
-                        }),
+                            onChangeIndex = function(idx) setSel(idx) end,
+                            height = 10,
+                            key = "list1",
+                        },
                         lumina.createElement("text", {id = "sel"},
-                            "selected:" .. tostring(selected))
+                            "selected:" .. tostring(sel))
                     )
                 end,
             })
         ]])
         -- Click to focus
         app:click(5, 2)
-        -- j: onChange fires 1 (Alpha, 1-based)
+        -- j: onChangeIndex fires with 2 (move from 1 to 2)
         app:keyPress("j")
         local sel = app:find("sel")
         test.assert.notNil(sel)
-        test.assert.contains(sel.content, "selected:1")
+        test.assert.contains(sel.content, "selected:2")
         app:destroy()
     end)
 
-    test.it("List: ArrowUp moves selection up", function()
+    test.it("ListView: ArrowUp moves selection up", function()
         local app = test.createApp(80, 24)
         app:loadString([[
+            local ListView = require("lux.list")
             lumina.createComponent({
                 id = "test", name = "Test",
                 render = function()
-                    return lumina.createElement("vbox", {id = "root"},
-                        lumina.createElement(lumina.List, {
-                            items = {"Alpha", "Beta", "Gamma"},
-                            selectedIndex = 3,
+                    local sel, setSel = lumina.useState("sel", 3)
+                    return lumina.createElement("vbox", {id = "root",
+                        style = {width = 80, height = 24}},
+                        ListView {
+                            rows = {{label = "Alpha"}, {label = "Beta"}, {label = "Gamma"}},
+                            selectedIndex = sel,
+                            renderRow = function(row, idx, ctx)
+                                local prefix = ctx.selected and "> " or "  "
+                                return lumina.createElement("text", {key = "r" .. idx}, prefix .. row.label)
+                            end,
+                            onChangeIndex = function(idx) setSel(idx) end,
+                            height = 10,
                             key = "list1",
-                        })
+                        }
                     )
                 end,
             })

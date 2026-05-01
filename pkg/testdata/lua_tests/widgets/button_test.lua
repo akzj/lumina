@@ -1,4 +1,4 @@
--- button_test.lua — Tests for the Button widget (rendering + interaction)
+-- button_test.lua — Tests for the Lux Button component (rendering + interaction)
 
 test.describe("Button widget", function()
     local app
@@ -13,14 +13,13 @@ test.describe("Button widget", function()
 
     test.it("renders with label", function()
         app:loadString([[
+            local Button = require("lux.button")
             lumina.createComponent({
                 id = "test", name = "Test",
                 render = function()
-                    return lumina.createElement("vbox", {id = "root"},
-                        lumina.Button {
-                            label = "Click Me",
-                            key = "btn1",
-                        }
+                    return lumina.createElement("vbox", {id = "root",
+                        style = {width = 80, height = 24}},
+                        Button { label = "Click Me", key = "btn1" }
                     )
                 end,
             })
@@ -30,6 +29,7 @@ test.describe("Button widget", function()
 
     test.it("fires onClick on click", function()
         app:loadString([[
+            local Button = require("lux.button")
             lumina.store.set("count", 0)
             lumina.createComponent({
                 id = "test", name = "Test",
@@ -37,13 +37,13 @@ test.describe("Button widget", function()
                     local count = lumina.useStore("count")
                     return lumina.createElement("vbox", {id = "root",
                         style = {width = 80, height = 24}},
-                        lumina.createElement(lumina.Button, {
+                        Button {
                             label = "Increment",
                             key = "btn2",
                             onClick = function()
                                 lumina.store.set("count", count + 1)
                             end,
-                        }),
+                        },
                         lumina.createElement("text", {id = "out"},
                             "count:" .. tostring(count))
                     )
@@ -52,7 +52,7 @@ test.describe("Button widget", function()
         ]])
         test.assert.eq(app:screenContains("count:0"), true)
 
-        -- Click the button (in the bordered area)
+        -- Click the button area
         app:click(3, 1)
         test.assert.eq(app:screenContains("count:1"), true)
 
@@ -63,6 +63,7 @@ test.describe("Button widget", function()
 
     test.it("disabled button does not fire onClick", function()
         app:loadString([[
+            local Button = require("lux.button")
             lumina.store.set("clicked", "no")
             lumina.createComponent({
                 id = "test", name = "Test",
@@ -70,14 +71,14 @@ test.describe("Button widget", function()
                     local clicked = lumina.useStore("clicked")
                     return lumina.createElement("vbox", {id = "root",
                         style = {width = 80, height = 24}},
-                        lumina.createElement(lumina.Button, {
+                        Button {
                             label = "Disabled",
                             disabled = true,
                             key = "btn3",
                             onClick = function()
                                 lumina.store.set("clicked", "yes")
                             end,
-                        }),
+                        },
                         lumina.createElement("text", {id = "out"},
                             "clicked:" .. clicked)
                     )
@@ -93,13 +94,15 @@ test.describe("Button widget", function()
 
     test.it("supports variant prop", function()
         app:loadString([[
+            local Button = require("lux.button")
             lumina.createComponent({
                 id = "test", name = "Test",
                 render = function()
-                    return lumina.createElement("vbox", {id = "root"},
-                        lumina.Button { label = "Primary", variant = "primary", key = "bp" },
-                        lumina.Button { label = "Ghost", variant = "ghost", key = "bg" },
-                        lumina.Button { label = "Secondary", variant = "secondary", key = "bs" }
+                    return lumina.createElement("vbox", {id = "root",
+                        style = {width = 80, height = 24}},
+                        Button { label = "Primary", severity = "primary", key = "bp" },
+                        Button { label = "Ghost", appearance = "text", key = "bg" },
+                        Button { label = "Secondary", severity = "secondary", key = "bs" }
                     )
                 end,
             })

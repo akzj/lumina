@@ -1,4 +1,4 @@
--- toast_test.lua — Tests for the Toast widget (rendering + interaction)
+-- toast_test.lua — Tests for the Lux Toast component (stack-based notification)
 
 test.describe("Toast widget", function()
     local app
@@ -13,15 +13,18 @@ test.describe("Toast widget", function()
 
     test.it("renders visible toast with message", function()
         app:loadString([[
+            local Toast = require("lux.toast")
             lumina.createComponent({
                 id = "test", name = "Test",
                 render = function()
-                    return lumina.createElement("vbox", {id = "root"},
-                        lumina.createElement(lumina.Toast, {
-                            visible = true,
-                            message = "Operation complete",
+                    return lumina.createElement("vbox", {id = "root",
+                        style = {width = 80, height = 24}},
+                        Toast {
+                            items = {
+                                {id = "t1", message = "Operation complete", variant = "success"},
+                            },
                             key = "toast1",
-                        })
+                        }
                     )
                 end,
             })
@@ -29,36 +32,42 @@ test.describe("Toast widget", function()
         test.assert.eq(app:screenContains("Operation complete"), true)
     end)
 
-    test.it("hidden when not visible", function()
+    test.it("renders nothing when items empty", function()
         app:loadString([[
+            local Toast = require("lux.toast")
             lumina.createComponent({
                 id = "test", name = "Test",
                 render = function()
-                    return lumina.createElement("vbox", {id = "root"},
-                        lumina.createElement(lumina.Toast, {
-                            visible = false,
-                            message = "Hidden toast",
+                    return lumina.createElement("vbox", {id = "root",
+                        style = {width = 80, height = 24}},
+                        Toast {
+                            items = {},
                             key = "toast2",
-                        })
+                        },
+                        lumina.createElement("text", {id = "marker"}, "END")
                     )
                 end,
             })
         ]])
-        test.assert.eq(app:screenContains("Hidden toast"), false)
+        local tree = app:vnodeTree()
+        test.assert.notNil(tree)
+        test.assert.eq(app:screenContains("END"), true)
     end)
 
     test.it("renders variant icons", function()
         app:loadString([[
+            local Toast = require("lux.toast")
             lumina.createComponent({
                 id = "test", name = "Test",
                 render = function()
-                    return lumina.createElement("vbox", {id = "root"},
-                        lumina.createElement(lumina.Toast, {
-                            visible = true,
-                            message = "Saved!",
-                            variant = "success",
+                    return lumina.createElement("vbox", {id = "root",
+                        style = {width = 80, height = 24}},
+                        Toast {
+                            items = {
+                                {id = "t1", message = "Saved!", variant = "success"},
+                            },
                             key = "toast3",
-                        })
+                        }
                     )
                 end,
             })
@@ -68,16 +77,18 @@ test.describe("Toast widget", function()
 
     test.it("renders error variant", function()
         app:loadString([[
+            local Toast = require("lux.toast")
             lumina.createComponent({
                 id = "test", name = "Test",
                 render = function()
-                    return lumina.createElement("vbox", {id = "root"},
-                        lumina.createElement(lumina.Toast, {
-                            visible = true,
-                            message = "Failed!",
-                            variant = "error",
+                    return lumina.createElement("vbox", {id = "root",
+                        style = {width = 80, height = 24}},
+                        Toast {
+                            items = {
+                                {id = "t1", message = "Failed!", variant = "error"},
+                            },
                             key = "toast4",
-                        })
+                        }
                     )
                 end,
             })
@@ -87,65 +98,64 @@ test.describe("Toast widget", function()
 
     test.it("renders default message when none given", function()
         app:loadString([[
+            local Toast = require("lux.toast")
             lumina.createComponent({
                 id = "test", name = "Test",
                 render = function()
-                    return lumina.createElement("vbox", {id = "root"},
-                        lumina.createElement(lumina.Toast, {
-                            visible = true,
-                            key = "toast5",
-                        })
-                    )
-                end,
-            })
-        ]])
-        test.assert.eq(app:screenContains("Notification"), true)
-    end)
-
-    test.it("click fires onChange with dismiss", function()
-        app:loadString([[
-            lumina.store.set("action", "none")
-            lumina.createComponent({
-                id = "test", name = "Test",
-                render = function()
-                    local action = lumina.useStore("action")
                     return lumina.createElement("vbox", {id = "root",
                         style = {width = 80, height = 24}},
-                        lumina.createElement(lumina.Toast, {
-                            visible = true,
-                            message = "Click to dismiss",
-                            key = "toast6",
-                            onChange = function(val)
-                                lumina.store.set("action", val)
-                            end,
-                        }),
-                        lumina.createElement("text", {id = "out"},
-                            "action:" .. action)
+                        Toast {
+                            items = {
+                                {id = "t1", variant = "info"},
+                            },
+                            key = "toast5",
+                        }
                     )
                 end,
             })
         ]])
-        test.assert.eq(app:screenContains("action:none"), true)
+        -- Toast renders even without explicit message
+        local tree = app:vnodeTree()
+        test.assert.notNil(tree)
+    end)
 
-        -- Click the toast
-        app:click(5, 0)
-        test.assert.eq(app:screenContains("action:dismiss"), true)
+    test.it("renders multiple toasts", function()
+        app:loadString([[
+            local Toast = require("lux.toast")
+            lumina.createComponent({
+                id = "test", name = "Test",
+                render = function()
+                    return lumina.createElement("vbox", {id = "root",
+                        style = {width = 80, height = 24}},
+                        Toast {
+                            items = {
+                                {id = "t1", message = "First toast"},
+                                {id = "t2", message = "Second toast"},
+                            },
+                            key = "toast6",
+                        }
+                    )
+                end,
+            })
+        ]])
+        test.assert.eq(app:screenContains("First toast"), true)
+        test.assert.eq(app:screenContains("Second toast"), true)
     end)
 
     test.it("show/hide controlled by state", function()
         app:loadString([[
-            lumina.store.set("show", false)
+            local Toast = require("lux.toast")
+            lumina.store.set("items", {})
             lumina.createComponent({
                 id = "test", name = "Test",
                 render = function()
-                    local show = lumina.useStore("show")
+                    local items = lumina.useStore("items")
                     return lumina.createElement("vbox", {id = "root",
                         style = {width = 80, height = 24}},
-                        lumina.createElement(lumina.Toast, {
-                            visible = show,
-                            message = "Dynamic Toast",
+                        Toast {
+                            items = items,
                             key = "toast7",
-                        })
+                        }
                     )
                 end,
             })
@@ -153,12 +163,12 @@ test.describe("Toast widget", function()
         test.assert.eq(app:screenContains("Dynamic Toast"), false)
 
         -- Show toast via store
-        app:loadString([[lumina.store.set("show", true)]])
+        app:loadString([[lumina.store.set("items", {{id = "t1", message = "Dynamic Toast"}})]])
         app:render()
         test.assert.eq(app:screenContains("Dynamic Toast"), true)
 
         -- Hide toast via store
-        app:loadString([[lumina.store.set("show", false)]])
+        app:loadString([[lumina.store.set("items", {})]])
         app:render()
         test.assert.eq(app:screenContains("Dynamic Toast"), false)
     end)

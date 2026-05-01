@@ -6,6 +6,7 @@ func TestWidgetChildren_DialogWithChildren(t *testing.T) {
 	app, ta, _ := newLuaApp(t, 80, 24)
 
 	err := app.RunString(`
+		local Dialog = require("lux.dialog")
 		lumina.createComponent({
 			id = "dialog-children",
 			name = "DialogChildren",
@@ -14,15 +15,16 @@ func TestWidgetChildren_DialogWithChildren(t *testing.T) {
 				return lumina.createElement("vbox", {
 					style = {width = 80, height = 24},
 				},
-					lumina.createElement(lumina.Dialog, {
+					Dialog {
 						open = true,
 						title = "Confirm",
 						width = 40,
 						key = "dlg1",
-					},
-						lumina.createElement("text", {}, "Are you sure?"),
-						lumina.createElement("text", {}, "This cannot be undone.")
-					)
+						Dialog.Content {
+							lumina.createElement("text", {}, "Are you sure?"),
+							lumina.createElement("text", {}, "This cannot be undone."),
+						},
+					}
 				)
 			end,
 		})
@@ -48,6 +50,7 @@ func TestWidgetChildren_DialogWithoutChildren(t *testing.T) {
 	app, ta, _ := newLuaApp(t, 80, 24)
 
 	err := app.RunString(`
+		local Dialog = require("lux.dialog")
 		lumina.createComponent({
 			id = "dialog-msg",
 			name = "DialogMsg",
@@ -56,13 +59,13 @@ func TestWidgetChildren_DialogWithoutChildren(t *testing.T) {
 				return lumina.createElement("vbox", {
 					style = {width = 80, height = 24},
 				},
-					lumina.createElement(lumina.Dialog, {
+					Dialog {
 						open = true,
 						title = "Info",
 						message = "Hello World",
 						width = 40,
 						key = "dlg2",
-					})
+					}
 				)
 			end,
 		})
@@ -81,10 +84,11 @@ func TestWidgetChildren_DialogWithoutChildren(t *testing.T) {
 }
 
 func TestWidgetChildren_DialogChildrenReplaceMessage(t *testing.T) {
-	// When children are provided, they should replace the message prop
+	// When Content slot is provided, it should replace the message prop
 	app, ta, _ := newLuaApp(t, 80, 24)
 
 	err := app.RunString(`
+		local Dialog = require("lux.dialog")
 		lumina.createComponent({
 			id = "dialog-replace",
 			name = "DialogReplace",
@@ -93,15 +97,16 @@ func TestWidgetChildren_DialogChildrenReplaceMessage(t *testing.T) {
 				return lumina.createElement("vbox", {
 					style = {width = 80, height = 24},
 				},
-					lumina.createElement(lumina.Dialog, {
+					Dialog {
 						open = true,
 						title = "Replace Test",
 						message = "Should NOT appear",
 						width = 40,
 						key = "dlg3",
-					},
-						lumina.createElement("text", {}, "Custom Content")
-					)
+						Dialog.Content {
+							lumina.createElement("text", {}, "Custom Content"),
+						},
+					}
 				)
 			end,
 		})
@@ -118,6 +123,6 @@ func TestWidgetChildren_DialogChildrenReplaceMessage(t *testing.T) {
 		t.Error("expected 'Custom Content' child on screen")
 	}
 	if screenHasString(ta, "Should NOT appear") {
-		t.Error("message prop should be replaced by children")
+		t.Error("message prop should be replaced by Content slot")
 	}
 }

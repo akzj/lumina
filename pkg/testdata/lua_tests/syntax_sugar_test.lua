@@ -28,22 +28,6 @@ test.describe("Factory __call syntax (Go widgets)", function()
         test.assert.eq(app:screenContains("Accept"), true)
     end)
 
-    test.it("Button __call syntax with id", function()
-        app:loadString([[
-            lumina.createComponent({
-                id = "test", name = "Test",
-                render = function()
-                    return lumina.createElement("vbox", {id = "root"},
-                        lumina.Button { id = "btn", label = "Click", key = "btn1" }
-                    )
-                end,
-            })
-        ]])
-        local node = app:find("btn")
-        test.assert.notNil(node)
-        test.assert.eq(app:screenContains("Click"), true)
-    end)
-
     test.it("Switch __call syntax with id", function()
         app:loadString([[
             lumina.createComponent({

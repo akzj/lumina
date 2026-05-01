@@ -584,16 +584,12 @@ func TestAllWidgetsIncludesLabelAndSelect(t *testing.T) {
 	if !names["Select"] {
 		t.Error("All() should include Select")
 	}
-	if len(all) != 17 {
-		t.Errorf("expected 17 widgets, got %d", len(all))
-	}
-	if !names["Dialog"] {
-		t.Error("All() should include Dialog")
+	// 12 widgets: Checkbox, Switch, Radio, Label, Select, Tooltip, Table, Menu, Dropdown, Spacer, Window, ScrollView
+	// (Button, Dialog, Toast, List, Pagination removed — superseded by Lua lux components)
+	if len(all) != 12 {
+		t.Errorf("expected 12 widgets, got %d", len(all))
 	}
 	if !names["Tooltip"] {
 		t.Error("All() should include Tooltip")
-	}
-	if !names["Toast"] {
-		t.Error("All() should include Toast")
 	}
 }
