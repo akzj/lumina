@@ -46,7 +46,7 @@ func registerLuxModules(L *lua.State) {
 	preloadLuaSource(L, "lux.checkbox", mustReadLuxLua("checkbox.lua"))
 	preloadLuaSource(L, "lux.radio", mustReadLuxLua("radio.lua"))
 	preloadLuaSource(L, "lux.switch", mustReadLuxLua("switch.lua"))
-	preloadLuaSource(L, "lux.dropdown", mustReadLuxLua("dropdown.lua"))
+	// lux.dropdown removed — use lumina.Dropdown (Go widget) directly
 	preloadLuaSource(L, "lux.toast", mustReadLuxLua("toast.lua"))
 	preloadLuaSource(L, "lux.tree", mustReadLuxLua("tree.lua"))
 	preloadLuaSource(L, "lux.form", mustReadLuxLua("form.lua"))

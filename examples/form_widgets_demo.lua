@@ -77,7 +77,7 @@ lumina.createComponent({
             },
 
             -- Actions dropdown
-            lux.Dropdown {
+            lumina.Dropdown {
                 key = "actions",
                 label = "More Actions",
                 items = {

@@ -222,13 +222,12 @@ test.describe("Lux widget wrappers", function()
 
     test.it("Dropdown renders with label", function()
         app:loadString([[
-            local Dropdown = require("lux.dropdown")
             lumina.createComponent({
                 id = "test", name = "Test",
                 render = function()
                     return lumina.createElement("vbox", {id = "root",
                         style = {width = 80, height = 24}},
-                        Dropdown {
+                        lumina.Dropdown {
                             label = "Actions",
                             key = "dd1",
                             items = {
@@ -257,8 +256,7 @@ test.describe("Lux widget wrappers", function()
                         lux.Button { label = "LuxBtn", key = "b1" },
                         lux.Checkbox { label = "LuxCB", key = "c1" },
                         lux.Radio { label = "LuxRad", value = "r", key = "r1" },
-                        lux.Switch { label = "LuxSw", key = "s1" },
-                        lux.Dropdown { label = "LuxDD", key = "d1", items = {{label = "Item"}} }
+                        lux.Switch { label = "LuxSw", key = "s1" }
                     )
                 end,
             })
@@ -267,7 +265,6 @@ test.describe("Lux widget wrappers", function()
         test.assert.eq(app:screenContains("LuxCB"), true)
         test.assert.eq(app:screenContains("LuxRad"), true)
         test.assert.eq(app:screenContains("LuxSw"), true)
-        test.assert.eq(app:screenContains("LuxDD"), true)
     end)
 
     test.it("Lux Button.Group renders fused labels", function()
