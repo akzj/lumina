@@ -63,14 +63,14 @@ local Tabs = lumina.defineComponent("Tabs", function(props)
         local isDisabled = tab.disabled == true
         local fg, bg
         if isDisabled then
-            fg = t.muted or "#6C7086"
-            bg = t.base or "#1E1E2E"
+            fg = t.muted or "#8B9BB4"
+            bg = t.base or "#0B1220"
         elseif isActive then
-            fg = t.primary or "#89B4FA"
-            bg = t.surface1 or "#45475A"
+            fg = t.primary or "#F5C842"
+            bg = t.surface1 or "#1B2639"
         else
-            fg = t.text or "#CDD6F4"
-            bg = t.surface0 or "#313244"
+            fg = t.text or "#E8EDF7"
+            bg = t.surface0 or "#141C2C"
         end
 
         tabBarChildren[#tabBarChildren + 1] = lumina.createElement("text", {
@@ -95,7 +95,7 @@ local Tabs = lumina.defineComponent("Tabs", function(props)
     -- Underline/separator
     local sepW = props.width or 40
     local sep = lumina.createElement("text", {
-        foreground = t.surface1 or "#45475A",
+        foreground = t.surface1 or "#1B2639",
         dim = true,
         style = { height = 1 },
     }, string.rep("─", sepW))

@@ -92,13 +92,13 @@ local Accordion = lumina.defineComponent("Accordion", function(props)
         local arrow = opened and "▾ " or "▸ "
         local headerFg
         if isDisabled then
-            headerFg = t.muted or "#6C7086"
+            headerFg = t.muted or "#8B9BB4"
         elseif isSelected then
-            headerFg = t.primary or "#89B4FA"
+            headerFg = t.primary or "#F5C842"
         else
-            headerFg = t.text or "#CDD6F4"
+            headerFg = t.text or "#E8EDF7"
         end
-        local headerBg = isSelected and (t.surface0 or "#313244") or (t.base or "#1E1E2E")
+        local headerBg = isSelected and (t.surface0 or "#141C2C") or (t.base or "#0B1220")
 
         children[#children + 1] = lumina.createElement("text", {
             key = "hdr-" .. item.id,
@@ -119,8 +119,8 @@ local Accordion = lumina.defineComponent("Accordion", function(props)
                 content = item.render()
             elseif type(item.content) == "string" then
                 content = lumina.createElement("text", {
-                    foreground = t.text or "#CDD6F4",
-                    background = t.base or "#1E1E2E",
+                    foreground = t.text or "#E8EDF7",
+                    background = t.base or "#0B1220",
                     style = { height = 1 },
                 }, "   " .. item.content)
             else

@@ -66,11 +66,11 @@ local CommandPalette = lumina.defineComponent("CommandPalette", function(props)
         local prefix = isSelected and "> " or "  "
         items[#items + 1] = lumina.createElement("text", {
             id = "cmd-" .. i,
-            foreground = isSelected and (t.primary or "#89B4FA") or (t.text or "#CDD6F4"),
+            foreground = isSelected and (t.primary or "#F5C842") or (t.text or "#E8EDF7"),
             bold = isSelected,
             style = {
                 height = 1,
-                background = isSelected and (t.surface1 or "#45475A") or "",
+                background = isSelected and (t.surface1 or "#1B2639") or "",
             },
         }, prefix .. cmd.title)
     end
@@ -115,7 +115,7 @@ local CommandPalette = lumina.defineComponent("CommandPalette", function(props)
             border = "rounded",
             width = paletteWidth,
             height = paletteHeight,
-            background = t.surface0 or "#313244",
+            background = t.surface0 or "#141C2C",
         },
         onKeyDown = handleKey,
         focusable = true,
@@ -123,13 +123,13 @@ local CommandPalette = lumina.defineComponent("CommandPalette", function(props)
         -- Search input display
         lumina.createElement("text", {
             id = "cp-input",
-            foreground = t.text or "#CDD6F4",
+            foreground = t.text or "#E8EDF7",
             style = { height = 1 },
         }, "> " .. query .. "▏"),
 
         -- Divider
         lumina.createElement("text", {
-            foreground = t.muted or "#6C7086",
+            foreground = t.muted or "#8B9BB4",
             dim = true,
             style = { height = 1 },
         }, string.rep("─", divWidth)),

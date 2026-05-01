@@ -6,16 +6,16 @@ local Breadcrumb = lumina.defineComponent("Breadcrumb", function(props)
     local items = props.items or {}
     local separator = props.separator or " › "
     local onNavigate = props.onNavigate
-    local barBg = props.barBackground or props.background or t.base or "#1E1E2E"
+    local barBg = props.barBackground or props.background or t.base or "#0B1220"
 
     local children = {}
     for i, item in ipairs(items) do
         local isLast = (i == #items)
         local fg
         if isLast then
-            fg = t.text or "#CDD6F4"
+            fg = t.text or "#E8EDF7"
         else
-            fg = t.primary or "#89B4FA"
+            fg = t.primary or "#F5C842"
         end
 
         -- Include item.id in the key so changing the active page (same index, new
@@ -36,7 +36,7 @@ local Breadcrumb = lumina.defineComponent("Breadcrumb", function(props)
         if not isLast then
             children[#children + 1] = lumina.createElement("text", {
                 key = "sep-" .. tostring(i),
-                foreground = t.muted or "#6C7086",
+                foreground = t.muted or "#8B9BB4",
                 background = barBg,
                 style = { height = 1 },
             }, separator)

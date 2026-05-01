@@ -42,7 +42,7 @@ local Form = lumina.defineComponent("LuxForm", function(props)
                 if field.required then labelText = labelText .. " *" end
                 children[#children + 1] = lumina.createElement("text", {
                     key = "lbl-" .. fieldId,
-                    foreground = t.text or "#CDD6F4",
+                    foreground = t.text or "#E8EDF7",
                     bold = true,
                     style = { height = 1 },
                 }, labelText)
@@ -53,8 +53,8 @@ local Form = lumina.defineComponent("LuxForm", function(props)
                 id = "form-" .. fieldId,
                 value = value or field.defaultValue or "",
                 placeholder = field.placeholder or "",
-                foreground = err and (t.error or "#F38BA8") or (t.text or "#CDD6F4"),
-                background = t.surface0 or "#313244",
+                foreground = err and (t.error or "#F87171") or (t.text or "#E8EDF7"),
+                background = t.surface0 or "#141C2C",
                 focusable = not disabled,
                 style = { height = 1, width = width },
                 onChange = onFieldChange and function(text)
@@ -65,7 +65,7 @@ local Form = lumina.defineComponent("LuxForm", function(props)
             if err then
                 children[#children + 1] = lumina.createElement("text", {
                     key = "err-" .. fieldId,
-                    foreground = t.error or "#F38BA8",
+                    foreground = t.error or "#F87171",
                     style = { height = 1 },
                 }, err)
             end
@@ -81,7 +81,7 @@ local Form = lumina.defineComponent("LuxForm", function(props)
             local label = field.label or fieldId
             children[#children + 1] = lumina.createElement("text", {
                 key = "cb-" .. fieldId,
-                foreground = t.text or "#CDD6F4",
+                foreground = t.text or "#E8EDF7",
                 style = { height = 1 },
                 onClick = (not disabled and onFieldChange) and function()
                     onFieldChange(fieldId, not checked)
@@ -98,7 +98,7 @@ local Form = lumina.defineComponent("LuxForm", function(props)
     local buttons = {}
     buttons[#buttons + 1] = lumina.createElement("text", {
         key = "submit-btn",
-        foreground = disabled and (t.muted or "#6C7086") or (t.primary or "#89B4FA"),
+        foreground = disabled and (t.muted or "#8B9BB4") or (t.primary or "#F5C842"),
         bold = true,
         style = { height = 1 },
         onClick = (not disabled and onSubmit) and function()
@@ -109,7 +109,7 @@ local Form = lumina.defineComponent("LuxForm", function(props)
     if onReset then
         buttons[#buttons + 1] = lumina.createElement("text", {
             key = "reset-btn",
-            foreground = t.muted or "#6C7086",
+            foreground = t.muted or "#8B9BB4",
             style = { height = 1 },
             onClick = (not disabled) and function()
                 onReset()

@@ -9,20 +9,20 @@ local Alert = lumina.defineComponent("Alert", function(props)
     local icon, fg, bg
     if variant == "error" then
         icon = "✗ "
-        fg = t.error or "#F38BA8"
-        bg = t.surface0 or "#313244"
+        fg = t.error or "#F87171"
+        bg = t.surface0 or "#141C2C"
     elseif variant == "warning" then
         icon = "⚠ "
-        fg = t.warning or "#F9E2AF"
-        bg = t.surface0 or "#313244"
+        fg = t.warning or "#F5C842"
+        bg = t.surface0 or "#141C2C"
     elseif variant == "success" then
         icon = "✓ "
-        fg = t.success or "#A6E3A1"
-        bg = t.surface0 or "#313244"
+        fg = t.success or "#4ADE80"
+        bg = t.surface0 or "#141C2C"
     else -- info
         icon = "ℹ "
-        fg = t.primary or "#89B4FA"
-        bg = t.surface0 or "#313244"
+        fg = t.primary or "#F5C842"
+        bg = t.surface0 or "#141C2C"
     end
 
     local children = {}
@@ -40,7 +40,7 @@ local Alert = lumina.defineComponent("Alert", function(props)
     -- Dismiss button
     if props.dismissible then
         titleRow[#titleRow + 1] = lumina.createElement("text", {
-            foreground = t.muted or "#6C7086",
+            foreground = t.muted or "#8B9BB4",
             background = bg,
             style = { width = 4, height = 1 },
             onClick = function()
@@ -56,7 +56,7 @@ local Alert = lumina.defineComponent("Alert", function(props)
     -- Message
     if props.message and props.message ~= "" then
         children[#children + 1] = lumina.createElement("text", {
-            foreground = t.text or "#CDD6F4",
+            foreground = t.text or "#E8EDF7",
             background = bg,
             style = { height = 1 },
         }, " " .. props.message)

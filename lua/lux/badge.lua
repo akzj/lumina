@@ -7,13 +7,13 @@ local Badge = lumina.defineComponent("Badge", function(props)
     local t = lumina.getTheme and lumina.getTheme() or {}
     local fg, bg
     if variant == "success" then
-        fg = t.success or "#A6E3A1"; bg = t.surface0 or "#313244"
+        fg = t.success or "#4ADE80"; bg = t.surface0 or "#141C2C"
     elseif variant == "warning" then
-        fg = t.warning or "#F9E2AF"; bg = t.surface0 or "#313244"
+        fg = t.warning or "#F5C842"; bg = t.surface0 or "#141C2C"
     elseif variant == "error" then
-        fg = t.error or "#F38BA8"; bg = t.surface0 or "#313244"
+        fg = t.error or "#F87171"; bg = t.surface0 or "#141C2C"
     else
-        fg = t.primary or "#89B4FA"; bg = t.surface0 or "#313244"
+        fg = t.primary or "#F5C842"; bg = t.surface0 or "#141C2C"
     end
 
     return lumina.createElement("text", {

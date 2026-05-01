@@ -45,18 +45,18 @@ local function theme()
         return lumina.getTheme()
     end
     return {
-        primary = "#89B4FA",
-        primaryDark = "#1E1E2E",
-        text = "#CDD6F4",
-        muted = "#6C7086",
-        surface0 = "#313244",
-        surface1 = "#45475A",
-        surface2 = "#585B70",
-        success = "#A6E3A1",
-        warning = "#F9E2AF",
-        error = "#F38BA8",
-        hover = "#B4BEFE",
-        pressed = "#74C7EC",
+        primary = "#F5C842",
+        primaryDark = "#0B1220",
+        text = "#E8EDF7",
+        muted = "#8B9BB4",
+        surface0 = "#141C2C",
+        surface1 = "#1B2639",
+        surface2 = "#2A3A56",
+        success = "#4ADE80",
+        warning = "#F5C842",
+        error = "#F87171",
+        hover = "#FFD35A",
+        pressed = "#D4A82E",
     }
 end
 
@@ -78,7 +78,7 @@ local function palette(sev, t)
         },
         success = { themeStr(t.success, "#4ADE80"), "#0B1220", themeStr(t.success, "#4ADE80") },
         danger = { err, "#0B1220", err },
-        warning = { themeStr(t.warning, "#F9E2AF"), "#0B1220", themeStr(t.warning, "#F9E2AF") },
+        warning = { themeStr(t.warning, "#F5C842"), "#0B1220", themeStr(t.warning, "#F5C842") },
         info = { "#8B5CF6", "#E8EDF7", "#A78BFA" },
         help = { "#EC4899", "#E8EDF7", "#F472B6" },
     }
@@ -166,10 +166,10 @@ local LuxButton = lumina.defineComponent("LuxButton", function(props)
     local bg, fg, border, borderColor, dim, underline, height
 
     if disabled then
-        bg = themeStr(t.surface0, "#313244")
-        fg = themeStr(t.muted, "#6C7086")
+        bg = themeStr(t.surface0, "#141C2C")
+        fg = themeStr(t.muted, "#8B9BB4")
         border = "rounded"
-        borderColor = themeStr(t.surface2, "#585B70")
+        borderColor = themeStr(t.surface2, "#2A3A56")
         dim = true
         underline = false
         height = (appearance == "text" or appearance == "link") and 1 or 3
@@ -182,7 +182,7 @@ local LuxButton = lumina.defineComponent("LuxButton", function(props)
         underline = linkLike or props.underline == true
         height = 1
     elseif appearance == "outlined" then
-        bg = hovered and themeStr(t.surface0, "#313244") or ""
+        bg = hovered and themeStr(t.surface0, "#141C2C") or ""
         fg = edge0
         border = props.shape == "square" and "single" or "rounded"
         borderColor = edge0
@@ -193,7 +193,7 @@ local LuxButton = lumina.defineComponent("LuxButton", function(props)
         bg = hoverPressedBg(severity, t, bg0, hovered, pressed)
         fg = fg0
         border = "single"
-        borderColor = themeStr(t.surface2, "#585B70")
+        borderColor = themeStr(t.surface2, "#2A3A56")
         dim = false
         underline = false
         height = 3
@@ -315,8 +315,8 @@ local LuxButtonGroup = lumina.defineComponent("LuxButtonGroup", function(props)
     local sev = props.severity or "primary"
     local disabled = props.disabled == true
     local bg0, fg0, edge0 = palette(sev, t)
-    local bg = disabled and themeStr(t.surface0, "#313244") or bg0
-    local fg = disabled and themeStr(t.muted, "#6C7086") or fg0
+    local bg = disabled and themeStr(t.surface0, "#141C2C") or bg0
+    local fg = disabled and themeStr(t.muted, "#8B9BB4") or fg0
     local items = props.items or {}
 
     local cells = {}
@@ -371,8 +371,8 @@ local LuxSplitButton = lumina.defineComponent("LuxSplitButton", function(props)
     local sev = props.severity or "primary"
     local disabled = props.disabled == true
     local bg0, fg0, edge0 = palette(sev, t)
-    local bg = disabled and themeStr(t.surface0, "#313244") or bg0
-    local fg = disabled and themeStr(t.muted, "#6C7086") or fg0
+    local bg = disabled and themeStr(t.surface0, "#141C2C") or bg0
+    local fg = disabled and themeStr(t.muted, "#8B9BB4") or fg0
 
     local st = {
         border = "rounded",

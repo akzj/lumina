@@ -152,13 +152,13 @@ local Tree = lumina.defineComponent("LuxTree", function(props)
 
         local fg
         if item.disabled then
-            fg = t.muted or "#6C7086"
+            fg = t.muted or "#8B9BB4"
         elseif isSelected then
-            fg = t.primary or "#89B4FA"
+            fg = t.primary or "#F5C842"
         else
-            fg = t.text or "#CDD6F4"
+            fg = t.text or "#E8EDF7"
         end
-        local bg = isSelected and (t.surface0 or "#313244") or (t.base or "#1E1E2E")
+        local bg = isSelected and (t.surface0 or "#141C2C") or (t.base or "#0B1220")
 
         children[#children + 1] = lumina.createElement("text", {
             key = "tn-" .. item.id,
