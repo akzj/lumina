@@ -156,6 +156,15 @@ func (a *App) MCPEval(code string) (any, error) {
 	return map[string]any{"ok": true}, nil
 }
 
+// MCPHotReload triggers an immediate hot reload of the current script.
+func (a *App) MCPHotReload() error {
+	if a.scriptPath == "" {
+		return fmt.Errorf("no script loaded")
+	}
+	a.reloadScript(a.scriptPath)
+	return nil
+}
+
 // MCPFocusNext moves focus to the next focusable VNode and returns the new focused ID.
 func (a *App) MCPFocusNext() string {
 	a.engine.FocusNext()

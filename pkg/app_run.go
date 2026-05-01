@@ -81,6 +81,7 @@ func (a *App) Run(cfg RunConfig) error {
 
 	// Load and execute the Lua script.
 	if cfg.ScriptPath != "" {
+		a.scriptPath = cfg.ScriptPath
 		addScriptDirToPackagePath(a.luaState, cfg.ScriptPath)
 		if err := a.luaState.DoFile(cfg.ScriptPath); err != nil {
 			return err
