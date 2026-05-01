@@ -1287,3 +1287,158 @@ func TestEngine_NeedsRender_SetStateSameValue_NoRender(t *testing.T) {
 		t.Error("expected NeedsRender=false when SetState with same value")
 	}
 }
+
+func TestEngine_CreateLayer_RemoveLayer(t *testing.T) {
+	e, L := newTestEngine(t)
+
+	// Create a component so the engine has a main layer
+	err := L.DoString(`
+		lumina.createComponent({
+			id = "main",
+			name = "Main",
+			render = function(props)
+				return lumina.createElement("text", {}, "Main content")
+			end,
+		})
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.RenderAll()
+
+	// Create a layer via Lua API
+	err = L.DoString(`
+		lumina.createLayer("overlay1",
+			lumina.createElement("vbox", {
+				id = "layer-root",
+				style = {width = 20, height = 5, background = "#313244"},
+			},
+				lumina.createElement("text", {id = "item1"}, "Item 1"),
+				lumina.createElement("text", {id = "item2"}, "Item 2")
+			),
+			{ modal = true }
+		)
+	`)
+	if err != nil {
+		t.Fatalf("createLayer failed: %v", err)
+	}
+
+	// Verify the layer was created
+	if len(e.layers) < 2 {
+		t.Fatalf("expected at least 2 layers, got %d", len(e.layers))
+	}
+
+	var overlayLayer *Layer
+	for _, l := range e.layers {
+		if l.ID == "overlay1" {
+			overlayLayer = l
+			break
+		}
+	}
+	if overlayLayer == nil {
+		t.Fatal("overlay1 layer not found")
+	}
+	if !overlayLayer.Modal {
+		t.Error("expected modal=true")
+	}
+	if overlayLayer.Root == nil {
+		t.Fatal("layer root is nil")
+	}
+	if overlayLayer.Root.Type != "vbox" {
+		t.Errorf("expected root type 'vbox', got %q", overlayLayer.Root.Type)
+	}
+	if overlayLayer.Root.ID != "layer-root" {
+		t.Errorf("expected root ID 'layer-root', got %q", overlayLayer.Root.ID)
+	}
+	if len(overlayLayer.Root.Children) != 2 {
+		t.Errorf("expected 2 children, got %d", len(overlayLayer.Root.Children))
+	}
+
+	// Remove the layer via Lua API
+	err = L.DoString(`lumina.removeLayer("overlay1")`)
+	if err != nil {
+		t.Fatalf("removeLayer failed: %v", err)
+	}
+
+	// Verify the layer was removed
+	for _, l := range e.layers {
+		if l.ID == "overlay1" {
+			t.Fatal("overlay1 layer should have been removed")
+		}
+	}
+}
+
+func TestEngine_CreateLayer_NonModal(t *testing.T) {
+	e, L := newTestEngine(t)
+
+	err := L.DoString(`
+		lumina.createComponent({
+			id = "main",
+			name = "Main",
+			render = function(props)
+				return lumina.createElement("text", {}, "Main")
+			end,
+		})
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.RenderAll()
+
+	// Create non-modal layer (no options table)
+	err = L.DoString(`
+		lumina.createLayer("tooltip",
+			lumina.createElement("text", {id = "tip"}, "Tooltip text")
+		)
+	`)
+	if err != nil {
+		t.Fatalf("createLayer (no options) failed: %v", err)
+	}
+
+	var tipLayer *Layer
+	for _, l := range e.layers {
+		if l.ID == "tooltip" {
+			tipLayer = l
+			break
+		}
+	}
+	if tipLayer == nil {
+		t.Fatal("tooltip layer not found")
+	}
+	if tipLayer.Modal {
+		t.Error("expected modal=false for tooltip layer")
+	}
+	if tipLayer.Root == nil || tipLayer.Root.Content != "Tooltip text" {
+		t.Error("tooltip layer content mismatch")
+	}
+}
+
+func TestEngine_RemoveLayer_NonExistent(t *testing.T) {
+	e, L := newTestEngine(t)
+
+	err := L.DoString(`
+		lumina.createComponent({
+			id = "main",
+			name = "Main",
+			render = function(props)
+				return lumina.createElement("text", {}, "Main")
+			end,
+		})
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.RenderAll()
+
+	initialLayers := len(e.layers)
+
+	// Removing a non-existent layer should not panic or error
+	err = L.DoString(`lumina.removeLayer("does-not-exist")`)
+	if err != nil {
+		t.Fatalf("removeLayer of non-existent layer should not error: %v", err)
+	}
+
+	if len(e.layers) != initialLayers {
+		t.Error("layer count should not change when removing non-existent layer")
+	}
+}
