@@ -35,6 +35,7 @@ func registerLuxModules(L *lua.State) {
 	preloadLuaSource(L, "lux.command_palette", mustReadLuxLua("command_palette.lua"))
 	preloadLuaSource(L, "lux.list", mustReadLuxLua("list.lua"))
 	preloadLuaSource(L, "lux.vlist", mustReadLuxLua("vlist.lua"))
+	preloadLuaSource(L, "lux.scrollview", mustReadLuxLua("scrollview.lua"))
 	preloadLuaSource(L, "lux.data_grid", mustReadLuxLua("data_grid.lua"))
 	preloadLuaSource(L, "lux.wm", mustReadLuxLua("wm.lua"))
 	preloadLuaSource(L, "lux.pagination", mustReadLuxLua("pagination.lua"))
