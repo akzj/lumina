@@ -523,3 +523,196 @@ test.describe("VList variable height", function()
 		test.assert.notNil(tree)
 	end)
 end)
+
+test.describe("VList edge cases", function()
+	local app
+
+	test.beforeEach(function()
+		app = test.createApp(80, 24)
+	end)
+
+	test.afterEach(function()
+		app:destroy()
+	end)
+
+	-- Helper: find the scroll container vbox inside the component
+	local function findScrollContainer(app)
+		local vboxes = app:findAll("vbox")
+		for _, vb in ipairs(vboxes) do
+			if vb.scrollHeight then
+				return vb
+			end
+		end
+		return nil
+	end
+
+	test.it("extreme scroll: clamp at maxScroll", function()
+		app:loadString([[
+			local VList = require("lux.vlist")
+
+			lumina.createComponent({
+				id = "test", name = "Test",
+				render = function()
+					return lumina.createElement(VList, {
+						id = "vlist-extreme",
+						totalCount = 50,
+						height = 10,
+						overscan = 3,
+						estimateHeight = 1,
+						renderItem = function(index)
+							return lumina.createElement("text", {
+								key = "ext-item-" .. index,
+								style = { height = 1 },
+							}, "ExtItem " .. index)
+						end,
+					})
+				end,
+			})
+		]])
+
+		-- Scroll down 100 ticks (far beyond maxScroll)
+		for i = 1, 100 do
+			app:scroll(5, 2, 1)
+		end
+
+		-- scrollY should be clamped at maxScroll (50 - 10 = 40), not 300
+		local scrollBox = findScrollContainer(app)
+		test.assert.notNil(scrollBox)
+		local sy = scrollBox.scrollY or 0
+		test.assert.eq(sy, 40) -- maxScroll = totalCount - viewH = 50 - 10 = 40
+	end)
+
+	test.it("renderItem returns nil — skipped gracefully", function()
+		app:loadString([[
+			local VList = require("lux.vlist")
+
+			lumina.createComponent({
+				id = "test", name = "Test",
+				render = function()
+					return lumina.createElement(VList, {
+						id = "vlist-nil",
+						totalCount = 20,
+						height = 10,
+						overscan = 3,
+						estimateHeight = 1,
+						renderItem = function(index)
+							-- Return nil for even indices
+							if index % 2 == 0 then
+								return nil
+							end
+							return lumina.createElement("text", {
+								key = "nil-item-" .. index,
+								style = { height = 1 },
+							}, "NilItem " .. index)
+						end,
+					})
+				end,
+			})
+		]])
+
+		-- Odd items should be visible, even items skipped
+		test.assert.eq(app:screenContains("NilItem 1"), true)
+		test.assert.eq(app:screenContains("NilItem 3"), true)
+		-- Even items should not appear
+		test.assert.eq(app:screenContains("NilItem 0"), false)
+		test.assert.eq(app:screenContains("NilItem 2"), false)
+
+		-- Should not crash
+		local tree = app:vnodeTree()
+		test.assert.notNil(tree)
+	end)
+
+	test.it("totalCount changes dynamically", function()
+		app:loadString([[
+			local VList = require("lux.vlist")
+
+			lumina.createComponent({
+				id = "test", name = "Test",
+				render = function()
+					return lumina.createElement(VList, {
+						id = "vlist-dyn",
+						totalCount = 20,
+						height = 10,
+						overscan = 3,
+						estimateHeight = 1,
+						renderItem = function(index)
+							return lumina.createElement("text", {
+								key = "dyn-item-" .. index,
+								style = { height = 1 },
+							}, "DynItem " .. index)
+						end,
+					})
+				end,
+			})
+		]])
+
+		-- First load: totalCount=20, scrollHeight=20
+		local scrollBox = findScrollContainer(app)
+		test.assert.notNil(scrollBox)
+		test.assert.eq(scrollBox.scrollHeight, 20)
+
+		-- Re-load with totalCount=10
+		app:loadString([[
+			local VList = require("lux.vlist")
+
+			lumina.createComponent({
+				id = "test", name = "Test",
+				render = function()
+					return lumina.createElement(VList, {
+						id = "vlist-dyn",
+						totalCount = 10,
+						height = 10,
+						overscan = 3,
+						estimateHeight = 1,
+						renderItem = function(index)
+							return lumina.createElement("text", {
+								key = "dyn-item-" .. index,
+								style = { height = 1 },
+							}, "DynItem " .. index)
+						end,
+					})
+				end,
+			})
+		]])
+
+		-- After re-load: scrollHeight should be 10
+		scrollBox = findScrollContainer(app)
+		test.assert.notNil(scrollBox)
+		test.assert.eq(scrollBox.scrollHeight, 10)
+	end)
+
+	test.it("overscan=0 — renders only viewport items", function()
+		app:loadString([[
+			local VList = require("lux.vlist")
+
+			lumina.createComponent({
+				id = "test", name = "Test",
+				render = function()
+					return lumina.createElement(VList, {
+						id = "vlist-no-os",
+						totalCount = 100,
+						height = 10,
+						overscan = 0,
+						estimateHeight = 1,
+						renderItem = function(index)
+							return lumina.createElement("text", {
+								key = "noos-item-" .. index,
+								style = { height = 1 },
+							}, "NoOsItem " .. index)
+						end,
+					})
+				end,
+			})
+		]])
+
+		-- With overscan=0, only viewport items (10) should be rendered
+		local texts = app:findAll("text")
+		-- Should have exactly 10 text items (viewport only)
+		test.assert.eq(#texts <= 12, true) -- allow small margin for spacers
+
+		-- Verify spacer heights correct
+		local scrollBox = findScrollContainer(app)
+		test.assert.notNil(scrollBox)
+		test.assert.eq(scrollBox.scrollHeight, 100) -- totalCount * estimateHeight
+	end)
+end)

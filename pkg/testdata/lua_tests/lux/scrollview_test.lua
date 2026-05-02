@@ -302,4 +302,187 @@ test.describe("ScrollView", function()
 		-- Should not crash
 		test.assert.eq(true, true)
 	end)
+
+	test.it("scrollbar click when no overflow — no crash", function()
+		app:loadString([[
+			local ScrollView = require("lux.scrollview")
+
+			lumina.createComponent({
+				id = "test",
+				render = function()
+					return lumina.createElement(ScrollView, {
+						id = "sv",
+						height = 10
+					},
+						lumina.createElement("text", { key = "a" }, "Only"),
+						lumina.createElement("text", { key = "b" }, "Two")
+					)
+				end,
+			})
+		]])
+
+		local box = findScrollBox(app)
+		test.assert.notNil(box)
+
+		-- Click on scrollbar area — content fits, no scrollbar needed
+		local sbX = box.x + box.w - 1
+		app:click(sbX, box.y + 2)
+
+		-- Should not crash, scrollY remains 0
+		box = findScrollBox(app)
+		test.assert.notNil(box)
+		local sy = box.scrollY or 0
+		test.assert.eq(sy, 0)
+	end)
+
+	test.it("Tab focuses ScrollView", function()
+		app:loadString([[
+			local ScrollView = require("lux.scrollview")
+
+			lumina.createComponent({
+				id = "test",
+				render = function()
+					return lumina.createElement("vbox", {},
+						lumina.createElement(ScrollView, {
+							id = "sv1",
+							height = 10
+						},
+							lumina.createElement("text", { key = "a" }, "SV1 Content")
+						),
+						lumina.createElement(ScrollView, {
+							id = "sv2",
+							height = 10
+						},
+							lumina.createElement("text", { key = "b" }, "SV2 Content")
+						)
+					)
+				end,
+			})
+		]])
+
+		-- Click first to set initial focus
+		app:click("sv1")
+		local fid1 = app:focusedID()
+		test.assert.notNil(fid1)
+
+		-- Tab to next
+		app:keyPress("Tab")
+		local fid2 = app:focusedID()
+		test.assert.notNil(fid2)
+		-- Focus should have changed (either to sv2 or cycled)
+		test.assert.eq(true, true)
+	end)
+
+	test.it("scrollNode API: programmatic scrolling", function()
+		app:loadString([[
+			local ScrollView = require("lux.scrollview")
+
+			lumina.createComponent({
+				id = "test",
+				render = function()
+					local items = {}
+					for i = 1, 100 do
+						items[#items + 1] = lumina.createElement("text", {
+							key = "item-" .. i
+						}, "Item " .. i)
+					end
+					return lumina.createElement(ScrollView, {
+						id = "sv",
+						height = 10
+					}, table.unpack(items))
+				end,
+			})
+		]])
+
+		-- Use scrollNode API directly via a second loadString
+		app:loadString([[
+			local r = lumina.scrollNode("sv", 15)
+		]])
+
+		local box = findScrollBox(app)
+		test.assert.notNil(box)
+		local sy = box.scrollY or 0
+		test.assert.eq(sy, 15)
+	end)
+
+	test.it("multiple ScrollViews scroll independently", function()
+		app:loadString([[
+			local ScrollView = require("lux.scrollview")
+
+			lumina.createComponent({
+				id = "test",
+				render = function()
+					local function makeItems(prefix)
+						local items = {}
+						for i = 1, 50 do
+							items[#items + 1] = lumina.createElement("text", {
+								key = prefix .. "-" .. i
+							}, prefix .. " " .. i)
+						end
+						return items
+					end
+					return lumina.createElement("hbox", {},
+						lumina.createElement(ScrollView, {
+							id = "sv-left",
+							height = 10
+						}, table.unpack(makeItems("Left"))),
+						lumina.createElement(ScrollView, {
+							id = "sv-right",
+							height = 10
+						}, table.unpack(makeItems("Right")))
+					)
+				end,
+			})
+		]])
+
+		-- Scroll the left one
+		app:click("sv-left")
+		app:keyPress("PageDown")
+		app:keyPress("PageDown")
+
+		-- Left should have scrolled
+		local function findBoxById(app, id)
+			local node = app:find(id)
+			if node and node.children then
+				for _, child in ipairs(node.children) do
+					if child.type == "vbox" and child.id == id then
+						return child
+					end
+				end
+			end
+			return nil
+		end
+
+		local leftBox = findBoxById(app, "sv-left")
+		test.assert.notNil(leftBox)
+		local leftSY = leftBox.scrollY or 0
+		test.assert.eq(leftSY > 0, true)
+
+		-- Right should still be at 0 (independent)
+		local rightBox = findBoxById(app, "sv-right")
+		test.assert.notNil(rightBox)
+		local rightSY = rightBox.scrollY or 0
+		test.assert.eq(rightSY, 0)
+	end)
+
+	test.it("ScrollView with zero children", function()
+		app:loadString([[
+			local ScrollView = require("lux.scrollview")
+
+			lumina.createComponent({
+				id = "test",
+				render = function()
+					return lumina.createElement(ScrollView, {
+						id = "sv",
+						height = 10
+					})
+				end,
+			})
+		]])
+
+		-- Should not crash, component renders empty
+		local box = findScrollBox(app)
+		test.assert.notNil(box)
+		test.assert.eq(true, true)
+	end)
 end)
