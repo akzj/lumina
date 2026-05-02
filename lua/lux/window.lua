@@ -29,8 +29,14 @@ local Window = lumina.defineComponent("LuxWindow", function(props)
 	local dragRef = lumina.useRef({active = false, startX = 0, startY = 0, origX = 0, origY = 0})
 	local resizeRef = lumina.useRef({active = false, startX = 0, startY = 0, origW = 0, origH = 0})
 
-	-- Build title bar text matching original format
-	local titleText = " " .. title .. string.rep(" ", math.max(0, w - #title - 4))
+	-- Build title bar text, capped to available inner width
+	local innerW = math.max(0, w - 2) -- subtract border (1 left + 1 right)
+	local titleText = " " .. title
+	if #titleText > innerW then
+		titleText = string.sub(titleText, 1, innerW)
+	else
+		titleText = titleText .. string.rep(" ", math.max(0, innerW - #titleText))
+	end
 
 	local children = {
 		-- Title bar

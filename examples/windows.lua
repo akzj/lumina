@@ -60,7 +60,7 @@ local function createWindowElement(win, isActive)
         -- Content area
         lumina.createElement("text", {
             foreground = t.text,
-            style = { height = win.h - 5 },
+            style = { height = math.max(0, win.h - 5) },
         }, content),
         -- Button
         lumina.createElement("text", {

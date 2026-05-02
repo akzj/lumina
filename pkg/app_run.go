@@ -351,6 +351,8 @@ func (a *App) handleInputEvent(ie InputEvent) {
 			X:    ie.X,
 			Y:    ie.Y,
 		})
+		// Render immediately after mouse events for responsive feedback
+		a.RenderDirty()
 
 	case "scroll":
 		a.HandleEvent(&event.Event{

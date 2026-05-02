@@ -222,7 +222,10 @@ func (e *Engine) HandleMouseMove(x, y int) {
 	}
 
 	// Mouse capture: if a node has captured mouse, send events directly to it
-	if e.capturedNode != nil && !e.capturedNode.Removed {
+	// Note: we deliver events even if the node is Removed — the Lua refs are still
+	// valid (pendingUnrefs aren't drained until next renderInOrder), and we MUST
+	// deliver mouseMove to avoid drag state leaks.
+	if e.capturedNode != nil {
 		for n := e.capturedNode; n != nil; n = n.Parent {
 			if n.OnMouseMove != 0 {
 				e.callLuaRef(n.OnMouseMove, x, y)
@@ -394,7 +397,9 @@ func (e *Engine) HandleMouseUp(x, y int) {
 	captured := e.capturedNode
 	e.capturedNode = nil // release capture
 
-	if captured != nil && !captured.Removed {
+	// Deliver mouseup even if captured node was Removed — Lua refs are still valid
+	// in this frame, and we MUST deliver mouseup to reset drag/resize state.
+	if captured != nil {
 		for n := captured; n != nil; n = n.Parent {
 			if n.OnMouseUp != 0 {
 				e.callLuaRef(n.OnMouseUp, x, y)
