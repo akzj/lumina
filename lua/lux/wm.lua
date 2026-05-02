@@ -29,19 +29,6 @@ local M = {}
 --- @param initialWindows table  Array of { id, title, x, y, w, h } initial window definitions
 --- @return table  Manager object with methods: register, close, reopen, activate, setFrame, getWindows, getActiveId
 function M.create(storeKey, initialWindows)
-    -- Deep-clone helper to avoid pointer-equality issues with lumina.store.
-    -- Without cloning, setFrame mutates s.frames[id] in place, then calls
-    -- lumina.store.set with the SAME pointer. Go's reflect.DeepEqual sees
-    -- no change → component NOT marked dirty → no re-render.
-    local function clone(t)
-        if type(t) ~= "table" then return t end
-        local result = {}
-        for k, v in pairs(t) do
-            result[clone(k)] = clone(v)
-        end
-        return result
-    end
-
     -- Only initialize if store doesn't have this key yet (idempotent)
     local existing = lumina.store.get(storeKey)
     if existing == nil then
@@ -67,70 +54,64 @@ function M.create(storeKey, initialWindows)
     --- Register a new window at the top of the z-order.
     function mgr.register(id, frame)
         local s = lumina.store.get(storeKey)
-        local newState = clone(s)
-        newState.frames[id] = {
+        s.frames[id] = {
             x = frame.x or 0, y = frame.y or 0,
             w = frame.w or 30, h = frame.h or 10,
             title = frame.title or id,
             open = true,
         }
-        for i, oid in ipairs(newState.order) do
-            if oid == id then table.remove(newState.order, i); break end
+        for i, oid in ipairs(s.order) do
+            if oid == id then table.remove(s.order, i); break end
         end
-        newState.order[#newState.order + 1] = id
-        newState.activeId = id
-        lumina.store.set(storeKey, newState)
+        s.order[#s.order + 1] = id
+        s.activeId = id
+        lumina.store.set(storeKey, s)
     end
 
     --- Close a window: remove from order, mark as closed, preserve frame.
     function mgr.close(id)
         local s = lumina.store.get(storeKey)
-        local newState = clone(s)
-        for i, oid in ipairs(newState.order) do
+        for i, oid in ipairs(s.order) do
             if oid == id then
-                table.remove(newState.order, i)
+                table.remove(s.order, i)
                 break
             end
         end
-        if newState.frames[id] then
-            newState.frames[id].open = false
+        if s.frames[id] then
+            s.frames[id].open = false
         end
-        if newState.activeId == id then
-            newState.activeId = newState.order[#newState.order] or nil
+        if s.activeId == id then
+            s.activeId = s.order[#s.order] or nil
         end
-        lumina.store.set(storeKey, newState)
+        lumina.store.set(storeKey, s)
     end
 
     --- Reopen a previously closed window at the top of the z-order.
     function mgr.reopen(id)
         local s = lumina.store.get(storeKey)
         if not s.frames[id] then return end
-        local newState = clone(s)
-        newState.frames[id].open = true
-        for i, oid in ipairs(newState.order) do
-            if oid == id then table.remove(newState.order, i); break end
+        s.frames[id].open = true
+        for i, oid in ipairs(s.order) do
+            if oid == id then table.remove(s.order, i); break end
         end
-        newState.order[#newState.order + 1] = id
-        newState.activeId = id
-        lumina.store.set(storeKey, newState)
+        s.order[#s.order + 1] = id
+        s.activeId = id
+        lumina.store.set(storeKey, s)
     end
 
     --- Activate (bring to front): move to top of z-order, set as active.
     --- Should only be called on mousedown/"activate" events, NOT on every move/resize.
     function mgr.activate(id)
         local s = lumina.store.get(storeKey)
-        local newState = clone(s)
-        -- Remove from current position in order
-        for i, oid in ipairs(newState.order) do
+        for i, oid in ipairs(s.order) do
             if oid == id then
-                table.remove(newState.order, i)
+                table.remove(s.order, i)
                 break
             end
         end
-        -- Append to end (top of z-order)
-        newState.order[#newState.order + 1] = id
-        newState.activeId = id
-        lumina.store.set(storeKey, newState)
+        s.order[#s.order + 1] = id
+        s.activeId = id
+        lumina.store.set(storeKey, s)
     end
 
     --- Update a window's frame (position/size). Does NOT change z-order.
@@ -139,11 +120,10 @@ function M.create(storeKey, initialWindows)
     function mgr.setFrame(id, patch)
         local s = lumina.store.get(storeKey)
         if not s.frames[id] then return end
-        local newState = clone(s)
         for k, v in pairs(patch) do
-            newState.frames[id][k] = v
+            s.frames[id][k] = v
         end
-        lumina.store.set(storeKey, newState)
+        lumina.store.set(storeKey, s)
     end
 
     --- Get ordered list of open windows (bottom to top) for rendering.
