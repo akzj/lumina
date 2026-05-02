@@ -301,7 +301,8 @@ func (a *App) HandleEvent(e *event.Event) {
 	case "mouseup":
 		a.engine.HandleMouseUp(e.X, e.Y)
 		// Synthesize click only if mouseup at same position as mousedown
-		if e.X == a.mouseDownX && e.Y == a.mouseDownY {
+		// AND mousedown handler did not call preventDefault
+		if e.X == a.mouseDownX && e.Y == a.mouseDownY && !a.engine.ClickPrevented() {
 			a.engine.HandleClick(e.X, e.Y)
 		}
 	case "click":

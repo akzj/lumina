@@ -64,11 +64,22 @@ local Window = lumina.defineComponent("LuxWindow", function(props)
 			background = bg,
 			overflow = "hidden",
 		},
-		onClick = function()
-			if props.onActivate then props.onActivate() end
+		onClick = function(event)
+			if not isActive then
+				if props.onActivate then props.onActivate() end
+				event.stopPropagation()
+			end
 		end,
 		onMouseDown = function(event)
 			local mx, my = event.x, event.y
+
+			-- Non-active window: activate and prevent click from reaching children
+			if not isActive then
+				if props.onActivate then props.onActivate() end
+				event.preventDefault()
+				return
+			end
+
 			-- Resize handle: bottom-right 3x3 area (inside border)
 			if mx >= x + w - 3 and my >= y + h - 3 then
 				resizeRef.current = {

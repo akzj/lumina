@@ -344,6 +344,8 @@ func (e *Engine) HandleClick(x, y int) {
 	}
 
 	// Dispatch onClick (bubble up from hit node, skip disabled)
+	// Stops at the first handler found (standard Lumina behavior).
+	// Handlers can call event.stopPropagation() for explicit control.
 	for n := hitNode; n != nil; n = n.Parent {
 		if n.OnClick != 0 && !n.Disabled {
 			e.callLuaRef(n.OnClick, x, y)
@@ -355,12 +357,17 @@ func (e *Engine) HandleClick(x, y int) {
 // HandleMouseDown processes a mousedown event at screen coordinates (x, y).
 // Finds the deepest node with an onMouseDown handler (bubbling) and dispatches.
 func (e *Engine) HandleMouseDown(x, y int) {
+	e.clickPrevented = false // reset at start of each mousedown
+
 	if len(e.layers) == 0 {
 		return
 	}
 	target, _ := e.hitTestLayersWithHandler(x, y, "mousedown")
 	if target != nil && target.OnMouseDown != 0 && !target.Disabled {
-		e.callLuaRef(target.OnMouseDown, x, y)
+		result := e.callLuaRef(target.OnMouseDown, x, y)
+		if result.DefaultPrevented {
+			e.clickPrevented = true
+		}
 	}
 
 	// Mouse capture: if the hit node or its ancestor has onMouseDown, capture it
@@ -372,6 +379,11 @@ func (e *Engine) HandleMouseDown(x, y int) {
 			}
 		}
 	}
+}
+
+// ClickPrevented returns true if the last mousedown handler called preventDefault.
+func (e *Engine) ClickPrevented() bool {
+	return e.clickPrevented
 }
 
 // HandleMouseUp processes a mouseup event at screen coordinates (x, y).
@@ -759,41 +771,76 @@ func computeMaxScrollY(node *Node) int {
 	return maxScroll
 }
 
+// EventResult holds the result of calling a Lua event handler.
+// Handlers can call event.stopPropagation() and event.preventDefault().
+type EventResult struct {
+	Stopped          bool // stopPropagation was called
+	DefaultPrevented bool // preventDefault was called
+}
+
 // callLuaRef calls a Lua function by registry ref with an event table {x=x, y=y}.
-func (e *Engine) callLuaRef(ref LuaRef, x, y int) {
+// The event table includes stopPropagation() and preventDefault() methods.
+func (e *Engine) callLuaRef(ref LuaRef, x, y int) EventResult {
+	result := EventResult{}
 	L := e.L
 	L.RawGetI(lua.RegistryIndex, ref)
 	if !L.IsFunction(-1) {
 		L.Pop(1)
-		return
+		return result
 	}
-	// Push event table: {x=x, y=y}
+	// Push event table: {x=x, y=y, stopPropagation=func, preventDefault=func}
 	L.NewTable()
 	tblIdx := L.AbsIndex(-1)
 	L.PushInteger(int64(x))
 	L.SetField(tblIdx, "x")
 	L.PushInteger(int64(y))
 	L.SetField(tblIdx, "y")
+	// event.stopPropagation() — Go closure that sets result.Stopped
+	L.PushFunction(func(L *lua.State) int {
+		result.Stopped = true
+		return 0
+	})
+	L.SetField(tblIdx, "stopPropagation")
+	// event.preventDefault() — Go closure that sets result.DefaultPrevented
+	L.PushFunction(func(L *lua.State) int {
+		result.DefaultPrevented = true
+		return 0
+	})
+	L.SetField(tblIdx, "preventDefault")
 	if status := L.PCall(1, 0, 0); status != lua.OK {
 		L.Pop(1) // pop error message to prevent stack pollution
 	}
+	return result
 }
 
 // callLuaRefKey calls a Lua function with an event table {key=key}.
-func (e *Engine) callLuaRefKey(ref LuaRef, key string) {
+// The event table includes stopPropagation() and preventDefault() methods.
+func (e *Engine) callLuaRefKey(ref LuaRef, key string) EventResult {
+	result := EventResult{}
 	L := e.L
 	L.RawGetI(lua.RegistryIndex, ref)
 	if !L.IsFunction(-1) {
 		L.Pop(1)
-		return
+		return result
 	}
 	L.NewTable()
 	tblIdx := L.AbsIndex(-1)
 	L.PushString(key)
 	L.SetField(tblIdx, "key")
+	L.PushFunction(func(L *lua.State) int {
+		result.Stopped = true
+		return 0
+	})
+	L.SetField(tblIdx, "stopPropagation")
+	L.PushFunction(func(L *lua.State) int {
+		result.DefaultPrevented = true
+		return 0
+	})
+	L.SetField(tblIdx, "preventDefault")
 	if status := L.PCall(1, 0, 0); status != lua.OK {
 		L.Pop(1) // pop error message to prevent stack pollution
 	}
+	return result
 }
 
 // callLuaRefScroll calls a Lua function with an event table {delta=delta, key="up"/"down",
@@ -844,15 +891,31 @@ func (e *Engine) findKeyHandler(node *Node) *Node {
 	return nil
 }
 
-// callLuaRefSimple calls a Lua function by registry ref with no arguments.
-func (e *Engine) callLuaRefSimple(ref LuaRef) {
+// callLuaRefSimple calls a Lua function by registry ref with an event table
+// containing only stopPropagation() and preventDefault() methods.
+func (e *Engine) callLuaRefSimple(ref LuaRef) EventResult {
+	result := EventResult{}
 	L := e.L
 	L.RawGetI(lua.RegistryIndex, ref)
 	if !L.IsFunction(-1) {
 		L.Pop(1)
-		return
+		return result
 	}
-	if status := L.PCall(0, 0, 0); status != lua.OK {
+	// Push event table with just the control methods
+	L.NewTable()
+	tblIdx := L.AbsIndex(-1)
+	L.PushFunction(func(L *lua.State) int {
+		result.Stopped = true
+		return 0
+	})
+	L.SetField(tblIdx, "stopPropagation")
+	L.PushFunction(func(L *lua.State) int {
+		result.DefaultPrevented = true
+		return 0
+	})
+	L.SetField(tblIdx, "preventDefault")
+	if status := L.PCall(1, 0, 0); status != lua.OK {
 		L.Pop(1) // pop error message to prevent stack pollution
 	}
+	return result
 }

@@ -48,6 +48,9 @@ type Engine struct {
 	// Mouse capture: node that has captured mouse events (drag/resize)
 	capturedNode *Node
 
+	// Click prevention: set by HandleMouseDown when handler calls preventDefault
+	clickPrevented bool
+
 	// Lua ref cleanup: refs to unref after reconcile
 	pendingUnrefs []int64
 
