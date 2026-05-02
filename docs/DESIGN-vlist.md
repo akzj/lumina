@@ -1,8 +1,8 @@
 # VList: Virtual Scrolling List Design
 
-> **Status**: Draft (Revised after review)  
-> **Inspired by**: [ScrollU](https://github.com/akzj/scroll-u) — clip-on-idle strategy  
-> **Pattern**: React `ref` prop for container property access (Phase 3, independent)
+> **Status**: Complete (Phases 0-5 implemented)
+> **Inspired by**: [ScrollU](https://github.com/akzj/scroll-u) — clip-on-idle strategy
+> **Pattern**: React `ref` prop for container property access
 
 ---
 
@@ -61,9 +61,9 @@ onScroll = function(e)
 end
 ```
 
-### 3.2 Engine Change Required (Phase 0)
+### 3.2 Engine Change (Phase 0)
 
-`callLuaRefScroll` must include `scrollY` and `scrollHeight` in the event table:
+`HandleScroll` allows `onScroll` + `autoScroll` to coexist. `callLuaRefScroll` includes `scrollY` and `scrollHeight` in the event table:
 
 ```go
 L.PushInteger(int64(scrollNode.ScrollY))
@@ -71,8 +71,6 @@ L.SetField(tblIdx, "scrollY")
 L.PushInteger(int64(scrollNode.ScrollHeight))
 L.SetField(tblIdx, "scrollHeight")
 ```
-
-Also, `HandleScroll` must allow `onScroll` + `autoScroll` to coexist (see §7 Phase 0).
 
 ---
 
@@ -85,7 +83,7 @@ local VList = require("lux.vlist")
 
 lumina.createElement(VList, {
     -- Required
-    totalCount = 50000,           -- total number of items (for scrollbar)
+    totalCount = 50000,           -- total number of items
     renderItem = function(index)  -- called to create item element
         return lumina.createElement("hbox", {key = "msg-" .. index},
             lumina.createElement("text", {}, "Message " .. (index + 1)),
@@ -94,8 +92,8 @@ lumina.createElement(VList, {
 
     -- Optional
     overscan = 15,                -- items to keep beyond viewport (default: 10)
-    estimateHeight = 1,           -- estimated height per item in rows (default: 1)
-    height = 20,                  -- viewport height (default: parent height)
+    estimateHeight = 1,           -- fallback height per item in rows (default: 1)
+    height = 20,                  -- viewport height (default: 20)
     clipDelay = 500,              -- ms idle before clipping (default: 500)
 })
 ```
@@ -136,220 +134,155 @@ Frame 1: items [5, 6, 7, ..., 35]
 Frame 2: items [10, 11, 12, ..., 40]
 
 Reconciler:
-  key "i10".."i35" → match → reuse existing Node (no re-render!) ✨
-  key "i36".."i40" → new → call renderItem() to create
-  key "i5".."i9"   → removed → destroy Node
+  key "item-10".."item-35" → match → reuse existing Node (no re-render!)
+  key "item-36".."item-40" → new → call renderItem() to create
+  key "item-5".."item-9"   → removed → destroy Node
 ```
 
 **This is the foundation**: already-rendered items are never re-rendered. Only newly visible items trigger `renderItem`.
 
 ### 4.4 Clip-on-Idle
 
+Uses `isClipped` state + `lumina.setTimeout`/`clearTimeout`:
+
 ```
 Active scroll:
-  - Items accumulate in both directions
-  - overscan=15 items kept beyond viewport
-  - Memory: ~50 Nodes (15+20+15)
+  - isClipped = false
+  - effectiveOverscan = overscan (e.g., 10)
+  - Memory: ~(viewport + 2*overscan) Nodes
 
 Scroll stops → clipDelay ms passes:
-  - Clip range: overscan*2 = 30 items beyond viewport
-  - Remove items beyond clip range from children array
-  - Spacer nodes fill the gaps
-  - Memory: ~30 Nodes (10+20+10)
+  - isClipped = true
+  - effectiveOverscan = max(2, floor(overscan/2)) (e.g., 5)
+  - Reconciler removes items outside new range
+  - Memory: ~(viewport + 2*reduced_overscan) Nodes
 
 Scroll resumes:
+  - isClipped = false (immediately on scroll)
+  - old timer cleared, new timer set
   - Items re-created via renderItem() as they enter overscan range
 ```
 
-### 4.5 Pseudo-Implementation (Revised)
+### 4.5 Variable Height
 
-```lua
-local VList = lumina.defineComponent("LuxVList", function(props)
-    local totalCount = props.totalCount or 0
-    local renderItem = props.renderItem
-    local overscan = props.overscan or 10
-    local estimateHeight = props.estimateHeight or 1
-    local clipDelay = props.clipDelay or 500
+Items can have different actual heights. Uses height cache + ref-based measurement:
 
-    -- Track scrollY via state (NOT ref — avoids frame lag)
-    local scrollY, setScrollY = lumina.useState("scrollY", 0)
-    local viewH = props.height or 20
-    local clipTimerRef = lumina.useRef()
+```
+Frame N:
+  1. Render using heightCache (actual for measured, estimateHeight for unknown)
+  2. Layout → populateRefs fills item refs with {x, y, w, h}
+  3. Paint
+  4. useEffect reads ref.current.h, updates heightCache → triggers re-render
 
-    -- Calculate visible range
-    local startIdx = math.max(0, math.floor(scrollY / estimateHeight) - overscan)
-    local endIdx = math.min(totalCount, math.ceil((scrollY + viewH) / estimateHeight) + overscan)
+Frame N+1:
+  1. Render using updated heightCache
+```
 
-    -- Build children
-    local children = {}
+Each visible item is wrapped in `<box ref={itemRefs[i]}>` for measurement. The wrapper has no explicit height, so it sizes to its child's actual height.
 
-    -- Top spacer
-    if startIdx > 0 then
-        children[#children + 1] = lumina.createElement("box", {
-            key = "vlist_top",
-            style = {height = startIdx * estimateHeight}
-        })
-    end
+### 4.6 Prefix Sum Optimization
 
-    -- Visible items (reconciler reuses by key)
-    for i = startIdx, endIdx - 1 do
-        children[#children + 1] = renderItem(i)
-    end
+`findIndexAt` uses binary search (O(log n)), `heightUpTo` uses direct lookup (O(1)). Prefix sums built once per render (single O(n) pass).
 
-    -- Bottom spacer
-    if endIdx < totalCount then
-        children[#children + 1] = lumina.createElement("box", {
-            key = "vlist_bottom",
-            style = {height = (totalCount - endIdx) * estimateHeight}
-        })
-    end
-
-    return lumina.createElement("vbox", {
-        style = {height = viewH, overflow = "scroll"},
-        onScroll = function(e)
-            setScrollY(e.scrollY)  -- absolute scrollY from engine
-            -- Clip-on-idle: clear old timer, set new one
-            if clipTimerRef.current then
-                lumina.clearTimeout(clipTimerRef.current)
-            end
-            clipTimerRef.current = lumina.setTimeout(function()
-                -- Re-render with clipped range
-                setScrollY(e.scrollY)  -- trigger re-render for clip
-            end, clipDelay)
-        end,
-    }, table.unpack(children))
-end)
+```
+Before: 5 × O(n) linear scans per render (~250K iterations for 50K items)
+After:  1 × O(n) prefix sum build + O(log n) lookups (~50K iterations)
 ```
 
 ---
 
-## 5. Variable Height Items (Future)
+## 5. `ref` Prop (Phase 3)
 
-Items may have different heights (e.g., multi-line messages, embedded images). The `estimateHeight` approach causes scrollbar inaccuracy.
-
-### 5.1 Height Cache Strategy
+### 5.1 API
 
 ```lua
--- Track actual heights of rendered items
-local heights = lumina.useRef("heights", {})  -- {[index] = actualHeight}
-
--- After render, record actual heights
--- For unrendered items, use estimateHeight
-
--- Spacer height = sum of actual heights for hidden rendered items
---               + estimateHeight * count of hidden unrendered items
-```
-
-### 5.2 How to Get Actual Height
-
-Requires the `ref` prop (Phase 3) to expose child layout info, or a separate mechanism to query rendered node dimensions from Lua.
-
-This is a future enhancement. Initial implementation uses fixed `estimateHeight`.
-
----
-
-## 6. `ref` Prop (Independent Feature — Phase 3)
-
-`ref` prop is NOT a prerequisite for VList. It's a separate, generally useful feature following React's pattern.
-
-### 6.1 API
-
-```lua
-local containerRef = lumina.useRef()
+local ref = lumina.useRef()
 
 lumina.createElement("vbox", {
-    ref = containerRef,
+    ref = ref,
     style = {overflow = "scroll"},
 }, ...)
 
--- After mount, engine populates automatically:
--- containerRef.current.width, .height
--- containerRef.current.contentWidth, .contentHeight
--- containerRef.current.scrollY, .scrollX
--- containerRef.current.isAtTop, .isAtBottom
+-- After layout, engine populates automatically:
+-- ref.current = {x, y, w, h, scrollY, scrollHeight, id, type}
 ```
 
-### 6.2 Engine Changes
+### 5.2 Lifecycle
+
+```
+createElement({ref = myRef}) → Descriptor.RefTableRef = myRef
+Reconcile: createNodeFromDesc() → Node.RefTableRef = myRef
+After layout → populateRefs() → ref.current = {x, y, w, h, ...}
+Node removed → drainPendingUnrefs() → ref.current = nil → Unref
+```
+
+### 5.3 Engine Changes
 
 | File | Change |
 |------|--------|
-| `descriptor.go` | Read `ref` prop, store ref table reference |
-| `node.go` | Add `RefTable LuaRef` field |
-| `reconciler.go` | Reconcile `ref` prop |
-| `engine.go` | After layout/paint: `populateRefs()` — fill `ref.current` |
-| `engine.go` | On node removal: `clearRef()` |
+| `descriptor.go` | Added `RefTableRef LuaRef` field |
+| `node.go` | Added `RefTableRef LuaRef` field |
+| `engine_marshal.go` | Read `ref` prop in `readDescriptor`, store as registry ref |
+| `reconciler.go` | Thread through `createNodeFromDesc`, `updateRef`, `collectNodeRefs` |
+| `engine.go` | Call `populateRefs` after layout; set `ref.current=nil` in `drainPendingUnrefs` |
+| `layout.go` | Added `populateRefs()` — walks tree, fills `ref.current` |
 
-### 6.3 Lifecycle
+---
+
+## 6. Implementation Summary
+
+| Phase | Content | Commit | Status |
+|-------|---------|--------|--------|
+| 0 | `onScroll` + `autoScroll` coexist; `callLuaRefScroll` passes `scrollY`/`scrollHeight` | `ac6a236` | ✅ |
+| 1 | VList v1: overscan + spacers + key-based children (pure Lua) | `2f17838` | ✅ |
+| 2 | Clip-on-idle: `isClipped` state + `lumina.setTimeout`/`clearTimeout` | `af84578` | ✅ |
+| 3 | `ref` prop: engine populates `ref.current` after layout | `99e51f9` | ✅ |
+| 4 | Variable height: heightCache + ref-based measurement + useEffect | `5cc6f43` | ✅ |
+| 5 | Prefix sum optimization: O(log n) findIndexAt + O(1) heightUpTo | `6d74f78` | ✅ |
+
+### Files
+
+| File | Purpose |
+|------|---------|
+| `lua/lux/vlist.lua` | VList component (152 lines Lua) |
+| `pkg/testdata/lua_tests/lux/vlist_test.lua` | 15 test cases |
+| `examples/vlist_demo.lua` | 50K item demo |
+| `pkg/render/events.go` | Phase 0: HandleScroll fix |
+| `pkg/render/descriptor.go` | Phase 3: RefTableRef field |
+| `pkg/render/node.go` | Phase 3: RefTableRef field |
+| `pkg/render/engine_marshal.go` | Phase 3: read `ref` prop |
+| `pkg/render/reconciler.go` | Phase 3: reconcile `ref` |
+| `pkg/render/engine.go` | Phase 3: populateRefs + drainPendingUnrefs |
+| `pkg/render/layout.go` | Phase 3: populateRefs function |
+| `pkg/testdata/lua_tests/hooks/use_ref_test.lua` | Phase 3: 4 ref prop tests |
+
+---
+
+## 7. Memory Analysis
 
 ```
-createElement({ref = myRef}) → Descriptor.RefTable = myRef
-Reconcile: createNodeFromDesc() → Node.RefTable = myRef
-After layout + paint → myRef.current = { width, height, scrollY, ... }
-Node removed → myRef.current = nil
+Scenario: 50,000 messages, viewport=20 rows, overscan=10, estimateHeight=1
+
+                    Nodes in Go tree    Lua tables (itemRefs + heightCache)
+Traditional:        50,000 (~50MB)      N/A
+Active scrolling:   ~40 (~40KB)         grows with items scrolled past
+After clip (idle):  ~24 (~24KB)         same as above (not cleaned)
+
+Lua-side accumulation: 50K items all scrolled past ≈ 2-4MB in itemRefs + heightCache.
+Acceptable for TUI. Can be cleaned in clip callback if needed.
 ```
 
 ---
 
-## 7. Implementation Plan
+## 8. Known Limitations
 
-### Phase 0: Fix Scroll Event Handling (Engine — ~20 lines)
+1. **Lua-side memory accumulation**: `itemRefs.current` and `heightCache` grow with total items scrolled past. Not cleaned by clip-on-idle (~2-4MB for 50K items). Acceptable for TUI.
 
-**Problem**: `onScroll` handler and `autoScroll` are mutually exclusive in `HandleScroll`. If a node has `onScroll`, the engine returns early and never calls `autoScroll`. VList needs both.
+2. **Prefix sums rebuilt every render**: Single O(n) pass per render. Could be cached with `useMemo` but <1ms for 50K items — not worth the complexity.
 
-**Fix**:
+3. **No callback refs**: Only object refs (`ref = myRef`) supported, not `ref = function(node) end`.
 
-| Step | File | Description |
-|------|------|-------------|
-| 0.1 | `events.go:HandleScroll` | Remove early `return` after `callLuaRefScroll`. Always do autoScroll first, then call onScroll handler with the updated scrollY |
-| 0.2 | `events.go:callLuaRefScroll` | Add `scrollY` and `scrollHeight` fields to the Lua event table |
-
-### Phase 1: VList v1 — Basic (Pure Lua)
-
-No clip, no variable height. Uses `onScroll(e.scrollY)` + `useState`.
-
-| Step | File | Description |
-|------|------|-------------|
-| 1.1 | `lua/lux/vlist.lua` | VList component: overscan + spacers + key-based children |
-| 1.2 | `examples/vlist_demo.lua` | Demo with 50000 items |
-
-### Phase 2: Clip-on-Idle (Lua + setTimeout)
-
-`lumina.setTimeout` / `lumina.clearTimeout` already exist in `pkg/app_timer.go`.
-
-| Step | File | Description |
-|------|------|-------------|
-| 2.1 | `lua/lux/vlist.lua` | Add clip-on-idle: debounced `setTimeout` removes far-offscreen items |
-
-### Phase 3: `ref` Prop (Engine — Independent)
-
-| Step | File | Description |
-|------|------|-------------|
-| 3.1 | `node.go` | Add `RefTable LuaRef` field |
-| 3.2 | `descriptor.go` | Read `ref` prop, store ref table reference |
-| 3.3 | `reconciler.go` | Reconcile `ref` prop |
-| 3.4 | `engine.go` | After layout/paint: `populateRefs()` — fill `ref.current` |
-| 3.5 | `engine.go` | On node removal: `clearRef()` |
-
-### Phase 4: Variable Height (Future)
-
-| Step | Description |
-|------|-------------|
-| 4.1 | Height cache in Lua |
-| 4.2 | Accurate spacer heights |
-| 4.3 | Accurate scrollbar |
-
----
-
-## 8. Memory Analysis
-
-```
-Scenario: 50,000 messages, viewport=20 rows, overscan=15, estimateHeight=1
-
-                    Nodes in memory
-Traditional:        50,000 Nodes       (~50MB)
-Active scrolling:   ~50 Nodes          (~50KB)     ← 1000x less
-After clip (idle):  ~30 Nodes          (~30KB)     ← 1600x less
-```
+4. **No horizontal virtual scrolling**: VList is vertical-only.
 
 ---
 
@@ -359,21 +292,8 @@ After clip (idle):  ~30 Nodes          (~30KB)     ← 1600x less
 |---|---|---|---|
 | Visible-only rendering | ✅ | ❌ (accumulates during scroll) | ❌ (accumulates during scroll) |
 | Clip-on-idle | ❌ | ✅ | ✅ |
-| Variable height | ✅ (with measured) | ✅ (native DOM) | 🔸 (estimate, future: cache) |
+| Variable height | ✅ (with measured) | ✅ (native DOM) | ✅ (height cache + ref) |
 | Implementation | Complex | Simple | Simple (pure Lua) |
 | Scroll smoothness | Can jank | Smooth | Smooth |
-| Memory (idle) | O(visible) | O(visible) | O(visible) |
-
----
-
-## 10. Review Notes
-
-### Critical Design Decisions
-
-1. **VList uses `useState` + `onScroll(e.scrollY)`, NOT `ref.current.scrollY`** — avoids frame-lag because ref is populated after layout/paint, but VList reads scrollY during render.
-
-2. **`onScroll` + `autoScroll` must coexist** — current engine behavior is mutually exclusive (Phase 0 fixes this).
-
-3. **`ref` prop is independent** — VList v1 does not need it. Develop in parallel.
-
-4. **`setTimeout` already exists** — `lumina.setTimeout(fn, ms)` and `lumina.clearTimeout(id)` are available for clip-on-idle debounce.
+| Memory (idle, Go) | O(visible) | O(visible) | O(visible) |
+| Memory (idle, Lua) | N/A | N/A | O(scrolled) — minor |
