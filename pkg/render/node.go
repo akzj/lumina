@@ -1,6 +1,8 @@
 package render
 
-import "reflect"
+import (
+	"reflect"
+)
 
 // LuaRef is a Lua registry reference. 0 means nil/unset.
 type LuaRef = int64

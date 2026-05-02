@@ -66,7 +66,8 @@ local Window = lumina.defineComponent("LuxWindow", function(props)
 		onClick = function()
 			if props.onActivate then props.onActivate() end
 		end,
-		onMouseDown = function(mx, my)
+		onMouseDown = function(event)
+			local mx, my = event.x, event.y
 			-- Resize handle: bottom-right 3x3 area (inside border)
 			if mx >= x + w - 3 and my >= y + h - 3 then
 				resizeRef.current = {
@@ -85,7 +86,8 @@ local Window = lumina.defineComponent("LuxWindow", function(props)
 				}
 			end
 		end,
-		onMouseMove = function(mx, my)
+		onMouseMove = function(event)
+			local mx, my = event.x, event.y
 			if dragRef.current.active then
 				local dx = mx - dragRef.current.startX
 				local dy = my - dragRef.current.startY
@@ -100,7 +102,7 @@ local Window = lumina.defineComponent("LuxWindow", function(props)
 				if props.onResize then props.onResize(newW, newH) end
 			end
 		end,
-		onMouseUp = function()
+		onMouseUp = function(event)
 			dragRef.current.active = false
 			resizeRef.current.active = false
 		end,
