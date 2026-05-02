@@ -80,7 +80,6 @@ local VList = lumina.defineComponent("LuxVList", function(props)
 	end
 
 	return lumina.createElement("vbox", {
-		key = props.key,
 		id = props.id,
 		style = {
 			height = viewH,
