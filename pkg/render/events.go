@@ -399,24 +399,24 @@ func (e *Engine) HandleKeyDown(key string) {
 }
 
 // HandleScroll processes a scroll event at screen coordinates (x, y).
-// Priority: custom onScroll Lua handler > built-in auto-scroll for overflow=scroll nodes.
+// Always performs auto-scroll first (if a scroll container exists), then calls any
+// custom Lua onScroll handler so it receives the updated scrollY.
 func (e *Engine) HandleScroll(x, y, delta int) {
 	if len(e.layers) == 0 {
 		return
 	}
 
-	// First: check for a custom Lua onScroll handler (takes priority)
-	target, _ := e.hitTestLayersWithHandler(x, y, "scroll")
-	if target != nil && target.OnScroll != 0 {
-		e.callLuaRefScroll(target.OnScroll, delta)
-		return
-	}
-
-	// No custom handler — find nearest overflow=scroll ancestor for auto-scroll
+	// Step 1: Always do auto-scroll first (if there's a scroll container)
 	hitNode, _ := e.hitTestLayers(x, y)
 	scrollNode := findScrollableAncestor(hitNode)
 	if scrollNode != nil {
 		e.autoScroll(scrollNode, delta)
+	}
+
+	// Step 2: Then call onScroll handler (with updated scrollY)
+	target, _ := e.hitTestLayersWithHandler(x, y, "scroll")
+	if target != nil && target.OnScroll != 0 {
+		e.callLuaRefScroll(target.OnScroll, delta, scrollNode)
 	}
 }
 
@@ -566,8 +566,9 @@ func (e *Engine) callLuaRefKey(ref LuaRef, key string) {
 	}
 }
 
-// callLuaRefScroll calls a Lua function with an event table {delta=delta, key="up"/"down"}.
-func (e *Engine) callLuaRefScroll(ref LuaRef, delta int) {
+// callLuaRefScroll calls a Lua function with an event table {delta=delta, key="up"/"down",
+// scrollY=scrollY, scrollHeight=scrollHeight}.
+func (e *Engine) callLuaRefScroll(ref LuaRef, delta int, scrollNode *Node) {
 	L := e.L
 	L.RawGetI(lua.RegistryIndex, ref)
 	if !L.IsFunction(-1) {
@@ -585,6 +586,13 @@ func (e *Engine) callLuaRefScroll(ref LuaRef, delta int) {
 		L.PushString("down")
 	}
 	L.SetField(tblIdx, "key")
+	// Include absolute scrollY and scrollHeight so handlers can compute visible range
+	if scrollNode != nil {
+		L.PushInteger(int64(scrollNode.ScrollY))
+		L.SetField(tblIdx, "scrollY")
+		L.PushInteger(int64(scrollNode.ScrollHeight))
+		L.SetField(tblIdx, "scrollHeight")
+	}
 	if status := L.PCall(1, 0, 0); status != lua.OK {
 		L.Pop(1) // pop error message to prevent stack pollution
 	}

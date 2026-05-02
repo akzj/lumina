@@ -650,9 +650,11 @@ func TestEngine_AutoScroll(t *testing.T) {
 func TestEngine_AutoScroll_CustomHandlerPriority(t *testing.T) {
 	e, L := newTestEngine(t)
 
-	// Create a node with BOTH overflow=scroll AND onScroll handler
+	// Create a node with BOTH overflow=scroll AND onScroll handler.
+	// The handler records scrollY from the event to verify it receives updated state.
 	err := L.DoString(`
 		scroll_called = false
+		scroll_received_y = nil
 		local children = {}
 		for i = 1, 20 do
 			children[i] = lumina.createElement("text", {style = {height = 1}}, "Line " .. i)
@@ -665,6 +667,7 @@ func TestEngine_AutoScroll_CustomHandlerPriority(t *testing.T) {
 					style = {overflow = "scroll", height = 5, width = 20},
 					onScroll = function(e)
 						scroll_called = true
+						scroll_received_y = e.scrollY
 					end,
 					children = children,
 				})
@@ -682,7 +685,7 @@ func TestEngine_AutoScroll_CustomHandlerPriority(t *testing.T) {
 		t.Fatal("no root node")
 	}
 
-	// Scroll — custom handler should be called, NOT auto-scroll
+	// Scroll — auto-scroll should fire first, THEN custom handler
 	e.HandleScroll(5, 2, 1)
 
 	// Verify Lua handler was called
@@ -693,13 +696,21 @@ func TestEngine_AutoScroll_CustomHandlerPriority(t *testing.T) {
 		t.Error("expected custom onScroll handler to be called")
 	}
 
-	// Verify auto-scroll did NOT change ScrollY
+	// Verify auto-scroll DID change ScrollY (step=3, delta=1 → ScrollY=3)
 	scrollNode := root.RootNode
 	if len(scrollNode.Children) > 0 && scrollNode.Children[0].Style.Overflow == "scroll" {
 		scrollNode = scrollNode.Children[0]
 	}
-	if scrollNode.ScrollY != 0 {
-		t.Errorf("auto-scroll should NOT have fired; ScrollY = %d, want 0", scrollNode.ScrollY)
+	if scrollNode.ScrollY != 3 {
+		t.Errorf("auto-scroll should have fired; ScrollY = %d, want 3", scrollNode.ScrollY)
+	}
+
+	// Verify handler received the updated scrollY
+	L.GetGlobal("scroll_received_y")
+	receivedY, _ := L.ToInteger(-1)
+	L.Pop(1)
+	if receivedY != 3 {
+		t.Errorf("onScroll handler received scrollY = %d, want 3", receivedY)
 	}
 }
 
