@@ -62,27 +62,31 @@ test.describe("Window", function()
     -- Test 3: Drag via mouse events changes position
     test.it("drag via mouse events changes position", function()
         app:loadString([[
-            lumina.store.set("movedTo", nil)
+            local WM = require("lux.wm")
+            local mgr = WM.create("drag_test", {
+                {id = "w1", title = "Test", x = 2, y = 1, w = 30, h = 10},
+            })
             lumina.createComponent({
                 id = "test",
                 render = function()
+                    local wins = mgr.getWindows()
+                    local w = wins[1]
                     return lumina.createElement(_G.Window, {
                         id = "w1",
                         title = "Test",
-                        x = 2, y = 1, w = 30, h = 10,
+                        x = w.x, y = w.y,
+                        w = w.w, h = w.h,
                         onMove = function(nx, ny)
-                            lumina.store.set("movedTo", {x = nx, y = ny})
+                            mgr.setFrame("w1", {x = nx, y = ny})
                         end,
                     })
                 end,
             })
         ]])
-        -- Mouse down on title bar (at y+1 = 2, inside border)
+        -- Mouse down on title bar (y+1=2, inside border)
         app:mouseDown(5, 2)
-        -- Mouse move to simulate drag
-        app:mouseMove(10, 5)
-        -- Mouse up
-        app:mouseUp(10, 5)
+        app:mouseMove(13, 5)
+        app:mouseUp(13, 5)
         app:render()
         -- After drag, window content should still be visible (no crash)
         test.assert.eq(app:screenContains("Test"), true)
@@ -91,16 +95,22 @@ test.describe("Window", function()
     -- Test 4: Resize via mouse events changes size
     test.it("resize via mouse events changes size", function()
         app:loadString([[
-            lumina.store.set("resizedTo", nil)
+            local WM = require("lux.wm")
+            local mgr = WM.create("resize_test", {
+                {id = "w1", title = "Test", x = 2, y = 1, w = 30, h = 10},
+            })
             lumina.createComponent({
                 id = "test",
                 render = function()
+                    local wins = mgr.getWindows()
+                    local w = wins[1]
                     return lumina.createElement(_G.Window, {
                         id = "w1",
                         title = "Test",
-                        x = 2, y = 1, w = 30, h = 10,
+                        x = w.x, y = w.y,
+                        w = w.w, h = w.h,
                         onResize = function(nw, nh)
-                            lumina.store.set("resizedTo", {w = nw, h = nh})
+                            mgr.setFrame("w1", {w = nw, h = nh})
                         end,
                     })
                 end,
@@ -109,9 +119,7 @@ test.describe("Window", function()
         -- Mouse down on resize handle (bottom-right 3x3 area, inside border)
         -- x+w-3=29, y+h-3=8, so (30, 10) is inside the 3x3 resize zone
         app:mouseDown(30, 10)
-        -- Mouse move to simulate resize
         app:mouseMove(35, 14)
-        -- Mouse up
         app:mouseUp(35, 14)
         app:render()
         -- After resize, window should still be visible (no crash)
