@@ -1,5 +1,9 @@
 package render
 
+import (
+	"github.com/akzj/go-lua/pkg/lua"
+)
+
 // layoutViewportW and layoutViewportH hold the root layout dimensions (viewport).
 // Set at the start of LayoutFull. Used to resolve vw/vh units.
 // Thread-safe because layout is single-threaded.
@@ -426,3 +430,45 @@ func computeFlex(node *Node, x, y, w, h int, depth int) {
 }
 
 // layoutText measures a text node. It wraps text if it exceeds the available width.
+
+// populateRefs walks the tree and fills ref.current with node geometry.
+func populateRefs(node *Node, L *lua.State) {
+	if node == nil {
+		return
+	}
+	if node.RefTableRef != 0 {
+		L.RawGetI(lua.RegistryIndex, int64(node.RefTableRef))
+		if L.IsTable(-1) {
+			// Build the current table: {x, y, w, h, scrollY, scrollHeight, id, type}
+			L.NewTable()
+			curIdx := L.AbsIndex(-1)
+			L.PushInteger(int64(node.X))
+			L.SetField(curIdx, "x")
+			L.PushInteger(int64(node.Y))
+			L.SetField(curIdx, "y")
+			L.PushInteger(int64(node.W))
+			L.SetField(curIdx, "w")
+			L.PushInteger(int64(node.H))
+			L.SetField(curIdx, "h")
+			if node.ScrollY != 0 {
+				L.PushInteger(int64(node.ScrollY))
+				L.SetField(curIdx, "scrollY")
+			}
+			if node.ScrollHeight != 0 {
+				L.PushInteger(int64(node.ScrollHeight))
+				L.SetField(curIdx, "scrollHeight")
+			}
+			if node.ID != "" {
+				L.PushString(node.ID)
+				L.SetField(curIdx, "id")
+			}
+			L.PushString(node.Type)
+			L.SetField(curIdx, "type")
+			L.SetField(-2, "current") // ref.current = curIdx
+		}
+		L.Pop(1) // pop the ref table
+	}
+	for _, child := range node.Children {
+		populateRefs(child, L)
+	}
+}

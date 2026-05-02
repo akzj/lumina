@@ -36,6 +36,7 @@ type Descriptor struct {
 	OnBlur         LuaRef
 	OnSubmit       LuaRef
 	OnOutsideClick LuaRef
+	RefTableRef   LuaRef // Lua registry ref to the useRef() table
 
 	// Component-specific (when Type == "component")
 	ComponentType  string // factory name
