@@ -221,11 +221,6 @@ func (e *Engine) HandleMouseMove(x, y int) {
 		return
 	}
 
-	// If a widget has captured the mouse (dragging), dispatch directly to it
-	if e.dispatchCapturedWidgetEvent("mousemove", x, y) {
-		return // captured widget gets ALL mouse events, skip normal dispatch
-	}
-
 	// Clear stale hovered pointer if node was removed from tree
 	if e.hoveredNode != nil && e.hoveredNode.Removed {
 		e.hoveredNode = nil
@@ -234,10 +229,6 @@ func (e *Engine) HandleMouseMove(x, y int) {
 	target, _ := e.hitTestLayers(x, y)
 
 	if target == e.hoveredNode {
-		// Same node — still dispatch mousemove to widget
-		if target != nil {
-			e.dispatchWidgetEvent(target, "mousemove", "", x, y)
-		}
 		return
 	}
 
@@ -246,7 +237,6 @@ func (e *Engine) HandleMouseMove(x, y int) {
 
 	// Fire onMouseLeave on old node (bubble up to find handler)
 	if old != nil && !old.Removed {
-		e.dispatchWidgetEvent(old, "mouseleave", "", x, y)
 		for n := old; n != nil; n = n.Parent {
 			if n.OnMouseLeave != 0 {
 				e.callLuaRef(n.OnMouseLeave, x, y)
@@ -257,15 +247,12 @@ func (e *Engine) HandleMouseMove(x, y int) {
 
 	// Fire onMouseEnter on new node (bubble up to find handler)
 	if target != nil {
-		e.dispatchWidgetEvent(target, "mouseenter", "", x, y)
 		for n := target; n != nil; n = n.Parent {
 			if n.OnMouseEnter != 0 {
 				e.callLuaRef(n.OnMouseEnter, x, y)
 				break
 			}
 		}
-		// Also dispatch mousemove to widget at current position
-		e.dispatchWidgetEvent(target, "mousemove", "", x, y)
 	}
 }
 
@@ -275,10 +262,6 @@ func (e *Engine) HandleMouseMove(x, y int) {
 func (e *Engine) HandleClick(x, y int) {
 	if len(e.layers) == 0 {
 		return
-	}
-	// During widget capture (drag), all mouse events go to the captured widget
-	if e.capturedComp != nil {
-		return // captured widget only receives mousemove/mouseup
 	}
 
 	// Clear stale focused pointer if node was removed from tree
@@ -323,13 +306,7 @@ func (e *Engine) HandleClick(x, y int) {
 		e.setFocus(nil)
 	}
 
-	// Dispatch widget click event
-	if hitNode != nil {
-		e.dispatchWidgetEvent(hitNode, "click", "", x, y)
-	}
-
 	// Dispatch onClick (bubble up from hit node, skip disabled)
-	// Reuse hitNode from first hit-test — walk up to find nearest onClick handler.
 	for n := hitNode; n != nil; n = n.Parent {
 		if n.OnClick != 0 && !n.Disabled {
 			e.callLuaRef(n.OnClick, x, y)
@@ -344,15 +321,6 @@ func (e *Engine) HandleMouseDown(x, y int) {
 	if len(e.layers) == 0 {
 		return
 	}
-	// During widget capture (drag), all mouse events go to the captured widget
-	if e.capturedComp != nil {
-		return // captured widget only receives mousemove/mouseup
-	}
-	// Dispatch widget mousedown event
-	hitNode, _ := e.hitTestLayers(x, y)
-	if hitNode != nil {
-		e.dispatchWidgetEvent(hitNode, "mousedown", "", x, y)
-	}
 	target, _ := e.hitTestLayersWithHandler(x, y, "mousedown")
 	if target != nil && target.OnMouseDown != 0 && !target.Disabled {
 		e.callLuaRef(target.OnMouseDown, x, y)
@@ -364,19 +332,6 @@ func (e *Engine) HandleMouseDown(x, y int) {
 func (e *Engine) HandleMouseUp(x, y int) {
 	if len(e.layers) == 0 {
 		return
-	}
-
-	// If a widget has captured the mouse, dispatch to it and release capture
-	if e.capturedComp != nil {
-		e.dispatchCapturedWidgetEvent("mouseup", x, y)
-		e.capturedComp = nil // release capture
-		return
-	}
-
-	// Dispatch widget mouseup event
-	hitNode, _ := e.hitTestLayers(x, y)
-	if hitNode != nil {
-		e.dispatchWidgetEvent(hitNode, "mouseup", "", x, y)
 	}
 	target, _ := e.hitTestLayersWithHandler(x, y, "mouseup")
 	if target != nil && target.OnMouseUp != 0 && !target.Disabled {
@@ -410,16 +365,6 @@ func (e *Engine) HandleKeyDown(key string) {
 	if e.focusedNode != nil {
 		if e.HandleInputKeyDown(key) {
 			return // consumed by input system
-		}
-	}
-
-	// Dispatch keydown to Go widget that owns the focused node.
-	// dispatchWidgetEvent walks up from the node to find the owning widget
-	// component and calls DoOnEvent("keydown", key). If the widget consumed
-	// the event, don't dispatch to Lua onKeyDown handler.
-	if e.focusedNode != nil {
-		if e.dispatchWidgetEvent(e.focusedNode, "keydown", key, 0, 0) {
-			return // consumed by Go widget, skip Lua onKeyDown
 		}
 	}
 
@@ -458,10 +403,6 @@ func (e *Engine) HandleKeyDown(key string) {
 func (e *Engine) HandleScroll(x, y, delta int) {
 	if len(e.layers) == 0 {
 		return
-	}
-	// During widget capture (drag), all mouse events go to the captured widget
-	if e.capturedComp != nil {
-		return // captured widget only receives mousemove/mouseup
 	}
 
 	// First: check for a custom Lua onScroll handler (takes priority)
@@ -676,178 +617,4 @@ func (e *Engine) callLuaRefSimple(ref LuaRef) {
 	if status := L.PCall(0, 0, 0); status != lua.OK {
 		L.Pop(1) // pop error message to prevent stack pollution
 	}
-}
-
-// dispatchCapturedWidgetEvent dispatches an event to the currently captured widget.
-// Returns true if capturedComp was set and the event was dispatched (regardless of consumed).
-// The caller is responsible for releasing capture (e.capturedComp = nil) if needed.
-func (e *Engine) dispatchCapturedWidgetEvent(eventType string, x, y int) bool {
-	if e.capturedComp == nil {
-		return false
-	}
-	w, ok := e.widgets[e.capturedComp.Type]
-	if !ok {
-		e.capturedComp = nil
-		return true
-	}
-	state, stateOk := e.widgetStates[e.capturedComp.ID]
-	if !stateOk {
-		e.capturedComp = nil
-		return true
-	}
-	appW, appH := e.appBounds()
-	evt := &WidgetEvent{Type: eventType, X: x, Y: y, ScreenW: appW, ScreenH: appH}
-	if e.capturedComp.RootNode != nil {
-		evt.WidgetX = e.capturedComp.RootNode.X
-		evt.WidgetY = e.capturedComp.RootNode.Y
-		evt.WidgetW = e.capturedComp.RootNode.W
-		evt.WidgetH = e.capturedComp.RootNode.H
-		if scrollNode := findScrollNode(e.capturedComp.RootNode); scrollNode != nil {
-			evt.ScrollY = scrollNode.ScrollY
-			evt.ContentHeight = scrollNode.ScrollHeight
-		}
-	}
-	consumed := w.DoOnEvent(e.capturedComp.Props, state, evt)
-	if consumed {
-		if evt.ScrollBy == 0 {
-			e.capturedComp.Dirty = true
-		}
-		e.needsRender = true
-	}
-	// Fire onChange if widget requested it
-	if evt.FireOnChange != nil && e.capturedComp.RootNode != nil && e.capturedComp.RootNode.OnChange != 0 {
-		e.callLuaRefWithValue(e.capturedComp.RootNode.OnChange, evt.FireOnChange)
-	}
-	// Process scroll request from captured widget
-	if evt.ScrollBy != 0 && e.capturedComp.RootNode != nil {
-		e.scrollNodeBy(e.capturedComp.RootNode, evt.ScrollBy)
-	}
-	return true
-}
-
-// dispatchWidgetEvent walks up from node to find an owning Go widget component,
-// then calls WidgetDef.DoOnEvent. If it returns true (state changed), the
-// component is marked dirty for re-render.
-// If the widget sets FireOnChange on the event, the engine fires the onChange
-// Lua callback on the widget's root node.
-// Returns true if a widget was found AND DoOnEvent returned true (event consumed).
-func (e *Engine) dispatchWidgetEvent(node *Node, eventType, key string, x, y int) bool {
-	comp := findOwnerComponent(node)
-	if comp == nil {
-		return false
-	}
-	w, ok := e.widgets[comp.Type]
-	if !ok {
-		return false
-	}
-	state, ok := e.widgetStates[comp.ID]
-	if !ok {
-		return false
-	}
-	appW, appH := e.appBounds()
-	evt := &WidgetEvent{Type: eventType, Key: key, X: x, Y: y, ScreenW: appW, ScreenH: appH}
-	// Populate widget screen bounds so widgets know their position
-	if comp.RootNode != nil {
-		evt.WidgetX = comp.RootNode.X
-		evt.WidgetY = comp.RootNode.Y
-		evt.WidgetW = comp.RootNode.W
-		evt.WidgetH = comp.RootNode.H
-		// Populate scroll state from the scroll container
-		if scrollNode := findScrollNode(comp.RootNode); scrollNode != nil {
-			evt.ScrollY = scrollNode.ScrollY
-			evt.ContentHeight = scrollNode.ScrollHeight
-		}
-	}
-	consumed := w.DoOnEvent(comp.Props, state, evt)
-	if consumed {
-		// Don't mark dirty if only ScrollBy was set — scrolling is handled
-		// by the engine directly on the existing node tree (no re-render needed).
-		if evt.ScrollBy == 0 {
-			comp.Dirty = true
-		}
-		e.needsRender = true
-	}
-
-	// Mouse capture: widget requests to capture all subsequent mouse events
-	if evt.CaptureMouse {
-		e.capturedComp = comp
-	}
-
-	// Fire onChange if widget requested it
-	if evt.FireOnChange != nil && comp.RootNode != nil && comp.RootNode.OnChange != 0 {
-		e.callLuaRefWithValue(comp.RootNode.OnChange, evt.FireOnChange)
-	}
-
-	// Process layer requests from widget
-	if evt.CreateLayer != nil {
-		req := evt.CreateLayer
-		e.CreateLayer(req.ID, req.Root, req.Modal)
-	}
-	if evt.RemoveLayer != "" {
-		e.RemoveLayer(evt.RemoveLayer)
-	}
-
-	// Scroll request: widget wants to scroll its root node by N lines
-	if evt.ScrollBy != 0 && comp.RootNode != nil {
-		e.scrollNodeBy(comp.RootNode, evt.ScrollBy)
-	}
-
-	return consumed
-}
-
-// callLuaRefWithValue calls a Lua function by registry ref with a single typed value argument.
-func (e *Engine) callLuaRefWithValue(ref LuaRef, value any) {
-	L := e.L
-	L.RawGetI(lua.RegistryIndex, ref)
-	if !L.IsFunction(-1) {
-		L.Pop(1)
-		return
-	}
-	switch v := value.(type) {
-	case bool:
-		L.PushBoolean(v)
-	case string:
-		L.PushString(v)
-	case float64:
-		L.PushNumber(v)
-	case int:
-		L.PushInteger(int64(v))
-	case int64:
-		L.PushInteger(v)
-	case map[string]any:
-		L.CreateTable(0, len(v))
-		for key, val := range v {
-			L.PushString(key)
-			switch tv := val.(type) {
-			case bool:
-				L.PushBoolean(tv)
-			case string:
-				L.PushString(tv)
-			case float64:
-				L.PushNumber(tv)
-			case int:
-				L.PushInteger(int64(tv))
-			case int64:
-				L.PushInteger(tv)
-			default:
-				L.PushNil()
-			}
-			L.SetTable(-3)
-		}
-	default:
-		L.PushNil()
-	}
-	if status := L.PCall(1, 0, 0); status != lua.OK {
-		L.Pop(1) // pop error message to prevent stack pollution
-	}
-}
-
-// findOwnerComponent walks up the node tree to find the nearest Component.
-func findOwnerComponent(node *Node) *Component {
-	for n := node; n != nil; n = n.Parent {
-		if n.Component != nil {
-			return n.Component
-		}
-	}
-	return nil
 }

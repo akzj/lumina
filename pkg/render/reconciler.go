@@ -78,7 +78,7 @@ func reconcileImpl(node *Node, desc Descriptor, freedRefs *[]int64) bool {
 	changed = updateRef(&node.OnSubmit, desc.OnSubmit, freedRefs) || changed
 	changed = updateRef(&node.OnOutsideClick, desc.OnOutsideClick, freedRefs) || changed
 
-	// 4b. Update widget fields
+	// 4b. Update node fields
 	if desc.Focusable != node.Focusable {
 		node.Focusable = desc.Focusable
 		changed = true

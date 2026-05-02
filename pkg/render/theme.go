@@ -1,4 +1,4 @@
-package widget
+package render
 
 // Theme defines the color palette for all widgets.
 // Semantic tokens, not raw colors.

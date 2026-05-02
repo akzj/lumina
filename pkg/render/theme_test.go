@@ -1,4 +1,4 @@
-package widget
+package render
 
 import (
 	"reflect"
@@ -43,7 +43,6 @@ func TestDraculaThemeHasAllFields(t *testing.T) {
 		}
 	}
 }
-
 
 // All widget-specific theme tests have been removed (widgets deleted).
 // Theme system is still tested via ThemeToMap, SetThemeByName, etc.

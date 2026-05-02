@@ -9,46 +9,6 @@ import (
 	"github.com/akzj/lumina/pkg/perf"
 )
 
-// WidgetEvent is the event passed to widget OnEvent handlers.
-// Output fields (FireOnChange) are set by the widget and read by the engine.
-type WidgetEvent struct {
-	Type string // "click", "mousedown", "mouseup", "mouseenter", "mouseleave", "keydown", "focus", "blur"
-	Key  string
-	X, Y int
-	// Output: set by widget, read by engine after OnEvent returns.
-	// Non-nil → engine calls onChange(value) on the widget's root node.
-	FireOnChange any
-
-	// Input: Widget's screen bounds (set by engine BEFORE calling OnEvent).
-	WidgetX, WidgetY, WidgetW, WidgetH int
-
-	// Input: Screen dimensions (set by engine BEFORE calling OnEvent).
-	ScreenW, ScreenH int
-
-	// Output: Mouse capture (set by widget during mousedown to capture subsequent mouse events).
-	CaptureMouse bool
-
-	// Output: Layer management (set by widget, processed by engine AFTER OnEvent).
-	CreateLayer *LayerRequest // non-nil → engine creates this layer
-	RemoveLayer string        // non-empty → engine removes this layer ID
-
-	// Output: Scroll request (set by widget, processed by engine AFTER OnEvent).
-	// Non-zero → engine adjusts ScrollY on the widget's root node by this many lines.
-	ScrollBy int
-
-	// Input: Current scroll state of the widget's scroll container (set by engine).
-	// Populated from the first overflow:"scroll" node in the widget's tree.
-	ScrollY       int // current scroll offset
-	ContentHeight int // total content height (ScrollHeight)
-}
-
-// LayerRequest describes a layer to create.
-type LayerRequest struct {
-	ID    string
-	Root  *Node
-	Modal bool
-}
-
 // AnimationManager is the interface for animation management.
 // Implemented by animation.Manager to avoid import cycles (render cannot import animation).
 type AnimationManager interface {
@@ -58,15 +18,6 @@ type AnimationManager interface {
 	GetAnimValue(id string) (float64, bool)
 	// StopAnim stops and removes an animation by ID.
 	StopAnim(id string)
-}
-
-// WidgetDef is the interface for Go-native widgets.
-// Implemented by widget.Widget (in pkg/widget) to avoid import cycles.
-type WidgetDef interface {
-	GetName() string
-	GetNewState() any
-	DoRender(props map[string]any, state any) any // returns *Node
-	DoOnEvent(props map[string]any, state any, event *WidgetEvent) bool
 }
 
 // Engine is the new render engine that manages persistent RenderNode trees.
@@ -106,17 +57,8 @@ type Engine struct {
 	// Render flag: true when any component is dirty or any node needs layout/paint
 	needsRender bool
 
-	// Go widget registry: name → widget definition
-	widgets map[string]WidgetDef
-
-	// Go widget state: component.ID → widget state
-	widgetStates map[string]any
-
 	// Layer stack: [0] = main app layer, [1..n] = overlay layers
 	layers []*Layer
-
-	// Mouse capture: non-nil = this widget captures all mouse events (for dragging)
-	capturedComp *Component
 
 	// ThemeGetter returns the current theme as a map of color tokens.
 	// Set by the app layer to avoid import cycles (render cannot import widget).
@@ -197,15 +139,10 @@ func (e *Engine) Destroy() {
 		delete(e.components, id)
 	}
 
-	// Free Lua factory refs but preserve Go widget sentinels.
-	// Go widgets are registered once in NewApp and must persist across reloads.
+	// Free all Lua factory refs.
 	for name, ref := range e.factories {
-		if ref != goWidgetSentinel {
-			L.Unref(lua.RegistryIndex, int(ref))
-			delete(e.factories, name)
-		}
-		// Keep goWidgetSentinel entries — they don't hold Lua refs
-		// and need to persist across reloads.
+		L.Unref(lua.RegistryIndex, int(ref))
+		delete(e.factories, name)
 	}
 
 	// Free factory metatable ref.
@@ -218,32 +155,17 @@ func (e *Engine) Destroy() {
 	e.drainPendingUnrefs()
 }
 
-
-
 // NewEngine creates a new render engine.
 func NewEngine(L *lua.State, width, height int) *Engine {
 	return &Engine{
-		L:            L,
-		components:   make(map[string]*Component),
-		factories:    make(map[string]int64),
-		width:        width,
-		height:       height,
-		buffer:       NewCellBuffer(width, height),
-		widgets:      make(map[string]WidgetDef),
-		widgetStates: make(map[string]any),
-		layers:       make([]*Layer, 0, 4),
+		L:          L,
+		components: make(map[string]*Component),
+		factories:  make(map[string]int64),
+		width:      width,
+		height:     height,
+		buffer:     NewCellBuffer(width, height),
+		layers:     make([]*Layer, 0, 4),
 	}
-}
-
-// goWidgetSentinel is stored in e.factories for Go widgets (not a real Lua ref).
-const goWidgetSentinel LuaRef = -999
-
-// RegisterWidget registers a Go widget as a component factory.
-// It becomes available in Lua as lumina.<Name> (e.g., lumina.Button).
-func (e *Engine) RegisterWidget(w WidgetDef) {
-	name := w.GetName()
-	e.factories[name] = goWidgetSentinel
-	e.widgets[name] = w
 }
 
 // Buffer returns the engine's cell buffer.
@@ -263,9 +185,9 @@ func (e *Engine) HasComponent(id string) bool {
 
 // CurrentComponent returns the component currently being rendered (for hooks).
 func (e *Engine) CurrentComponent() *Component { return e.currentComp }
+
 // AllComponents returns all registered components.
 func (e *Engine) AllComponents() map[string]*Component { return e.components }
-
 
 // Resize updates the engine dimensions and buffer.
 func (e *Engine) Resize(width, height int) {
@@ -365,13 +287,11 @@ func (e *Engine) Layers() []*Layer {
 	return e.layers
 }
 
-
 // DefineComponent registers a component factory.
 // Called from Lua: lumina.defineComponent("Cell", renderFn)
 func (e *Engine) DefineComponent(name string, renderFnRef int64) {
 	// Free the old factory ref if redefining (e.g. module-level hot-reload).
-	// Skip goWidgetSentinel — not a real Lua ref.
-	if old, exists := e.factories[name]; exists && old != goWidgetSentinel {
+	if old, exists := e.factories[name]; exists {
 		e.L.Unref(lua.RegistryIndex, int(old))
 	}
 	e.factories[name] = renderFnRef
@@ -573,12 +493,6 @@ func (e *Engine) RenderAll() {
 
 // renderComponent calls the Lua render function and reconciles the result.
 func (e *Engine) renderComponent(comp *Component) {
-	// Check if this is a Go widget
-	if w, ok := e.widgets[comp.Type]; ok {
-		e.renderGoWidget(comp, w)
-		return
-	}
-
 	L := e.L
 
 	// Stop GC during render
@@ -651,106 +565,6 @@ func (e *Engine) renderComponent(comp *Component) {
 	comp.Mounted = true
 	comp.RenderCount++
 }
-
-// renderGoWidget renders a component backed by a Go widget.
-// It calls Widget.Render to get a *Node tree, then replaces the component's RootNode.
-func (e *Engine) renderGoWidget(comp *Component, w WidgetDef) {
-	// Get or create widget state
-	state, ok := e.widgetStates[comp.ID]
-	if !ok {
-		state = w.GetNewState()
-		e.widgetStates[comp.ID] = state
-	}
-
-	// Convert children descriptors to Node trees
-	comp.ChildNodes = convertChildDescriptors(comp.Props)
-
-	// Pass child nodes via props so Widget.Render can use them
-	if len(comp.ChildNodes) > 0 {
-		comp.Props["_childNodes"] = comp.ChildNodes
-	}
-
-	// Call Go render function (returns *Node as any)
-	result := w.DoRender(comp.Props, state)
-	if result == nil {
-		comp.Dirty = false
-		return
-	}
-	newRoot, ok := result.(*Node)
-	if !ok {
-		comp.Dirty = false
-		return
-	}
-
-	if comp.RootNode == nil {
-		// First mount
-		comp.RootNode = newRoot
-		comp.RootNode.Component = comp
-		comp.RootNode.LayoutDirty = true
-		comp.RootNode.PaintDirty = true
-	} else {
-		// Update: replace the root node tree entirely
-		// Preserve scroll positions from old tree to new tree
-		preserveScrollState(comp.RootNode, newRoot)
-		parent := comp.RootNode.Parent
-		markRemovedRecursive(comp.RootNode)
-		newRoot.Parent = parent
-		newRoot.Component = comp
-		newRoot.LayoutDirty = true
-		newRoot.PaintDirty = true
-		comp.RootNode = newRoot
-	}
-
-	comp.Dirty = false
-	comp.Mounted = true
-	comp.RenderCount++
-}
-
-// preserveScrollState copies ScrollY from the old node tree to the new node tree
-// for matching scroll containers. This prevents scroll position from resetting
-// when a Go widget re-renders (e.g., when a sibling window gets focus).
-func preserveScrollState(oldNode, newNode *Node) {
-	if oldNode == nil || newNode == nil {
-		return
-	}
-	if oldNode.Style.Overflow == "scroll" && newNode.Style.Overflow == "scroll" {
-		newNode.ScrollY = oldNode.ScrollY
-	}
-	// Recurse into children (match by index since Go widgets produce deterministic trees)
-	minLen := len(oldNode.Children)
-	if len(newNode.Children) < minLen {
-		minLen = len(newNode.Children)
-	}
-	for i := 0; i < minLen; i++ {
-		preserveScrollState(oldNode.Children[i], newNode.Children[i])
-	}
-}
-
-// copyWidgetEventHandlers copies Lua event refs from the component placeholder
-// node to the widget's rendered root node. This allows Lua callbacks (onClick,
-// etc.) passed as props to fire through the normal event bubbling system.
-func copyWidgetEventHandlers(placeholder *Node, root *Node) {
-	if placeholder == nil || root == nil {
-		return
-	}
-	root.OnClick = placeholder.OnClick
-	root.OnMouseDown = placeholder.OnMouseDown
-	root.OnMouseUp = placeholder.OnMouseUp
-	root.OnFocus = placeholder.OnFocus
-	root.OnBlur = placeholder.OnBlur
-	root.OnKeyDown = placeholder.OnKeyDown
-	root.OnChange = placeholder.OnChange
-	root.OnScroll = placeholder.OnScroll
-	root.OnSubmit = placeholder.OnSubmit
-	root.OnOutsideClick = placeholder.OnOutsideClick
-	// OnMouseEnter/Leave are handled by Widget.OnEvent for hover state,
-	// but also copy them for Lua callbacks
-	root.OnMouseEnter = placeholder.OnMouseEnter
-	root.OnMouseLeave = placeholder.OnMouseLeave
-}
-
-// convertChildDescriptors converts raw children data from Lua props into Node trees.
-// Children come from Lua as []any (each element is map[string]any descriptor).
 
 func (e *Engine) reconcileChildComponents(parent *Component, node *Node) {
 	if node == nil {
@@ -943,14 +757,6 @@ func (e *Engine) cleanupComponentTree(comp *Component) {
 		e.cleanupComponentTree(child)
 	}
 
-	// Clear capturedComp if it points to this component (prevent zombie capture)
-	if e.capturedComp == comp {
-		e.capturedComp = nil
-	}
-
-	// Clean up widget state for this component (prevent memory leak + stale state)
-	delete(e.widgetStates, comp.ID)
-
 	// Drop Lua function refs held in props (nested propFuncRef from readMapFromTable).
 	unrefPropFuncRefsInProps(e.L, comp.Props)
 	comp.Props = nil
@@ -975,7 +781,6 @@ func (e *Engine) cleanupComponentTree(comp *Component) {
 	comp.Children = nil
 	comp.ChildMap = nil
 }
-
 
 // --- Lua API Registration ---
 
@@ -1084,9 +889,6 @@ func (e *Engine) graftWalk(node *Node, visited map[*Node]bool) {
 				node.LayoutDirty = true
 				node.PaintDirty = true
 			}
-			if _, isWidget := e.widgets[comp.Type]; isWidget {
-				copyWidgetEventHandlers(node, comp.RootNode)
-			}
 		}
 	}
 
@@ -1102,18 +904,12 @@ func (e *Engine) graftWalk(node *Node, visited map[*Node]bool) {
 					child.LayoutDirty = true
 					child.PaintDirty = true
 				}
-				// For Go widgets, copy event handlers from placeholder to root node
-				if _, isWidget := e.widgets[comp.Type]; isWidget {
-					copyWidgetEventHandlers(child, comp.RootNode)
-				}
 			}
 		}
 		// Always recurse (component children may contain nested components)
 		e.graftWalk(child, visited)
 	}
 }
-
-
 
 // ToBuffer converts the engine's CellBuffer to a buffer.Buffer for output.
 // Convention translation: in CellBuffer, Wide=true marks the PADDING cell (x+1).
