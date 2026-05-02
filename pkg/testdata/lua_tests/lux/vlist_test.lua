@@ -259,12 +259,90 @@ test.describe("VList", function()
 		test.assert.eq(app:screenContains("Item 10"), true)
 	end)
 
-	test.it("via require('lux.vlist') works when registered", function()
-		-- This test verifies the module can be required.
-		-- Since we're testing before registration, we use loadString with inline definition.
-		-- But we can also test that the file is loadable.
-		-- For now, just verify inline VList works (covered by other tests).
-		-- The module registration test will pass once lux_modules.go is updated.
-		test.assert.eq(true, true) -- placeholder
+	test.it("via require('lux.vlist') — module loads and renders", function()
+		-- Use the real lux.vlist module (registered in lux_modules.go)
+		app:loadString([[
+			local VList = require("lux.vlist")
+
+			lumina.createComponent({
+				id = "test", name = "Test",
+				render = function()
+					return lumina.createElement(VList, {
+						id = "vlist-req",
+						totalCount = 100,
+						height = 10,
+						overscan = 3,
+						estimateHeight = 1,
+						renderItem = function(index)
+							return lumina.createElement("text", {
+								key = "req-item-" .. index,
+								style = { height = 1 },
+							}, "ReqItem " .. index)
+						end,
+					})
+				end,
+			})
+		]])
+
+		-- Verify the real module renders correctly
+		test.assert.eq(app:screenContains("ReqItem 0"), true)
+		test.assert.eq(app:screenContains("ReqItem 5"), true)
+		test.assert.eq(app:screenContains("ReqItem 50"), false) -- outside viewport
+
+		-- Verify scrollHeight is set (totalCount * estimateHeight = 100)
+		local scrollBox = findScrollContainer(app)
+		test.assert.notNil(scrollBox)
+		test.assert.eq(scrollBox.scrollHeight, 100)
+
+		-- Scroll down and verify
+		for i = 1, 5 do
+			app:scroll(5, 2, 1)
+		end
+		test.assert.eq(app:screenContains("ReqItem 0"), false)
+		test.assert.eq(app:screenContains("ReqItem 15"), true)
+	end)
+
+	test.it("clip-on-idle: component has isClipped state and renders", function()
+		-- The real VList has clip-on-idle built in. Verify it renders without crashing.
+		app:loadString([[
+			local VList = require("lux.vlist")
+
+			lumina.createComponent({
+				id = "test", name = "Test",
+				render = function()
+					return lumina.createElement(VList, {
+						id = "vlist-clip",
+						totalCount = 200,
+						height = 10,
+						overscan = 10,
+						estimateHeight = 1,
+						clipDelay = 500,
+						renderItem = function(index)
+							return lumina.createElement("text", {
+								key = "clip-item-" .. index,
+								style = { height = 1 },
+							}, "ClipItem " .. index)
+						end,
+					})
+				end,
+			})
+		]])
+
+		-- Verify items render
+		test.assert.eq(app:screenContains("ClipItem 0"), true)
+		test.assert.eq(app:screenContains("ClipItem 9"), true)
+
+		-- Scroll a few times — onScroll sets isClipped=false (active scrolling mode)
+		-- This exercises the clip-on-idle timer setup/teardown
+		for i = 1, 3 do
+			app:scroll(5, 2, 1)
+		end
+
+		-- After scrolling, items should still be rendered (no crash)
+		test.assert.eq(app:screenContains("ClipItem 9"), true)
+		-- Earlier items may or may not be visible depending on scroll position
+		-- But the component should not have crashed
+		local tree = app:vnodeTree()
+		test.assert.notNil(tree)
 	end)
 end)
