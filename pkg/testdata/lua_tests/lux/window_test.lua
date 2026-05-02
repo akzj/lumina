@@ -77,14 +77,14 @@ test.describe("Window", function()
                 end,
             })
         ]])
-        -- Mouse down on title bar (y=1)
-        app:mouseDown(5, 1)
+        -- Mouse down on title bar (at y+1 = 2, inside border)
+        app:mouseDown(5, 2)
         -- Mouse move to simulate drag
-        app:mouseMove(10, 4)
+        app:mouseMove(10, 5)
         -- Mouse up
-        app:mouseUp(10, 4)
+        app:mouseUp(10, 5)
         app:render()
-        -- After drag, window content should still be visible
+        -- After drag, window content should still be visible (no crash)
         test.assert.eq(app:screenContains("Test"), true)
     end)
 
@@ -106,14 +106,15 @@ test.describe("Window", function()
                 end,
             })
         ]])
-        -- Mouse down on resize handle (bottom-right corner)
+        -- Mouse down on resize handle (bottom-right 3x3 area, inside border)
+        -- x+w-3=29, y+h-3=8, so (30, 10) is inside the 3x3 resize zone
         app:mouseDown(30, 10)
         -- Mouse move to simulate resize
         app:mouseMove(35, 14)
         -- Mouse up
         app:mouseUp(35, 14)
         app:render()
-        -- After resize, window should still be visible
+        -- After resize, window should still be visible (no crash)
         test.assert.eq(app:screenContains("Test"), true)
     end)
 

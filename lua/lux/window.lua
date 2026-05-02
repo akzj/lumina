@@ -48,6 +48,12 @@ local Window = lumina.defineComponent("LuxWindow", function(props)
 		end
 	end
 
+	-- Add resize handle indicator
+	children[#children + 1] = lumina.createElement("text", {
+		key = id .. "-resize",
+		foreground = t.surface1,
+	}, "┘")
+
 	return lumina.createElement("vbox", {
 		key = id,
 		style = {
@@ -61,7 +67,8 @@ local Window = lumina.defineComponent("LuxWindow", function(props)
 			if props.onActivate then props.onActivate() end
 		end,
 		onMouseDown = function(mx, my)
-			if mx >= x + w - 2 and my >= y + h - 2 then
+			-- Resize handle: bottom-right 3x3 area (inside border)
+			if mx >= x + w - 3 and my >= y + h - 3 then
 				resizeRef.current = {
 					active = true,
 					startX = mx, startY = my,
@@ -69,7 +76,8 @@ local Window = lumina.defineComponent("LuxWindow", function(props)
 				}
 				return
 			end
-			if my == y then
+			-- Title bar: first 2 rows (y and y+1, covering border + title text)
+			if my >= y and my <= y + 1 then
 				dragRef.current = {
 					active = true,
 					startX = mx, startY = my,
