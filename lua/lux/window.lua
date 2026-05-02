@@ -74,6 +74,11 @@ local Window = lumina.defineComponent("LuxWindow", function(props)
 		onMouseDown = function(event)
 			local mx, my = event.x, event.y
 
+			-- Non-active window: mousedown immediately activates
+			if not isActive then
+				if props.onActivate then props.onActivate() end
+			end
+
 			-- Resize handle: bottom-right 3x3 area (inside border)
 			if mx >= x + w - 3 and my >= y + h - 3 then
 				resizeRef.current = {
@@ -81,9 +86,6 @@ local Window = lumina.defineComponent("LuxWindow", function(props)
 					startX = mx, startY = my,
 					origW = w, origH = h,
 				}
-				if not isActive then
-					if props.onActivate then props.onActivate() end
-				end
 				event.preventDefault()
 				return
 			end
@@ -94,9 +96,6 @@ local Window = lumina.defineComponent("LuxWindow", function(props)
 					startX = mx, startY = my,
 					origX = x, origY = y,
 				}
-				if not isActive then
-					if props.onActivate then props.onActivate() end
-				end
 				event.preventDefault()
 				return
 			end
@@ -124,10 +123,6 @@ local Window = lumina.defineComponent("LuxWindow", function(props)
 		onMouseUp = function(event)
 			dragRef.current.active = false
 			resizeRef.current.active = false
-			-- Activate on mouse release (click or end of drag)
-			if not isActive then
-				if props.onActivate then props.onActivate() end
-			end
 		end,
 	}, table.unpack(children))
 end)
