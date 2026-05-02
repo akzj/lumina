@@ -142,6 +142,9 @@ func descriptorFromMap(m map[string]any) Descriptor {
 	if ref, ok := m["onMouseUp"].(propFuncRef); ok {
 		desc.OnMouseUp = LuaRef(ref)
 	}
+	if ref, ok := m["onMouseMove"].(propFuncRef); ok {
+		desc.OnMouseMove = LuaRef(ref)
+	}
 	if ref, ok := m["onFocus"].(propFuncRef); ok {
 		desc.OnFocus = LuaRef(ref)
 	}
@@ -230,6 +233,7 @@ func (e *Engine) readDescriptor(L *lua.State, idx int) Descriptor {
 	desc.OnScroll = getRefField(L, absIdx, "onScroll")
 	desc.OnMouseDown = getRefField(L, absIdx, "onMouseDown")
 	desc.OnMouseUp = getRefField(L, absIdx, "onMouseUp")
+	desc.OnMouseMove = getRefField(L, absIdx, "onMouseMove")
 	desc.OnFocus = getRefField(L, absIdx, "onFocus")
 	desc.OnBlur = getRefField(L, absIdx, "onBlur")
 	desc.OnSubmit = getRefField(L, absIdx, "onSubmit")

@@ -140,6 +140,7 @@ type Node struct {
 	OnKeyDown      LuaRef
 	OnMouseDown    LuaRef
 	OnMouseUp      LuaRef
+	OnMouseMove    LuaRef
 	OnFocus        LuaRef
 	OnBlur         LuaRef
 	OnSubmit       LuaRef

@@ -221,6 +221,17 @@ func (e *Engine) HandleMouseMove(x, y int) {
 		return
 	}
 
+	// Mouse capture: if a node has captured mouse, send events directly to it
+	if e.capturedNode != nil && !e.capturedNode.Removed {
+		for n := e.capturedNode; n != nil; n = n.Parent {
+			if n.OnMouseMove != 0 {
+				e.callLuaRef(n.OnMouseMove, x, y)
+				break
+			}
+		}
+		return
+	}
+
 	// Clear stale hovered pointer if node was removed from tree
 	if e.hoveredNode != nil && e.hoveredNode.Removed {
 		e.hoveredNode = nil
@@ -229,6 +240,15 @@ func (e *Engine) HandleMouseMove(x, y int) {
 	target, _ := e.hitTestLayers(x, y)
 
 	if target == e.hoveredNode {
+		// Fire onMouseMove on hovered node even when it hasn't changed
+		if target != nil {
+			for n := target; n != nil; n = n.Parent {
+				if n.OnMouseMove != 0 {
+					e.callLuaRef(n.OnMouseMove, x, y)
+					break
+				}
+			}
+		}
 		return
 	}
 
@@ -250,6 +270,13 @@ func (e *Engine) HandleMouseMove(x, y int) {
 		for n := target; n != nil; n = n.Parent {
 			if n.OnMouseEnter != 0 {
 				e.callLuaRef(n.OnMouseEnter, x, y)
+				break
+			}
+		}
+		// Fire onMouseMove on new hovered node
+		for n := target; n != nil; n = n.Parent {
+			if n.OnMouseMove != 0 {
+				e.callLuaRef(n.OnMouseMove, x, y)
 				break
 			}
 		}
@@ -335,11 +362,26 @@ func (e *Engine) HandleMouseDown(x, y int) {
 	if target != nil && target.OnMouseDown != 0 && !target.Disabled {
 		e.callLuaRef(target.OnMouseDown, x, y)
 	}
+
+	// Mouse capture: if the hit node or its ancestor has onMouseDown, capture it
+	if target != nil {
+		for n := target; n != nil; n = n.Parent {
+			if n.OnMouseDown != 0 {
+				e.capturedNode = n
+				break
+			}
+		}
+	}
 }
 
 // HandleMouseUp processes a mouseup event at screen coordinates (x, y).
 // Finds the deepest node with an onMouseUp handler (bubbling) and dispatches.
 func (e *Engine) HandleMouseUp(x, y int) {
+	// Release mouse capture
+	if e.capturedNode != nil {
+		e.capturedNode = nil
+	}
+
 	if len(e.layers) == 0 {
 		return
 	}

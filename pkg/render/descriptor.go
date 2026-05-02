@@ -32,6 +32,7 @@ type Descriptor struct {
 	OnScroll       LuaRef
 	OnMouseDown    LuaRef
 	OnMouseUp      LuaRef
+	OnMouseMove    LuaRef
 	OnFocus        LuaRef
 	OnBlur         LuaRef
 	OnSubmit       LuaRef

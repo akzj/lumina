@@ -1,23 +1,26 @@
--- examples/windows.lua — Multi-Window Manager using lux.wm
+-- examples/windows.lua — Multi-Window Manager using lux.wm + lux.window
 --
 -- Demonstrates overlapping windows with z-order management:
 --   • Absolute positioning for window placement
 --   • Z-order via child ordering (last child = on top)
 --   • Click to bring window to front
+--   • Drag via title bar (onMouseDown + onMouseMove)
+--   • Resize via bottom-right corner
 --   • Keyboard movement of active window
 --   • Per-window click counters
 --
--- Uses lux.wm module for window state management.
+-- Uses lux.wm for window state + lux.window for drag/resize.
 --
 -- Features showcased:
 --   • position = "absolute" with left/top/width/height
---   • onClick handlers on windows and buttons
+--   • onClick, onMouseDown, onMouseMove, onMouseUp handlers
 --   • lumina.store for state management
 --   • Global keybindings (1/2/3=select, arrows=move, q=quit)
 --
 -- Usage: lumina examples/windows.lua
 
 local WM = require("lux.wm")
+local Window = require("lux.window")
 local mgr = WM.create("wm_state", {
     {id = "win1", title = "📝 Editor", x = 2, y = 1, w = 30, h = 12},
     {id = "win2", title = "📊 Monitor", x = 15, y = 5, w = 30, h = 12},
@@ -31,38 +34,29 @@ local windowContent = {
     win3 = "Colors: Red, Green, Blue\nBrush: Round 3px\nOpacity: 80%",
 }
 
--- Create a single window element
+-- Create a single window element using lux.window
 local function createWindowElement(win, isActive)
     local t = lumina.getTheme()
     local clicks = lumina.useStore("wm_clicks")
     local clickCount = (clicks and clicks[win.id]) or 0
     local content = windowContent[win.id] or ""
-    local borderColor = isActive and t.primary or t.surface1
-    local titleBg = isActive and t.primary or t.surface1
-    local titleFg = isActive and t.base or t.text
-    local bg = isActive and t.surface0 or t.base
 
-    return lumina.createElement("vbox", {
-        key = win.id,
-        style = {
-            position = "absolute",
-            left = win.x,
-            top = win.y,
-            width = win.w,
-            height = win.h,
-            border = "rounded",
-            background = bg,
-        },
-        onClick = function()
+    return lumina.createElement(Window, {
+        id = win.id,
+        title = win.title,
+        x = win.x, y = win.y,
+        w = win.w, h = win.h,
+        isActive = isActive,
+        onActivate = function()
             mgr.activate(win.id)
         end,
+        onMove = function(newX, newY)
+            mgr.setFrame(win.id, {x = newX, y = newY})
+        end,
+        onResize = function(newW, newH)
+            mgr.setFrame(win.id, {w = newW, h = newH})
+        end,
     },
-        -- Title bar
-        lumina.createElement("text", {
-            bold = true,
-            foreground = titleFg,
-            background = titleBg,
-        }, " " .. win.title .. string.rep(" ", math.max(0, win.w - #win.title - 4))),
         -- Content area
         lumina.createElement("text", {
             foreground = t.text,

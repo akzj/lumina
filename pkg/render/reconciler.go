@@ -73,6 +73,7 @@ func reconcileImpl(node *Node, desc Descriptor, freedRefs *[]int64) bool {
 	changed = updateRef(&node.OnScroll, desc.OnScroll, freedRefs) || changed
 	changed = updateRef(&node.OnMouseDown, desc.OnMouseDown, freedRefs) || changed
 	changed = updateRef(&node.OnMouseUp, desc.OnMouseUp, freedRefs) || changed
+	changed = updateRef(&node.OnMouseMove, desc.OnMouseMove, freedRefs) || changed
 	changed = updateRef(&node.OnFocus, desc.OnFocus, freedRefs) || changed
 	changed = updateRef(&node.OnBlur, desc.OnBlur, freedRefs) || changed
 	changed = updateRef(&node.OnSubmit, desc.OnSubmit, freedRefs) || changed
@@ -333,6 +334,9 @@ func collectNodeRefs(node *Node, refs *[]int64) {
 	if node.OnMouseUp != 0 {
 		*refs = append(*refs, node.OnMouseUp)
 	}
+	if node.OnMouseMove != 0 {
+		*refs = append(*refs, node.OnMouseMove)
+	}
 	if node.OnFocus != 0 {
 		*refs = append(*refs, node.OnFocus)
 	}
@@ -403,6 +407,7 @@ func createNodeFromDesc(desc Descriptor) *Node {
 	node.OnScroll = desc.OnScroll
 	node.OnMouseDown = desc.OnMouseDown
 	node.OnMouseUp = desc.OnMouseUp
+	node.OnMouseMove = desc.OnMouseMove
 	node.OnFocus = desc.OnFocus
 	node.OnBlur = desc.OnBlur
 	node.OnSubmit = desc.OnSubmit

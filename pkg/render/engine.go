@@ -45,6 +45,9 @@ type Engine struct {
 	// Focus state: currently focused input/textarea node
 	focusedNode *Node
 
+	// Mouse capture: node that has captured mouse events (drag/resize)
+	capturedNode *Node
+
 	// Lua ref cleanup: refs to unref after reconcile
 	pendingUnrefs []int64
 

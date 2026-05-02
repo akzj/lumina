@@ -38,6 +38,7 @@ func registerLuxModules(L *lua.State) {
 	preloadLuaSource(L, "lux.scrollview", mustReadLuxLua("scrollview.lua"))
 	preloadLuaSource(L, "lux.data_grid", mustReadLuxLua("data_grid.lua"))
 	preloadLuaSource(L, "lux.wm", mustReadLuxLua("wm.lua"))
+	preloadLuaSource(L, "lux.window", mustReadLuxLua("window.lua"))
 	preloadLuaSource(L, "lux.pagination", mustReadLuxLua("pagination.lua"))
 	preloadLuaSource(L, "lux.tabs", mustReadLuxLua("tabs.lua"))
 	preloadLuaSource(L, "lux.alert", mustReadLuxLua("alert.lua"))
