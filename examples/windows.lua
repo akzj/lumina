@@ -1,4 +1,4 @@
--- examples/windows.lua — Multi-Window Manager (keyboard-only)
+-- examples/windows.lua — Multi-Window Manager using lux.wm
 --
 -- Demonstrates overlapping windows with z-order management:
 --   • Absolute positioning for window placement
@@ -7,8 +7,7 @@
 --   • Keyboard movement of active window
 --   • Per-window click counters
 --
--- Pure Lua window management (no Go Window widget needed)
--- with mouse drag-to-move and drag-to-resize support.
+-- Uses lux.wm module for window state management.
 --
 -- Features showcased:
 --   • position = "absolute" with left/top/width/height
@@ -18,64 +17,26 @@
 --
 -- Usage: lumina examples/windows.lua
 
-local initialWindows = {
-    {
-        id = "win1",
-        title = "📝 Editor",
-        x = 2, y = 1, w = 30, h = 12,
-        clicks = 0,
-        content = "Welcome to the editor window.\nType your code here.\nLine 3 of content.",
-    },
-    {
-        id = "win2",
-        title = "📊 Monitor",
-        x = 15, y = 5, w = 30, h = 12,
-        clicks = 0,
-        content = "CPU: 42%  MEM: 1.2GB\nProcesses: 128\nUptime: 3d 14h",
-    },
-    {
-        id = "win3",
-        title = "🎨 Palette",
-        x = 28, y = 3, w = 30, h = 12,
-        clicks = 0,
-        content = "Colors: Red, Green, Blue\nBrush: Round 3px\nOpacity: 80%",
-    },
+local WM = require("lux.wm")
+local mgr = WM.create("wm_state", {
+    {id = "win1", title = "📝 Editor", x = 2, y = 1, w = 30, h = 12},
+    {id = "win2", title = "📊 Monitor", x = 15, y = 5, w = 30, h = 12},
+    {id = "win3", title = "🎨 Palette", x = 28, y = 3, w = 30, h = 12},
+})
+
+-- Per-window content (static)
+local windowContent = {
+    win1 = "Welcome to the editor window.\nType your code here.\nLine 3 of content.",
+    win2 = "CPU: 42%  MEM: 1.2GB\nProcesses: 128\nUptime: 3d 14h",
+    win3 = "Colors: Red, Green, Blue\nBrush: Round 3px\nOpacity: 80%",
 }
 
--- Helper: bring a window to the front of the order
-local function bringToFront(winIdx)
-    local order = lumina.store.get("windowOrder")
-    local newOrder = {}
-    for _, idx in ipairs(order) do
-        if idx ~= winIdx then
-            newOrder[#newOrder + 1] = idx
-        end
-    end
-    newOrder[#newOrder + 1] = winIdx
-    lumina.store.set("windowOrder", newOrder)
-    lumina.store.set("activeIdx", winIdx)
-end
-
--- Helper: increment click counter for a window
-local function incrementClicks(winIdx)
-    local windows = lumina.store.get("windows")
-    local newWindows = {}
-    for i, w in ipairs(windows) do
-        if i == winIdx then
-            local copy = {}
-            for k, v in pairs(w) do copy[k] = v end
-            copy.clicks = w.clicks + 1
-            newWindows[i] = copy
-        else
-            newWindows[i] = w
-        end
-    end
-    lumina.store.set("windows", newWindows)
-end
-
 -- Create a single window element
-local function createWindowElement(win, isActive, winIdx)
+local function createWindowElement(win, isActive)
     local t = lumina.getTheme()
+    local clicks = lumina.useStore("wm_clicks")
+    local clickCount = (clicks and clicks[win.id]) or 0
+    local content = windowContent[win.id] or ""
     local borderColor = isActive and t.primary or t.surface1
     local titleBg = isActive and t.primary or t.surface1
     local titleFg = isActive and t.base or t.text
@@ -93,7 +54,7 @@ local function createWindowElement(win, isActive, winIdx)
             background = bg,
         },
         onClick = function()
-            bringToFront(winIdx)
+            mgr.activate(win.id)
         end,
     },
         -- Title bar
@@ -106,122 +67,96 @@ local function createWindowElement(win, isActive, winIdx)
         lumina.createElement("text", {
             foreground = t.text,
             style = { height = win.h - 5 },
-        }, win.content),
+        }, content),
         -- Button
         lumina.createElement("text", {
             key = win.id .. "-btn",
             foreground = isActive and t.primary or t.accent,
             bold = true,
             onClick = function()
-                incrementClicks(winIdx)
-                bringToFront(winIdx)
+                local c = lumina.store.get("wm_clicks") or {}
+                c[win.id] = (c[win.id] or 0) + 1
+                lumina.store.set("wm_clicks", c)
+                mgr.activate(win.id)
             end,
-        }, " [ Click Me (" .. win.clicks .. ") ]")
+        }, " [ Click Me (" .. clickCount .. ") ]")
     )
 end
 
 lumina.app {
     id = "windows-app",
     store = {
-        windows = initialWindows,
-        windowOrder = {1, 2, 3},  -- indices into windows[], last = top/front
-        activeIdx = 3,            -- which window is "active"
+        wm_clicks = {win1 = 0, win2 = 0, win3 = 0},
     },
     keys = {
         ["ctrl+c"] = function() lumina.quit() end,
         ["q"] = function() lumina.quit() end,
         ["1"] = function()
-            bringToFront(1)
+            mgr.activate("win1")
         end,
         ["2"] = function()
-            bringToFront(2)
+            mgr.activate("win2")
         end,
         ["3"] = function()
-            bringToFront(3)
+            mgr.activate("win3")
         end,
         ["ArrowLeft"] = function()
-            local idx = lumina.store.get("activeIdx")
-            local windows = lumina.store.get("windows")
-            local newWindows = {}
-            for i, w in ipairs(windows) do
-                if i == idx then
-                    local copy = {}
-                    for k, v in pairs(w) do copy[k] = v end
-                    copy.x = math.max(0, w.x - 2)
-                    newWindows[i] = copy
-                else
-                    newWindows[i] = w
-                end
+            local s = lumina.store.get("wm_state")
+            local id = s.activeId
+            if id and s.frames[id] then
+                local f = s.frames[id]
+                mgr.setFrame(id, {x = math.max(0, f.x - 2)})
             end
-            lumina.store.set("windows", newWindows)
         end,
         ["ArrowRight"] = function()
-            local idx = lumina.store.get("activeIdx")
-            local windows = lumina.store.get("windows")
-            local newWindows = {}
-            for i, w in ipairs(windows) do
-                if i == idx then
-                    local copy = {}
-                    for k, v in pairs(w) do copy[k] = v end
-                    copy.x = math.min(50, w.x + 2)
-                    newWindows[i] = copy
-                else
-                    newWindows[i] = w
-                end
+            local s = lumina.store.get("wm_state")
+            local id = s.activeId
+            if id and s.frames[id] then
+                local f = s.frames[id]
+                mgr.setFrame(id, {x = math.min(50, f.x + 2)})
             end
-            lumina.store.set("windows", newWindows)
         end,
         ["ArrowUp"] = function()
-            local idx = lumina.store.get("activeIdx")
-            local windows = lumina.store.get("windows")
-            local newWindows = {}
-            for i, w in ipairs(windows) do
-                if i == idx then
-                    local copy = {}
-                    for k, v in pairs(w) do copy[k] = v end
-                    copy.y = math.max(0, w.y - 2)
-                    newWindows[i] = copy
-                else
-                    newWindows[i] = w
-                end
+            local s = lumina.store.get("wm_state")
+            local id = s.activeId
+            if id and s.frames[id] then
+                local f = s.frames[id]
+                mgr.setFrame(id, {y = math.max(0, f.y - 2)})
             end
-            lumina.store.set("windows", newWindows)
         end,
         ["ArrowDown"] = function()
-            local idx = lumina.store.get("activeIdx")
-            local windows = lumina.store.get("windows")
-            local newWindows = {}
-            for i, w in ipairs(windows) do
-                if i == idx then
-                    local copy = {}
-                    for k, v in pairs(w) do copy[k] = v end
-                    copy.y = math.min(12, w.y + 2)
-                    newWindows[i] = copy
-                else
-                    newWindows[i] = w
-                end
+            local s = lumina.store.get("wm_state")
+            local id = s.activeId
+            if id and s.frames[id] then
+                local f = s.frames[id]
+                mgr.setFrame(id, {y = math.min(12, f.y + 2)})
             end
-            lumina.store.set("windows", newWindows)
         end,
     },
 
     render = function()
         local t = lumina.getTheme()
-        local windows = lumina.useStore("windows")
-        local windowOrder = lumina.useStore("windowOrder")
-        local activeIdx = lumina.useStore("activeIdx")
+        local windows = mgr.getWindows()
+        local activeId = mgr.getActiveId()
 
-        -- Build window elements in windowOrder (last = top = painted last)
+        -- Build window elements in order (last = top = painted last)
         local windowElements = {}
-        for _, orderIdx in ipairs(windowOrder) do
-            local win = windows[orderIdx]
-            local isActive = (orderIdx == activeIdx)
-            windowElements[#windowElements + 1] = createWindowElement(win, isActive, orderIdx)
+        for _, win in ipairs(windows) do
+            local isActive = (win.id == activeId)
+            windowElements[#windowElements + 1] = createWindowElement(win, isActive)
+        end
+
+        -- Find active window title for status bar
+        local activeTitle = ""
+        for _, win in ipairs(windows) do
+            if win.id == activeId then
+                activeTitle = win.title
+                break
+            end
         end
 
         -- Status bar at the bottom
-        local statusText = " [1/2/3] Select  [←→↑↓] Move  [q] Quit  |  Active: " ..
-            windows[activeIdx].title
+        local statusText = " [1/2/3] Select  [←→↑↓] Move  [q] Quit  |  Active: " .. activeTitle
 
         return lumina.createElement("vbox", {
             style = { width = 80, height = 24 },
