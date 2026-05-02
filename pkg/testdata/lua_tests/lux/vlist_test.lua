@@ -346,3 +346,180 @@ test.describe("VList", function()
 		test.assert.notNil(tree)
 	end)
 end)
+
+test.describe("VList variable height", function()
+	local app
+
+	test.beforeEach(function()
+		app = test.createApp(80, 24)
+	end)
+
+	test.afterEach(function()
+		app:destroy()
+	end)
+
+	-- Helper: find the scroll container vbox inside the component
+	local function findScrollContainer(app)
+		local vboxes = app:findAll("vbox")
+		for _, vb in ipairs(vboxes) do
+			if vb.scrollHeight then
+				return vb
+			end
+		end
+		return nil
+	end
+
+	test.it("variable height: items with different heights measured correctly", function()
+		app:loadString([[
+			local VList = require("lux.vlist")
+
+			lumina.createComponent({
+				id = "test", name = "Test",
+				render = function()
+					return lumina.createElement(VList, {
+						id = "vlist-var",
+						totalCount = 10,
+						height = 10,
+						overscan = 3,
+						estimateHeight = 1,
+						renderItem = function(index)
+							local heights = {1, 3, 1, 2, 1, 4, 1, 2, 1, 3}
+							local h = heights[index + 1] or 1
+							return lumina.createElement("text", {
+								key = "var-item-" .. index,
+								style = { height = h },
+							}, "VarItem " .. index)
+						end,
+					})
+				end,
+			})
+		]])
+
+		-- All 10 items visible (viewport=10, overscan=3).
+		-- Actual heights sum = 1+3+1+2+1+4+1+2+1+3 = 19
+		local scrollBox = findScrollContainer(app)
+		test.assert.notNil(scrollBox)
+		test.assert.eq(scrollBox.scrollHeight, 19)
+
+		-- After effect measures, cache populated. scrollHeight stable.
+		app:render()
+		scrollBox = findScrollContainer(app)
+		test.assert.notNil(scrollBox)
+		test.assert.eq(scrollBox.scrollHeight, 19)
+	end)
+
+	test.it("variable height: scrolling with mixed heights", function()
+		app:loadString([[
+			local VList = require("lux.vlist")
+
+			lumina.createComponent({
+				id = "test", name = "Test",
+				render = function()
+					return lumina.createElement(VList, {
+						id = "vlist-mixed",
+						totalCount = 30,
+						height = 10,
+						overscan = 3,
+						estimateHeight = 1,
+						renderItem = function(index)
+							local h = (index % 2 == 0) and 1 or 3
+							return lumina.createElement("text", {
+								key = "mixed-item-" .. index,
+								style = { height = h },
+							}, "MixedItem " .. index)
+						end,
+					})
+				end,
+			})
+		]])
+
+		test.assert.eq(app:screenContains("MixedItem 0"), true)
+		test.assert.eq(app:screenContains("MixedItem 20"), false)
+
+		app:render()
+
+		for i = 1, 5 do
+			app:scroll(5, 2, 1)
+		end
+
+		test.assert.eq(app:screenContains("MixedItem 0"), false)
+		local tree = app:vnodeTree()
+		test.assert.notNil(tree)
+	end)
+
+	test.it("variable height: height cache converges after first render", function()
+		app:loadString([[
+			local VList = require("lux.vlist")
+
+			lumina.createComponent({
+				id = "test", name = "Test",
+				render = function()
+					return lumina.createElement(VList, {
+						id = "vlist-converge",
+						totalCount = 10,
+						height = 10,
+						overscan = 3,
+						estimateHeight = 1,
+						renderItem = function(index)
+							return lumina.createElement("text", {
+								key = "conv-item-" .. index,
+								style = { height = 2 },
+							}, "ConvItem " .. index)
+						end,
+					})
+				end,
+			})
+		]])
+
+		-- All 10 items visible (viewport=10, overscan=3). Actual heights = 2 each.
+		-- scrollHeight = 10 * 2 = 20 from the start (layout uses actual heights).
+		local scrollBox = findScrollContainer(app)
+		test.assert.notNil(scrollBox)
+		test.assert.eq(scrollBox.scrollHeight, 20)
+
+		-- After effect measures, cache populated. scrollHeight stays 20.
+		app:render()
+		scrollBox = findScrollContainer(app)
+		test.assert.notNil(scrollBox)
+		test.assert.eq(scrollBox.scrollHeight, 20)
+
+		-- Stable across another render
+		app:render()
+		scrollBox = findScrollContainer(app)
+		test.assert.notNil(scrollBox)
+		test.assert.eq(scrollBox.scrollHeight, 20)
+	end)
+
+	test.it("variable height: handles items with no explicit height", function()
+		app:loadString([[
+			local VList = require("lux.vlist")
+
+			lumina.createComponent({
+				id = "test", name = "Test",
+				render = function()
+					return lumina.createElement(VList, {
+						id = "vlist-auto",
+						totalCount = 15,
+						height = 10,
+						overscan = 3,
+						estimateHeight = 2,
+						renderItem = function(index)
+							return lumina.createElement("text", {
+								key = "auto-item-" .. index,
+							}, "AutoItem " .. index)
+						end,
+					})
+				end,
+			})
+		]])
+
+		test.assert.eq(app:screenContains("AutoItem 0"), true)
+		test.assert.eq(app:screenContains("AutoItem 4"), true)
+
+		for i = 1, 3 do
+			app:scroll(5, 2, 1)
+		end
+		local tree = app:vnodeTree()
+		test.assert.notNil(tree)
+	end)
+end)
