@@ -119,17 +119,18 @@ function M.create(storeKey, initialWindows)
     --- Should only be called on mousedown/"activate" events, NOT on every move/resize.
     function mgr.activate(id)
         local s = lumina.store.get(storeKey)
+        local newState = clone(s)
         -- Remove from current position in order
-        for i, oid in ipairs(s.order) do
+        for i, oid in ipairs(newState.order) do
             if oid == id then
-                table.remove(s.order, i)
+                table.remove(newState.order, i)
                 break
             end
         end
         -- Append to end (top of z-order)
-        s.order[#s.order + 1] = id
-        s.activeId = id
-        lumina.store.set(storeKey, s)
+        newState.order[#newState.order + 1] = id
+        newState.activeId = id
+        lumina.store.set(storeKey, newState)
     end
 
     --- Update a window's frame (position/size). Does NOT change z-order.

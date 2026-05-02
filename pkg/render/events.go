@@ -375,13 +375,24 @@ func (e *Engine) HandleMouseDown(x, y int) {
 }
 
 // HandleMouseUp processes a mouseup event at screen coordinates (x, y).
-// Finds the deepest node with an onMouseUp handler (bubbling) and dispatches.
+// Sends mouseup to captured node first (critical for drag release), then falls
+// back to hitTest if no capture was active.
 func (e *Engine) HandleMouseUp(x, y int) {
-	// Release mouse capture
-	if e.capturedNode != nil {
-		e.capturedNode = nil
+	// Send mouseup to captured node first (critical for drag release)
+	captured := e.capturedNode
+	e.capturedNode = nil // release capture
+
+	if captured != nil && !captured.Removed {
+		for n := captured; n != nil; n = n.Parent {
+			if n.OnMouseUp != 0 {
+				e.callLuaRef(n.OnMouseUp, x, y)
+				break
+			}
+		}
+		return // captured node handled it, don't also dispatch to hitTest target
 	}
 
+	// No capture — fall back to hitTest
 	if len(e.layers) == 0 {
 		return
 	}

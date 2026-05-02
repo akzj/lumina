@@ -62,6 +62,7 @@ local Window = lumina.defineComponent("LuxWindow", function(props)
 			width = w, height = h,
 			border = "rounded",
 			background = bg,
+			overflow = "hidden",
 		},
 		onClick = function()
 			if props.onActivate then props.onActivate() end
