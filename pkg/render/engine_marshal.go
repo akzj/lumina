@@ -238,6 +238,14 @@ func (e *Engine) readDescriptor(L *lua.State, idx int) Descriptor {
 	desc.Disabled = getBoolField(L, absIdx, "disabled")
 	desc.Role = getStringField(L, absIdx, "role")
 
+	// Read ref prop (table, not function — store as registry ref)
+	L.GetField(absIdx, "ref")
+	if L.IsTable(-1) {
+		desc.RefTableRef = int64(L.Ref(lua.RegistryIndex))
+	} else {
+		L.Pop(1)
+	}
+
 	// Read children
 	L.GetField(absIdx, "children")
 	if L.IsTable(-1) {

@@ -77,6 +77,7 @@ func reconcileImpl(node *Node, desc Descriptor, freedRefs *[]int64) bool {
 	changed = updateRef(&node.OnBlur, desc.OnBlur, freedRefs) || changed
 	changed = updateRef(&node.OnSubmit, desc.OnSubmit, freedRefs) || changed
 	changed = updateRef(&node.OnOutsideClick, desc.OnOutsideClick, freedRefs) || changed
+	changed = updateRef(&node.RefTableRef, desc.RefTableRef, freedRefs) || changed
 
 	// 4b. Update node fields
 	if desc.Focusable != node.Focusable {
@@ -344,6 +345,9 @@ func collectNodeRefs(node *Node, refs *[]int64) {
 	if node.OnOutsideClick != 0 {
 		*refs = append(*refs, node.OnOutsideClick)
 	}
+	if node.RefTableRef != 0 {
+		*refs = append(*refs, node.RefTableRef)
+	}
 }
 
 func childKey(node *Node) string {
@@ -403,6 +407,7 @@ func createNodeFromDesc(desc Descriptor) *Node {
 	node.OnBlur = desc.OnBlur
 	node.OnSubmit = desc.OnSubmit
 	node.OnOutsideClick = desc.OnOutsideClick
+	node.RefTableRef = desc.RefTableRef
 
 	for _, childDesc := range desc.Children {
 		child := createNodeFromDesc(childDesc)

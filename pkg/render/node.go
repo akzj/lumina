@@ -144,6 +144,7 @@ type Node struct {
 	OnBlur         LuaRef
 	OnSubmit       LuaRef
 	OnOutsideClick LuaRef
+	RefTableRef   LuaRef // Lua registry ref to the useRef() table
 
 	// Lifecycle
 	Removed  bool // true when orphaned from tree (stale pointer guard)

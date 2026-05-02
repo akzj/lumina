@@ -109,12 +109,20 @@ func (e *Engine) MarkAllComponentsDirty() {
 }
 
 // drainPendingUnrefs frees all Lua registry refs collected during reconcile.
+// For table refs (useRef), sets ref.current = nil before unreffing.
 func (e *Engine) drainPendingUnrefs() {
 	if len(e.pendingUnrefs) == 0 {
 		return
 	}
 	L := e.L
 	for _, ref := range e.pendingUnrefs {
+		// If this ref is a table (useRef), set current = nil before unreffing
+		L.RawGetI(lua.RegistryIndex, ref)
+		if L.IsTable(-1) {
+			L.PushNil()
+			L.SetField(-2, "current")
+		}
+		L.Pop(1)
 		L.Unref(lua.RegistryIndex, int(ref))
 	}
 	e.pendingUnrefs = e.pendingUnrefs[:0]
@@ -394,6 +402,13 @@ func (e *Engine) RenderDirty() {
 		}
 	}
 
+	// Populate ref.current for nodes with ref prop (after layout, before paint)
+	for _, layer := range e.layers {
+		if layer.Root != nil {
+			populateRefs(layer.Root, e.L)
+		}
+	}
+
 	// 5. Paint all layers (bottom to top)
 	for i, layer := range e.layers {
 		if layer.Root != nil {
@@ -472,6 +487,7 @@ func (e *Engine) RenderAll() {
 			}
 			LayoutFull(layer.Root, lx, ly, lw, lh)
 		}
+		populateRefs(layer.Root, e.L)
 		paintNode(e.buffer, layer.Root)
 		clearPaintDirty(layer.Root)
 	}
