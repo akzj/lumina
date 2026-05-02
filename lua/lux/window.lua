@@ -65,6 +65,7 @@ local Window = lumina.defineComponent("LuxWindow", function(props)
 			overflow = "hidden",
 		},
 		onClick = function(event)
+			-- Fallback for direct HandleClick calls (test framework)
 			if not isActive then
 				if props.onActivate then props.onActivate() end
 				event.stopPropagation()
@@ -73,13 +74,6 @@ local Window = lumina.defineComponent("LuxWindow", function(props)
 		onMouseDown = function(event)
 			local mx, my = event.x, event.y
 
-			-- Non-active window: activate and prevent click from reaching children
-			if not isActive then
-				if props.onActivate then props.onActivate() end
-				event.preventDefault()
-				return
-			end
-
 			-- Resize handle: bottom-right 3x3 area (inside border)
 			if mx >= x + w - 3 and my >= y + h - 3 then
 				resizeRef.current = {
@@ -87,6 +81,10 @@ local Window = lumina.defineComponent("LuxWindow", function(props)
 					startX = mx, startY = my,
 					origW = w, origH = h,
 				}
+				if not isActive then
+					if props.onActivate then props.onActivate() end
+				end
+				event.preventDefault()
 				return
 			end
 			-- Title bar: first 2 rows (y and y+1, covering border + title text)
@@ -96,6 +94,15 @@ local Window = lumina.defineComponent("LuxWindow", function(props)
 					startX = mx, startY = my,
 					origX = x, origY = y,
 				}
+				if not isActive then
+					if props.onActivate then props.onActivate() end
+				end
+				event.preventDefault()
+				return
+			end
+			-- Content area: prevent click from reaching children for inactive window
+			if not isActive then
+				event.preventDefault()
 			end
 		end,
 		onMouseMove = function(event)
@@ -117,6 +124,10 @@ local Window = lumina.defineComponent("LuxWindow", function(props)
 		onMouseUp = function(event)
 			dragRef.current.active = false
 			resizeRef.current.active = false
+			-- Activate on mouse release (click or end of drag)
+			if not isActive then
+				if props.onActivate then props.onActivate() end
+			end
 		end,
 	}, table.unpack(children))
 end)
