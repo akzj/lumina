@@ -35,26 +35,37 @@ local VList = lumina.defineComponent("LuxVList", function(props)
 		return heightCache[idx] or estimateHeight
 	end
 
-	-- Find which item is at scrollY (linear scan accumulating heights)
+	-- Build prefix sums once per render (single O(n) pass)
+	-- prefixSums[i] = accumulated height up to and including item i
+	local prefixSums = {}
+	local totalContentHeight = 0
+	local acc = 0
+	for i = 0, totalCount - 1 do
+		acc = acc + getHeight(i)
+		prefixSums[i] = acc
+	end
+	totalContentHeight = acc
+
+	-- O(log n) binary search on prefix sums
 	local function findIndexAt(targetY)
-		local acc = 0
-		for i = 0, totalCount - 1 do
-			local h = getHeight(i)
-			if acc + h > targetY then
-				return i
+		if targetY <= 0 then return 0 end
+		if totalCount == 0 then return 0 end
+		local lo, hi = 0, totalCount - 1
+		while lo < hi do
+			local mid = math.floor((lo + hi) / 2)
+			if prefixSums[mid] <= targetY then
+				lo = mid + 1
+			else
+				hi = mid
 			end
-			acc = acc + h
 		end
-		return totalCount
+		return lo
 	end
 
-	-- Accumulated height up to (not including) idx
+	-- O(1) direct lookup on prefix sums
 	local function heightUpTo(idx)
-		local acc = 0
-		for i = 0, idx - 1 do
-			acc = acc + getHeight(i)
-		end
-		return acc
+		if idx <= 0 then return 0 end
+		return prefixSums[idx - 1] or 0
 	end
 
 	-- Calculate visible range using actual heights
@@ -93,7 +104,7 @@ local VList = lumina.defineComponent("LuxVList", function(props)
 	end
 
 	-- Bottom spacer
-	local bottomH = heightUpTo(totalCount) - heightUpTo(endIdx)
+	local bottomH = totalContentHeight - heightUpTo(endIdx)
 	if bottomH > 0 then
 		children[#children + 1] = lumina.createElement("box", {
 			key = "vlist_bottom",
