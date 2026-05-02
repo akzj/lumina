@@ -155,6 +155,16 @@ func (e *Engine) RegisterLuaAPI() {
 	L.PushFunction(e.luaUseAnimation)
 	L.SetField(tblIdx, "useAnimation")
 
+	// lumina.scrollNode(id, delta) → newScrollY
+	L.PushFunction(func(L *lua.State) int {
+		id := L.CheckString(1)
+		delta := int(L.CheckInteger(2))
+		newSY := e.ScrollNodeByID(id, delta)
+		L.PushInteger(int64(newSY))
+		return 1
+	})
+	L.SetField(tblIdx, "scrollNode")
+
 	L.SetGlobal("lumina")
 }
 

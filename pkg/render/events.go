@@ -269,6 +269,16 @@ func (e *Engine) HandleClick(x, y int) {
 		e.focusedNode = nil
 	}
 
+	// Phase A: Scrollbar click — check if click is on a scrollbar column
+	for i := len(e.layers) - 1; i >= 0; i-- {
+		if e.layers[i].Root != nil {
+			if e.handleScrollbarClick(e.layers[i].Root, x, y) {
+				e.needsRender = true
+				return
+			}
+		}
+	}
+
 	// Hit-test across layers for the deepest node at this position
 	hitNode, hitLayer := e.hitTestLayers(x, y)
 
@@ -457,6 +467,108 @@ func (e *Engine) autoScroll(node *Node, delta int) {
 	e.needsRender = true
 }
 
+// handleScrollbarClick walks the tree (DFS) looking for scroll containers with visible
+// scrollbars. If the click (x,y) lands on a scrollbar, it handles page up/down or
+// thumb-jump and returns true. The scrollbar geometry matches paintScrollbar.
+func (e *Engine) handleScrollbarClick(node *Node, x, y int) bool {
+	if node == nil {
+		return false
+	}
+	if node.Style.Display == "none" || node.Style.Visibility == "hidden" {
+		return false
+	}
+
+	// Check children first (DFS) — deepest scroll container wins
+	for _, child := range node.Children {
+		if e.handleScrollbarClick(child, x, y) {
+			return true
+		}
+	}
+
+	// Check this node: is it a scroll container with a visible scrollbar?
+	if node.Style.Overflow != "scroll" {
+		return false
+	}
+	maxScroll := computeMaxScrollY(node)
+	if maxScroll <= 0 {
+		return false
+	}
+
+	bw := 0
+	if hasBorder(node.Style) {
+		bw = 1
+	}
+	scrollbarX := node.X + node.W - bw - node.Style.PaddingRight - 1
+	innerY1 := node.Y + bw + node.Style.PaddingTop
+	innerY2 := node.Y + node.H - bw - node.Style.PaddingBottom
+
+	// Is click on the scrollbar column?
+	if x != scrollbarX {
+		return false
+	}
+	if y < innerY1 || y >= innerY2 {
+		return false
+	}
+
+	visibleH := innerY2 - innerY1
+	totalH := node.ScrollHeight
+	if totalH <= 0 || visibleH <= 0 {
+		return false
+	}
+
+	// Thumb geometry (same as paintScrollbar)
+	thumbSize := visibleH * visibleH / totalH
+	if thumbSize < 1 {
+		thumbSize = 1
+	}
+	if thumbSize > visibleH {
+		thumbSize = visibleH
+	}
+	trackSpace := visibleH - thumbSize
+	thumbPos := 0
+	if maxScroll > 0 && trackSpace > 0 {
+		thumbPos = node.ScrollY * trackSpace / maxScroll
+	}
+
+	clickRel := y - innerY1 // click position relative to top of visible area
+
+	if clickRel < thumbPos {
+		// Click above thumb → page up
+		contentH := visibleH
+		newSY := node.ScrollY - contentH
+		if newSY < 0 {
+			newSY = 0
+		}
+		node.ScrollY = newSY
+		node.PaintDirty = true
+		return true
+	} else if clickRel < thumbPos+thumbSize {
+		// Click on thumb → jump to proportional position
+		thumbCenter := thumbPos + thumbSize/2
+		fraction := float64(thumbCenter) / float64(visibleH)
+		newSY := int(fraction * float64(totalH))
+		if newSY < 0 {
+			newSY = 0
+		}
+		if newSY > maxScroll {
+			newSY = maxScroll
+		}
+		node.ScrollY = newSY
+		node.PaintDirty = true
+		return true
+	} else {
+		// Click below thumb → page down
+		contentH := visibleH
+		newSY := node.ScrollY + contentH
+		if newSY > maxScroll {
+			newSY = maxScroll
+		}
+		node.ScrollY = newSY
+		node.PaintDirty = true
+		return true
+	}
+}
+
 // scrollNodeBy adjusts a node's ScrollY by the given number of lines (positive=down, negative=up).
 // appBounds returns the app's logical dimensions (root component's rendered size).
 // Falls back to engine dimensions (terminal size) if root is not available.
@@ -505,6 +617,71 @@ func findScrollNode(node *Node) *Node {
 	}
 	for _, ch := range node.Children {
 		if found := findScrollNode(ch); found != nil {
+			return found
+		}
+	}
+	return nil
+}
+
+// ScrollNodeByID finds a node by its ID across all layers and adjusts its ScrollY by delta.
+// Returns the new ScrollY value. The target must be a node with overflow:"scroll" style.
+// If the ID matches a non-scroll node (e.g., a component placeholder), it searches children
+// for the actual scroll container with the same ID.
+func (e *Engine) ScrollNodeByID(id string, delta int) int {
+	for _, layer := range e.layers {
+		if layer.Root != nil {
+			if found := e.findNodeByID(layer.Root, id); found != nil {
+				// If the found node is not a scroll container, search its children
+				// (e.g., component placeholder wrapping a scroll vbox with the same ID)
+				scrollNode := found
+				if scrollNode.Style.Overflow != "scroll" {
+					scrollNode = e.findScrollNodeByID(scrollNode, id)
+					if scrollNode == nil {
+						return 0
+					}
+				}
+				maxScroll := computeMaxScrollY(scrollNode)
+				newSY := scrollNode.ScrollY + delta
+				if newSY < 0 {
+					newSY = 0
+				}
+				if newSY > maxScroll {
+					newSY = maxScroll
+				}
+				if newSY != scrollNode.ScrollY {
+					scrollNode.ScrollY = newSY
+					scrollNode.PaintDirty = true
+					e.needsRender = true
+				}
+				return newSY
+			}
+		}
+	}
+	return 0
+}
+
+// findScrollNodeByID searches children of node for a node with the given ID
+// that has overflow:"scroll" style.
+func (e *Engine) findScrollNodeByID(node *Node, id string) *Node {
+	for _, child := range node.Children {
+		if child.ID == id && child.Style.Overflow == "scroll" {
+			return child
+		}
+		if found := e.findScrollNodeByID(child, id); found != nil {
+			return found
+		}
+	}
+	return nil
+}
+
+// findNodeByID searches the tree rooted at node for a node with the given ID.
+// Returns nil if not found.
+func (e *Engine) findNodeByID(node *Node, id string) *Node {
+	if node.ID == id {
+		return node
+	}
+	for _, child := range node.Children {
+		if found := e.findNodeByID(child, id); found != nil {
 			return found
 		}
 	}
