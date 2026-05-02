@@ -20,6 +20,15 @@
 - `useState` — 组件状态管理
 - 子组件嫁接（graft）机制
 
+### 组件库（Lua lux）
+- 基础组件（Button, Card, Dialog, Select, ...）
+- 纯 Lua 实现，基于 defineComponent
+
+### Go Widget 清理
+- 完全移除 Go widget 基础设施（WidgetEvent, WidgetDef, widgets map, widgetStates）
+- Theme 系统迁移至 `pkg/render/theme.go`
+- `pkg/widget/` 包已删除
+
 ### 布局
 - Flex 布局（vbox 垂直 / hbox 水平）
 - flex 分配、justify、align
@@ -50,10 +59,6 @@
 ---
 
 ## 🔜 计划中
-
-### 组件库
-- 基础组件（Button, Card, Dialog, Select, ...）
-- 纯 Lua 实现，基于 defineComponent
 
 ### Web 运行时
 - WebSocket 服务器

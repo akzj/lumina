@@ -4,6 +4,8 @@
 package v2
 
 import (
+	"fmt"
+	"os"
 	"time"
 
 	"github.com/akzj/go-lua/pkg/lua"
@@ -17,7 +19,6 @@ import (
 	"github.com/akzj/lumina/pkg/render"
 	"github.com/akzj/lumina/pkg/router"
 	"github.com/akzj/lumina/pkg/store"
-	"github.com/akzj/lumina/pkg/widget"
 )
 
 // App is the composition root — ties all v2 modules together.
@@ -71,23 +72,19 @@ func NewApp(L *lua.State, w, h int, adapter output.Adapter) *App {
 	t := perf.NewTracker(60)
 
 	eng := render.NewEngine(L, w, h)
-	for _, wgt := range widget.All() {
-		eng.RegisterWidget(wgt)
-	}
 	eng.RegisterLuaAPI()
 	eng.ThemeGetter = func() map[string]string {
-		return widget.ThemeToMap(widget.CurrentTheme)
+		return render.ThemeToMap(render.CurrentTheme)
 	}
 	eng.ThemeSetter = func(name string) bool {
-		return widget.SetThemeByName(name)
+		return render.SetThemeByName(name)
 	}
 	registerLuxModules(L)
 	eng.SetTracker(t)
 
 	sched := lua.NewScheduler(L)
 	sched.OnError = func(err error) {
-		// Log async coroutine errors (non-fatal)
-		_ = err // TODO: wire to proper logger if available
+		fmt.Fprintf(os.Stderr, "coroutine error: %v\n", err)
 	}
 
 	eng.SetScheduler(sched)

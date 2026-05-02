@@ -80,21 +80,6 @@ func (e *Engine) RegisterLuaAPI() {
 	L.NewTable()
 	L.PushFunction(e.luaFactoryCall)
 	L.SetField(-2, "__call")
-	sharedMetaIdx := L.AbsIndex(-1)
-
-	// Register Go widgets as Lua-accessible factories (e.g., lumina.Button)
-	for name := range e.widgets {
-		L.NewTable()
-		factoryIdx := L.AbsIndex(-1)
-		L.PushBoolean(true)
-		L.SetField(factoryIdx, "_isFactory")
-		L.PushString(name)
-		L.SetField(factoryIdx, "_name")
-		// Set callable metatable so lumina.Button { props } works
-		L.PushValue(sharedMetaIdx)
-		L.SetMetatable(factoryIdx)
-		L.SetField(tblIdx, name) // lumina.Button = {_isFactory=true, _name="Button"}
-	}
 
 	// Store shared metatable as registry ref for reuse by defineComponent
 	e.factoryMetaRef = int64(L.Ref(lua.RegistryIndex)) // pops metatable
@@ -242,7 +227,7 @@ func (e *Engine) luaDefineComponent(L *lua.State) int {
 	L.PushValue(2)
 	ref := L.Ref(lua.RegistryIndex)
 	// Free old factory ref if redefining (prevent Lua registry leak)
-	if old, exists := e.factories[name]; exists && old != goWidgetSentinel {
+	if old, exists := e.factories[name]; exists {
 		L.Unref(lua.RegistryIndex, int(old))
 	}
 	e.factories[name] = int64(ref)
@@ -366,19 +351,6 @@ func (e *Engine) luaCreateElement(L *lua.State) int {
 
 	// Registered Go widgets must use the component placeholder shape so graftWalk,
 	// hit-testing, and focus traversal see the widget's rendered RootNode.
-	if _, isWidget := e.widgets[nodeType]; isWidget {
-		L.NewTable()
-		resultIdx := L.AbsIndex(-1)
-		propsArg := 0
-		firstChildArg := 2
-		if nArgs >= 2 && L.IsTable(2) {
-			propsArg = 2
-			firstChildArg = 3
-		}
-		e.finishComponentPlaceholderDescriptor(L, resultIdx, nodeType, propsArg, firstChildArg, nArgs)
-		return 1
-	}
-
 	// Create result table
 	L.NewTable()
 	resultIdx := L.AbsIndex(-1)
