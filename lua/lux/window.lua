@@ -82,6 +82,7 @@ local Window = lumina.defineComponent("LuxWindow", function(props)
 	children[#children + 1] = lumina.createElement("text", {
 		key = id .. "-resize",
 		foreground = t.surface1,
+		style = { textAlign = "right" },
 	}, "┘")
 
 	return lumina.createElement("vbox", {
