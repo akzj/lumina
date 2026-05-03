@@ -334,6 +334,7 @@ func (a *App) handleInputEvent(ie InputEvent) {
 			Type: ie.Type,
 			Key:  key,
 		})
+		a.RenderDirty()
 
 		// Re-output screen buffer after character input to clear IME artifacts.
 		// When a CJK IME is active, the terminal writes composition characters

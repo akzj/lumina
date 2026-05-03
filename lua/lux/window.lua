@@ -29,14 +29,38 @@ local Window = lumina.defineComponent("LuxWindow", function(props)
 	local dragRef = lumina.useRef({active = false, startX = 0, startY = 0, origX = 0, origY = 0})
 	local resizeRef = lumina.useRef({active = false, startX = 0, startY = 0, origW = 0, origH = 0})
 
-	-- Build title bar text, capped to available inner width
+	-- Build title bar text, capped to available inner width (display columns)
 	local innerW = math.max(0, w - 2) -- subtract border (1 left + 1 right)
-	local titleText = " " .. title
-	if #titleText > innerW then
-		titleText = string.sub(titleText, 1, innerW)
-	else
-		titleText = titleText .. string.rep(" ", math.max(0, innerW - #titleText))
+	local rawTitle = " " .. title
+
+	-- Calculate display width and truncate by display columns
+	local displayW = 0
+	local truncated = ""
+	for _, code in utf8.codes(rawTitle) do
+		local ch = utf8.char(code)
+		-- Approximate: CJK/emoji = 2 cols, others = 1 col
+		local charW = 1
+		if code >= 0x1100 and (
+			(code <= 0x115F) or                         -- Hangul Jamo
+			(code >= 0x2E80 and code <= 0x9FFF) or      -- CJK
+			(code >= 0xAC00 and code <= 0xD7AF) or      -- Hangul Syllables
+			(code >= 0xF900 and code <= 0xFAFF) or      -- CJK Compatibility
+			(code >= 0xFE10 and code <= 0xFE6F) or      -- CJK forms
+			(code >= 0xFF01 and code <= 0xFF60) or      -- Fullwidth
+			(code >= 0xFFE0 and code <= 0xFFE6) or      -- Fullwidth signs
+			(code >= 0x1F300 and code <= 0x1F9FF) or    -- Emoji
+			(code >= 0x20000 and code <= 0x2FA1F)       -- CJK Extension
+		) then
+			charW = 2
+		end
+		if displayW + charW > innerW then
+			break
+		end
+		displayW = displayW + charW
+		truncated = truncated .. ch
 	end
+	-- Pad remaining width with spaces
+	local titleText = truncated .. string.rep(" ", math.max(0, innerW - displayW))
 
 	local children = {
 		-- Title bar
