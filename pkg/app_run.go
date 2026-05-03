@@ -361,6 +361,7 @@ func (a *App) handleInputEvent(ie InputEvent) {
 			Y:    ie.Y,
 			Key:  ie.Button, // "up" or "down"
 		})
+		a.RenderDirty()
 
 	case "resize":
 		a.Resize(ie.X, ie.Y)

@@ -67,6 +67,7 @@ local Window = lumina.defineComponent("LuxWindow", function(props)
 			left = x, top = y,
 			width = w, height = h,
 			border = "rounded",
+			borderColor = borderColor,
 			background = bg,
 			overflow = "hidden",
 		},
@@ -122,7 +123,7 @@ local Window = lumina.defineComponent("LuxWindow", function(props)
 				local dx = mx - resizeRef.current.startX
 				local dy = my - resizeRef.current.startY
 				local newW = math.max(10, resizeRef.current.origW + dx)
-				local newH = math.max(3, resizeRef.current.origH + dy)
+				local newH = math.max(5, resizeRef.current.origH + dy)
 				if props.onResize then props.onResize(newW, newH) end
 			end
 		end,

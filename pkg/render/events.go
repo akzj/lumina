@@ -373,14 +373,9 @@ func (e *Engine) HandleMouseDown(x, y int) {
 		}
 	}
 
-	// Mouse capture: if the hit node or its ancestor has onMouseDown, capture it
+	// Mouse capture: target already has onMouseDown (found by hitTestLayersWithHandler)
 	if target != nil {
-		for n := target; n != nil; n = n.Parent {
-			if n.OnMouseDown != 0 {
-				e.capturedNode = n
-				break
-			}
-		}
+		e.capturedNode = target
 	}
 }
 
