@@ -35,6 +35,44 @@ func TestHorizontalScroll_ScrollWidthComputed(t *testing.T) {
 	}
 }
 
+func TestHorizontalScroll_NowrapTextExpandsInScrollContainer(t *testing.T) {
+	// Verify that layout_vbox gives nowrap text its intrinsic width in scroll containers
+	root := &Node{
+		Type: "vbox",
+		W:    20,
+		H:    10,
+		Style: Style{
+			Overflow: "scroll",
+		},
+	}
+	// A text node with content wider than container (30 chars > 20 cols)
+	textNode := &Node{
+		Type:    "text",
+		Content: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123",
+		Parent:  root,
+		Style: Style{
+			WhiteSpace: "nowrap",
+		},
+	}
+	root.Children = []*Node{textNode}
+
+	// Run layout
+	computeFlex(root, 0, 0, 20, 10, 0)
+
+	// The text node should have W > 20 (its intrinsic width = 30)
+	if textNode.W <= 20 {
+		t.Errorf("nowrap text W = %d, want > 20 (intrinsic width should expand in scroll container)", textNode.W)
+	}
+	if textNode.W != 30 {
+		t.Errorf("nowrap text W = %d, want 30 (intrinsic width of 30-char string)", textNode.W)
+	}
+
+	// ScrollWidth should be >= 30
+	if root.ScrollWidth < 30 {
+		t.Errorf("root.ScrollWidth = %d, want >= 30", root.ScrollWidth)
+	}
+}
+
 func TestHorizontalScroll_HandleScrollH(t *testing.T) {
 	e := &Engine{}
 	e.layers = append(e.layers, &Layer{})

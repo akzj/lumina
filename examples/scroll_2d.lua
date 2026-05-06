@@ -27,6 +27,7 @@ lumina.app {
             rows[#rows + 1] = lumina.createElement("text", {
                 key = "row" .. r,
                 style = {
+                    whiteSpace = "nowrap",
                     foreground = (r % 2 == 0) and t.text or t.subtext1,
                     background = (r % 2 == 0) and t.surface0 or t.base,
                 },

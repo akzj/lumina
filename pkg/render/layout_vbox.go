@@ -299,6 +299,17 @@ func layoutVBox(node *Node, contentX, contentY, contentW, contentH int, style St
 			childW = clamp(contentW, cMinW, cMaxW)
 		}
 
+		// For scroll containers: let nowrap text children expand to intrinsic width
+		// so they can overflow and create horizontal scroll content.
+		if style.Overflow == "scroll" && rw == 0 {
+			if child.Type == "text" && cs.WhiteSpace == "nowrap" && child.Content != "" {
+				intrinsicW := stringWidth(child.Content)
+				if intrinsicW > childW {
+					childW = intrinsicW
+				}
+			}
+		}
+
 		// Cross-axis alignment: check alignSelf first, fall back to parent's align
 		align := style.Align
 		if cs.AlignSelf != "" {
