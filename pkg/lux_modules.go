@@ -52,6 +52,7 @@ func registerLuxModules(L *lua.State) {
 	// All Go widgets removed — UI is built with lux components or engine primitives
 	preloadLuaSource(L, "lux.toast", mustReadLuxLua("toast.lua"))
 	preloadLuaSource(L, "lux.tree", mustReadLuxLua("tree.lua"))
+	preloadLuaSource(L, "lux.split_pane", mustReadLuxLua("split_pane.lua"))
 	preloadLuaSource(L, "lux.form", mustReadLuxLua("form.lua"))
 	preloadLuaSource(L, "lux.atlantis", mustReadLuxLua("atlantis.lua"))
 	preloadLuaSource(L, "lux.atlantis_form_demo", mustReadLuxLua("atlantis_form_demo.lua"))

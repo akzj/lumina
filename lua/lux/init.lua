@@ -36,6 +36,7 @@ M.Switch = require("lux.switch")
 -- All Go widgets removed — use engine primitives (vbox/hbox/text/input) + lux components
 M.Toast = require("lux.toast")
 M.Tree = require("lux.tree")
+M.SplitPane = require("lux.split_pane")
 M.Form = require("lux.form")
 M.Atlantis = require("lux.atlantis")
 M.AtlantisFormDemo = require("lux.atlantis_form_demo")
