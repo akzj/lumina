@@ -225,6 +225,12 @@ func (e *Engine) HandleMouseMove(x, y int) {
 		return
 	}
 
+	// Scrollbar drag in progress?
+	if e.scrollbarDragNode != nil {
+		e.handleScrollbarDrag(x, y)
+		return
+	}
+
 	// Mouse capture: if a node has captured mouse, send events directly to it
 	// Note: we deliver events even if the node is Removed — the Lua refs are still
 	// valid (pendingUnrefs aren't drained until next renderInOrder), and we MUST
@@ -369,6 +375,12 @@ func (e *Engine) HandleMouseDown(x, y int) {
 	if len(e.layers) == 0 {
 		return
 	}
+
+	// Check if mousedown is on a scrollbar thumb → start drag
+	if e.handleScrollbarDragStart(x, y) {
+		return
+	}
+
 	target, _ := e.hitTestLayersWithHandler(x, y, "mousedown")
 	if target != nil && target.OnMouseDown != 0 && !target.Disabled {
 		result := e.callLuaRef(target.OnMouseDown, x, y)
@@ -392,6 +404,12 @@ func (e *Engine) ClickPrevented() bool {
 // Sends mouseup to captured node first (critical for drag release), then falls
 // back to hitTest if no capture was active.
 func (e *Engine) HandleMouseUp(x, y int) {
+	// End scrollbar drag if active
+	if e.scrollbarDragNode != nil {
+		e.scrollbarDragNode = nil
+		return
+	}
+
 	// Send mouseup to captured node first (critical for drag release)
 	captured := e.capturedNode
 	e.capturedNode = nil // release capture
@@ -635,6 +653,130 @@ func (e *Engine) handleScrollbarClick(node *Node, x, y int) bool {
 		node.ScrollY = newSY
 		node.PaintDirty = true
 		return true
+	}
+}
+
+// handleScrollbarDragStart checks if (x,y) is on a scrollbar thumb and starts drag if so.
+func (e *Engine) handleScrollbarDragStart(x, y int) bool {
+	for i := len(e.layers) - 1; i >= 0; i-- {
+		if e.layers[i].Root != nil {
+			if node := e.findScrollbarThumbAt(e.layers[i].Root, x, y); node != nil {
+				e.scrollbarDragNode = node
+				e.scrollbarDragStartY = y
+				e.scrollbarDragStartScrollY = node.ScrollY
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// findScrollbarThumbAt walks the tree and returns the scroll node whose thumb is at (x,y).
+func (e *Engine) findScrollbarThumbAt(node *Node, x, y int) *Node {
+	// DFS - check children first (deeper nodes have priority)
+	for _, child := range node.Children {
+		if found := e.findScrollbarThumbAt(child, x, y); found != nil {
+			return found
+		}
+	}
+
+	if node.Style.Overflow != "scroll" {
+		return nil
+	}
+	maxScroll := computeMaxScrollY(node)
+	if maxScroll <= 0 {
+		return nil
+	}
+
+	bw := 0
+	if hasBorder(node.Style) {
+		bw = 1
+	}
+	scrollbarX := node.X + node.W - bw - node.Style.PaddingRight - 1
+	innerY1 := node.Y + bw + node.Style.PaddingTop
+	innerY2 := node.Y + node.H - bw - node.Style.PaddingBottom
+
+	if x != scrollbarX {
+		return nil
+	}
+	if y < innerY1 || y >= innerY2 {
+		return nil
+	}
+
+	// Check if click is on thumb
+	visibleH := innerY2 - innerY1
+	totalH := node.ScrollHeight
+	if totalH <= 0 || visibleH <= 0 {
+		return nil
+	}
+	thumbSize := visibleH * visibleH / totalH
+	if thumbSize < 1 {
+		thumbSize = 1
+	}
+	if thumbSize > visibleH {
+		thumbSize = visibleH
+	}
+	trackSpace := visibleH - thumbSize
+	thumbPos := 0
+	if maxScroll > 0 && trackSpace > 0 {
+		thumbPos = node.ScrollY * trackSpace / maxScroll
+	}
+
+	clickRel := y - innerY1
+	if clickRel >= thumbPos && clickRel < thumbPos+thumbSize {
+		return node // Click is on thumb
+	}
+	return nil
+}
+
+// handleScrollbarDrag processes mouse move during scrollbar drag.
+func (e *Engine) handleScrollbarDrag(x, y int) {
+	node := e.scrollbarDragNode
+	bw := 0
+	if hasBorder(node.Style) {
+		bw = 1
+	}
+	innerY1 := node.Y + bw + node.Style.PaddingTop
+	innerY2 := node.Y + node.H - bw - node.Style.PaddingBottom
+	visibleH := innerY2 - innerY1
+	if visibleH <= 0 {
+		return
+	}
+
+	totalH := node.ScrollHeight
+	maxScroll := computeMaxScrollY(node)
+	if maxScroll <= 0 {
+		return
+	}
+
+	thumbSize := visibleH * visibleH / totalH
+	if thumbSize < 1 {
+		thumbSize = 1
+	}
+	if thumbSize > visibleH {
+		thumbSize = visibleH
+	}
+	trackSpace := visibleH - thumbSize
+	if trackSpace <= 0 {
+		return
+	}
+
+	// Convert mouse Y delta to scroll delta
+	dy := y - e.scrollbarDragStartY
+	scrollDelta := dy * maxScroll / trackSpace
+	newScrollY := e.scrollbarDragStartScrollY + scrollDelta
+
+	if newScrollY < 0 {
+		newScrollY = 0
+	}
+	if newScrollY > maxScroll {
+		newScrollY = maxScroll
+	}
+
+	if newScrollY != node.ScrollY {
+		node.ScrollY = newScrollY
+		node.PaintDirty = true
+		e.needsRender = true
 	}
 }
 

@@ -84,6 +84,11 @@ type Engine struct {
 	// NowMs returns the current time in milliseconds.
 	// Set by App; defaults to 0 if not set.
 	NowMs func() int64
+
+	// Scrollbar drag state
+	scrollbarDragNode        *Node // node being scrollbar-dragged (nil = no drag)
+	scrollbarDragStartY      int   // mouse Y at drag start
+	scrollbarDragStartScrollY int  // ScrollY at drag start
 }
 
 // SetTracker sets the performance tracker for recording render-engine metrics.
