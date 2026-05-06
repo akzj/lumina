@@ -1,11 +1,14 @@
--- examples/scroll_2d.lua — 2D Scroll Demo (Vertical + Horizontal)
+-- examples/scroll_2d.lua — 2D Scroll + Resize Demo
 --
 -- Demonstrates:
 --   • Vertical scrolling: mouse wheel ↑/↓
 --   • Horizontal scrolling: Shift + mouse wheel
---   • Combined: content overflows in both directions
+--   • Drag-to-resize: drag the divider between panels
+--   • Independent scrolling in each pane
 --
 -- Press q or Ctrl+C to quit.
+
+local SplitPane = require("lux.split_pane")
 
 lumina.app {
     id = "scroll-2d-demo",
@@ -16,10 +19,9 @@ lumina.app {
     render = function()
         local t = lumina.getTheme()
 
-        -- Generate a wide+tall grid (80 rows × 20 columns)
+        -- LEFT PANEL: Wide+tall grid (300 rows × 20 columns)
         local rows = {}
         for r = 1, 300 do
-            -- Each row is a long text line (wider than viewport)
             local line = string.format(" %3d │", r)
             for c = 1, 20 do
                 line = line .. string.format(" Cell(%d,%d) ", r, c)
@@ -34,11 +36,54 @@ lumina.app {
             }, line)
         end
 
-        -- Header row (also wide)
-        local header = "  #  │"
-        for c = 1, 20 do
-            header = header .. string.format(" Col %-5d ", c)
+        local leftPanel = lumina.createElement("vbox", {
+            key = "left-panel",
+            style = { flex = 1, background = t.base },
+        },
+            lumina.createElement("text", {
+                key = "left-header",
+                style = { bold = true, foreground = t.blue, background = t.surface1 },
+            }, " Grid (300×20) — Scroll both ways"),
+            lumina.createElement("vbox", {
+                key = "left-scroll",
+                style = {
+                    flex = 1,
+                    overflow = "scroll",
+                },
+            }, table.unpack(rows))
+        )
+
+        -- RIGHT PANEL: Item list (100 items)
+        local items = {}
+        for i = 1, 100 do
+            local status = (i % 5 == 0) and "●" or (i % 3 == 0) and "◐" or "○"
+            local color = (i % 5 == 0) and t.green or (i % 3 == 0) and t.yellow or t.subtext0
+            items[#items + 1] = lumina.createElement("text", {
+                key = "item" .. i,
+                style = {
+                    foreground = color,
+                    background = (i % 2 == 0) and t.surface0 or t.base,
+                },
+            }, string.format(" %s Task #%03d — %s", status, i,
+                (i % 5 == 0) and "completed" or (i % 3 == 0) and "running" or "pending"))
         end
+
+        local rightPanel = lumina.createElement("vbox", {
+            key = "right-panel",
+            style = { flex = 1, background = t.base },
+        },
+            lumina.createElement("text", {
+                key = "right-header",
+                style = { bold = true, foreground = t.mauve, background = t.surface1 },
+            }, " Tasks (100) — Scroll vertically"),
+            lumina.createElement("vbox", {
+                key = "right-scroll",
+                style = {
+                    flex = 1,
+                    overflow = "scroll",
+                },
+            }, table.unpack(items))
+        )
 
         return lumina.createElement("vbox", {
             style = { width = 80, height = 24, background = t.base },
@@ -47,34 +92,22 @@ lumina.app {
             lumina.createElement("text", {
                 key = "title",
                 style = { bold = true, foreground = t.blue },
-            }, " 📜 2D Scroll Demo — Scroll: ↕ wheel │ ↔ Shift+wheel"),
+            }, " 📜 2D Scroll + Resize Demo — Scroll: ↕ wheel │ ↔ Shift+wheel │ Drag divider to resize"),
 
-            -- Column header (fixed, not scrolled)
-            lumina.createElement("text", {
-                key = "header",
-                style = {
-                    foreground = t.blue,
-                    bold = true,
-                    background = t.surface1,
-                },
-            }, string.sub(header, 1, 78)),
-
-            -- Scrollable area (both directions)
-            lumina.createElement("vbox", {
-                key = "scroll-area",
-                style = {
-                    flex = 1,
-                    overflow = "scroll",
-                    border = "single",
-                    borderColor = t.blue,
-                },
-            }, table.unpack(rows)),
+            -- SplitPane with two scrollable panels
+            lumina.createElement(SplitPane, {
+                direction = "horizontal",
+                sizes = { 50, 0 },
+                minSizes = { 20, 15 },
+                maxSizes = { 65, 0 },
+                borderColor = t.blue,
+            }, leftPanel, rightPanel),
 
             -- Footer
             lumina.createElement("text", {
                 key = "footer",
                 style = { foreground = t.subtext0 },
-            }, " [↕ wheel=vertical] [Shift+↕=horizontal] [q=quit]")
+            }, " [↕ wheel] [Shift+↕ horiz] [drag divider] [q=quit]")
         )
     end,
 }
