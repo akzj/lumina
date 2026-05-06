@@ -9,8 +9,9 @@ type Descriptor struct {
 	Key      string
 	Content    string
 	ContentSet bool // true when content/value was explicitly set in Lua
-	Style    Style
-	Children []Descriptor
+	Style      Style
+	HoverStyle *Style // hover style overrides (nil = no hover style)
+	Children   []Descriptor
 
 	// Input/textarea specific
 	Placeholder string

@@ -94,11 +94,37 @@ lumina.app {
             lumina.createElement("text", {
                 style = { height = 1 },
             }, ""),
+            -- Hover demo: buttons that change style on hover
+            lumina.createElement("hbox", {
+                style = { height = 1, justify = "center", gap = 2 },
+            },
+                lumina.createElement("text", {
+                    foreground = "#666666",
+                    hoverStyle = { foreground = "#ffffff", bold = true, underline = true },
+                    onClick = function() end,
+                    style = { height = 1 },
+                }, "[Hover me]"),
+                lumina.createElement("text", {
+                    foreground = "#666666",
+                    hoverStyle = { foreground = "#00ff88", bold = true },
+                    onClick = function() end,
+                    style = { height = 1 },
+                }, "[Green hover]"),
+                lumina.createElement("text", {
+                    foreground = "#666666",
+                    hoverStyle = { foreground = "#ff5555", bold = true },
+                    onClick = function() end,
+                    style = { height = 1 },
+                }, "[Red hover]")
+            ),
+            lumina.createElement("text", {
+                style = { height = 1 },
+            }, ""),
             lumina.createElement("text", {
                 foreground = t.subtext0 or "#6C7086",
                 dim = true,
                 style = { height = 1, textAlign = "center" },
-            }, "setInterval(50ms) + useState + math.sin")
+            }, "setInterval(50ms) + useState + math.sin + hoverStyle")
         )
     end,
 }

@@ -768,3 +768,106 @@ func TestPaintInput_SingleLineDoesNotWrapIntoNextRow(t *testing.T) {
 		}
 	}
 }
+
+func TestHoverStyle(t *testing.T) {
+	// Create a text node with hoverStyle
+	node := NewNode("text")
+	node.Content = "Hover me"
+	node.Style = Style{
+		Foreground: "#888888",
+		Background: "#000000",
+	}
+	node.HoverStyle = &Style{
+		Foreground: "#ffffff",
+		Bold:       true,
+		Underline:  true,
+	}
+
+	// Initially not hovered
+	if node.Hovered {
+		t.Error("node should not be hovered initially")
+	}
+
+	// Simulate hover
+	node.Hovered = true
+	node.PaintDirty = true
+
+	// Verify mergeHoverStyle works correctly
+	merged := mergeHoverStyle(node.Style, node.HoverStyle)
+	if merged.Foreground != "#ffffff" {
+		t.Errorf("merged foreground = %q, want #ffffff", merged.Foreground)
+	}
+	if merged.Background != "#000000" {
+		t.Errorf("merged background should be preserved = %q, want #000000", merged.Background)
+	}
+	if !merged.Bold {
+		t.Error("merged bold should be true")
+	}
+	if !merged.Underline {
+		t.Error("merged underline should be true")
+	}
+
+	// Simulate unhover
+	node.Hovered = false
+	node.PaintDirty = true
+
+	// Verify original style is unchanged
+	if node.Style.Foreground != "#888888" {
+		t.Errorf("original foreground changed to %q", node.Style.Foreground)
+	}
+	if node.Style.Bold {
+		t.Error("original bold should still be false")
+	}
+}
+
+func TestHoverStylePainting(t *testing.T) {
+	buf := NewCellBuffer(20, 3)
+
+	// Create a text node with hoverStyle
+	root := NewNode("vbox")
+	root.X, root.Y, root.W, root.H = 0, 0, 20, 3
+	root.Style = Style{}
+
+	child := NewNode("text")
+	child.Content = "Hello"
+	child.X, child.Y, child.W, child.H = 0, 0, 20, 1
+	child.Style = Style{
+		Foreground: "#888888",
+		Background: "#111111",
+	}
+	child.HoverStyle = &Style{
+		Foreground: "#ffffff",
+		Background: "#333333",
+	}
+	root.AddChild(child)
+
+	// Paint without hover
+	paintNode(buf, root)
+	cell := buf.Get(0, 0)
+	if cell.FG != "#888888" {
+		t.Errorf("unhovered FG = %q, want #888888", cell.FG)
+	}
+	if cell.BG != "#111111" {
+		t.Errorf("unhovered BG = %q, want #111111", cell.BG)
+	}
+
+	// Now hover and repaint
+	child.Hovered = true
+	buf.Clear()
+	paintNode(buf, root)
+	cell = buf.Get(0, 0)
+	if cell.FG != "#ffffff" {
+		t.Errorf("hovered FG = %q, want #ffffff", cell.FG)
+	}
+	if cell.BG != "#333333" {
+		t.Errorf("hovered BG = %q, want #333333", cell.BG)
+	}
+
+	// Verify original style was NOT mutated
+	if child.Style.Foreground != "#888888" {
+		t.Errorf("child.Style.Foreground mutated to %q", child.Style.Foreground)
+	}
+	if child.Style.Background != "#111111" {
+		t.Errorf("child.Style.Background mutated to %q", child.Style.Background)
+	}
+}

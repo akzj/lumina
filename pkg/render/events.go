@@ -268,6 +268,26 @@ func (e *Engine) HandleMouseMove(x, y int) {
 	old := e.hoveredNode
 	e.hoveredNode = target
 
+	// Update hoverStyle state: clear Hovered on old path, set on new path
+	if old != nil && !old.Removed {
+		for n := old; n != nil; n = n.Parent {
+			if n.HoverStyle != nil && n.Hovered {
+				n.Hovered = false
+				n.PaintDirty = true
+				e.needsRender = true
+			}
+		}
+	}
+	if target != nil {
+		for n := target; n != nil; n = n.Parent {
+			if n.HoverStyle != nil && !n.Hovered {
+				n.Hovered = true
+				n.PaintDirty = true
+				e.needsRender = true
+			}
+		}
+	}
+
 	// Fire onMouseLeave on old node (bubble up to find handler)
 	if old != nil && !old.Removed {
 		for n := old; n != nil; n = n.Parent {

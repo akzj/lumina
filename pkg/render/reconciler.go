@@ -64,6 +64,13 @@ func reconcileImpl(node *Node, desc Descriptor, freedRefs *[]int64) bool {
 		changed = true
 	}
 
+	// 3b. Update hoverStyle
+	if !hoverStyleEqual(node.HoverStyle, desc.HoverStyle) {
+		node.HoverStyle = desc.HoverStyle
+		node.PaintDirty = true
+		changed = true
+	}
+
 	// 4. Update event handlers (just swap refs, collect old refs for cleanup)
 	changed = updateRef(&node.OnClick, desc.OnClick, freedRefs) || changed
 	changed = updateRef(&node.OnMouseEnter, desc.OnMouseEnter, freedRefs) || changed
@@ -395,6 +402,7 @@ func createNodeFromDesc(desc Descriptor) *Node {
 		node.ScrollY = desc.ScrollY
 	}
 	node.Style = desc.Style
+	node.HoverStyle = desc.HoverStyle
 	node.ComponentType = desc.ComponentType
 	node.ComponentProps = desc.ComponentProps
 	node.Focusable = desc.Focusable
@@ -439,4 +447,25 @@ func markRemovedRecursive(node *Node) {
 	for _, child := range node.Children {
 		markRemovedRecursive(child)
 	}
+}
+
+// hoverStyleEqual compares two *Style pointers for equality.
+// Both nil = equal. One nil = not equal. Otherwise compare visual fields.
+func hoverStyleEqual(a, b *Style) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	return a.Foreground == b.Foreground &&
+		a.Background == b.Background &&
+		a.Bold == b.Bold &&
+		a.Dim == b.Dim &&
+		a.Underline == b.Underline &&
+		a.Italic == b.Italic &&
+		a.Strikethrough == b.Strikethrough &&
+		a.Inverse == b.Inverse &&
+		a.Border == b.Border &&
+		a.BorderColor == b.BorderColor
 }

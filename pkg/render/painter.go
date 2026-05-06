@@ -444,6 +444,46 @@ const maxPaintDepth = 500
 // unboundedClip is used as a "no clip" sentinel in clipped paint functions.
 const unboundedClip = 1 << 30
 
+// mergeHoverStyle merges hover overrides onto the base style.
+// Only non-zero/non-empty hover fields override the base.
+func mergeHoverStyle(base Style, hover *Style) Style {
+	if hover == nil {
+		return base
+	}
+	result := base
+	if hover.Foreground != "" {
+		result.Foreground = hover.Foreground
+	}
+	if hover.Background != "" {
+		result.Background = hover.Background
+	}
+	if hover.Bold {
+		result.Bold = true
+	}
+	if hover.Dim {
+		result.Dim = true
+	}
+	if hover.Underline {
+		result.Underline = true
+	}
+	if hover.Italic {
+		result.Italic = true
+	}
+	if hover.Strikethrough {
+		result.Strikethrough = true
+	}
+	if hover.Inverse {
+		result.Inverse = true
+	}
+	if hover.Border != "" {
+		result.Border = hover.Border
+	}
+	if hover.BorderColor != "" {
+		result.BorderColor = hover.BorderColor
+	}
+	return result
+}
+
 func paintNode(buf *CellBuffer, node *Node) {
 	if node == nil || node.W <= 0 || node.H <= 0 {
 		return
@@ -457,6 +497,14 @@ func paintNode(buf *CellBuffer, node *Node) {
 		return
 	}
 	defer func() { paintDepth-- }()
+
+	// Apply hover style: temporarily swap node.Style with merged version
+	var savedStyle Style
+	if node.Hovered && node.HoverStyle != nil {
+		savedStyle = node.Style
+		node.Style = mergeHoverStyle(node.Style, node.HoverStyle)
+		defer func() { node.Style = savedStyle }()
+	}
 
 	switch node.Type {
 	case "text":
@@ -687,6 +735,13 @@ func paintNodeClipped(buf *CellBuffer, node *Node, clipX1, clipY1, clipX2, clipY
 	screenY := node.Y + offsetY
 	if screenY >= clipY2 || screenY+node.H <= clipY1 || screenX >= clipX2 || screenX+node.W <= clipX1 {
 		return
+	}
+
+	// Apply hover style: temporarily swap node.Style with merged version
+	if node.Hovered && node.HoverStyle != nil {
+		savedStyle := node.Style
+		node.Style = mergeHoverStyle(node.Style, node.HoverStyle)
+		defer func() { node.Style = savedStyle }()
 	}
 
 	switch node.Type {

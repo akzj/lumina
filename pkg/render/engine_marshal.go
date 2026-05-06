@@ -77,6 +77,12 @@ func descriptorFromMap(m map[string]any) Descriptor {
 		desc.Style.Bottom = -1
 	}
 
+	// HoverStyle
+	if hs, ok := m["hoverStyle"].(map[string]any); ok {
+		s := styleFromMap(hs)
+		desc.HoverStyle = &s
+	}
+
 	// Foreground/Background at top level (Lua shorthand)
 	if fg, ok := m["foreground"].(string); ok {
 		desc.Style.Foreground = fg
@@ -223,6 +229,14 @@ func (e *Engine) readDescriptor(L *lua.State, idx int) Descriptor {
 
 	// Also read top-level style fields (they override the style sub-table)
 	e.readStyleFields(L, absIdx, &desc.Style)
+
+	// Read hoverStyle — optional style overrides when hovered
+	L.GetField(absIdx, "hoverStyle")
+	if L.IsTable(-1) {
+		hs := e.readStyle(L, -1)
+		desc.HoverStyle = &hs
+	}
+	L.Pop(1)
 
 	// Read event handlers (store as Lua refs)
 	desc.OnClick = getRefField(L, absIdx, "onClick")

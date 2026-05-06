@@ -124,6 +124,8 @@ type Node struct {
 	Content     string // text content
 	Placeholder string // placeholder text (input/textarea)
 	Style       Style  // visual style
+	HoverStyle  *Style // hover style overrides (nil = no hover style)
+	Hovered     bool   // true when mouse is over this node (or ancestor with hoverStyle)
 	PaintDirty  bool   // true → repaint this node
 
 	// Input/textarea state
