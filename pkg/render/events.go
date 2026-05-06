@@ -465,6 +465,14 @@ func (e *Engine) HandleKeyDown(key string) {
 		}
 	}
 
+	// Page up/down: scroll the nearest vertical scroll container (under focus,
+	// or at viewport center if nothing is focused).
+	if key == "PageUp" || key == "PageDown" {
+		if e.handlePageScrollKey(key) {
+			return
+		}
+	}
+
 	// Fall through to onKeyDown handler.
 	// Priority: walk up from focused node first (bubble), then DFS fallback.
 	var keyHandlerNode *Node
@@ -493,6 +501,81 @@ func (e *Engine) HandleKeyDown(key string) {
 	if keyHandlerNode != nil && keyHandlerNode.OnKeyDown != 0 {
 		e.callLuaRefKey(keyHandlerNode.OnKeyDown, key)
 	}
+}
+
+// handlePageScrollKey applies one viewport of ScrollY for PageUp/PageDown on the
+// scrollable ancestor of the focused node (or the top layer hit at screen center).
+// Returns true if a scroll container was updated.
+func (e *Engine) handlePageScrollKey(key string) bool {
+	var anchor *Node
+	if e.focusedNode != nil && !e.focusedNode.Removed {
+		anchor = e.focusedNode
+	} else {
+		for i := len(e.layers) - 1; i >= 0; i-- {
+			if e.layers[i].Root == nil {
+				continue
+			}
+			cx := e.width / 2
+			cy := e.height / 2
+			if cx < 0 {
+				cx = 0
+			}
+			if cy < 0 {
+				cy = 0
+			}
+			anchor = HitTest(e.layers[i].Root, cx, cy)
+			break
+		}
+	}
+	scroll := findScrollableAncestor(anchor)
+	if scroll == nil {
+		return false
+	}
+	page := scrollViewportLines(scroll)
+	if page < 1 {
+		page = 1
+	}
+	d := page
+	if key == "PageUp" {
+		d = -page
+	}
+	maxScroll := computeMaxScrollY(scroll)
+	if maxScroll <= 0 {
+		return false
+	}
+	newY := scroll.ScrollY + d
+	if newY < 0 {
+		newY = 0
+	}
+	if newY > maxScroll {
+		newY = maxScroll
+	}
+	if newY == scroll.ScrollY {
+		return true // at boundary; still "handled" so we don't fall through to Lua
+	}
+	scroll.ScrollY = newY
+	scroll.PaintDirty = true
+	e.needsRender = true
+	return true
+}
+
+// scrollViewportLines is the inner visible height in rows of a scroll container.
+func scrollViewportLines(n *Node) int {
+	if n == nil {
+		return 0
+	}
+	if n.Style.Overflow != "scroll" {
+		return 0
+	}
+	bw := 0
+	if hasBorder(n.Style) {
+		bw = 1
+	}
+	h := n.H - 2*bw - n.Style.PaddingTop - n.Style.PaddingBottom
+	if h < 1 {
+		return 1
+	}
+	return h
 }
 
 // HandleScroll processes a scroll event at screen coordinates (x, y).

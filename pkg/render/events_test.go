@@ -349,6 +349,39 @@ func TestEngine_HandleScroll(t *testing.T) {
 	}
 }
 
+func TestEngine_HandleKeyDown_PageUpPageDown(t *testing.T) {
+	e := &Engine{}
+	e.width, e.height = 20, 10
+	e.layers = append(e.layers, &Layer{})
+
+	root := &Node{
+		Type:         "vbox",
+		X:            0, Y: 0, W: 20, H: 10,
+		Style:        Style{Overflow: "scroll"},
+		ScrollHeight: 100,
+	}
+	e.layers[0].Root = root
+
+	if root.ScrollY != 0 {
+		t.Fatalf("initial ScrollY = %d, want 0", root.ScrollY)
+	}
+
+	e.HandleKeyDown("PageDown")
+	want := scrollViewportLines(root)
+	if root.ScrollY != want {
+		t.Errorf("after PageDown: ScrollY=%d, want %d", root.ScrollY, want)
+	}
+	e.HandleKeyDown("PageUp")
+	if root.ScrollY != 0 {
+		t.Errorf("after PageUp: ScrollY=%d, want 0", root.ScrollY)
+	}
+	// At top, PageUp is still handled (no Lua); position unchanged
+	e.HandleKeyDown("PageUp")
+	if root.ScrollY != 0 {
+		t.Errorf("at top after extra PageUp: ScrollY=%d, want 0", root.ScrollY)
+	}
+}
+
 // Benchmarks
 
 
