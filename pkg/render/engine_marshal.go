@@ -387,6 +387,7 @@ func (e *Engine) readStyle(L *lua.State, idx int) Style {
 	s.Strikethrough = getBoolField(L, absIdx, "strikethrough")
 	s.Inverse = getBoolField(L, absIdx, "inverse")
 	s.Overflow = getStringField(L, absIdx, "overflow")
+	s.Scrollbar = getStringField(L, absIdx, "scrollbar")
 	s.Position = getStringField(L, absIdx, "position")
 	s.Top = int(getIntField(L, absIdx, "top"))
 	s.Left = int(getIntField(L, absIdx, "left"))
@@ -544,6 +545,9 @@ func (e *Engine) readStyleFields(L *lua.State, idx int, s *Style) {
 	}
 	if str, ok := getStringFieldIfPresent(L, absIdx, "overflow"); ok {
 		s.Overflow = str
+	}
+	if str, ok := getStringFieldIfPresent(L, absIdx, "scrollbar"); ok {
+		s.Scrollbar = str
 	}
 	if str, ok := getStringFieldIfPresent(L, absIdx, "position"); ok {
 		s.Position = str
