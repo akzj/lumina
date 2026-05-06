@@ -317,23 +317,34 @@ func computeFlex(node *Node, x, y, w, h int, depth int) {
 		// taller/wider than the slot (e.g. LuxButton style.Height=3 while flex-wrap
 		// passes childH=1). Keep placeholder W/H in sync so layoutHBoxWrap row height,
 		// parent vbox totals, and hit-testing match what paint draws.
+		// IMPORTANT: For height, only shrink when parent is NOT a vbox (i.e. cross-axis).
+		// When parent IS a vbox, the height was allocated by flex distribution and must
+		// not be overridden by content height (prevents SplitPane collapse bug).
 		if len(node.Children) == 1 {
 			root := node.Children[0]
 			if root.X == node.X && root.Y == node.Y {
-				// Match placeholder outer box to the grafted root (grow or shrink).
-				// Only growing used to leave a taller slot than the real button; the
-				// extra row sat under the bottom border and looked like a line drawn
-				// on the border (e.g. outlined LuxButton in flex-wrap rows).
+				// Width: always sync (grow or shrink)
 				if root.W != node.W {
 					node.W = root.W
 					node.PaintDirty = true
 				}
-				if root.H != node.H {
+				// Height: always allow shrink (component sizes to content).
+				// Only allow grow when parent is NOT a vbox — in vbox, the height
+				// was allocated by flex distribution and growing would push siblings
+				// off-screen (SplitPane overflow bug).
+				if root.H > node.H {
+					parentIsVBox := node.Parent != nil && (node.Parent.Type == "vbox" || node.Parent.Type == "box" || node.Parent.Type == "fragment")
+					if !parentIsVBox {
+						node.H = root.H
+						node.PaintDirty = true
+					}
+				} else if root.H < node.H {
 					node.H = root.H
 					node.PaintDirty = true
 				}
 			}
 		}
+
 		return
 
 	case "text":

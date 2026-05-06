@@ -149,11 +149,31 @@ func layoutVBox(node *Node, contentX, contentY, contentW, contentH int, style St
 			} else {
 				// No flex, no fixed height.
 				// Leaf types (text, input, textarea) get minimum 1 row.
-				// Container types get implicit flex=1.
+				// Component placeholders: check grafted root for explicit absolute height.
+				// Other container types get implicit flex=1.
 				switch child.Type {
 				case "text", "input", "textarea":
 					children[i].fixedH = 1 + marginV
 					fixedTotal += children[i].fixedH
+				case "component":
+					// Component placeholder with no explicit style on the placeholder itself.
+					// Check if the grafted root has an explicit ABSOLUTE height (e.g. DataGrid
+					// returns vbox{height=14}). If so, use it as fixed height.
+					// Otherwise use implicit flex=1 (same as other containers).
+					graftedH := 0
+					if len(child.Children) == 1 {
+						root := child.Children[0]
+						if root.Style.Height > 0 && root.Style.HeightPercent == 0 {
+							graftedH = root.Style.Height
+						}
+					}
+					if graftedH > 0 {
+						children[i].fixedH = graftedH + marginV
+						fixedTotal += children[i].fixedH
+					} else {
+						children[i].flexGrow = 1
+						flexTotal += 1
+					}
 				default:
 					children[i].flexGrow = 1
 					flexTotal += 1

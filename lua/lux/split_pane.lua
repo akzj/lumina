@@ -155,7 +155,7 @@ local SplitPane = lumina.defineComponent("SplitPane", function(props)
     -- Outer container
     local containerType = (direction == "horizontal") and "hbox" or "vbox"
     return lumina.createElement(containerType, {
-        style = { flex = 1 },
+        style = { flex = 1, width = "100%", height = "100%" },
     }, table.unpack(elements))
 end)
 

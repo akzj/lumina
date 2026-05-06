@@ -302,6 +302,9 @@ func layoutHBox(node *Node, contentX, contentY, contentW, contentH int, style St
 		innerUsed = 1
 	}
 	wantOuter := innerUsed + 2*bw + pt + pb
+	// Only grow if the node has NO explicit height constraint (absolute, percent, or vh).
+	// When height is constrained (e.g. height=100% resolved by parent flex allocation),
+	// children that overflow should be clipped, not cause the hbox to grow.
 	if wantOuter > node.H {
 		node.H = wantOuter
 		node.PaintDirty = true
