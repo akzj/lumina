@@ -2344,3 +2344,25 @@ func TestV2E2E_BreathingLightScript(t *testing.T) {
 		t.Error("breathing_light.lua should show 'setInterval' description")
 	}
 }
+
+func TestV2E2E_HoverDemoScript(t *testing.T) {
+	app, ta, _ := newV2App(t, 60, 20)
+
+	err := app.RunScript("../examples/hover_demo.lua")
+	if err != nil {
+		t.Fatalf("RunScript failed: %v", err)
+	}
+
+	app.RenderAll()
+
+	if ta.LastScreen == nil {
+		t.Fatal("LastScreen is nil after rendering hover_demo.lua")
+	}
+
+	if !screenHasString(ta, "Hover Demo") {
+		t.Error("hover_demo.lua should show 'Hover Demo' title")
+	}
+	if !screenHasString(ta, "White + Bold") {
+		t.Error("hover_demo.lua should show hover buttons")
+	}
+}

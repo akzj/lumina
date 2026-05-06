@@ -274,6 +274,9 @@ func (e *Engine) HandleMouseMove(x, y int) {
 			if n.HoverStyle != nil && n.Hovered {
 				n.Hovered = false
 				n.PaintDirty = true
+				if n.Parent != nil {
+					n.Parent.PaintDirty = true
+				}
 				e.needsRender = true
 			}
 		}
@@ -283,6 +286,9 @@ func (e *Engine) HandleMouseMove(x, y int) {
 			if n.HoverStyle != nil && !n.Hovered {
 				n.Hovered = true
 				n.PaintDirty = true
+				if n.Parent != nil {
+					n.Parent.PaintDirty = true
+				}
 				e.needsRender = true
 			}
 		}
