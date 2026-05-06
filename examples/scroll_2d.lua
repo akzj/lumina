@@ -5,6 +5,7 @@
 --   • Horizontal scrolling: Shift + mouse wheel
 --   • Drag-to-resize: drag the divider between panels
 --   • Independent scrolling in each pane
+--   • Toggle scrollbar visibility (scrollbar = "none")
 --
 -- Press q or Ctrl+C to quit.
 
@@ -18,6 +19,10 @@ lumina.app {
     },
     render = function()
         local t = lumina.getTheme()
+
+        -- Scrollbar visibility state
+        local showScrollbar, setShowScrollbar = lumina.useState("showScrollbar", true)
+        local scrollbarStyle = showScrollbar and "" or "none"
 
         -- LEFT PANEL: Wide+tall grid (300 rows × 20 columns)
         local rows = {}
@@ -49,6 +54,7 @@ lumina.app {
                 style = {
                     flex = 1,
                     overflow = "scroll",
+                    scrollbar = scrollbarStyle,
                 },
             }, table.unpack(rows))
         )
@@ -81,6 +87,7 @@ lumina.app {
                 style = {
                     flex = 1,
                     overflow = "scroll",
+                    scrollbar = scrollbarStyle,
                 },
             }, table.unpack(items))
         )
@@ -88,11 +95,23 @@ lumina.app {
         return lumina.createElement("vbox", {
             style = { width = 80, height = 24, background = t.base },
         },
-            -- Title
-            lumina.createElement("text", {
-                key = "title",
-                style = { bold = true, foreground = t.blue },
-            }, " 📜 2D Scroll + Resize Demo — Scroll: ↕ wheel │ ↔ Shift+wheel │ Drag divider to resize"),
+            -- Title bar with toggle button
+            lumina.createElement("hbox", {
+                key = "title-bar",
+                style = { background = t.base },
+            },
+                lumina.createElement("text", {
+                    key = "title",
+                    style = { flex = 1, bold = true, foreground = t.blue },
+                }, " 📜 2D Scroll + Resize Demo"),
+                lumina.createElement("text", {
+                    key = "toggle-btn",
+                    style = { bold = true, foreground = t.green },
+                    onClick = function()
+                        setShowScrollbar(not showScrollbar)
+                    end,
+                }, showScrollbar and " [Hide Scrollbar] " or " [Show Scrollbar] ")
+            ),
 
             -- SplitPane with two scrollable panels
             lumina.createElement(SplitPane, {
@@ -107,7 +126,7 @@ lumina.app {
             lumina.createElement("text", {
                 key = "footer",
                 style = { foreground = t.subtext0 },
-            }, " [↕ wheel] [Shift+↕ horiz] [drag divider] [q=quit]")
+            }, " [↕ wheel] [Shift+↕ horiz] [drag divider] [click toggle] [q=quit]")
         )
     end,
 }
