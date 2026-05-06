@@ -103,6 +103,20 @@ func paintDirtyWalk(buf *CellBuffer, node *Node) {
 			repaintOverlappingSiblings(buf, scrollAncestor)
 			return
 		}
+		// If this node is inside an overflow:hidden container, escalate to that
+		// container so its full area gets cleared before repainting. This prevents
+		// residual content when children change (e.g. tab switches).
+		hiddenAncestor := findHiddenAncestor(node.Parent)
+		if hiddenAncestor != nil && !hiddenAncestor.PaintDirty {
+			hiddenAncestor.PaintDirty = true
+			bg := findAncestorBackground(hiddenAncestor)
+			clearRectWithBG(buf, hiddenAncestor.X, hiddenAncestor.Y, hiddenAncestor.W, hiddenAncestor.H, bg)
+			paintNode(buf, hiddenAncestor)
+			hiddenAncestor.PaintDirty = false
+			clearPaintDirtyBelow(hiddenAncestor)
+			return
+		}
+
 		// Component placeholders have stacked bounds that may overlap siblings'
 		// absolute-positioned children. Escalate to parent so all siblings
 		// get repainted after ClearRect.
@@ -348,6 +362,21 @@ func findOverlayAncestor(node *Node) *Node {
 	}
 	return nil
 }
+// findHiddenAncestor walks up from node.Parent to find the nearest ancestor
+// with overflow:"hidden". This is used to escalate dirty painting to the
+// hidden container so its full area gets cleared before repainting.
+func findHiddenAncestor(node *Node) *Node {
+	for n := node; n != nil; n = n.Parent {
+		if n.Type == "component" {
+			continue // skip component wrappers
+		}
+		if n.Style.Overflow == "hidden" {
+			return n
+		}
+	}
+	return nil
+}
+
 // findAncestorBackground walks up the tree to find the nearest ancestor
 // with a non-empty background color. This simulates CSS background inheritance.
 func findAncestorBackground(node *Node) string {
