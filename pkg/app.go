@@ -327,7 +327,11 @@ func (a *App) HandleEvent(e *event.Event) {
 				return
 			}
 		}
-		a.engine.HandleScroll(e.X, e.Y, delta)
+		if e.Shift {
+			a.engine.HandleScrollH(e.X, e.Y, delta)
+		} else {
+			a.engine.HandleScroll(e.X, e.Y, delta)
+		}
 	}
 }
 

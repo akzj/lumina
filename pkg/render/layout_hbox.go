@@ -348,6 +348,19 @@ func layoutHBox(node *Node, contentX, contentY, contentW, contentH int, style St
 			}
 		}
 		node.ScrollHeight = maxBottom
+
+		// Also compute ScrollWidth for horizontal scrolling
+		maxRight := 0
+		for i, child := range node.Children {
+			if children[i].positioned {
+				continue
+			}
+			right := child.X + child.W - contentX
+			if right > maxRight {
+				maxRight = right
+			}
+		}
+		node.ScrollWidth = maxRight
 	}
 }
 

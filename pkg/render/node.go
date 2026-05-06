@@ -162,6 +162,8 @@ type Node struct {
 	// Scroll state
 	ScrollY      int
 	ScrollHeight int // total content height (set by layout for overflow=scroll containers)
+	ScrollX      int
+	ScrollWidth  int // total content width (set by layout for overflow=scroll containers)
 }
 
 // Component is a stateful UI unit.

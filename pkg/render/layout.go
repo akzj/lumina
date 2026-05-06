@@ -458,6 +458,14 @@ func populateRefs(node *Node, L *lua.State) {
 				L.PushInteger(int64(node.ScrollHeight))
 				L.SetField(curIdx, "scrollHeight")
 			}
+			if node.ScrollWidth != 0 {
+				L.PushInteger(int64(node.ScrollWidth))
+				L.SetField(curIdx, "scrollWidth")
+			}
+			if node.ScrollX != 0 {
+				L.PushInteger(int64(node.ScrollX))
+				L.SetField(curIdx, "scrollX")
+			}
 			if node.ID != "" {
 				L.PushString(node.ID)
 				L.SetField(curIdx, "id")

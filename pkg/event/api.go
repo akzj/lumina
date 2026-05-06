@@ -12,6 +12,7 @@ type Event struct {
 	Target    string // VNode ID that should handle this event
 	Bubbles   bool
 	Timestamp int64
+	Shift     bool // shift modifier (for horizontal scroll, shift+click, etc.)
 }
 
 // EventHandler is a function that handles an event.

@@ -77,7 +77,7 @@ func TestDisplayNone_HitTest(t *testing.T) {
 		Style: Style{Display: "none"},
 		X: 0, Y: 0, W: 10, H: 10,
 	}
-	hit := hitTestWithOffset(node, 5, 5, 0)
+	hit := hitTestWithOffset(node, 5, 5, 0, 0)
 	if hit != nil {
 		t.Error("display:none node should not be hit-testable")
 	}
@@ -131,7 +131,7 @@ func TestVisibilityHidden_HitTest(t *testing.T) {
 		Style: Style{Visibility: "hidden"},
 		X: 0, Y: 0, W: 10, H: 10,
 	}
-	hit := hitTestWithOffset(node, 5, 5, 0)
+	hit := hitTestWithOffset(node, 5, 5, 0, 0)
 	if hit != nil {
 		t.Error("visibility:hidden node should not be hit-testable")
 	}

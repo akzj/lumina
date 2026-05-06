@@ -165,6 +165,16 @@ func (e *Engine) RegisterLuaAPI() {
 	})
 	L.SetField(tblIdx, "scrollNode")
 
+	// lumina.scrollNodeH(id, delta) → newScrollX
+	L.PushFunction(func(L *lua.State) int {
+		id := L.CheckString(1)
+		delta := int(L.CheckInteger(2))
+		newSX := e.ScrollNodeByIDH(id, delta)
+		L.PushInteger(int64(newSX))
+		return 1
+	})
+	L.SetField(tblIdx, "scrollNodeH")
+
 	L.SetGlobal("lumina")
 }
 

@@ -357,10 +357,11 @@ func (a *App) handleInputEvent(ie InputEvent) {
 
 	case "scroll":
 		a.HandleEvent(&event.Event{
-			Type: "scroll",
-			X:    ie.X,
-			Y:    ie.Y,
-			Key:  ie.Button, // "up" or "down"
+			Type:  "scroll",
+			X:     ie.X,
+			Y:     ie.Y,
+			Key:   ie.Button, // "up" or "down"
+			Shift: ie.Modifiers.Shift,
 		})
 		a.RenderDirty()
 

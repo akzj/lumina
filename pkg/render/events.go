@@ -8,13 +8,13 @@ import (
 // Returns nil if no node contains the point.
 // Uses cumulative scroll offset for correct nested scroll handling.
 func HitTest(root *Node, x, y int) *Node {
-	return hitTestWithOffset(root, x, y, 0)
+	return hitTestWithOffset(root, x, y, 0, 0)
 }
 
 // hitTestWithOffset performs hit testing with a cumulative scroll offset.
 // scrollOffsetY accumulates as we descend through nested scroll containers.
 // Each node's screen position = layout position - cumulativeScrollOffset.
-func hitTestWithOffset(node *Node, x, y int, scrollOffsetY int) *Node {
+func hitTestWithOffset(node *Node, x, y int, scrollOffsetX, scrollOffsetY int) *Node {
 	if node == nil {
 		return nil
 	}
@@ -30,13 +30,13 @@ func hitTestWithOffset(node *Node, x, y int, scrollOffsetY int) *Node {
 	if node.Type == "component" {
 		if sorted := hitTestOrderChildren(node.Children); sorted != nil {
 			for _, child := range sorted {
-				if hit := hitTestWithOffset(child, x, y, scrollOffsetY); hit != nil {
+				if hit := hitTestWithOffset(child, x, y, scrollOffsetX, scrollOffsetY); hit != nil {
 					return hit
 				}
 			}
 		} else {
 			for i := len(node.Children) - 1; i >= 0; i-- {
-				if hit := hitTestWithOffset(node.Children[i], x, y, scrollOffsetY); hit != nil {
+				if hit := hitTestWithOffset(node.Children[i], x, y, scrollOffsetX, scrollOffsetY); hit != nil {
 					return hit
 				}
 			}
@@ -45,7 +45,7 @@ func hitTestWithOffset(node *Node, x, y int, scrollOffsetY int) *Node {
 	}
 
 	// Node's screen position = layout position - cumulative scroll offset
-	screenX := node.X
+	screenX := node.X - scrollOffsetX
 	screenY := node.Y - scrollOffsetY
 
 	// Bounds check using screen coordinates
@@ -53,10 +53,12 @@ func hitTestWithOffset(node *Node, x, y int, scrollOffsetY int) *Node {
 		return nil
 	}
 
-	// Calculate child scroll offset
-	childScrollOffset := scrollOffsetY
+	// Calculate child scroll offsets
+	childScrollOffsetX := scrollOffsetX
+	childScrollOffsetY := scrollOffsetY
 	if node.Style.Overflow == "scroll" {
-		childScrollOffset += node.ScrollY
+		childScrollOffsetX += node.ScrollX
+		childScrollOffsetY += node.ScrollY
 
 		// Clip: only process clicks within content area (not border/padding)
 		bw := 0
@@ -65,7 +67,9 @@ func hitTestWithOffset(node *Node, x, y int, scrollOffsetY int) *Node {
 		}
 		visTop := screenY + bw + node.Style.PaddingTop
 		visBot := screenY + node.H - bw - node.Style.PaddingBottom
-		if y < visTop || y >= visBot {
+		visLeft := screenX + bw + node.Style.PaddingLeft
+		visRight := screenX + node.W - bw - node.Style.PaddingRight
+		if y < visTop || y >= visBot || x < visLeft || x >= visRight {
 			return node // click on border/padding area, return container
 		}
 	}
@@ -77,7 +81,7 @@ func hitTestWithOffset(node *Node, x, y int, scrollOffsetY int) *Node {
 		for _, child := range hitChildren {
 			// For scroll containers, skip children outside visible area
 			if node.Style.Overflow == "scroll" {
-				childScreenY := child.Y - childScrollOffset
+				childScreenY := child.Y - childScrollOffsetY
 				childScreenBottom := childScreenY + child.H
 				bw := 0
 				if hasBorder(node.Style) {
@@ -90,7 +94,7 @@ func hitTestWithOffset(node *Node, x, y int, scrollOffsetY int) *Node {
 				}
 			}
 
-			if hit := hitTestWithOffset(child, x, y, childScrollOffset); hit != nil {
+			if hit := hitTestWithOffset(child, x, y, childScrollOffsetX, childScrollOffsetY); hit != nil {
 				return hit
 			}
 		}
@@ -101,7 +105,7 @@ func hitTestWithOffset(node *Node, x, y int, scrollOffsetY int) *Node {
 
 			// For scroll containers, skip children outside visible area
 			if node.Style.Overflow == "scroll" {
-				childScreenY := child.Y - childScrollOffset
+				childScreenY := child.Y - childScrollOffsetY
 				childScreenBottom := childScreenY + child.H
 				bw := 0
 				if hasBorder(node.Style) {
@@ -114,7 +118,7 @@ func hitTestWithOffset(node *Node, x, y int, scrollOffsetY int) *Node {
 				}
 			}
 
-			if hit := hitTestWithOffset(child, x, y, childScrollOffset); hit != nil {
+			if hit := hitTestWithOffset(child, x, y, childScrollOffsetX, childScrollOffsetY); hit != nil {
 				return hit
 			}
 		}
@@ -725,6 +729,40 @@ func (e *Engine) ScrollNodeByID(id string, delta int) int {
 	return 0
 }
 
+// ScrollNodeByIDH finds a node by its ID and adjusts its ScrollX by delta.
+// Returns the new ScrollX value.
+func (e *Engine) ScrollNodeByIDH(id string, delta int) int {
+	for _, layer := range e.layers {
+		if layer.Root != nil {
+			if found := e.findNodeByID(layer.Root, id); found != nil {
+				scrollNode := found
+				if scrollNode.Style.Overflow != "scroll" {
+					scrollNode = e.findScrollNodeByID(scrollNode, id)
+					if scrollNode == nil {
+						return 0
+					}
+				}
+				maxScroll := computeMaxScrollX(scrollNode)
+				newSX := scrollNode.ScrollX + delta
+				if newSX < 0 {
+					newSX = 0
+				}
+				if newSX > maxScroll {
+					newSX = maxScroll
+				}
+				if newSX != scrollNode.ScrollX {
+					scrollNode.ScrollX = newSX
+					scrollNode.PaintDirty = true
+					e.needsRender = true
+				}
+				return newSX
+			}
+		}
+	}
+	return 0
+}
+
+
 // findScrollNodeByID searches children of node for a node with the given ID
 // that has overflow:"scroll" style.
 func (e *Engine) findScrollNodeByID(node *Node, id string) *Node {
@@ -770,6 +808,62 @@ func computeMaxScrollY(node *Node) int {
 	}
 	return maxScroll
 }
+
+func computeMaxScrollX(node *Node) int {
+	bw := 0
+	if hasBorder(node.Style) {
+		bw = 1
+	}
+	contentW := node.W - 2*bw - node.Style.PaddingLeft - node.Style.PaddingRight
+	if contentW <= 0 {
+		return 0
+	}
+	maxScroll := node.ScrollWidth - contentW
+	if maxScroll < 0 {
+		maxScroll = 0
+	}
+	return maxScroll
+}
+
+// autoScrollX adjusts a scroll container's ScrollX by delta, clamped to [0, maxScroll].
+func (e *Engine) autoScrollX(node *Node, delta int) {
+	maxScroll := computeMaxScrollX(node)
+	if maxScroll <= 0 {
+		return // content fits, no scrolling needed
+	}
+
+	const step = 3 // scroll 3 columns per wheel tick
+	newScrollX := node.ScrollX + delta*step
+
+	// Clamp
+	if newScrollX < 0 {
+		newScrollX = 0
+	}
+	if newScrollX > maxScroll {
+		newScrollX = maxScroll
+	}
+
+	if newScrollX == node.ScrollX {
+		return // no change
+	}
+
+	node.ScrollX = newScrollX
+	node.PaintDirty = true
+	e.needsRender = true
+}
+
+// HandleScrollH handles horizontal scroll events (e.g. Shift+wheel).
+func (e *Engine) HandleScrollH(x, y, delta int) {
+	if len(e.layers) == 0 {
+		return
+	}
+	hitNode, _ := e.hitTestLayers(x, y)
+	scrollNode := findScrollableAncestor(hitNode)
+	if scrollNode != nil {
+		e.autoScrollX(scrollNode, delta)
+	}
+}
+
 
 // EventResult holds the result of calling a Lua event handler.
 // Handlers can call event.stopPropagation() and event.preventDefault().
