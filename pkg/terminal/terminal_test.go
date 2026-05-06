@@ -306,6 +306,33 @@ func TestParse_MouseScroll(t *testing.T) {
 	}
 }
 
+func TestParse_MouseScrollHorizontal(t *testing.T) {
+	// ESC[<66;10;5M — wheel left (xterm SGR; Windows Terminal horizontal wheel)
+	data := []byte{0x1b, '[', '<', '6', '6', ';', '1', '0', ';', '5', 'M'}
+	e := mustParseOne(t, data)
+	if e.Type != "scroll" {
+		t.Errorf("expected scroll, got %q", e.Type)
+	}
+	if e.Button != "left" {
+		t.Errorf("expected left, got %q", e.Button)
+	}
+	// ESC[<67;10;5M — wheel right
+	data = []byte{0x1b, '[', '<', '6', '7', ';', '1', '0', ';', '5', 'M'}
+	e = mustParseOne(t, data)
+	if e.Button != "right" {
+		t.Errorf("expected right, got %q", e.Button)
+	}
+	// modifier + wheel left: 66+4=70 (Shift)
+	data = []byte{0x1b, '[', '<', '7', '0', ';', '1', '0', ';', '5', 'M'}
+	e = mustParseOne(t, data)
+	if e.Button != "left" {
+		t.Errorf("expected left, got %q", e.Button)
+	}
+	if !e.Modifiers.Shift {
+		t.Error("expected Shift modifier on 70 (66+4)")
+	}
+}
+
 func TestParse_MouseWithModifiers(t *testing.T) {
 	// ESC[<20;10;5M → Ctrl+left (button 0 + Ctrl bit 16 = 16, but 16&0x03=0 → left)
 	// Actually: button=20 → bits: 16(Ctrl) + 4(Shift) + 0(left) = 20

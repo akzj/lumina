@@ -14,7 +14,7 @@ type InputEvent struct {
 	Key       string // key name: "a", "Enter", "ArrowUp", "Escape", "Tab", "F1", etc.
 	Char      string // printable character (for text input); empty for non-printable
 	X, Y      int    // mouse position (0-based)
-	Button    string // "left", "middle", "right", "up", "down" (scroll direction)
+	Button    string // mouse: "left","middle","right"; wheel: "up","down","left","right"
 	Modifiers Modifiers
 }
 

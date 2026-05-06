@@ -235,11 +235,30 @@ func parseSGRMouse(data []byte) []InputEvent {
 		Ctrl:  button&16 != 0,
 	}
 
-	// Scroll events (bit 6 = 64)
+	// Wheel / scroll (xterm SGR mode 1006): button values 64–67 are wheel up,
+	// down, left, right. Shift/Alt/Ctrl (4,8,16) and the motion bit (32) are OR'd
+	// into the same field — strip them before classifying. Without this, Windows
+	// Terminal (and others) send 66/67 for horizontal wheel but they were mistaken
+	// for vertical "up"/"down" via bit 0.
 	if button&64 != 0 {
-		direction := "up"
-		if button&1 != 0 {
+		const wheelExtraMask = 4 | 8 | 16 | 32
+		wb := button &^ wheelExtraMask
+		var direction string
+		switch wb {
+		case 64:
+			direction = "up"
+		case 65:
 			direction = "down"
+		case 66:
+			direction = "left"
+		case 67:
+			direction = "right"
+		default:
+			// Unknown wheel encoding: preserve legacy vertical heuristic.
+			direction = "up"
+			if wb&1 != 0 {
+				direction = "down"
+			}
 		}
 		return []InputEvent{{
 			Type:      "scroll",

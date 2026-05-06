@@ -13,6 +13,8 @@ type Event struct {
 	Bubbles   bool
 	Timestamp int64
 	Shift     bool // shift modifier (for horizontal scroll, shift+click, etc.)
+	Alt       bool // alt modifier; Alt+vertical wheel → horizontal scroll (Windows Terminal often omits Shift on wheel)
+	Ctrl      bool // ctrl modifier; Ctrl+vertical wheel → horizontal scroll when the terminal encodes it
 }
 
 // EventHandler is a function that handles an event.

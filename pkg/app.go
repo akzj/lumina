@@ -313,7 +313,17 @@ func (a *App) HandleEvent(e *event.Event) {
 	case "keydown":
 		a.engine.HandleKeyDown(e.Key)
 	case "scroll":
-		// Scroll direction is in e.Key ("up"/"down"), convert to delta
+		// Horizontal wheel (xterm SGR 66/67) uses Key "left"/"right"; Shift+vertical
+		// wheel uses "up"/"down" with Shift set.
+		if e.Key == "left" || e.Key == "right" {
+			delta := 1
+			if e.Key == "left" {
+				delta = -1
+			}
+			a.engine.HandleScrollH(e.X, e.Y, delta)
+			break
+		}
+		// Vertical wheel: Key is "up"/"down"
 		delta := 1
 		if e.Key == "up" {
 			delta = -1
@@ -327,7 +337,11 @@ func (a *App) HandleEvent(e *event.Event) {
 				return
 			}
 		}
-		if e.Shift {
+		// Windows Terminal / ConPTY often omit Shift on wheel in SGR reports; many
+		// terminals still set Alt or Ctrl — treat any of them like Shift+wheel for
+		// horizontal scroll (iTerm/macOS typically sets Shift correctly).
+		modWheel := e.Shift || e.Alt || e.Ctrl
+		if modWheel {
 			a.engine.HandleScrollH(e.X, e.Y, delta)
 		} else {
 			a.engine.HandleScroll(e.X, e.Y, delta)

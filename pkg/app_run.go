@@ -23,7 +23,7 @@ type InputEvent struct {
 	Key       string // key name (e.g. "a", "Enter", "Tab", "Escape")
 	Char      string // printable character (if any)
 	X, Y      int    // mouse position (screen coordinates)
-	Button    string // mouse button or scroll direction ("left", "right", "up", "down")
+	Button    string // mouse button, or wheel: "up"/"down"/"left"/"right"
 	Modifiers InputModifiers
 }
 
@@ -362,6 +362,8 @@ func (a *App) handleInputEvent(ie InputEvent) {
 			Y:     ie.Y,
 			Key:   ie.Button, // "up" or "down"
 			Shift: ie.Modifiers.Shift,
+			Alt:   ie.Modifiers.Alt,
+			Ctrl:  ie.Modifiers.Ctrl,
 		})
 		a.RenderDirty()
 
