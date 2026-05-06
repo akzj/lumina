@@ -300,8 +300,8 @@ func (e *Engine) readDescriptor(L *lua.State, idx int) Descriptor {
 		L.Pop(1)
 	}
 
-	// Backward compat: input/textarea are always focusable
-	if desc.Type == "input" || desc.Type == "textarea" {
+	// Backward compat: input/textarea are always focusable (unless disabled)
+	if (desc.Type == "input" || desc.Type == "textarea") && !desc.Disabled {
 		desc.Focusable = true
 	}
 

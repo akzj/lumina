@@ -203,6 +203,9 @@ func (e *Engine) HandleInputKeyDown(key string) bool {
 	if node.Type != "input" && node.Type != "textarea" {
 		return false
 	}
+	if node.Disabled {
+		return false
+	}
 
 	switch key {
 	case "Tab":

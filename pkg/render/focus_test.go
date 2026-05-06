@@ -293,3 +293,35 @@ func TestEngine_FocusNextAndPrev_Symmetry(t *testing.T) {
 		t.Error("FocusPrev: expected c (wrap)")
 	}
 }
+
+func TestEngine_HandleInputKeyDown_Disabled(t *testing.T) {
+	e, _ := newLayerTestEngine(t)
+
+	root := NewNode("box")
+	root.W = 40
+	root.H = 10
+
+	input := NewNode("input")
+	input.ID = "disabled-input"
+	input.Focusable = true
+	input.Disabled = true
+	input.W = 20
+	input.H = 1
+	input.Content = ""
+	root.AddChild(input)
+
+	e.syncMainLayer()
+	e.Layers()[0].Root = root
+
+	// Force focus onto the disabled node (simulate a bug scenario)
+	e.focusedNode = input
+
+	// Try typing — should be rejected
+	consumed := e.HandleInputKeyDown("a")
+	if consumed {
+		t.Error("HandleInputKeyDown should not consume keys on disabled input")
+	}
+	if input.Content != "" {
+		t.Errorf("disabled input content changed: got %q, want empty", input.Content)
+	}
+}

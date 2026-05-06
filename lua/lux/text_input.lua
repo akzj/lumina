@@ -36,6 +36,7 @@ local TextInput = lumina.defineComponent("TextInput", function(props)
         background = inputBg,
         role = "textbox",
         focusable = not props.disabled,
+        disabled = props.disabled or false,
         autoFocus = props.autoFocus,
         style = inputStyle,
         onChange = props.onChange,
