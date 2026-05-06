@@ -2320,3 +2320,27 @@ func TestV2E2E_CreateElementFactorySingleChild(t *testing.T) {
 		t.Errorf("expected child content 'Only Child', got %q", content)
 	}
 }
+
+func TestV2E2E_BreathingLightScript(t *testing.T) {
+	app, ta, _ := newV2App(t, 60, 20)
+
+	err := app.RunScript("../examples/breathing_light.lua")
+	if err != nil {
+		t.Fatalf("RunScript failed: %v", err)
+	}
+
+	app.RenderAll()
+
+	if ta.LastScreen == nil {
+		t.Fatal("LastScreen is nil after rendering breathing_light.lua")
+	}
+
+	// Should show the title text
+	if !screenHasString(ta, "Breathing Light") {
+		t.Error("breathing_light.lua should show 'Breathing Light' title")
+	}
+	// Should show the description
+	if !screenHasString(ta, "setInterval") {
+		t.Error("breathing_light.lua should show 'setInterval' description")
+	}
+}
