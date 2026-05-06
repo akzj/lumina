@@ -85,7 +85,8 @@ type Style struct {
 	GridRowEnd      int    // 1-based row end (exclusive)
 
 	// Overflow
-	Overflow string // "hidden", "scroll"
+	Overflow  string // "hidden", "scroll"
+	Scrollbar string // "" (default=show), "none" (hide scrollbar)
 
 	// Positioning
 	Position      string // "", "relative", "absolute", "fixed"

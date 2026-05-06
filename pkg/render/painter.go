@@ -541,8 +541,10 @@ func paintScrollChildrenClipped(buf *CellBuffer, node *Node, outerClipX1, outerC
 		paintNodeClipped(buf, child, clipX1, clipY1, clipX2, clipY2, childOffsetX, childOffsetY)
 	}
 
-	// Paint scrollbar in the reserved right column (use inner clip for position)
-	paintScrollbar(buf, node, innerX2-1, innerY1, innerY2, maxScrollY)
+	// Paint scrollbar in the reserved right column (unless hidden)
+	if node.Style.Scrollbar != "none" {
+		paintScrollbar(buf, node, innerX2-1, innerY1, innerY2, maxScrollY)
+	}
 }
 
 // paintHiddenChildrenClipped paints overflow:hidden children with both the

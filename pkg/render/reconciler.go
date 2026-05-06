@@ -147,6 +147,7 @@ func reconcileStyle(node *Node, newStyle Style) bool {
 		old.Order != newStyle.Order ||
 		old.Border != newStyle.Border ||
 		old.Overflow != newStyle.Overflow ||
+		old.Scrollbar != newStyle.Scrollbar ||
 		old.Position != newStyle.Position ||
 		old.Top != newStyle.Top ||
 		old.Left != newStyle.Left ||

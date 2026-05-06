@@ -261,9 +261,9 @@ func computeFlex(node *Node, x, y, w, h int, depth int) {
 		contentH = 0
 	}
 
-	// If overflow=scroll, reserve 1 column for scrollbar
+	// If overflow=scroll, reserve 1 column for scrollbar (unless hidden)
 	layoutW := contentW
-	if style.Overflow == "scroll" && contentW > 1 {
+	if style.Overflow == "scroll" && contentW > 1 && style.Scrollbar != "none" {
 		layoutW = contentW - 1
 	}
 

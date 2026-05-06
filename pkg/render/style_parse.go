@@ -229,6 +229,10 @@ func applyStyleField(s *Style, name string, value any) {
 		if str, ok := value.(string); ok {
 			s.Overflow = str
 		}
+	case "scrollbar":
+		if str, ok := value.(string); ok {
+			s.Scrollbar = str
+		}
 
 	// --- Positioning ---
 	case "position":
@@ -347,6 +351,11 @@ func validateStyle(s *Style) {
 	case "", "scroll", "hidden":
 	default:
 		s.Overflow = ""
+	}
+	switch s.Scrollbar {
+	case "", "none", "auto":
+	default:
+		s.Scrollbar = ""
 	}
 	switch s.Border {
 	case "", "none", "single", "double", "rounded":

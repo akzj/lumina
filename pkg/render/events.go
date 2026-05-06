@@ -576,6 +576,9 @@ func (e *Engine) handleScrollbarClick(node *Node, x, y int) bool {
 	if node.Style.Overflow != "scroll" {
 		return false
 	}
+	if node.Style.Scrollbar == "none" {
+		return false
+	}
 	maxScroll := computeMaxScrollY(node)
 	if maxScroll <= 0 {
 		return false
@@ -681,6 +684,9 @@ func (e *Engine) findScrollbarThumbAt(node *Node, x, y int) *Node {
 	}
 
 	if node.Style.Overflow != "scroll" {
+		return nil
+	}
+	if node.Style.Scrollbar == "none" {
 		return nil
 	}
 	maxScroll := computeMaxScrollY(node)
