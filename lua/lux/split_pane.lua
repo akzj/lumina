@@ -84,6 +84,12 @@ local SplitPane = lumina.defineComponent("SplitPane", function(props)
             paneStyle.background = backgrounds
         end
 
+        -- Ensure child has a key to prevent defineComponent dedup bug
+        -- (without key, sibling defineComponent elements in hbox may only render the last one)
+        if type(child) == "table" and child.key == nil then
+            child.key = "split-child-" .. i
+        end
+
         elements[#elements + 1] = lumina.createElement("vbox", {
             key = "split-pane-" .. i,
             style = paneStyle,
