@@ -2,15 +2,16 @@
 
 > Go 渲染引擎 + Lua 声明式 UI = 高性能终端应用
 
-Lumina 是一个 **React 风格的终端 UI 框架**。用 Lua 声明 UI 组件，Go 负责渲染、布局和事件处理。
+Lumina 是一个 **React 风格的终端 UI 框架**。用 Lua 声明 UI 组件，Go 负责渲染、布局和事件处理。专为 AI Agent 调试设计了 MCP DevTools，是生成式 TUI 应用的最佳底座。
 
 ```lua
-lumina.createComponent({
+local app = lumina.app({
     id = "hello",
-    render = function(props)
-        local count, setCount = lumina.useState("count", 0)
+    store = { count = 0 },
+    render = function()
+        local count = lumina.useStore("count")
         return lumina.createElement("box", {
-            onClick = function() setCount(count + 1) end,
+            onClick = function() lumina.store.set("count", count + 1) end,
         },
             lumina.createElement("text", {foreground = "#89B4FA"}, "Count: " .. count)
         )
@@ -25,56 +26,78 @@ lumina.createComponent({
 - **增量布局** — 只重算 `LayoutDirty` 子树
 - **脏区绘制** — 只重绘 `PaintDirty` 节点
 - **O(k) 复杂度** — k = 实际变化量，与总节点数无关
+- **分层渲染** — 支持 main 层 + 多个 overlay 层（窗口、对话框等）
+- **2D 滚动支持** — 水平/垂直滚动，自动滚动条
 
 ### 组件系统
-- **`createComponent`** — 创建根组件
+- **`lumina.app`** — 应用入口（全局配置、状态、路由、快捷键）
 - **`defineComponent`** — 定义可复用子组件（工厂模式）
 - **`createElement`** — 创建 UI 元素（JSX 等价物）
-- **`useState`** — 组件状态管理（React 风格 Hook）
-- **Hooks** — `useEffect`、`useRef`、`useMemo`、`useCallback`（与 `useState` 同一套调用顺序规则）
-- **Radix 风格控件（Go Widget）** — 在 `pkg/widget/` 实现、以 `lumina.<Name>` 暴露给 Lua（与 Web 里 Radix 那层「无障碍原语 + 交互状态机」同角色）；基元仍是 `box` / `text` / `input` 等，Widget 在其之上组合布局与事件
-- **Lua Lux** — `require("lux")` 的纯 Lua 模板（Card、Dialog 等），偏展示与业务拼装；复杂交互优先用上面的 Go Widget，再用 Lux 包一层样式即可
+- **Hooks** — 19个 React 风格 Hook
+  - 基础：`useState`、`useEffect`、`useRef`、`useMemo`、`useCallback`
+  - 框架：`useStore`、`useRoute`、`useTheme`、`useAnimation`
+- **Lux 纯 Lua 组件库** — 30+ shadcn 风格组件，嵌入二进制，无需外置依赖
+  - 基础：Button、Card、Badge、Divider、Progress、Spinner、Alert、Accordion、Breadcrumb
+  - 输入：TextInput、Checkbox、Radio、Switch、Form、Command Palette
+  - 布局：Layout、Slot、Window、SplitPane、ScrollView、VList、DataGrid、Pagination、Tabs、Tree
+  - 反馈：Dialog、Toast
+  - 高级：WM(窗口管理)、DataGrid、Atlantis 主题
 
-### 布局
-- **Flexbox** — `vbox`（垂直）/ `hbox`（水平）
-- **Flex 分配** — `flex` 属性按比例分配空间
-- **对齐** — `justify`（主轴）/ `align`（交叉轴）
-- **间距** — `padding`, `margin`, `gap`
-- **定位** — `relative`, `absolute`, `fixed`
-- **边框** — `single`, `double`, `rounded`
+### 布局系统
+- **Flexbox** — `vbox`（垂直）/ `hbox`（水平）/ `grid`（网格）
+- **Flex 分配** — `flexGrow`/`flexShrink`/`flexBasis` 属性
+- **对齐** — `justifyContent`（主轴）/ `alignItems`（交叉轴）/ `alignSelf`
+- **间距** — `padding`, `margin`, `gap`，支持简写和单边设置
+- **定位** — `static`, `relative`, `absolute`, `fixed`
+- **边框** — `single`, `double`, `rounded`，支持自定义颜色
 - **约束** — `minWidth`, `maxWidth`, `minHeight`, `maxHeight`
+- **单位支持** — 无单位（字符）、px、%、vw、vh
+- **溢出处理** — `hidden`/`scroll`/`visible`，自动滚动条
 
-### 事件
-- **鼠标** — `onClick`, `onMouseEnter`, `onMouseLeave`, `onScroll`
-- **键盘** — `onKeyDown`
-- **输入** — `onChange`（input/textarea 值变化）
-- **冒泡** — 事件从最深层节点向上冒泡到最近的处理器
-
-### 输入组件
-- **`input`** — 单行文本输入
-- **`textarea`** — 多行文本输入
-- **焦点** — `Tab` 循环、点击聚焦、`autoFocus`
-- **编辑** — 光标移动、Backspace、字符插入
+### 事件系统
+- **鼠标事件** — `onClick`, `onMouseDown`, `onMouseUp`, `onMouseEnter`, `onMouseLeave`, `onScroll`, `onScrollH`
+- **键盘事件** — `onKeyDown`, `onKeyUp`, `onKeyPress`
+- **输入事件** — `onChange`（input/textarea 值变化）
+- **自定义事件** — `emit`/`on`/`off` 事件总线
+- **命中测试** — 多层重叠节点的事件冒泡
+- **焦点管理** — Tab/Shift+Tab 循环、点击聚焦、`autoFocus`、全局快捷键
+- **文本编辑** — 支持删除、方向键、选择、IME 兼容
 
 ### 运行时
 - **60fps 事件循环** — 定时渲染脏组件
 - **热加载** — 文件变化自动重载 Lua 脚本（`lumina --watch script.lua`）
 - **定时器** — `setInterval`, `setTimeout`, `clearInterval`, `clearTimeout`
-- **异步** — `lumina.spawn`、`lumina.sleep`、`lumina.readFile`、`lumina.exec`；在 spawn 协程内用 `require("async").await(...)` 等待 Future（示例见 `pkg/testdata/lua_tests/async_test.lua`）
-- **开发者工具** — F12 切换，显示组件树和性能指标
+- **异步支持** — 协程调度、异步IO
+- **动画系统** — `useAnimation` Hook，支持缓动函数、循环动画
+- **全局状态** — `lumina.store` 全局状态管理，`useStore` 响应式订阅
+- **路由系统** — `lumina.router` 路由管理，`useRoute` 响应式订阅
+- **开发者工具** — F12 切换，包含 Elements 面板（组件树检查）、性能面板（渲染指标）、实时修改状态
+
+### MCP DevTools（AI 专属）
+Lumina 内置 AI 友好的调试协议：
+- **inspect** — 读取组件树、组件详情、计算样式
+- **simulate** — 模拟点击、按键、滚动等用户操作
+- **console** — 日志收集、错误栈输出
+- **patch** — 热修复组件代码，无需重启
+- **diff** — 帧对比，输出变化区域
+- **profile** — 性能分析，渲染耗时统计
+
+### Web 运行时
+- WebSocket 服务器
+- xterm.js 前端
+- 多会话管理
+- 浏览器中直接访问 Lumina 应用
 
 ---
 
 ## 🚀 快速开始
 
 ### 安装
-
 ```bash
 go install github.com/akzj/lumina/cmd/lumina@latest
 ```
 
 ### 运行示例
-
 ```bash
 # 计数器
 lumina examples/counter.lua
@@ -82,78 +105,91 @@ lumina examples/counter.lua
 # Todo MVC
 lumina examples/todo_mvc.lua
 
-# 压力测试（1840 个独立组件）
-lumina examples/stress_test.lua
+# 表单演示
+lumina examples/form_demo.lua
 
 # 系统仪表盘
 lumina examples/dashboard.lua
 
-# Widget + Lux 组件展示
+# 文件浏览器
+lumina examples/file_browser.lua
+
+# 组件展示
 lumina examples/components_showcase.lua
+
+# 2D 滚动演示
+lumina examples/scroll_2d.lua
+
+# 真实案例
+lumina examples/ai-agent/main.lua    # AI Agent 界面
+lumina examples/kanban/main.lua     # 看板应用
+lumina examples/api-client/main.lua # API 客户端
+lumina examples/markdown-viewer/main.lua # Markdown 阅读器
 ```
 
 ### CLI 常用参数
-
 ```text
 lumina [--web :8080] [--mcp :8088] [--watch] <script.lua>
 ```
-
 - **`--watch`** — 监听脚本所在目录，保存后热重载
 - **`--web :端口`** — WebSocket 输出到浏览器（终端里会打印本地 URL）
-- **`--mcp :端口`** — 并行启动 MCP HTTP 服务（便于 IDE / 工具对接）
+- **`--mcp :端口`** — 并行启动 MCP HTTP 服务（便于 IDE / AI Agent 对接）
 
 ### 退出
-
 `Ctrl+C` 或 `Ctrl+Q`
 
 ---
 
 ## 📖 Lua API 参考
 
-### lumina.createComponent(config)
-
-创建根组件并注册到渲染引擎。
-
+### lumina.app(config)
+创建并启动应用，是 V2 的标准入口。
 ```lua
-lumina.createComponent({
+lumina.app({
     id = "my-app",          -- 必填，唯一标识
     name = "MyApp",         -- 可选，显示名称
-    render = function(props)
+    store = { count = 0 },  -- 初始全局状态
+    routes = { "/", "/settings/:id" }, -- 路由表
+    keys = {                -- 全局快捷键
+        ["Ctrl+C"] = function() lumina.quit() end,
+        ["F12"] = function() -- 自定义快捷键 end
+    },
+    render = function()
         -- 返回 createElement 结果
         return lumina.createElement("box", {}, ...)
     end,
 })
 ```
 
-### lumina.defineComponent(name, renderFn)
-
+### lumina.defineComponent(config)
 定义可复用的子组件工厂。返回一个工厂表，可传给 `createElement`。
-
 ```lua
-local Button = lumina.defineComponent("Button", function(props)
-    local hovered, setHovered = lumina.useState("h", false)
-    return lumina.createElement("box", {
-        style = {background = hovered and "#313244" or "#1E1E2E"},
-        onMouseEnter = function() setHovered(true) end,
-        onMouseLeave = function() setHovered(false) end,
-        onClick = props.onClick,
-    },
-        lumina.createElement("text", {foreground = "#89B4FA"}, props.label)
-    )
-end)
+local Button = lumina.defineComponent({
+    name = "Button",
+    init = function(props)
+        return { hovered = false }
+    end,
+    render = function(instance)
+        return lumina.createElement("box", {
+            style = {background = instance.hovered and "#313244" or "#1E1E2E"},
+            onMouseEnter = function() instance.setState({hovered = true}) end,
+            onMouseLeave = function() instance.setState({hovered = false}) end,
+            onClick = instance.props.onClick,
+        },
+            lumina.createElement("text", {foreground = "#89B4FA"}, instance.props.label)
+        )
+    end
+})
 
 -- 使用子组件
 lumina.createElement(Button, {key = "btn1", label = "Click me", onClick = handler})
 ```
 
 ### lumina.createElement(type, props, ...children)
-
 创建 UI 元素描述。
-
 ```lua
 -- 基本元素
-lumina.createElement("box", {style = {background = "#1E1E2E"}},
-    lumina.createElement("text", {foreground = "#CDD6F4"}, "Hello")
+lumina.createElement("box", {style = {background = "#1E1E2E"}},\n    lumina.createElement("text", {foreground = "#CDD6F4"}, "Hello")
 )
 
 -- 子组件（工厂来自 defineComponent）
@@ -161,14 +197,11 @@ lumina.createElement(MyComponent, {key = "unique-key", someProp = "value"})
 
 -- 子组件 + 子节点：第 3 个参数起的子节点会进入 props.children（数组），
 -- 便于在 defineComponent 里用 table.unpack(props.children or {}) 组合布局。
-lumina.createElement(MyComponent, {title = "Panel"},
-    lumina.createElement("text", {}, "Line A"),
-    lumina.createElement("text", {}, "Line B")
+lumina.createElement(MyComponent, {title = "Panel"},\n    lumina.createElement("text", {}, "Line A"),\n    lumina.createElement("text", {}, "Line B")
 )
 ```
 
 **元素类型**:
-
 | 类型 | 说明 |
 |------|------|
 | `"box"` | 通用容器（默认垂直堆叠） |
@@ -177,83 +210,71 @@ lumina.createElement(MyComponent, {title = "Panel"},
 | `"text"` | 文本节点 |
 | `"input"` | 单行文本输入 |
 | `"textarea"` | 多行文本输入 |
+| `"fragment"` | 透明容器，不占空间 |
+| `"component"` | 组件占位符 |
 
-### Radix 风格控件：Go Widget（`lumina.*`）
-
-应用启动时（`pkg/app.go`）会把 `pkg/widget` 里内置控件全部注册进引擎，因此在 Lua 里与基元一样通过 `createElement` 使用，工厂表挂在全局 `lumina` 上（名称与 Go 侧 `Widget.Name` 一致）。
-
-**当前内置控件（Lua 工厂名）**
-
-| `lumina.*` | 说明 |
-|------------|------|
-| `Button` | 按钮（variant、hover/pressed 等） |
-| `Checkbox` | 勾选框，支持 `checked` + `onChange(bool)` |
-| `Switch` | 开关 |
-| `Radio` | 单选 |
-| `Label` | 标签（可与输入控件关联） |
-| `Select` | 下拉选择，`options` + `value` + `onChange(string)` |
-| `Dialog` | 对话框容器 |
-| `Tooltip` | 提示 |
-| `Toast` | 轻提示 |
-| `Table` | 表格 |
-| `List` | 列表 |
-| `Pagination` | 分页 |
-| `Menu` | 菜单 |
-| `Dropdown` | 下拉菜单 |
-| `Spacer` | 占位间距 |
-
-示例：
-
+### Lux 组件库（`require("lux")`）
+30+ 纯 Lua 实现的 shadcn 风格组件，嵌入二进制，无需外置依赖：
 ```lua
-lumina.createElement(lumina.Button, {
+local lux = require("lux")
+
+-- 按钮
+lumina.createElement(lux.Button, {
     label = "OK",
     variant = "primary",
     onClick = function() end,
 })
 
-lumina.createElement(lumina.Checkbox, {
+-- 复选框
+lumina.createElement(lux.Checkbox, {
     checked = true,
     label = "Remember me",
     onChange = function(checked) end,
 })
-```
 
-实现细节、事件与无障碍相关约定见 [docs/DESIGN-widgets.md](docs/DESIGN-widgets.md)；源码目录为 [`pkg/widget/`](pkg/widget/)。
-
-### Lua Lux 组件库（`require("lux")`）
-
-与上一节的 **Go Radix 风格控件** 区分：`lux` 是 **Lua 侧可热更的 UI 模板**（由 `pkg/lux_modules.go` 通过 `lua/lux/embed.go` 将 `lua/lux/*.lua` 打进二进制并注册到 `package.preload`，运行时 `require` 即可），不负责底层焦点/键盘路由等——那些由引擎 + Go Widget 处理。
-
-典型用法：
-
-```lua
-local lux = require("lux")
-
+-- 卡片
 lumina.createElement(lux.Card, {title = "Hello"},
     lumina.createElement("text", {}, "Content")
 )
+
+-- 下拉选择
+lumina.createElement(lux.Select, {
+    options = {"A", "B", "C"},
+    value = "A",
+    onChange = function(value) end,
+})
 ```
+完整组件列表和用法见 [docs/COMPONENTS.md](docs/COMPONENTS.md)。
 
-### lumina.useState(key, defaultValue)
-
-在当前组件中声明一个状态变量。返回 `(currentValue, setterFn)`。
-
+### 状态管理
 ```lua
-local count, setCount = lumina.useState("count", 0)
--- 更新状态（触发组件重新渲染）
-setCount(count + 1)
+-- 读取全局状态并订阅变化
+local count = lumina.useStore("count")
+
+-- 修改全局状态
+lumina.store.set("count", count + 1)
+
+-- 批量修改
+lumina.store.batch({
+    count = 1,
+    user = {name = "Alice"}
+})
 ```
 
-> **注意**: `key` 在组件内必须唯一。相同 key 的多次调用返回同一个状态。
+### 路由系统
+```lua
+-- 获取当前路由信息并订阅变化
+local route = lumina.useRoute()
+-- route = {path = "/settings/123", params = {id = "123"}}
 
-### lumina.quit()
+-- 导航
+lumina.router.navigate("/settings/456")
 
-退出应用。
+-- 返回上一页
+lumina.router.back()
+```
 
-### lumina.setInterval(fn, ms) / lumina.setTimeout(fn, ms)
-
-设置定时器，返回 timer ID。
-
+### 定时器
 ```lua
 local id = lumina.setInterval(function()
     -- 每 1000ms 执行
@@ -262,36 +283,38 @@ end, 1000)
 lumina.clearInterval(id)  -- 取消
 ```
 
+### lumina.quit()
+退出应用。
+
 ---
 
 ## 🎨 样式系统
-
-样式可以通过 `style` 子表或直接作为 props 传入：
-
+样式可以通过 `style` 子表传入：
 ```lua
--- 方式 1: style 子表
 lumina.createElement("box", {
-    style = {width = 40, height = 10, background = "#1E1E2E"},
-})
-
--- 方式 2: 顶层属性（style 子表优先级更高）
-lumina.createElement("text", {
-    foreground = "#89B4FA",
-    bold = true,
+    style = {
+        width = "100%",
+        height = "100%",
+        background = "#1E1E2E",
+        border = "single",
+        borderColor = "#89B4FA",
+        padding = 1,
+        gap = 1
+    },
 })
 ```
 
-### 尺寸
-
+### 尺寸属性
 | 属性 | 说明 |
 |------|------|
-| `width`, `height` | 固定尺寸（0 = 自动） |
+| `width`, `height` | 固定尺寸，支持数字、`%`、`vw`、`vh` |
 | `minWidth`, `maxWidth` | 宽度约束 |
 | `minHeight`, `maxHeight` | 高度约束 |
-| `flex` | Flex 增长因子（按比例分配剩余空间） |
+| `flexGrow` | 弹性增长因子 |
+| `flexShrink` | 弹性收缩因子 |
+| `flexBasis` | 弹性基准尺寸 |
 
-### 间距
-
+### 间距属性
 | 属性 | 说明 |
 |------|------|
 | `padding` | 四边内边距（简写） |
@@ -300,43 +323,44 @@ lumina.createElement("text", {
 | `marginTop/Bottom/Left/Right` | 单边外边距（覆盖简写） |
 | `gap` | 子元素间距 |
 
-### 对齐
-
+### 对齐属性
 | 属性 | 值 | 说明 |
 |------|-----|------|
-| `justify` | `"start"`, `"center"`, `"end"`, `"space-between"`, `"space-around"` | 主轴对齐 |
-| `align` | `"stretch"`, `"start"`, `"center"`, `"end"` | 交叉轴对齐 |
+| `justifyContent` | `"start"`, `"center"`, `"end"`, `"space-between"`, `"space-around"`, `"space-evenly"` | 主轴对齐 |
+| `alignItems` | `"stretch"`, `"start"`, `"center"`, `"end"` | 交叉轴对齐 |
+| `alignSelf` | 同 alignItems | 单个子元素交叉轴对齐 |
+| `flexDirection` | `"row"`, `"column"`, `"row-reverse"`, `"column-reverse"` | 主轴方向 |
+| `flexWrap` | `"nowrap"`, `"wrap"`, `"wrap-reverse"` | 换行 |
 
-### 视觉
-
+### 视觉属性
 | 属性 | 说明 |
 |------|------|
-| `foreground` / `fg` | 前景色（如 `"#89B4FA"`） |
+| `foreground` / `fg` | 前景色（如 `"#89B4FA"` 或颜色名） |
 | `background` / `bg` | 背景色 |
 | `bold` | 粗体 |
 | `dim` | 暗淡 |
 | `underline` | 下划线 |
 | `border` | 边框样式: `"single"`, `"double"`, `"rounded"` |
+| `borderColor` | 边框颜色 |
 
-### 定位
-
+### 位置属性
 | 属性 | 说明 |
 |------|------|
-| `position` | `"relative"`, `"absolute"`, `"fixed"` |
+| `position` | `"static"`, `"relative"`, `"absolute"`, `"fixed"` |
 | `top`, `left`, `right`, `bottom` | 偏移量 |
 | `zIndex` | 层叠顺序 |
 
-### 溢出
-
+### 溢出属性
 | 属性 | 说明 |
 |------|------|
-| `overflow` | `"hidden"`, `"scroll"` |
-| `scrollY` | 垂直滚动偏移量（配合 `overflow: "scroll"`） |
+| `overflow` | `"hidden"`, `"scroll"`, `"visible"` |
+| `scrollX`/`scrollY` | 滚动偏移量 |
+
+完整布局属性参考见 [docs/LAYOUT_DESIGN.md](docs/LAYOUT_DESIGN.md)。
 
 ---
 
 ## 🎯 事件系统
-
 ```lua
 lumina.createElement("box", {
     onClick = function(e)
@@ -349,24 +373,21 @@ lumina.createElement("box", {
     end,
     onScroll = function(e)
         -- e.delta: 滚动方向（-1=上, 1=下）
-        -- e.key: "up" 或 "down"
     end,
     onChange = function(value)
         -- input/textarea 值变化时触发
     end,
 })
 ```
-
 事件从最深层节点向上**冒泡**，直到找到对应的处理器。
 
 ---
 
 ## 🏗️ 架构概览
-
 ```
 Lua 用户代码（含 require("lux") / require("theme")）
-  ↓ createComponent / defineComponent / createElement / hooks
-Engine (Go) + Widget（pkg/widget）
+  ↓ lumina.app / defineComponent / createElement / hooks
+Render Engine (Go)
   ↓ renderInOrder()     — 调用脏组件的 Lua renderFn
   ↓ readDescriptor()    — Lua 表 → Descriptor
   ↓ Reconcile()         — Descriptor vs Node 树，就地 patch
@@ -376,19 +397,16 @@ Engine (Go) + Widget（pkg/widget）
   ↓ ToBuffer()          — CellBuffer → Buffer
 Output Adapter
   ↓ WriteDirty(buf, dirtyRects) — 只输出变化区域
-终端 / WebSocket（--web）
+终端 / WebSocket（--web） / MCP 服务（--mcp）
 ```
-
 详细架构设计见 [DESIGN.md](DESIGN.md)。
 
 ---
 
 ## 🔧 开发指南
-
 ### 运行测试
-
 ```bash
-# 全部测试
+# 全部测试（751+ 测试用例）
 go test ./pkg/...
 
 # 渲染引擎测试
@@ -400,42 +418,34 @@ go test ./pkg/ -run TestE2E
 # 压力测试 benchmark
 go test ./pkg/ -bench BenchmarkStress -benchtime 5s
 
-# Lua 测试框架（testdata/lua_tests 下 *_test.lua，含子目录）
+# Lua 测试框架
 go test ./pkg/ -run TestLuaTestFramework
 ```
 
 ### 项目结构
-
 ```
-cmd/lumina/           — CLI 入口
+cmd/
+  lumina/           — CLI 入口
+  lumina-server/    — MCP 服务器入口
 pkg/                  — 核心框架（package v2）
   render/             — 渲染引擎（Engine, Node, Reconciler, Layout, Painter）
-  widget/             — Go 内置 Widget（Button、Checkbox、Select…）
   buffer/             — Buffer 类型
-  output/             — 输出适配器（ANSI, TestAdapter）
-  event/              — 事件类型
+  output/             — 输出适配器（ANSI, TestAdapter, WebSocket）
+  event/              — 事件系统、命中测试、焦点管理
   perf/               — 性能追踪
   devtools/           — 开发者工具
   animation/          — 动画系统
-  router/             — 路由
+  router/             — 路由管理
   hotreload/          — 热加载
-  store/              — 状态管理
+  store/              — 全局状态管理
+  mcp/                — MCP 协议实现
   testdata/lua_tests/ — Lua 侧单元测试脚本
-lua/                  — Lux / theme 源码（由 pkg 内嵌到运行时 require）
-examples/             — 示例 Lua 应用
+lua/                  — Lux 组件库 / theme 源码（内嵌到二进制）
+examples/             — 示例应用
 docs/                 — 文档
 ```
-
-### 添加新的元素类型
-
-1. 在 `render/node.go` 中定义类型字符串
-2. 在 `render/layout.go` 的 `computeFlex()` 中添加布局分支
-3. 在 `render/painter.go` 的 `paintNode()` 中添加绘制分支
-4. 在 `render/engine.go` 的 `readDescriptor()` 中读取特有属性
-5. 写测试，运行 `go test ./pkg/render/...`
 
 ---
 
 ## 📄 许可证
-
 MIT

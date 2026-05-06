@@ -84,8 +84,16 @@ local Tabs = lumina.defineComponent("Tabs", function(props)
                     onTabChange(tab.id)
                 end
             end or nil,
-            style = { height = 1 },
-        }, " " .. (tab.label or tab.id) .. " ")
+            style = {
+                height = 1,
+                flex = 1,
+                minWidth = 0,
+                textAlign = "center",
+                whiteSpace = "nowrap",
+                overflow = "hidden",
+                textOverflow = "ellipsis",
+            },
+        }, (tab.label or tab.id))
     end
 
     local tabBar = lumina.createElement("hbox", {
