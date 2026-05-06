@@ -869,6 +869,13 @@ func (e *Engine) renderInOrder() int {
 			if !comp.Dirty {
 				continue // may have been rendered as side effect
 			}
+			// Skip if any ancestor component is still dirty — this component
+			// will receive stale props. It will be re-dirtied by the ancestor's
+			// reconcileChildComponents and rendered in a subsequent iteration
+			// with correct props.
+			if ancestorDirty(comp) {
+				continue
+			}
 			e.renderComponent(comp)
 			count++
 		}
@@ -883,6 +890,18 @@ func componentDepth(c *Component) int {
 		depth++
 	}
 	return depth
+}
+
+// ancestorDirty returns true if any ancestor component of c is still dirty.
+// This means c would render with stale props — its ancestor hasn't propagated
+// updated props yet via reconcileChildComponents.
+func ancestorDirty(c *Component) bool {
+	for p := c.Parent; p != nil; p = p.Parent {
+		if p.Dirty {
+			return true
+		}
+	}
+	return false
 }
 
 // hasAnyDirty returns true if any node in the tree has LayoutDirty or PaintDirty set.
