@@ -158,9 +158,13 @@ type Node struct {
 	OnScroll LuaRef
 
 	// Component (if this is a component root node)
-	Component     *Component // nil for plain elements
+	Component      *Component     // nil for plain elements
 	ComponentType  string         // factory name for type="component" nodes
 	ComponentProps map[string]any // props passed to sub-component via createElement(Factory, props)
+
+	// positionalKey is an auto-generated key for same-type sibling components
+	// that lack an explicit key/id prop. Set during reconciliation, not persisted.
+	positionalKey string
 
 	// Scroll state
 	ScrollY      int

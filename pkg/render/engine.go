@@ -3,6 +3,7 @@ package render
 import (
 	"reflect"
 	"sort"
+	"strconv"
 
 	"github.com/akzj/go-lua/pkg/lua"
 	"github.com/akzj/lumina/pkg/buffer"
@@ -606,6 +607,10 @@ func (e *Engine) reconcileChildComponents(parent *Component, node *Node) {
 		if lookupKey == "" {
 			lookupKey = node.Key
 		}
+		// If still no key, use the positional key set by the parent's recursion.
+		if lookupKey == "" {
+			lookupKey = node.positionalKey
+		}
 		child := parent.FindChild(factoryName, lookupKey)
 		if child == nil {
 			// Create new child component
@@ -636,8 +641,21 @@ func (e *Engine) reconcileChildComponents(parent *Component, node *Node) {
 		return
 	}
 
-	// Recurse into children
+	// Recurse into children, assigning positional keys to same-type siblings
+	// that lack explicit keys (like React's implicit array index keys).
+	typeCount := make(map[string]int) // tracks occurrence index per component type
 	for _, ch := range node.Children {
+		if ch != nil && ch.Type == "component" && ch.ComponentType != "" {
+			explicitKey := ch.ID
+			if explicitKey == "" {
+				explicitKey = ch.Key
+			}
+			if explicitKey == "" {
+				idx := typeCount[ch.ComponentType]
+				ch.positionalKey = "__pos_" + strconv.Itoa(idx)
+				typeCount[ch.ComponentType] = idx + 1
+			}
+		}
 		e.reconcileChildComponents(parent, ch)
 	}
 }
@@ -762,6 +780,9 @@ func collectActiveComponentKeys(node *Node, keys map[string]bool) {
 		lookupKey := node.ID
 		if lookupKey == "" {
 			lookupKey = node.Key
+		}
+		if lookupKey == "" {
+			lookupKey = node.positionalKey
 		}
 		mapKey := node.ComponentType
 		if lookupKey != "" {

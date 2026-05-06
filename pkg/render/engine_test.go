@@ -1,6 +1,7 @@
 package render
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
@@ -1546,5 +1547,199 @@ func TestEngine_UseAnimation_WithManager(t *testing.T) {
 	e.RenderAll()
 	if len(mock.started) != 1 {
 		t.Errorf("expected 1 animation (reused), got %d", len(mock.started))
+	}
+}
+
+func TestEngine_MultipleSiblingComponents_SameType_NoKey(t *testing.T) {
+	// Bug: Multiple sibling components of the same type without explicit keys
+	// all mapped to the same ChildMap entry, so only the last one's props survived.
+	e, L := newTestEngine(t)
+
+	err := L.DoString(`
+		Counter = lumina.defineComponent("Counter", function(props)
+			return lumina.createElement("text", {}, "count:" .. tostring(props.n))
+		end)
+
+		lumina.createComponent({
+			id = "root",
+			name = "Root",
+			render = function(props)
+				return lumina.createElement("vbox", {id = "container"},
+					lumina.createElement(Counter, { n = 1 }),
+					lumina.createElement(Counter, { n = 2 }),
+					lumina.createElement(Counter, { n = 3 })
+				)
+			end,
+		})
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	e.RenderAll()
+
+	root := e.GetComponent("root")
+	if root == nil {
+		t.Fatal("root component not found")
+	}
+
+	// Should have 3 child components, not 1
+	if len(root.Children) != 3 {
+		t.Fatalf("expected 3 child components, got %d", len(root.Children))
+	}
+
+	// Each child should have distinct props
+	for i, child := range root.Children {
+		expectedN := int64(i + 1) // Lua integers come as int64 in Go
+		n, ok := child.Props["n"]
+		if !ok {
+			t.Errorf("child %d: missing prop 'n'", i)
+			continue
+		}
+		if n != expectedN {
+			t.Errorf("child %d: expected props.n=%v (%T), got %v (%T)", i, expectedN, expectedN, n, n)
+		}
+	}
+
+	// Each child should have rendered distinct content
+	for i, child := range root.Children {
+		if child.RootNode == nil {
+			t.Errorf("child %d: RootNode is nil", i)
+			continue
+		}
+		expected := "count:" + strconv.Itoa(i+1)
+		if child.RootNode.Content != expected {
+			t.Errorf("child %d: expected content %q, got %q", i, expected, child.RootNode.Content)
+		}
+	}
+}
+
+func TestEngine_MultipleSiblingComponents_MixedKeys(t *testing.T) {
+	// Verify that explicit keys still work alongside positional keys
+	e, L := newTestEngine(t)
+
+	err := L.DoString(`
+		Item = lumina.defineComponent("Item", function(props)
+			return lumina.createElement("text", {}, props.label)
+		end)
+
+		lumina.createComponent({
+			id = "root",
+			name = "Root",
+			render = function(props)
+				return lumina.createElement("vbox", {id = "container"},
+					lumina.createElement(Item, { key = "first", label = "A" }),
+					lumina.createElement(Item, { label = "B" }),
+					lumina.createElement(Item, { label = "C" }),
+					lumina.createElement(Item, { key = "last", label = "D" })
+				)
+			end,
+		})
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	e.RenderAll()
+
+	root := e.GetComponent("root")
+	if root == nil {
+		t.Fatal("root component not found")
+	}
+
+	// Should have 4 child components
+	if len(root.Children) != 4 {
+		t.Fatalf("expected 4 child components, got %d", len(root.Children))
+	}
+
+	// Verify keyed components are findable by key
+	if root.FindChild("Item", "first") == nil {
+		t.Error("keyed child 'first' not found")
+	}
+	if root.FindChild("Item", "last") == nil {
+		t.Error("keyed child 'last' not found")
+	}
+
+	// Verify all children have correct labels
+	expectedLabels := []string{"A", "B", "C", "D"}
+	for i, child := range root.Children {
+		if child.RootNode == nil {
+			t.Errorf("child %d: RootNode is nil", i)
+			continue
+		}
+		if child.RootNode.Content != expectedLabels[i] {
+			t.Errorf("child %d: expected content %q, got %q", i, expectedLabels[i], child.RootNode.Content)
+		}
+	}
+}
+
+func TestEngine_MultipleSiblingComponents_CleanupWorks(t *testing.T) {
+	// Verify that cleanup correctly removes positional-keyed components
+	e, L := newTestEngine(t)
+
+	err := L.DoString(`
+		Cell = lumina.defineComponent("Cell", function(props)
+			return lumina.createElement("text", {}, props.label)
+		end)
+
+		show_all = true
+		lumina.createComponent({
+			id = "root",
+			name = "Root",
+			render = function(props)
+				if show_all then
+					return lumina.createElement("vbox", {id = "container"},
+						lumina.createElement(Cell, { label = "X" }),
+						lumina.createElement(Cell, { label = "Y" }),
+						lumina.createElement(Cell, { label = "Z" })
+					)
+				else
+					return lumina.createElement("vbox", {id = "container"},
+						lumina.createElement(Cell, { label = "ONLY" })
+					)
+				end
+			end,
+		})
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	e.RenderAll()
+
+	root := e.GetComponent("root")
+	if root == nil {
+		t.Fatal("root component not found")
+	}
+	if len(root.Children) != 3 {
+		t.Fatalf("initial: expected 3 children, got %d", len(root.Children))
+	}
+
+	// Toggle to show only one
+	err = L.DoString(`show_all = false`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root.Dirty = true
+	e.MarkNeedsRender()
+	e.RenderDirty()
+
+	// Should now have only 1 child
+	if len(root.Children) != 1 {
+		t.Errorf("after toggle: expected 1 child, got %d", len(root.Children))
+	}
+
+	// Verify the remaining child has correct content
+	if root.Children[0].RootNode.Content != "ONLY" {
+		t.Errorf("expected content 'ONLY', got %q", root.Children[0].RootNode.Content)
+	}
+
+	// Verify removed components are gone from engine
+	allComps := e.AllComponents()
+	if len(allComps) != 2 { // root + 1 child
+		t.Errorf("expected 2 components total, got %d", len(allComps))
+		for id := range allComps {
+			t.Logf("  remaining: %s", id)
+		}
 	}
 }
