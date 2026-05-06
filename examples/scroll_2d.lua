@@ -18,7 +18,7 @@ lumina.app {
 
         -- Generate a wide+tall grid (80 rows × 20 columns)
         local rows = {}
-        for r = 1, 80 do
+        for r = 1, 300 do
             -- Each row is a long text line (wider than viewport)
             local line = string.format(" %3d │", r)
             for c = 1, 20 do
