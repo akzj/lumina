@@ -176,7 +176,6 @@ func (e *Engine) FocusableIDs() []string {
 
 
 // FocusAutoFocus focuses the first node with AutoFocus=true.
-// If no autoFocus node is found, falls back to the first focusable node.
 // Called after initial render.
 func (e *Engine) FocusAutoFocus() {
 	if len(e.layers) == 0 {
@@ -192,16 +191,22 @@ func (e *Engine) FocusAutoFocus() {
 			}
 		}
 	}
-	// Fallback: focus first focusable node if no autoFocus found
+}
+
+// focusAutoFocusOnly steals focus ONLY if an autoFocus=true node exists.
+// Unlike FocusAutoFocus, this has no fallback — if no autoFocus node is found,
+// the current focus is left as-is.
+func (e *Engine) focusAutoFocusOnly() {
 	for i := len(e.layers) - 1; i >= 0; i-- {
 		if e.layers[i].Root != nil {
-			focusable := collectFocusable(e.layers[i].Root)
-			if len(focusable) > 0 {
-				e.setFocus(focusable[0])
+			node := findAutoFocus(e.layers[i].Root)
+			if node != nil {
+				e.setFocus(node)
 				return
 			}
 		}
 	}
+	// No autoFocus node found — keep current focus as-is
 }
 
 // HandleInputKeyDown handles a keydown event on the focused input/textarea.

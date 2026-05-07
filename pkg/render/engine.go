@@ -468,11 +468,12 @@ func (e *Engine) RenderDirty() {
 	e.firePendingEffects()
 
 	// 8. Auto-focus newly created nodes with autoFocus=true
-	// Re-focus if: nothing focused, focused was removed, or focused is not an input/textarea
-	// (non-input focus is useless for text editing — let autoFocus steal it)
-	if e.focusedNode == nil || e.focusedNode.Removed ||
-		(e.focusedNode.Type != "input" && e.focusedNode.Type != "textarea") {
+	// (only if nothing is currently focused or focused node was removed)
+	if e.focusedNode == nil || e.focusedNode.Removed {
 		e.FocusAutoFocus()
+	} else if e.focusedNode.Type != "input" && e.focusedNode.Type != "textarea" {
+		// Current focus is a non-input node — check if there's an autoFocus node that should steal
+		e.focusAutoFocusOnly()
 	}
 }
 
