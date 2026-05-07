@@ -252,7 +252,7 @@ func (e *Engine) HandleInputKeyDown(key string) bool {
 
 	case "Alt+Enter", "Ctrl+j":
 		// Alt+Enter or Ctrl+J fires onSubmit for textarea (and input)
-		e.fireOnChange(node)
+		// No fireOnChange here — content hasn't changed on submit.
 		for n := node; n != nil; n = n.Parent {
 			if n.OnSubmit != 0 {
 				e.callLuaRefSimple(n.OnSubmit)

@@ -225,15 +225,8 @@ func (e *Engine) CursorPosition() (x, y int, visible bool) {
 		return 0, 0, false
 	}
 
-	// Lua-based input with cursor hint attributes (e.g., custom TextInput vbox)
-	if node.CursorHintCol >= 0 {
-		x = node.X + node.CursorHintCol
-		y = node.Y + node.CursorHintRow
-		if node.CursorHintRow < 0 {
-			y = node.Y
-		}
-		return x, y, true
-	}
+	// Lua-based input with cursor hint — disabled (software cursor handles display).
+	// Hardware cursor is only used for native input/textarea nodes.
 
 	if node.Type != "input" && node.Type != "textarea" {
 		return 0, 0, false
@@ -600,8 +593,11 @@ func (e *Engine) RenderDirty() {
 	if e.focusedNode == nil || e.focusedNode.Removed || isNodeHidden(e.focusedNode) {
 		e.FocusAutoFocus()
 	} else if e.focusedNode.Type != "input" && e.focusedNode.Type != "textarea" {
-		// Current focus is a non-input node — check if there's an autoFocus node that should steal
-		e.focusAutoFocusOnly()
+		// Only steal focus when a component actually re-rendered this frame
+		// (e.g., on mount or tab switch). Don't steal on idle frames.
+		if rendered > 0 {
+			e.focusAutoFocusOnly()
+		}
 	}
 }
 
