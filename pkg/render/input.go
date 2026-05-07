@@ -250,7 +250,7 @@ func (e *Engine) HandleInputKeyDown(key string) bool {
 		}
 		return true
 
-	case "Alt+Enter", "Ctrl+j":
+	case "Alt+Enter", "Ctrl+J":
 		// Alt+Enter or Ctrl+J fires onSubmit for textarea (and input)
 		// No fireOnChange here — content hasn't changed on submit.
 		for n := node; n != nil; n = n.Parent {

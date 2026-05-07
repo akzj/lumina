@@ -69,9 +69,9 @@ func TestTextareaCtrlJSubmits(t *testing.T) {
 	e.focusedNode = node
 
 	// Ctrl+J should be handled (submit trigger)
-	handled := e.HandleInputKeyDown("Ctrl+j")
+	handled := e.HandleInputKeyDown("Ctrl+J")
 	if !handled {
-		t.Fatal("Ctrl+j should be handled (submit)")
+		t.Fatal("Ctrl+J should be handled (submit)")
 	}
 }
 
