@@ -640,7 +640,12 @@ func findScrollableAncestor(node *Node) *Node {
 func (e *Engine) autoScroll(node *Node, delta int) {
 	maxScroll := computeMaxScrollY(node)
 	if maxScroll <= 0 {
-		return // content fits, no scrolling needed
+		// Content fits vertically — redirect to horizontal scroll if content overflows horizontally
+		maxScrollX := computeMaxScrollX(node)
+		if maxScrollX > 0 {
+			e.autoScrollX(node, delta)
+		}
+		return
 	}
 
 	const step = 3 // scroll 3 lines per wheel tick
