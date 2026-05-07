@@ -176,6 +176,7 @@ func (e *Engine) FocusableIDs() []string {
 
 
 // FocusAutoFocus focuses the first node with AutoFocus=true.
+// If no autoFocus node is found, falls back to the first focusable node.
 // Called after initial render.
 func (e *Engine) FocusAutoFocus() {
 	if len(e.layers) == 0 {
@@ -187,6 +188,16 @@ func (e *Engine) FocusAutoFocus() {
 			node := findAutoFocus(e.layers[i].Root)
 			if node != nil {
 				e.setFocus(node)
+				return
+			}
+		}
+	}
+	// Fallback: focus first focusable node if no autoFocus found
+	for i := len(e.layers) - 1; i >= 0; i-- {
+		if e.layers[i].Root != nil {
+			focusable := collectFocusable(e.layers[i].Root)
+			if len(focusable) > 0 {
+				e.setFocus(focusable[0])
 				return
 			}
 		}
