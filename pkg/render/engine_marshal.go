@@ -113,6 +113,20 @@ func descriptorFromMap(m map[string]any) Descriptor {
 		desc.Role = r
 	}
 
+	// Cursor hint (default -1 = unset)
+	desc.CursorHintCol = -1
+	desc.CursorHintRow = -1
+	if v, ok := m["cursorHintCol"].(int64); ok {
+		desc.CursorHintCol = int(v)
+	} else if v, ok := m["cursorHintCol"].(float64); ok {
+		desc.CursorHintCol = int(v)
+	}
+	if v, ok := m["cursorHintRow"].(int64); ok {
+		desc.CursorHintRow = int(v)
+	} else if v, ok := m["cursorHintRow"].(float64); ok {
+		desc.CursorHintRow = int(v)
+	}
+
 	// Placeholder
 	if p, ok := m["placeholder"].(string); ok {
 		desc.Placeholder = p
@@ -255,6 +269,10 @@ func (e *Engine) readDescriptor(L *lua.State, idx int) Descriptor {
 	desc.Focusable = getBoolField(L, absIdx, "focusable")
 	desc.Disabled = getBoolField(L, absIdx, "disabled")
 	desc.Role = getStringField(L, absIdx, "role")
+
+	// Cursor hint for Lua-based input components (default -1 = unset)
+	desc.CursorHintCol = int(getIntFieldDefault(L, absIdx, "cursorHintCol", -1))
+	desc.CursorHintRow = int(getIntFieldDefault(L, absIdx, "cursorHintRow", -1))
 
 	// Read ref prop (table, not function — store as registry ref)
 	L.GetField(absIdx, "ref")

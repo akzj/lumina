@@ -138,6 +138,11 @@ type Node struct {
 	Disabled  bool   // true = skip events, skip focus
 	Role      string // accessibility role (e.g. "button", "checkbox", "dialog")
 
+	// Cursor hint: for Lua-based input components that render their own cursor.
+	// Set via cursorHintCol/cursorHintRow props. -1 means unset.
+	CursorHintCol int // display column offset from node.X (0-based)
+	CursorHintRow int // row offset from node.Y (0-based)
+
 	// Events (persistent references, not re-registered per frame)
 	OnClick        LuaRef
 	OnMouseEnter   LuaRef

@@ -107,6 +107,10 @@ func reconcileImpl(node *Node, desc Descriptor, freedRefs *[]int64) bool {
 		node.Role = desc.Role
 	}
 
+	// Cursor hint (always update — no dirty flag needed, just position tracking)
+	node.CursorHintCol = desc.CursorHintCol
+	node.CursorHintRow = desc.CursorHintRow
+
 	// 5. Reconcile children (skip for component nodes — children are grafted)
 	if node.Type != "component" {
 		if reconcileChildrenImpl(node, desc.Children, freedRefs) {
@@ -414,6 +418,8 @@ func createNodeFromDesc(desc Descriptor) *Node {
 	node.Focusable = desc.Focusable
 	node.Disabled = desc.Disabled
 	node.Role = desc.Role
+	node.CursorHintCol = desc.CursorHintCol
+	node.CursorHintRow = desc.CursorHintRow
 	node.OnClick = desc.OnClick
 	node.OnMouseEnter = desc.OnMouseEnter
 	node.OnMouseLeave = desc.OnMouseLeave

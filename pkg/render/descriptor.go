@@ -20,6 +20,11 @@ type Descriptor struct {
 	Disabled    bool
 	Role        string // accessibility role (e.g. "button", "checkbox", "dialog")
 
+	// Cursor hint for Lua-based input components (custom TextInput).
+	// -1 means unset. If >= 0, engine uses these for hardware cursor positioning.
+	CursorHintCol int // display column offset from node.X (0-based)
+	CursorHintRow int // row offset from node.Y (0-based)
+
 	// Scroll state
 	ScrollY    int
 	ScrollYSet bool // true only when Lua explicitly sets scrollY

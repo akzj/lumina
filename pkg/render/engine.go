@@ -224,6 +224,17 @@ func (e *Engine) CursorPosition() (x, y int, visible bool) {
 	if node == nil {
 		return 0, 0, false
 	}
+
+	// Lua-based input with cursor hint attributes (e.g., custom TextInput vbox)
+	if node.CursorHintCol >= 0 {
+		x = node.X + node.CursorHintCol
+		y = node.Y + node.CursorHintRow
+		if node.CursorHintRow < 0 {
+			y = node.Y
+		}
+		return x, y, true
+	}
+
 	if node.Type != "input" && node.Type != "textarea" {
 		return 0, 0, false
 	}
