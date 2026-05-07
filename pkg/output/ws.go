@@ -145,6 +145,9 @@ func (ws *WSAdapter) WriteDirty(screen *buffer.Buffer, dirtyRects []buffer.Rect)
 	return nil
 }
 
+// SetCursor is a no-op for WebSocket adapter.
+func (ws *WSAdapter) SetCursor(x, y int, visible bool) {}
+
 // Flush is a no-op for WebSocket adapter (messages are sent immediately).
 func (ws *WSAdapter) Flush() error { return nil }
 

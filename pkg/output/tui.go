@@ -11,7 +11,10 @@ import (
 
 // tuiAdapter renders a buffer to an ANSI terminal.
 type tuiAdapter struct {
-	w *bufio.Writer
+	w      *bufio.Writer
+	curX   int
+	curY   int
+	curVis bool
 }
 
 // tuiState tracks current ANSI attribute state for incremental output.
@@ -152,13 +155,25 @@ func (t *tuiAdapter) writeCell(c buffer.Cell, st *tuiState) {
 	t.w.WriteRune(ch)
 }
 
-// Flush flushes buffered output.
+// SetCursor positions the hardware cursor. Coordinates are 0-based.
+// If visible is false, the cursor is hidden.
+func (t *tuiAdapter) SetCursor(x, y int, visible bool) {
+	t.curX = x
+	t.curY = y
+	t.curVis = visible
+}
+
+// Flush flushes buffered output, positioning the hardware cursor.
 func (t *tuiAdapter) Flush() error {
-	// Park cursor at top-left to prevent IME composition characters
-	// from corrupting the display. Without this, the cursor remains
-	// at the last-written cell position, and terminal IME overlays
-	// write characters there, causing scrolling/shifting.
-	t.w.WriteString("\033[1;1H")
+	if t.curVis {
+		// Position cursor at the focused input's cursor location (1-based ANSI coords)
+		fmt.Fprintf(t.w, "\033[%d;%dH", t.curY+1, t.curX+1)
+		t.w.WriteString("\033[?25h") // show cursor
+	} else {
+		// Hide cursor and park at top-left
+		t.w.WriteString("\033[?25l")
+		t.w.WriteString("\033[1;1H")
+	}
 	return t.w.Flush()
 }
 

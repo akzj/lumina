@@ -13,6 +13,10 @@ type Adapter interface {
 	// WriteDirty writes only the changed regions.
 	WriteDirty(screen *buffer.Buffer, dirtyRects []buffer.Rect) error
 
+	// SetCursor positions the hardware cursor at (x, y) and makes it visible.
+	// If visible is false, the cursor is hidden. Coordinates are 0-based.
+	SetCursor(x, y int, visible bool)
+
 	// Flush flushes buffered output.
 	Flush() error
 

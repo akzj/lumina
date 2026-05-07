@@ -13,6 +13,7 @@ type nopAdapter struct{}
 
 func (nopAdapter) WriteFull(_ *buffer.Buffer) error                   { return nil }
 func (nopAdapter) WriteDirty(_ *buffer.Buffer, _ []buffer.Rect) error { return nil }
+func (nopAdapter) SetCursor(_, _ int, _ bool)                         {}
 func (nopAdapter) Flush() error                                       { return nil }
 func (nopAdapter) Close() error                                       { return nil }
 

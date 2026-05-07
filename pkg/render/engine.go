@@ -210,6 +210,27 @@ func (e *Engine) CurrentComponent() *Component { return e.currentComp }
 // AllComponents returns all registered components.
 func (e *Engine) AllComponents() map[string]*Component { return e.components }
 
+// CursorPosition returns the screen position of the hardware cursor.
+// If a focused input/textarea exists, returns its cursor coordinates and visible=true.
+// Otherwise returns (0, 0, false).
+func (e *Engine) CursorPosition() (x, y int, visible bool) {
+	node := e.focusedNode
+	if node == nil {
+		return 0, 0, false
+	}
+	if node.Type != "input" && node.Type != "textarea" {
+		return 0, 0, false
+	}
+	// Calculate cursor X with scroll offset (same logic as paintInput)
+	cursorOffset := inputCursorScreenOffset(node)
+	availW := node.W
+	scrollX := 0
+	if cursorOffset >= availW {
+		scrollX = cursorOffset - availW + 1
+	}
+	return node.X + cursorOffset - scrollX, node.Y, true
+}
+
 // Resize updates the engine dimensions and buffer.
 func (e *Engine) Resize(width, height int) {
 	e.width = width

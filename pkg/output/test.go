@@ -38,6 +38,9 @@ func (t *TestAdapter) WriteDirty(screen *buffer.Buffer, dirtyRects []buffer.Rect
 	return nil
 }
 
+// SetCursor is a no-op for test adapter.
+func (t *TestAdapter) SetCursor(x, y int, visible bool) {}
+
 // Flush is a no-op for test adapter.
 func (t *TestAdapter) Flush() error { return nil }
 

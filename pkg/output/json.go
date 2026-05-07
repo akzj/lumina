@@ -62,6 +62,9 @@ func (j *jsonAdapter) WriteDirty(screen *buffer.Buffer, dirtyRects []buffer.Rect
 	return json.NewEncoder(j.w).Encode(result)
 }
 
+// SetCursor is a no-op for JSON adapter.
+func (j *jsonAdapter) SetCursor(x, y int, visible bool) {}
+
 // Flush is a no-op for JSON adapter.
 func (j *jsonAdapter) Flush() error { return nil }
 

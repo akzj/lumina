@@ -159,6 +159,7 @@ func (a *App) RenderAll() {
 	screen := a.engine.ToBuffer()
 	_ = a.adapter.WriteFull(screen)
 	a.tracker.Record(perf.WriteFullCalls, 1)
+	a.setCursorFromEngine()
 	_ = a.adapter.Flush()
 	a.tracker.Record(perf.FlushCalls, 1)
 
@@ -185,12 +186,19 @@ func (a *App) RenderDirty() {
 		_ = a.adapter.WriteDirty(screen, []buffer.Rect{dirtyRect})
 		a.tracker.Record(perf.DirtyRectsOut, 1)
 		a.tracker.Record(perf.WriteDirtyCalls, 1)
+		a.setCursorFromEngine()
 		_ = a.adapter.Flush()
 		a.tracker.Record(perf.FlushCalls, 1)
 	}
 	// If no dirty rect (idle frame), do NOTHING — no WriteDirty, no Flush
 
 	a.tracker.EndFrame()
+}
+
+// setCursorFromEngine queries the engine for cursor position and sets it on the adapter.
+func (a *App) setCursorFromEngine() {
+	x, y, visible := a.engine.CursorPosition()
+	a.adapter.SetCursor(x, y, visible)
 }
 
 // unionRect returns the bounding rect containing both a and b.

@@ -1090,6 +1090,8 @@ func paintInput(buf *CellBuffer, node *Node) {
 				x += w
 			}
 		}
+		// Fill remaining width with background color
+		paintInputBGFill(buf, node, x)
 		// Show cursor at start if focused
 		if node.Focused {
 			paintInputCursor(buf, node, node.X, node.Y)
@@ -1112,10 +1114,57 @@ func paintInput(buf *CellBuffer, node *Node) {
 		paintInputText(buf, node)
 	}
 
+	// Fill remaining width with background color
+	paintInputBGFillAfterText(buf, node, scrollX)
+
 	// Show cursor if focused
 	if node.Focused {
 		cursorX := node.X + cursorOffset - scrollX
 		paintInputCursor(buf, node, cursorX, node.Y)
+	}
+}
+
+// paintInputBGFill fills cells from startX to end of node width with the input's background color.
+func paintInputBGFill(buf *CellBuffer, node *Node, startX int) {
+	bg := node.Style.Background
+	if bg == "" {
+		return // no explicit background, nothing to fill
+	}
+	maxX := node.X + node.W
+	for x := startX; x < maxX; x++ {
+		buf.Set(x, node.Y, Cell{Ch: ' ', BG: bg})
+	}
+}
+
+// paintInputBGFillAfterText fills remaining cells after text content with background color.
+func paintInputBGFillAfterText(buf *CellBuffer, node *Node, scrollX int) {
+	bg := node.Style.Background
+	if bg == "" {
+		return // no explicit background, nothing to fill
+	}
+	// Calculate the display width of the content after scrollX
+	content := node.Content
+	colOffset := 0
+	textEndX := node.X
+	for _, ch := range content {
+		w := runeWidth(ch)
+		if colOffset+w > scrollX {
+			// This character is visible
+			screenX := node.X + (colOffset - scrollX)
+			if screenX+w > node.X+node.W {
+				break
+			}
+			textEndX = screenX + w
+		}
+		colOffset += w
+	}
+	// If text is shorter than scroll offset, textEndX stays at node.X
+	if colOffset <= scrollX {
+		textEndX = node.X
+	}
+	maxX := node.X + node.W
+	for x := textEndX; x < maxX; x++ {
+		buf.Set(x, node.Y, Cell{Ch: ' ', BG: bg})
 	}
 }
 
