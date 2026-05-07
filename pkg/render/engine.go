@@ -91,6 +91,10 @@ type Engine struct {
 	scrollbarDragNode        *Node // node being scrollbar-dragged (nil = no drag)
 	scrollbarDragStartY      int   // mouse Y at drag start
 	scrollbarDragStartScrollY int  // ScrollY at drag start
+
+	// Cursor blink state
+	cursorBlinkOn    bool // true = cursor visible, false = hidden
+	cursorBlinkFrame int  // frame counter for blink timing
 }
 
 // SetTracker sets the performance tracker for recording render-engine metrics.
@@ -179,13 +183,14 @@ func (e *Engine) Destroy() {
 // NewEngine creates a new render engine.
 func NewEngine(L *lua.State, width, height int) *Engine {
 	return &Engine{
-		L:          L,
-		components: make(map[string]*Component),
-		factories:  make(map[string]int64),
-		width:      width,
-		height:     height,
-		buffer:     NewCellBuffer(width, height),
-		layers:     make([]*Layer, 0, 4),
+		L:              L,
+		components:     make(map[string]*Component),
+		factories:      make(map[string]int64),
+		width:          width,
+		height:         height,
+		buffer:         NewCellBuffer(width, height),
+		layers:         make([]*Layer, 0, 4),
+		cursorBlinkOn:  true,
 	}
 }
 
@@ -229,6 +234,75 @@ func (e *Engine) CursorPosition() (x, y int, visible bool) {
 		scrollX = cursorOffset - availW + 1
 	}
 	return node.X + cursorOffset - scrollX, node.Y, true
+}
+
+// TickCursorBlink should be called once per frame (~60fps).
+// Toggles cursor visibility every 30 frames (~500ms at 60fps).
+// Returns true if blink state changed (caller should trigger repaint).
+func (e *Engine) TickCursorBlink() bool {
+	e.cursorBlinkFrame++
+	if e.cursorBlinkFrame >= 30 {
+		e.cursorBlinkFrame = 0
+		e.cursorBlinkOn = !e.cursorBlinkOn
+		return true
+	}
+	return false
+}
+
+// CursorBlinkOn returns whether the cursor should be visible in the current blink phase.
+func (e *Engine) CursorBlinkOn() bool {
+	return e.cursorBlinkOn
+}
+
+// ResetCursorBlink resets the blink timer (call on any keypress to keep cursor visible).
+func (e *Engine) ResetCursorBlink() {
+	e.cursorBlinkOn = true
+	e.cursorBlinkFrame = 0
+}
+
+// RepaintCursor repaints just the cursor cell based on current blink state.
+// Call after TickCursorBlink returns true to update the buffer.
+func (e *Engine) RepaintCursor() {
+	node := e.focusedNode
+	if node == nil || (node.Type != "input" && node.Type != "textarea") {
+		return
+	}
+	// Recalculate cursor position
+	cursorOffset := inputCursorScreenOffset(node)
+	availW := node.W
+	scrollX := 0
+	if cursorOffset >= availW {
+		scrollX = cursorOffset - availW + 1
+	}
+	cursorX := node.X + cursorOffset - scrollX
+
+	if e.cursorBlinkOn {
+		paintInputCursor(e.buffer, node, cursorX, node.Y)
+	} else {
+		// Restore the cell under the cursor (paint with input's normal colors)
+		bg := node.Style.Background
+		if bg == "" {
+			bg = "#1E1E2E"
+		}
+		fg := node.Style.Foreground
+		if fg == "" {
+			fg = "#CDD6F4"
+		}
+		ch := cursorCharAt(node)
+		e.buffer.Set(cursorX, node.Y, Cell{Ch: ch, FG: fg, BG: bg})
+	}
+}
+
+// cursorCharAt returns the character at the cursor position in the node's content.
+func cursorCharAt(node *Node) rune {
+	if node.Content == "" {
+		return ' '
+	}
+	runes := []rune(node.Content)
+	if node.CursorPos >= len(runes) {
+		return ' '
+	}
+	return runes[node.CursorPos]
 }
 
 // Resize updates the engine dimensions and buffer.

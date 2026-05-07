@@ -10,6 +10,7 @@ import (
 
 	"github.com/akzj/go-lua/pkg/lua"
 	"github.com/akzj/lumina/pkg/animation"
+	"github.com/akzj/lumina/pkg/buffer"
 	"github.com/akzj/lumina/pkg/event"
 	"github.com/akzj/lumina/pkg/hotreload"
 	"github.com/akzj/lumina/pkg/router"
@@ -235,6 +236,18 @@ func (a *App) eventLoop(cfg RunConfig) error {
 
 			// Render dirty components.
 			a.RenderDirty()
+
+			// Cursor blink: toggle every 30 frames, force a minimal repaint
+			if a.engine.TickCursorBlink() {
+				a.engine.RepaintCursor()
+				x, y, vis := a.engine.CursorPosition()
+				if vis {
+					screen := a.engine.ToBuffer()
+					_ = a.adapter.WriteDirty(screen, []buffer.Rect{{X: x, Y: y, W: 2, H: 1}})
+					a.setCursorFromEngine()
+					_ = a.adapter.Flush()
+				}
+			}
 		}
 	}
 }

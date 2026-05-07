@@ -223,6 +223,9 @@ func (e *Engine) HandleInputKeyDown(key string) bool {
 		return false
 	}
 
+	// Reset cursor blink on any keypress (keep cursor visible while typing)
+	e.ResetCursorBlink()
+
 	switch key {
 	case "Tab":
 		// Tab cycles focus — don't consume, let caller handle
