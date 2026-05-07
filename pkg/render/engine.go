@@ -348,7 +348,11 @@ func cursorCharAt(node *Node) rune {
 	if node.CursorPos >= len(runes) {
 		return ' '
 	}
-	return runes[node.CursorPos]
+	ch := runes[node.CursorPos]
+	if ch == '\n' {
+		return ' '
+	}
+	return ch
 }
 
 // Resize updates the engine dimensions and buffer.

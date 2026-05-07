@@ -1327,6 +1327,12 @@ func paintInputCursor(buf *CellBuffer, node *Node, x, y int) {
 // paintInputClipped renders an input/textarea node inside a clip rect,
 // handling placeholder text, content text, and cursor correctly.
 func paintInputClipped(buf *CellBuffer, node *Node, clipX1, clipY1, clipX2, clipY2, offsetX, offsetY int) {
+	// Multi-line textarea: delegate to paintTextareaClipped
+	if node.Type == "textarea" && strings.Contains(node.Content, "\n") {
+		paintTextareaClipped(buf, node, clipX1, clipY1, clipX2, clipY2, offsetX, offsetY)
+		return
+	}
+
 	screenX := node.X + offsetX
 	screenY := node.Y + offsetY
 	if node.Content == "" && node.Placeholder != "" {
@@ -1376,6 +1382,78 @@ func paintInputClipped(buf *CellBuffer, node *Node, clipX1, clipY1, clipX2, clip
 	}
 }
 
+
+// paintTextareaClipped renders a multi-line textarea inside a clip rect with scroll offset.
+func paintTextareaClipped(buf *CellBuffer, node *Node, clipX1, clipY1, clipX2, clipY2, offsetX, offsetY int) {
+	bg := node.Style.Background
+	fg := node.Style.Foreground
+
+	screenX := node.X + offsetX
+	screenY := node.Y + offsetY
+
+	lines := strings.Split(node.Content, "\n")
+
+	// Determine cursor line and column
+	cursorLine, cursorCol := computeCursorLineCol([]rune(node.Content), node.CursorPos)
+
+	// Vertical scroll: ensure cursor line is visible
+	scrollY := 0
+	if cursorLine >= node.H {
+		scrollY = cursorLine - node.H + 1
+	}
+
+	// Paint each visible line
+	for row := 0; row < node.H; row++ {
+		lineIdx := row + scrollY
+		y := screenY + row
+		if y < clipY1 || y >= clipY2 {
+			continue
+		}
+
+		// Fill entire row with background
+		for col := 0; col < node.W; col++ {
+			x := screenX + col
+			if x < clipX1 || x >= clipX2 {
+				continue
+			}
+			cellBG := bg
+			if cellBG == "" {
+				cellBG = buf.Get(x, y).BG
+			}
+			buf.Set(x, y, Cell{Ch: ' ', BG: cellBG, FG: fg})
+		}
+
+		if lineIdx < len(lines) {
+			// Paint line content
+			x := screenX
+			for _, ch := range lines[lineIdx] {
+				w := runeWidth(ch)
+				if x-screenX+w > node.W {
+					break // clip at width
+				}
+				if x >= clipX1 && x < clipX2 {
+					cellBG := bg
+					if cellBG == "" {
+						cellBG = buf.Get(x, y).BG
+					}
+					buf.Set(x, y, Cell{Ch: ch, FG: fg, BG: cellBG})
+					if w == 2 && x+1 >= clipX1 && x+1 < clipX2 {
+						buf.Set(x+1, y, Cell{Wide: true, BG: cellBG})
+					}
+				}
+				x += w
+			}
+		}
+
+		// Paint cursor if on this line
+		if node.Focused && buf.CursorBlinkOn && lineIdx == cursorLine {
+			cx := screenX + cursorCol
+			if cx >= clipX1 && cx < clipX2 && y >= clipY1 && y < clipY2 {
+				paintInputCursor(buf, node, cx, y)
+			}
+		}
+	}
+}
 
 func paintBorder(buf *CellBuffer, node *Node) {
 	x, y, w, h := node.X, node.Y, node.W, node.H
