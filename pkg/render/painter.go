@@ -1218,25 +1218,19 @@ func inputCursorScreenOffset(node *Node) int {
 	return offset
 }
 
-// paintInputCursor renders a cursor at the given screen position using inverted colors.
+// paintInputCursor renders a cursor at the given screen position as a white block.
 func paintInputCursor(buf *CellBuffer, node *Node, x, y int) {
 	if x >= node.X+node.W || y >= node.Y+node.H {
 		return
 	}
 	existing := buf.Get(x, y)
-	// Invert colors for cursor visibility
-	fg := existing.BG
-	bg := existing.FG
-	if fg == "" {
-		fg = "#1E1E2E" // default dark background
-	}
-	if bg == "" {
-		bg = "#CDD6F4" // default light foreground
-	}
 	ch := existing.Ch
 	if ch == 0 {
 		ch = ' ' // cursor on empty space shows as block
 	}
+	// White cursor block with dark text for maximum visibility
+	fg := "#000000"
+	bg := "#FFFFFF"
 	buf.Set(x, y, Cell{Ch: ch, FG: fg, BG: bg})
 	// If the character under cursor is wide (CJK), also write the padding cell
 	if runeWidth(ch) == 2 && x+1 < node.X+node.W {
