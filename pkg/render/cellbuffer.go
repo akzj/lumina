@@ -30,6 +30,10 @@ type CellBuffer struct {
 	dirtyMinY  int
 	dirtyMaxX  int // exclusive
 	dirtyMaxY  int // exclusive
+
+	// CursorBlinkOn: when false, paintInputCursor calls are skipped.
+	// Set by the engine before painting to reflect current blink phase.
+	CursorBlinkOn bool
 }
 
 // NewCellBuffer creates a buffer of the given size.

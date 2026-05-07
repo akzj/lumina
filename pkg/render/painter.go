@@ -1092,8 +1092,8 @@ func paintInput(buf *CellBuffer, node *Node) {
 		}
 		// Fill remaining width with background color
 		paintInputBGFill(buf, node, x)
-		// Show cursor at start if focused
-		if node.Focused {
+		// Show cursor at start if focused and blink is on
+		if node.Focused && buf.CursorBlinkOn {
 			paintInputCursor(buf, node, node.X, node.Y)
 		}
 		return
@@ -1117,8 +1117,8 @@ func paintInput(buf *CellBuffer, node *Node) {
 	// Fill remaining width with background color
 	paintInputBGFillAfterText(buf, node, scrollX)
 
-	// Show cursor if focused
-	if node.Focused {
+	// Show cursor if focused and blink is on
+	if node.Focused && buf.CursorBlinkOn {
 		cursorX := node.X + cursorOffset - scrollX
 		paintInputCursor(buf, node, cursorX, node.Y)
 	}
@@ -1268,8 +1268,8 @@ func paintInputClipped(buf *CellBuffer, node *Node, clipX1, clipY1, clipX2, clip
 				x += w
 			}
 		}
-		// Show cursor at start if focused
-		if node.Focused {
+		// Show cursor at start if focused and blink is on
+		if node.Focused && buf.CursorBlinkOn {
 			cx, cy := screenX, screenY
 			if cy >= clipY1 && cy < clipY2 && cx >= clipX1 && cx < clipX2 {
 				paintInputCursor(buf, node, cx, cy)
@@ -1280,8 +1280,8 @@ func paintInputClipped(buf *CellBuffer, node *Node, clipX1, clipY1, clipX2, clip
 	// Render text content (clipped)
 	paintInputTextClipped(buf, node, clipX1, clipY1, clipX2, clipY2, offsetX, offsetY)
 
-	// Show cursor if focused
-	if node.Focused {
+	// Show cursor if focused and blink is on
+	if node.Focused && buf.CursorBlinkOn {
 		cursorX := screenX + inputCursorScreenOffset(node)
 		cursorY := screenY
 		if cursorY >= clipY1 && cursorY < clipY2 && cursorX >= clipX1 && cursorX < clipX2 {

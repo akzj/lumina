@@ -290,6 +290,10 @@ func (e *Engine) RepaintCursor() {
 		}
 		ch := cursorCharAt(node)
 		e.buffer.Set(cursorX, node.Y, Cell{Ch: ch, FG: fg, BG: bg})
+		// Restore padding cell for wide characters
+		if runeWidth(ch) == 2 && cursorX+1 < node.X+node.W {
+			e.buffer.Set(cursorX+1, node.Y, Cell{Wide: true, BG: bg})
+		}
 	}
 }
 
@@ -518,6 +522,7 @@ func (e *Engine) RenderDirty() {
 	}
 
 	// 5. Paint all layers (bottom to top)
+	e.buffer.CursorBlinkOn = e.cursorBlinkOn
 	for i, layer := range e.layers {
 		if layer.Root != nil {
 			if i == 0 {
@@ -573,6 +578,7 @@ func (e *Engine) RenderAll() {
 	// Sync main layer and do full layout + paint for all layers
 	e.syncMainLayer()
 	e.buffer.Clear()
+	e.buffer.CursorBlinkOn = e.cursorBlinkOn
 	for i, layer := range e.layers {
 		if layer.Root == nil {
 			continue
