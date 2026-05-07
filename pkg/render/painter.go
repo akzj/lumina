@@ -1198,11 +1198,13 @@ func paintTextarea(buf *CellBuffer, node *Node) {
 		y := node.Y + row
 		x := node.X
 
-		// Fill entire row with background
-		if bg != "" {
-			for col := 0; col < node.W; col++ {
-				buf.Set(x+col, y, Cell{Ch: ' ', BG: bg, FG: fg})
+		// Always fill entire row to clear stale cursor artifacts
+		for col := 0; col < node.W; col++ {
+			cellBG := bg
+			if cellBG == "" {
+				cellBG = buf.Get(x+col, y).BG
 			}
+			buf.Set(x+col, y, Cell{Ch: ' ', BG: cellBG, FG: fg})
 		}
 
 		if lineIdx < len(lines) {

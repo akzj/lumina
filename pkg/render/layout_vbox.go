@@ -147,7 +147,16 @@ func layoutVBox(node *Node, contentX, contentY, contentW, contentH int, style St
 				children[i].flexGrow = cs.Flex
 				flexTotal += cs.Flex
 			} else if cs.MinHeight > 0 && cs.Flex == 0 {
-				children[i].fixedH = cs.MinHeight + marginV
+				// Use measured height if available (e.g. hbox with textarea),
+				// clamped between minHeight and maxHeight.
+				h := cs.MinHeight
+				if child.MeasuredH > h {
+					h = child.MeasuredH
+				}
+				if cs.MaxHeight > 0 && h > cs.MaxHeight {
+					h = cs.MaxHeight
+				}
+				children[i].fixedH = h + marginV
 				fixedTotal += children[i].fixedH
 			} else if cs.Flex > 0 {
 				children[i].flexGrow = cs.Flex

@@ -68,13 +68,14 @@ func TestParse_UTF8(t *testing.T) {
 }
 
 func TestParse_Enter(t *testing.T) {
-	// CR
+	// CR (Enter key in raw mode)
 	e := mustParseOne(t, []byte{0x0d})
 	assertKey(t, e, "Enter")
 
-	// LF
+	// LF (Ctrl+J in raw mode — distinct from Enter)
 	e = mustParseOne(t, []byte{0x0a})
-	assertKey(t, e, "Enter")
+	assertKey(t, e, "j")
+	assertMods(t, e, true, false, false)
 }
 
 func TestParse_Tab(t *testing.T) {

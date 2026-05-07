@@ -237,17 +237,21 @@ func (e *Engine) HandleInputKeyDown(key string) bool {
 			if node.CursorPos > len(runes) {
 				node.CursorPos = len(runes)
 			}
+			deleted := runes[node.CursorPos-1]
 			runes = append(runes[:node.CursorPos-1], runes[node.CursorPos:]...)
 			node.Content = string(runes)
 			node.CursorPos--
+			if node.Type == "textarea" && deleted == '\n' {
+				node.MarkLayoutDirty() // line count changed
+			}
 			node.PaintDirty = true
 			e.needsRender = true
 			e.fireOnChange(node)
 		}
 		return true
 
-	case "Alt+Enter":
-		// Alt+Enter fires onSubmit for textarea (and input)
+	case "Alt+Enter", "Ctrl+j":
+		// Alt+Enter or Ctrl+J fires onSubmit for textarea (and input)
 		e.fireOnChange(node)
 		for n := node; n != nil; n = n.Parent {
 			if n.OnSubmit != 0 {
@@ -267,6 +271,7 @@ func (e *Engine) HandleInputKeyDown(key string) bool {
 			runes = append(runes[:node.CursorPos], append([]rune{'\n'}, runes[node.CursorPos:]...)...)
 			node.Content = string(runes)
 			node.CursorPos++
+			node.MarkLayoutDirty() // textarea height depends on line count
 			node.PaintDirty = true
 			e.needsRender = true
 			e.fireOnChange(node)
@@ -317,8 +322,12 @@ func (e *Engine) HandleInputKeyDown(key string) bool {
 		// Forward delete: remove character at cursor position
 		runes := []rune(node.Content)
 		if node.CursorPos < len(runes) {
+			deleted := runes[node.CursorPos]
 			runes = append(runes[:node.CursorPos], runes[node.CursorPos+1:]...)
 			node.Content = string(runes)
+			if node.Type == "textarea" && deleted == '\n' {
+				node.MarkLayoutDirty() // line count changed
+			}
 			node.PaintDirty = true
 			e.needsRender = true
 			e.fireOnChange(node)

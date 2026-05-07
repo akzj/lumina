@@ -311,8 +311,11 @@ func parseControl(b byte) InputEvent {
 	switch b {
 	case 0x09:
 		return InputEvent{Type: "keydown", Key: "Tab"}
-	case 0x0a, 0x0d:
+	case 0x0d:
 		return InputEvent{Type: "keydown", Key: "Enter"}
+	case 0x0a:
+		// In raw mode (ICRNL cleared), 0x0a = Ctrl+J (distinct from Enter = 0x0d)
+		return InputEvent{Type: "keydown", Key: "j", Modifiers: Modifiers{Ctrl: true}}
 	case 0x7f:
 		return InputEvent{Type: "keydown", Key: "Backspace"}
 	default:

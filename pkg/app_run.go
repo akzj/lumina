@@ -324,6 +324,9 @@ func (a *App) handleInputEvent(ie InputEvent) {
 		if ie.Modifiers.Alt && key == "Enter" {
 			key = "Alt+Enter"
 		}
+		if ie.Modifiers.Ctrl && key == "j" {
+			key = "Ctrl+j"
+		}
 
 		// Check for quit keys (Ctrl+C, Ctrl+Q).
 		if ie.Type == "keydown" && ie.Modifiers.Ctrl {
