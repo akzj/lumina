@@ -175,6 +175,21 @@ func (e *Engine) RegisterLuaAPI() {
 	})
 	L.SetField(tblIdx, "scrollNodeH")
 
+	// lumina.onError(callback) — register global error handler for render/coroutine errors
+	L.PushFunction(func(L *lua.State) int {
+		if !L.IsFunction(1) {
+			return 0
+		}
+		// Free old ref if any
+		if e.onErrorRef != 0 {
+			L.Unref(lua.RegistryIndex, int(e.onErrorRef))
+		}
+		L.PushValue(1)
+		e.onErrorRef = int64(L.Ref(lua.RegistryIndex))
+		return 0
+	})
+	L.SetField(tblIdx, "onError")
+
 	L.SetGlobal("lumina")
 }
 

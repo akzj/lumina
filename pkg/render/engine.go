@@ -91,6 +91,14 @@ type Engine struct {
 	scrollbarDragNode        *Node // node being scrollbar-dragged (nil = no drag)
 	scrollbarDragStartY      int   // mouse Y at drag start
 	scrollbarDragStartScrollY int // ScrollY at drag start
+
+	// Lua error callback ref (set via lumina.onError)
+	onErrorRef int64
+}
+
+// GetOnErrorRef returns the Lua registry ref for the onError callback (0 if not set).
+func (e *Engine) GetOnErrorRef() int64 {
+	return e.onErrorRef
 }
 
 // SetTracker sets the performance tracker for recording render-engine metrics.
@@ -568,6 +576,13 @@ func (e *Engine) renderComponent(comp *Component) {
 		comp.Dirty = false
 		comp.LastError = errMsg
 		log.Printf("[lumina] render error in component %q (id=%s): %s", comp.Name, comp.ID, errMsg)
+		// Notify Lua error handler
+		if e.onErrorRef != 0 {
+			L.RawGetI(lua.RegistryIndex, e.onErrorRef)
+			L.PushString(errMsg)
+			L.PushString(comp.Name)
+			L.PCall(2, 0, 0) // ignore errors in error handler itself
+		}
 		return
 	}
 	comp.LastError = "" // clear on success

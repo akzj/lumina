@@ -85,6 +85,13 @@ func NewApp(L *lua.State, w, h int, adapter output.Adapter) *App {
 	sched := lua.NewScheduler(L)
 	sched.OnError = func(err error) {
 		fmt.Fprintf(os.Stderr, "coroutine error: %v\n", err)
+		// Notify Lua error handler
+		if eng.GetOnErrorRef() != 0 {
+			L.RawGetI(lua.RegistryIndex, eng.GetOnErrorRef())
+			L.PushString(err.Error())
+			L.PushString("coroutine")
+			L.PCall(2, 0, 0)
+		}
 	}
 
 	eng.SetScheduler(sched)
