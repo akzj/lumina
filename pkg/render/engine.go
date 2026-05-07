@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/akzj/go-lua/pkg/lua"
 	"github.com/akzj/lumina/pkg/buffer"
@@ -226,7 +227,24 @@ func (e *Engine) CursorPosition() (x, y int, visible bool) {
 	if node.Type != "input" && node.Type != "textarea" {
 		return 0, 0, false
 	}
-	// Calculate cursor X with scroll offset (same logic as paintInput)
+
+	// Multi-line textarea: compute line/col cursor position
+	if node.Type == "textarea" && strings.Contains(node.Content, "\n") {
+		runes := []rune(node.Content)
+		cursorLine, cursorCol := computeCursorLineCol(runes, node.CursorPos)
+		// Vertical scroll
+		scrollY := 0
+		if cursorLine >= node.H {
+			scrollY = cursorLine - node.H + 1
+		}
+		visRow := cursorLine - scrollY
+		if visRow < 0 || visRow >= node.H {
+			return 0, 0, false
+		}
+		return node.X + cursorCol, node.Y + visRow, true
+	}
+
+	// Single-line input: horizontal scroll
 	cursorOffset := inputCursorScreenOffset(node)
 	availW := node.W
 	scrollX := 0
@@ -267,17 +285,37 @@ func (e *Engine) RepaintCursor() {
 	if node == nil || (node.Type != "input" && node.Type != "textarea") {
 		return
 	}
-	// Recalculate cursor position
-	cursorOffset := inputCursorScreenOffset(node)
-	availW := node.W
-	scrollX := 0
-	if cursorOffset >= availW {
-		scrollX = cursorOffset - availW + 1
+
+	var cursorX, cursorY int
+
+	// Multi-line textarea
+	if node.Type == "textarea" && strings.Contains(node.Content, "\n") {
+		runes := []rune(node.Content)
+		cursorLine, cursorCol := computeCursorLineCol(runes, node.CursorPos)
+		scrollY := 0
+		if cursorLine >= node.H {
+			scrollY = cursorLine - node.H + 1
+		}
+		visRow := cursorLine - scrollY
+		if visRow < 0 || visRow >= node.H {
+			return
+		}
+		cursorX = node.X + cursorCol
+		cursorY = node.Y + visRow
+	} else {
+		// Single-line input
+		cursorOffset := inputCursorScreenOffset(node)
+		availW := node.W
+		scrollX := 0
+		if cursorOffset >= availW {
+			scrollX = cursorOffset - availW + 1
+		}
+		cursorX = node.X + cursorOffset - scrollX
+		cursorY = node.Y
 	}
-	cursorX := node.X + cursorOffset - scrollX
 
 	if e.cursorBlinkOn {
-		paintInputCursor(e.buffer, node, cursorX, node.Y)
+		paintInputCursor(e.buffer, node, cursorX, cursorY)
 	} else {
 		// Restore the cell under the cursor (paint with input's normal colors)
 		bg := node.Style.Background
@@ -289,10 +327,10 @@ func (e *Engine) RepaintCursor() {
 			fg = "#CDD6F4"
 		}
 		ch := cursorCharAt(node)
-		e.buffer.Set(cursorX, node.Y, Cell{Ch: ch, FG: fg, BG: bg})
+		e.buffer.Set(cursorX, cursorY, Cell{Ch: ch, FG: fg, BG: bg})
 		// Restore padding cell for wide characters
 		if runeWidth(ch) == 2 && cursorX+1 < node.X+node.W {
-			e.buffer.Set(cursorX+1, node.Y, Cell{Wide: true, BG: bg})
+			e.buffer.Set(cursorX+1, cursorY, Cell{Wide: true, BG: bg})
 		}
 	}
 }

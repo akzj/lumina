@@ -321,8 +321,8 @@ func (a *App) handleInputEvent(ie InputEvent) {
 		if ie.Modifiers.Shift && key == "Tab" {
 			key = "Shift+Tab"
 		}
-		if ie.Modifiers.Ctrl && key == "Enter" {
-			key = "Ctrl+Enter"
+		if ie.Modifiers.Alt && key == "Enter" {
+			key = "Alt+Enter"
 		}
 
 		// Check for quit keys (Ctrl+C, Ctrl+Q).

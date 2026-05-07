@@ -36,6 +36,13 @@ func parseEscape(data []byte) []InputEvent {
 		return parseCSI(data[2:])
 	case 'O':
 		return parseSS3(data[2:])
+	case 0x0d, 0x0a:
+		// Alt+Enter (ESC followed by CR or LF)
+		return []InputEvent{{
+			Type:      "keydown",
+			Key:       "Enter",
+			Modifiers: Modifiers{Alt: true},
+		}}
 	default:
 		// Alt+key: ESC followed by a character
 		ch := string(data[1:])

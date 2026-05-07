@@ -1,5 +1,7 @@
 package render
 
+import "strings"
+
 // PaintFull paints the entire node tree into the buffer.
 // The buffer is cleared first. Used for initial render.
 // Clears all PaintDirty flags after painting.
@@ -1065,6 +1067,12 @@ func paintInputTextClipped(buf *CellBuffer, node *Node, clipX1, clipY1, clipX2, 
 }
 
 func paintInput(buf *CellBuffer, node *Node) {
+	// Multi-line textarea: use dedicated multi-line paint
+	if node.Type == "textarea" && strings.Contains(node.Content, "\n") {
+		paintTextarea(buf, node)
+		return
+	}
+
 	if node.Content == "" && node.Placeholder != "" {
 		// Render placeholder with dim style
 		fg := node.Style.Foreground
@@ -1166,6 +1174,82 @@ func paintInputBGFillAfterText(buf *CellBuffer, node *Node, scrollX int) {
 	for x := textEndX; x < maxX; x++ {
 		buf.Set(x, node.Y, Cell{Ch: ' ', BG: bg})
 	}
+}
+
+// paintTextarea renders a multi-line textarea with vertical scrolling.
+func paintTextarea(buf *CellBuffer, node *Node) {
+	bg := node.Style.Background
+	fg := node.Style.Foreground
+
+	lines := strings.Split(node.Content, "\n")
+
+	// Determine cursor line and column
+	cursorLine, cursorCol := computeCursorLineCol([]rune(node.Content), node.CursorPos)
+
+	// Vertical scroll: ensure cursor line is visible
+	scrollY := 0
+	if cursorLine >= node.H {
+		scrollY = cursorLine - node.H + 1
+	}
+
+	// Paint each visible line
+	for row := 0; row < node.H; row++ {
+		lineIdx := row + scrollY
+		y := node.Y + row
+		x := node.X
+
+		// Fill entire row with background
+		if bg != "" {
+			for col := 0; col < node.W; col++ {
+				buf.Set(x+col, y, Cell{Ch: ' ', BG: bg, FG: fg})
+			}
+		}
+
+		if lineIdx < len(lines) {
+			// Paint line content
+			x = node.X
+			for _, ch := range lines[lineIdx] {
+				w := runeWidth(ch)
+				if x-node.X+w > node.W {
+					break // clip at width
+				}
+				cellBG := bg
+				if cellBG == "" {
+					cellBG = buf.Get(x, y).BG
+				}
+				cellFG := fg
+				if cellFG == "" {
+					cellFG = buf.Get(x, y).FG
+				}
+				buf.Set(x, y, Cell{Ch: ch, FG: cellFG, BG: cellBG})
+				if w == 2 && x+1 < node.X+node.W {
+					buf.Set(x+1, y, Cell{Wide: true, BG: cellBG})
+				}
+				x += w
+			}
+		}
+	}
+
+	// Paint cursor
+	if node.Focused && buf.CursorBlinkOn {
+		visRow := cursorLine - scrollY
+		if visRow >= 0 && visRow < node.H {
+			paintInputCursor(buf, node, node.X+cursorCol, node.Y+visRow)
+		}
+	}
+}
+
+// computeCursorLineCol computes the line and display column of the cursor.
+func computeCursorLineCol(runes []rune, cursorPos int) (line, col int) {
+	for i := 0; i < cursorPos && i < len(runes); i++ {
+		if runes[i] == '\n' {
+			line++
+			col = 0
+		} else {
+			col += runeWidth(runes[i])
+		}
+	}
+	return
 }
 
 // paintInputTextScrolled renders input text with a horizontal scroll offset,
