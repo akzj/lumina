@@ -84,6 +84,9 @@ local SplitPane = lumina.defineComponent("SplitPane", function(props)
             paneStyle.background = backgrounds
         end
 
+        -- Fill parent height
+        paneStyle.height = "100%"
+
         -- Ensure child has a key to prevent defineComponent dedup bug
         -- (without key, sibling defineComponent elements in hbox may only render the last one)
         if type(child) == "table" and child.key == nil then
@@ -155,7 +158,7 @@ local SplitPane = lumina.defineComponent("SplitPane", function(props)
     -- Outer container
     local containerType = (direction == "horizontal") and "hbox" or "vbox"
     return lumina.createElement(containerType, {
-        style = { flex = 1, width = "100%", height = "100%" },
+        style = { flex = 1, width = "100%" },
     }, table.unpack(elements))
 end)
 

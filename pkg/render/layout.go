@@ -339,8 +339,13 @@ func computeFlex(node *Node, x, y, w, h int, depth int) {
 						node.PaintDirty = true
 					}
 				} else if root.H < node.H {
-					node.H = root.H
-					node.PaintDirty = true
+					// Only allow shrink when parent is NOT a vbox — in vbox, the height
+					// was allocated by flex distribution and shrinking would collapse the component.
+					parentIsVBox := node.Parent != nil && (node.Parent.Type == "vbox" || node.Parent.Type == "box" || node.Parent.Type == "fragment")
+					if !parentIsVBox {
+						node.H = root.H
+						node.PaintDirty = true
+					}
 				}
 			}
 		}

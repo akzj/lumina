@@ -21,7 +21,7 @@ local Dialog = lumina.defineComponent("LuxDialog", function(props)
     local t = lumina.getTheme and lumina.getTheme() or {}
     local open = props.open
     if not open then
-        return lumina.createElement("box", { style = { width = 0, height = 0 } })
+        return lumina.createElement("box", { style = { display = "none" } })
     end
 
     local title = props.title or "Dialog"

@@ -35,6 +35,12 @@ func layoutVBox(node *Node, contentX, contentY, contentW, contentH int, style St
 		cs := child.Style
 		children[i].style = cs
 		children[i].positioned = isPositioned(cs) || cs.Display == "none"
+		// Component placeholder: if grafted root has display=none, treat placeholder as hidden too
+		if !children[i].positioned && child.Type == "component" && len(child.Children) == 1 {
+			if child.Children[0].Style.Display == "none" {
+				children[i].positioned = true
+			}
+		}
 		if !children[i].positioned {
 			flowCount++
 		}
