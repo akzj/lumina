@@ -547,13 +547,23 @@ func (e *Engine) RenderDirty() {
 	e.firePendingEffects()
 
 	// 8. Auto-focus newly created nodes with autoFocus=true
-	// Run if: no focus, focus removed, or focused node is hidden (W=0/H=0 from display:none)
-	if e.focusedNode == nil || e.focusedNode.Removed || e.focusedNode.W == 0 || e.focusedNode.H == 0 {
+	// Run if: no focus, focus removed, or focused node is in a hidden subtree (display:none)
+	if e.focusedNode == nil || e.focusedNode.Removed || isNodeHidden(e.focusedNode) {
 		e.FocusAutoFocus()
 	} else if e.focusedNode.Type != "input" && e.focusedNode.Type != "textarea" {
 		// Current focus is a non-input node — check if there's an autoFocus node that should steal
 		e.focusAutoFocusOnly()
 	}
+}
+
+// isNodeHidden returns true if the node or any ancestor has display:none.
+func isNodeHidden(node *Node) bool {
+	for n := node; n != nil; n = n.Parent {
+		if n.Style.Display == "none" {
+			return true
+		}
+	}
+	return false
 }
 
 // RenderAll does a full render of everything (initial mount).
