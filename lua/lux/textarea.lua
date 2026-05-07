@@ -256,33 +256,51 @@ local Textarea = lumina.defineComponent("LuxTextarea", function(props)
     if #value == 0 then
         -- Show cursor block + placeholder text (dimmed) after cursor
         local phText = placeholder or ""
-        if cursorVisible then
-            local phAfter = ""
-            if utf8.len(phText) and utf8.len(phText) > 1 then
-                phAfter = utf8.sub(phText, 2, -1)
+        local phFirst = ""
+        local phRest = ""
+        if utf8.len(phText) and utf8.len(phText) > 0 then
+            phFirst = utf8.sub(phText, 1, 1)
+            if utf8.len(phText) > 1 then
+                phRest = utf8.sub(phText, 2, -1)
             end
-            lineElements[1] = lumina.createElement("hbox", {
-                key = "ln-1",
-                style = { height = 1, width = "100%" },
-            },
-                lumina.createElement("text", {
-                    key = "cursor",
-                    foreground = bg or "#1E1E2E",
-                    background = fg or "#CDD6F4",
-                }, utf8.len(phText) and utf8.len(phText) > 0 and utf8.sub(phText, 1, 1) or " "),
-                lumina.createElement("text", {
-                    key = "ph-rest",
+        end
+
+        local spans = {}
+        if cursorVisible then
+            spans[#spans + 1] = {
+                text = #phFirst > 0 and phFirst or " ",
+                foreground = bg or "#1E1E2E",
+                background = fg or "#CDD6F4",
+            }
+        else
+            if #phFirst > 0 then
+                spans[#spans + 1] = {
+                    text = phFirst,
                     foreground = t.muted or "#6C7086",
                     dim = true,
-                }, phAfter)
-            )
-        else
-            lineElements[1] = lumina.createElement("text", {
-                key = "ph",
+                }
+            end
+        end
+        if #phRest > 0 then
+            spans[#spans + 1] = {
+                text = phRest,
                 foreground = t.muted or "#6C7086",
                 dim = true,
+            }
+        end
+
+        if #spans > 0 then
+            lineElements[1] = lumina.createElement("text", {
+                key = "ln-1",
                 style = { height = 1, width = "100%" },
-            }, phText)
+                spans = spans,
+            })
+        else
+            lineElements[1] = lumina.createElement("text", {
+                key = "ln-1",
+                foreground = t.muted or "#6C7086",
+                style = { height = 1, width = "100%" },
+            }, " ")
         end
     else
         for i = 1, visibleCount do
@@ -290,53 +308,44 @@ local Textarea = lumina.defineComponent("LuxTextarea", function(props)
             local line = lines[lineIdx] or ""
 
             if lineIdx == cursorLine then
+                -- Cursor line: use spans for consistent layout (no hbox)
+                local lineLen = utf8.len(line) or 0
+                local before = ""
+                local cursorChar = " "  -- space if at end of line
+                local after = ""
+
+                if cursorCol > 0 then
+                    before = utf8.sub(line, 1, cursorCol)
+                end
+                if cursorCol < lineLen then
+                    cursorChar = utf8.sub(line, cursorCol + 1, cursorCol + 1)
+                    after = utf8.sub(line, cursorCol + 2, -1)
+                end
+
+                local spans = {}
+                if #before > 0 then
+                    spans[#spans + 1] = { text = before, foreground = fg }
+                end
                 if cursorVisible then
-                    local lineLen = utf8.len(line) or 0
-                    local before = ""
-                    local cursorChar = " "  -- space if at end of line
-                    local after = ""
-
-                    if cursorCol > 0 then
-                        before = utf8.sub(line, 1, cursorCol)
-                    end
-                    if cursorCol < lineLen then
-                        cursorChar = utf8.sub(line, cursorCol + 1, cursorCol + 1)
-                        after = utf8.sub(line, cursorCol + 2, -1)
-                    end
-
-                    -- Build hbox with text segments + inverted cursor
-                    local segments = {}
-                    if #before > 0 then
-                        segments[#segments + 1] = lumina.createElement("text", {
-                            key = "before",
-                            foreground = fg,
-                        }, before)
-                    end
-                    -- Cursor char with inverted colors
-                    segments[#segments + 1] = lumina.createElement("text", {
-                        key = "cursor",
+                    -- Inverted cursor char
+                    spans[#spans + 1] = {
+                        text = cursorChar,
                         foreground = bg or "#1E1E2E",
                         background = fg or "#CDD6F4",
-                    }, cursorChar)
-                    if #after > 0 then
-                        segments[#segments + 1] = lumina.createElement("text", {
-                            key = "after",
-                            foreground = fg,
-                        }, after)
-                    end
-
-                    lineElements[#lineElements + 1] = lumina.createElement("hbox", {
-                        key = "ln-" .. i,
-                        style = { height = 1, width = "100%" },
-                    }, table.unpack(segments))
+                    }
                 else
-                    -- Blink off: show line normally
-                    lineElements[#lineElements + 1] = lumina.createElement("text", {
-                        key = "ln-" .. i,
-                        foreground = fg,
-                        style = { height = 1, width = "100%" },
-                    }, line)
+                    -- Blink off: normal colors
+                    spans[#spans + 1] = { text = cursorChar, foreground = fg }
                 end
+                if #after > 0 then
+                    spans[#spans + 1] = { text = after, foreground = fg }
+                end
+
+                lineElements[#lineElements + 1] = lumina.createElement("text", {
+                    key = "ln-" .. i,
+                    style = { height = 1, width = "100%" },
+                    spans = spans,
+                })
             else
                 -- Non-cursor line: plain text
                 lineElements[#lineElements + 1] = lumina.createElement("text", {
