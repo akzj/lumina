@@ -3,6 +3,7 @@
 -- Styling follows docs/css-properties.md (percent/vw/vh, borderColor, grid, flex).
 
 local Layout = require("lux.layout")
+local Textarea = require("lux.textarea")
 local Breadcrumb = require("lux.breadcrumb")
 
 local M = {}
@@ -191,13 +192,14 @@ function M.HorizontalField(props)
         lumina.createElement("vbox", {
             style = { flex = 1, height = 1, minWidth = "20%" },
         },
-            lumina.createElement("input", {
+            lumina.createElement(Textarea, {
                 id = props.inputId,
                 value = props.value or "",
                 placeholder = props.placeholder or "",
                 foreground = t.text or "#E8EDF7",
                 background = t.surface0 or "#141C2C",
                 focusable = props.focusable ~= false,
+                maxHeight = 1,
                 style = { height = 1, width = "100%" },
                 onChange = props.onChange,
             })

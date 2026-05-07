@@ -15,6 +15,8 @@
 --   width: number (default 40)
 --   disabled: boolean
 
+local Textarea = require("lux.textarea")
+
 local Form = lumina.defineComponent("LuxForm", function(props)
     local t = lumina.getTheme and lumina.getTheme() or {}
     local fields = props.fields or {}
@@ -48,7 +50,7 @@ local Form = lumina.defineComponent("LuxForm", function(props)
                 }, labelText)
             end
             -- Input
-            children[#children + 1] = lumina.createElement("input", {
+            children[#children + 1] = lumina.createElement(Textarea, {
                 key = "inp-" .. fieldId,
                 id = "form-" .. fieldId,
                 value = value or field.defaultValue or "",
@@ -56,6 +58,7 @@ local Form = lumina.defineComponent("LuxForm", function(props)
                 foreground = err and (t.error or "#F87171") or (t.text or "#E8EDF7"),
                 background = t.surface0 or "#141C2C",
                 focusable = not disabled,
+                maxHeight = 1,
                 style = { height = 1, width = width },
                 onChange = onFieldChange and function(text)
                     onFieldChange(fieldId, text)

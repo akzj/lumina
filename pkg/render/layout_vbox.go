@@ -167,7 +167,7 @@ func layoutVBox(node *Node, contentX, contentY, contentW, contentH int, style St
 				// Component placeholders: check grafted root for explicit absolute height.
 				// Other container types get implicit flex=1.
 				switch child.Type {
-				case "text", "input", "textarea":
+				case "text":
 					children[i].fixedH = 1 + marginV
 					fixedTotal += children[i].fixedH
 				case "component":
@@ -446,7 +446,7 @@ func layoutVBoxWrap(node *Node, contentX, contentY, contentW, contentH int, styl
 		} else {
 			// Auto height
 			switch child.Type {
-			case "text", "input", "textarea":
+			case "text":
 				desiredH = 1 + marginV
 			default:
 				if cs.Flex > 0 {

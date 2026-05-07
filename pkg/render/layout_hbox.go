@@ -83,9 +83,6 @@ func layoutHBox(node *Node, contentX, contentY, contentW, contentH int, style St
 				}
 				children[i].fixedW = naturalW + marginH
 				fixedTotal += children[i].fixedW
-			case "input", "textarea":
-				children[i].fixedW = 1 + marginH
-				fixedTotal += children[i].fixedW
 			default:
 				// Container — treat as flex=1
 				children[i].flexGrow = 1
@@ -401,8 +398,6 @@ func wrapHBoxItemDesiredWidth(child *Node, parentContentW int) int {
 			}
 		}
 		return clamp(n+hpad, resolveMinW(cs, parentContentW), resolveMaxW(cs, parentContentW)) + marginH
-	case "input", "textarea":
-		return clamp(1+hpad, resolveMinW(cs, parentContentW), resolveMaxW(cs, parentContentW)) + marginH
 	case "hbox":
 		inner := 0
 		flow := 0

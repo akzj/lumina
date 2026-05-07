@@ -456,9 +456,10 @@ func TestEngine_StaleFocusedNode_AfterRemoval(t *testing.T) {
 			render = function(props)
 				if show_input then
 					return lumina.createElement("vbox", {style={width=80, height=24}},
-						lumina.createElement("input", {
+						lumina.createElement("box", {
 							key = "inp",
 							id = "inp",
+							focusable = true,
 							style = {width = 40, height = 1},
 						})
 					)
@@ -476,13 +477,13 @@ func TestEngine_StaleFocusedNode_AfterRemoval(t *testing.T) {
 
 	e.RenderAll()
 
-	// Focus the input by clicking it
+	// Focus the box by clicking it
 	e.HandleClick(5, 0)
 	if e.FocusedNode() == nil {
-		t.Fatal("expected input to be focused after click")
+		t.Fatal("expected focusable box to be focused after click")
 	}
 
-	// Remove the input
+	// Remove the focusable box
 	err = L.DoString(`show_input = false`)
 	if err != nil {
 		t.Fatal(err)

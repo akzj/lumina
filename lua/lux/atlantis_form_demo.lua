@@ -3,6 +3,7 @@
 
 local Card = require("lux.card")
 local TextInput = require("lux.text_input")
+local Textarea = require("lux.textarea")
 local Button = require("lux.button")
 local Atlantis = require("lux.atlantis")
 
@@ -72,18 +73,20 @@ function M.formShowcaseBlocks()
                     overflow = "hidden",
                 },
             },
-                lumina.createElement("input", {
+                lumina.createElement(Textarea, {
                     id = "in-first",
                     placeholder = "Firstname",
                     foreground = t.text or "#E8EDF7",
                     background = t.surface0 or "#141C2C",
+                    maxHeight = 1,
                     style = { height = 1, flex = 1, minWidth = "10%" },
                 }),
-                lumina.createElement("input", {
+                lumina.createElement(Textarea, {
                     id = "in-last",
                     placeholder = "Lastname",
                     foreground = t.text or "#E8EDF7",
                     background = t.surface0 or "#141C2C",
+                    maxHeight = 1,
                     style = { height = 1, flex = 1, minWidth = "10%" },
                 }),
                 lumina.createElement(Button, {

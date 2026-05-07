@@ -5,7 +5,6 @@ import (
 	"reflect"
 	"sort"
 	"strconv"
-	"strings"
 
 	"github.com/akzj/go-lua/pkg/lua"
 	"github.com/akzj/lumina/pkg/buffer"
@@ -91,11 +90,7 @@ type Engine struct {
 	// Scrollbar drag state
 	scrollbarDragNode        *Node // node being scrollbar-dragged (nil = no drag)
 	scrollbarDragStartY      int   // mouse Y at drag start
-	scrollbarDragStartScrollY int  // ScrollY at drag start
-
-	// Cursor blink state
-	cursorBlinkOn    bool // true = cursor visible, false = hidden
-	cursorBlinkFrame int  // frame counter for blink timing
+	scrollbarDragStartScrollY int // ScrollY at drag start
 }
 
 // SetTracker sets the performance tracker for recording render-engine metrics.
@@ -191,7 +186,7 @@ func NewEngine(L *lua.State, width, height int) *Engine {
 		height:         height,
 		buffer:         NewCellBuffer(width, height),
 		layers:         make([]*Layer, 0, 4),
-		cursorBlinkOn:  true,
+
 	}
 }
 
@@ -215,145 +210,6 @@ func (e *Engine) CurrentComponent() *Component { return e.currentComp }
 
 // AllComponents returns all registered components.
 func (e *Engine) AllComponents() map[string]*Component { return e.components }
-
-// CursorPosition returns the screen position of the hardware cursor.
-// If a focused input/textarea exists, returns its cursor coordinates and visible=true.
-// Otherwise returns (0, 0, false).
-func (e *Engine) CursorPosition() (x, y int, visible bool) {
-	node := e.focusedNode
-	if node == nil {
-		return 0, 0, false
-	}
-
-	// Lua-based input with cursor hint — disabled (software cursor handles display).
-	// Hardware cursor is only used for native input/textarea nodes.
-
-	if node.Type != "input" && node.Type != "textarea" {
-		return 0, 0, false
-	}
-
-	// Multi-line textarea: compute line/col cursor position
-	if node.Type == "textarea" && strings.Contains(node.Content, "\n") {
-		runes := []rune(node.Content)
-		cursorLine, cursorCol := computeCursorLineCol(runes, node.CursorPos)
-		// Vertical scroll
-		scrollY := 0
-		if cursorLine >= node.H {
-			scrollY = cursorLine - node.H + 1
-		}
-		visRow := cursorLine - scrollY
-		if visRow < 0 || visRow >= node.H {
-			return 0, 0, false
-		}
-		return node.X + cursorCol, node.Y + visRow, true
-	}
-
-	// Single-line input: horizontal scroll
-	cursorOffset := inputCursorScreenOffset(node)
-	availW := node.W
-	scrollX := 0
-	if cursorOffset >= availW {
-		scrollX = cursorOffset - availW + 1
-	}
-	return node.X + cursorOffset - scrollX, node.Y, true
-}
-
-// TickCursorBlink should be called once per frame (~60fps).
-// Toggles cursor visibility every 30 frames (~500ms at 60fps).
-// Returns true if blink state changed (caller should trigger repaint).
-func (e *Engine) TickCursorBlink() bool {
-	e.cursorBlinkFrame++
-	if e.cursorBlinkFrame >= 30 {
-		e.cursorBlinkFrame = 0
-		e.cursorBlinkOn = !e.cursorBlinkOn
-		return true
-	}
-	return false
-}
-
-// CursorBlinkOn returns whether the cursor should be visible in the current blink phase.
-func (e *Engine) CursorBlinkOn() bool {
-	return e.cursorBlinkOn
-}
-
-// ResetCursorBlink resets the blink timer (call on any keypress to keep cursor visible).
-func (e *Engine) ResetCursorBlink() {
-	e.cursorBlinkOn = true
-	e.cursorBlinkFrame = 0
-}
-
-// RepaintCursor repaints just the cursor cell based on current blink state.
-// Call after TickCursorBlink returns true to update the buffer.
-func (e *Engine) RepaintCursor() {
-	node := e.focusedNode
-	if node == nil || (node.Type != "input" && node.Type != "textarea") {
-		return
-	}
-
-	var cursorX, cursorY int
-
-	// Multi-line textarea
-	if node.Type == "textarea" && strings.Contains(node.Content, "\n") {
-		runes := []rune(node.Content)
-		cursorLine, cursorCol := computeCursorLineCol(runes, node.CursorPos)
-		scrollY := 0
-		if cursorLine >= node.H {
-			scrollY = cursorLine - node.H + 1
-		}
-		visRow := cursorLine - scrollY
-		if visRow < 0 || visRow >= node.H {
-			return
-		}
-		cursorX = node.X + cursorCol
-		cursorY = node.Y + visRow
-	} else {
-		// Single-line input
-		cursorOffset := inputCursorScreenOffset(node)
-		availW := node.W
-		scrollX := 0
-		if cursorOffset >= availW {
-			scrollX = cursorOffset - availW + 1
-		}
-		cursorX = node.X + cursorOffset - scrollX
-		cursorY = node.Y
-	}
-
-	if e.cursorBlinkOn {
-		paintInputCursor(e.buffer, node, cursorX, cursorY)
-	} else {
-		// Restore the cell under the cursor (paint with input's normal colors)
-		bg := node.Style.Background
-		if bg == "" {
-			bg = "#1E1E2E"
-		}
-		fg := node.Style.Foreground
-		if fg == "" {
-			fg = "#CDD6F4"
-		}
-		ch := cursorCharAt(node)
-		e.buffer.Set(cursorX, cursorY, Cell{Ch: ch, FG: fg, BG: bg})
-		// Restore padding cell for wide characters
-		if runeWidth(ch) == 2 && cursorX+1 < node.X+node.W {
-			e.buffer.Set(cursorX+1, cursorY, Cell{Wide: true, BG: bg})
-		}
-	}
-}
-
-// cursorCharAt returns the character at the cursor position in the node's content.
-func cursorCharAt(node *Node) rune {
-	if node.Content == "" {
-		return ' '
-	}
-	runes := []rune(node.Content)
-	if node.CursorPos >= len(runes) {
-		return ' '
-	}
-	ch := runes[node.CursorPos]
-	if ch == '\n' {
-		return ' '
-	}
-	return ch
-}
 
 // Resize updates the engine dimensions and buffer.
 func (e *Engine) Resize(width, height int) {
@@ -568,7 +424,6 @@ func (e *Engine) RenderDirty() {
 	}
 
 	// 5. Paint all layers (bottom to top)
-	e.buffer.CursorBlinkOn = e.cursorBlinkOn
 	for i, layer := range e.layers {
 		if layer.Root != nil {
 			if i == 0 {
@@ -596,12 +451,10 @@ func (e *Engine) RenderDirty() {
 	// Run if: no focus, focus removed, or focused node is in a hidden subtree (display:none)
 	if e.focusedNode == nil || e.focusedNode.Removed || isNodeHidden(e.focusedNode) {
 		e.FocusAutoFocus()
-	} else if e.focusedNode.Type != "input" && e.focusedNode.Type != "textarea" {
+	} else if rendered > 0 {
 		// Only steal focus when a component actually re-rendered this frame
 		// (e.g., on mount or tab switch). Don't steal on idle frames.
-		if rendered > 0 {
-			e.focusAutoFocusOnly()
-		}
+		e.focusAutoFocusOnly()
 	}
 }
 
@@ -637,7 +490,6 @@ func (e *Engine) RenderAll() {
 	// Sync main layer and do full layout + paint for all layers
 	e.syncMainLayer()
 	e.buffer.Clear()
-	e.buffer.CursorBlinkOn = e.cursorBlinkOn
 	for i, layer := range e.layers {
 		if layer.Root == nil {
 			continue

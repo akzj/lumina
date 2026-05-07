@@ -99,7 +99,7 @@ type Style struct {
 // Never garbage collected during normal operation.
 type Node struct {
 	// Identity
-	Type string // "box", "vbox", "hbox", "text", "input", "textarea", "component"
+	Type string // "box", "vbox", "hbox", "text", "component"
 	ID   string // from props.id
 	Key  string // from props.key (for reconciliation)
 
@@ -128,8 +128,7 @@ type Node struct {
 	Hovered     bool   // true when mouse is over this node (or ancestor with hoverStyle)
 	PaintDirty  bool   // true → repaint this node
 
-	// Input/textarea state
-	CursorPos int  // cursor position within Content
+	// Focus state
 	AutoFocus bool // auto-focus on mount
 	Focused   bool // true when this node has input focus
 

@@ -69,24 +69,6 @@ func measure(node *Node, c Constraints) (int, int) {
 	switch node.Type {
 	case "text":
 		measuredW, measuredH = measureText(node, contentW, padW, padH)
-	case "input":
-		measuredW = outerW
-		measuredH = 1 + padH
-	case "textarea":
-		// textarea: auto-height based on content lines, clamped by min/maxHeight
-		if outerH > 0 {
-			measuredH = outerH
-		} else {
-			// Count lines in content (at least 1)
-			lines := 1
-			for _, ch := range node.Content {
-				if ch == '\n' {
-					lines++
-				}
-			}
-			measuredH = lines + padH
-		}
-		measuredW = outerW
 	case "component":
 		measuredW, measuredH = measureComponent(node, c, contentW, padW, padH)
 	case "fragment":
@@ -426,9 +408,6 @@ func measureHBox(node *Node, c Constraints, contentW, padW, padH int) (int, int)
 					}
 				}
 				children[i].fixedW = naturalW + marginH
-				fixedTotal += children[i].fixedW
-			case "input", "textarea":
-				children[i].fixedW = 1 + marginH
 				fixedTotal += children[i].fixedW
 			default:
 				// Container — treat as flex=1

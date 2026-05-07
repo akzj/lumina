@@ -14,9 +14,6 @@ func TestDescriptorFromMap_Text(t *testing.T) {
 	if desc.Content != "hello" {
 		t.Errorf("content: got %q, want 'hello'", desc.Content)
 	}
-	if !desc.ContentSet {
-		t.Error("ContentSet should be true when content is set")
-	}
 }
 
 func TestDescriptorFromMap_DefaultType(t *testing.T) {

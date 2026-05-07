@@ -2,6 +2,8 @@
 -- See lua/lux/data_grid.md for design and P0/P1 scope.
 -- Usage: local DataGrid = require("lux.data_grid")
 
+local Textarea = require("lux.textarea")
+
 -- UTF-8 helpers: count characters and truncate safely.
 -- utf8Len returns the number of UTF-8 characters (not bytes) in a string.
 local function utf8Len(s)
@@ -414,11 +416,13 @@ local DataGrid = lumina.defineComponent("DataGrid", function(props)
 					local inputValue = editValueProp
 					if inputValue == nil then inputValue = currentValue end
 					lastEditValue = inputValue
-					-- Render native input for editing
-					cell = lumina.createElement("input", {
+					-- Render Lua textarea for editing
+					cell = lumina.createElement(Textarea, {
 						id = "edit-" .. tostring(i) .. "-" .. colId,
 						value = inputValue,
 						focusable = true,
+						autoFocus = true,
+						maxHeight = 1,
 						foreground = t.text or "#E8EDF7",
 						background = t.surface1 or "#1B2639",
 						style = { height = 1, width = cw },
@@ -428,9 +432,8 @@ local DataGrid = lumina.defineComponent("DataGrid", function(props)
 								onEditValueChange(text)
 							end
 						end,
-						onSubmit = function()
-							-- onChange fires RIGHT BEFORE onSubmit in same event cycle
-							-- lastEditValue has the latest content
+						onSubmit = function(text)
+							lastEditValue = text or lastEditValue
 							if onCellChange then
 								onCellChange(i, colId, lastEditValue)
 							end
@@ -486,7 +489,7 @@ local DataGrid = lumina.defineComponent("DataGrid", function(props)
 		key = props.key,
 		style = rootStyle,
 		focusable = true,
-		autoFocus = props.autoFocus == true,
+		autoFocus = (props.autoFocus == true) and (editingCell == nil),
 		onKeyDown = onKeyDown,
 	}, headerRow, sep, bodyScroll)
 end)

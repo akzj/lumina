@@ -8,7 +8,7 @@ type Descriptor struct {
 	ID       string
 	Key      string
 	Content    string
-	ContentSet bool // true when content/value was explicitly set in Lua
+
 	Style      Style
 	HoverStyle *Style // hover style overrides (nil = no hover style)
 	Children   []Descriptor

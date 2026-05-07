@@ -195,11 +195,8 @@ func (a *App) RenderDirty() {
 	a.tracker.EndFrame()
 }
 
-// setCursorFromEngine queries the engine for cursor position and sets it on the adapter.
-func (a *App) setCursorFromEngine() {
-	x, y, visible := a.engine.CursorPosition()
-	a.adapter.SetCursor(x, y, visible)
-}
+// setCursorFromEngine is a no-op — native input cursor removed (all text input via Lua).
+func (a *App) setCursorFromEngine() {}
 
 // unionRect returns the bounding rect containing both a and b.
 func unionRect(a, b buffer.Rect) buffer.Rect {

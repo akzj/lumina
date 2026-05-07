@@ -484,12 +484,7 @@ func (e *Engine) HandleKeyDown(key string) {
 		return
 	}
 
-	// If an input/textarea is focused, try input handling first
-	if e.focusedNode != nil {
-		if e.HandleInputKeyDown(key) {
-			return // consumed by input system
-		}
-	}
+	// Native input/textarea removed — all text input is handled by Lua components via onKeyDown.
 
 	// Page up/down: scroll the nearest vertical scroll container (under focus,
 	// or at viewport center if nothing is focused).

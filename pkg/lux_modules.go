@@ -44,6 +44,7 @@ func registerLuxModules(L *lua.State) {
 	preloadLuaSource(L, "lux.alert", mustReadLuxLua("alert.lua"))
 	preloadLuaSource(L, "lux.accordion", mustReadLuxLua("accordion.lua"))
 	preloadLuaSource(L, "lux.breadcrumb", mustReadLuxLua("breadcrumb.lua"))
+	preloadLuaSource(L, "lux.textarea", mustReadLuxLua("textarea.lua"))
 	preloadLuaSource(L, "lux.text_input", mustReadLuxLua("text_input.lua"))
 	preloadLuaSource(L, "lux.button", mustReadLuxLua("button.lua"))
 	preloadLuaSource(L, "lux.checkbox", mustReadLuxLua("checkbox.lua"))

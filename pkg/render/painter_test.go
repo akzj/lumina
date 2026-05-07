@@ -747,28 +747,6 @@ func TestPaintText_MixedASCIIAndCJK(t *testing.T) {
 	}
 }
 
-func TestPaintInput_SingleLineDoesNotWrapIntoNextRow(t *testing.T) {
-	buf := NewCellBuffer(24, 3)
-	for y := 0; y < 3; y++ {
-		for x := 0; x < 24; x++ {
-			buf.Set(x, y, Cell{Ch: '.', BG: "#000001"})
-		}
-	}
-	n := NewNode("input")
-	n.Content = "姐姐斤斤计较"
-	n.X, n.Y, n.W, n.H = 0, 0, 8, 1
-	n.Style = Style{Foreground: "#FFFFFF", Background: "#222222"}
-
-	paintInput(buf, n)
-
-	for x := 0; x < 24; x++ {
-		c := buf.Get(x, 1)
-		if c.Ch != '.' {
-			t.Fatalf("y=1 col %d: got Ch=%q (input must not wrap past H=1)", x, c.Ch)
-		}
-	}
-}
-
 func TestHoverStyle(t *testing.T) {
 	// Create a text node with hoverStyle
 	node := NewNode("text")

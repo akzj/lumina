@@ -47,7 +47,6 @@ func descriptorFromMap(m map[string]any) Descriptor {
 	// Content
 	if c, ok := m["content"].(string); ok {
 		desc.Content = c
-		desc.ContentSet = true
 	}
 
 	// ID
@@ -204,26 +203,6 @@ func (e *Engine) readDescriptor(L *lua.State, idx int) Descriptor {
 	desc.ID = getStringField(L, absIdx, "id")
 	desc.Key = getStringField(L, absIdx, "key")
 	desc.Content = getStringField(L, absIdx, "content")
-	// Only mark ContentSet for input/textarea types (controlled input pattern).
-	// Other element types (text, box, etc.) also have "content" set by createElement
-	// for string children, but they should NOT be treated as controlled inputs.
-	if desc.Type == "input" || desc.Type == "textarea" {
-		// Check if "content" field exists (even if empty string) to mark controlled
-		L.GetField(absIdx, "content")
-		if !L.IsNil(-1) {
-			desc.ContentSet = true
-		}
-		L.Pop(1)
-		// Also check "value" field as alternative
-		if !desc.ContentSet {
-			L.GetField(absIdx, "value")
-			if !L.IsNil(-1) {
-				desc.Content = getStringField(L, absIdx, "value")
-				desc.ContentSet = true
-			}
-			L.Pop(1)
-		}
-	}
 	desc.Placeholder = getStringField(L, absIdx, "placeholder")
 	desc.AutoFocus = getBoolField(L, absIdx, "autoFocus")
 	L.GetField(absIdx, "scrollY")
@@ -316,11 +295,6 @@ func (e *Engine) readDescriptor(L *lua.State, idx int) Descriptor {
 			desc.ComponentProps = readMapFromTable(L, -1)
 		}
 		L.Pop(1)
-	}
-
-	// Backward compat: input/textarea are always focusable (unless disabled)
-	if (desc.Type == "input" || desc.Type == "textarea") && !desc.Disabled {
-		desc.Focusable = true
 	}
 
 	return desc

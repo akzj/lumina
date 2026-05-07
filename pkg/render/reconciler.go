@@ -19,29 +19,15 @@ func reconcileImpl(node *Node, desc Descriptor, freedRefs *[]int64) bool {
 	changed := false
 
 	// 1. Update content
-	// For input/textarea: only overwrite if descriptor explicitly sets content
-	// (controlled input). Otherwise preserve user-typed content.
 	if desc.Content != node.Content {
-		if !desc.ContentSet && (node.Type == "input" || node.Type == "textarea") {
-			// Uncontrolled input: preserve user-typed content
-		} else {
-			oldContent := node.Content
-			node.Content = desc.Content
-			// Clamp cursor position if new content is shorter
-			if node.Type == "input" || node.Type == "textarea" {
-				runes := []rune(node.Content)
-				if node.CursorPos > len(runes) {
-					node.CursorPos = len(runes)
-				}
-			}
-			node.PaintDirty = true
-			// If display width changed, mark layout dirty so parent re-lays out.
-			// This is needed for text nodes inside hbox/vbox whose width depends on content.
-			if stringWidth(oldContent) != stringWidth(node.Content) {
-				node.MarkLayoutDirty()
-			}
-			changed = true
+		oldContent := node.Content
+		node.Content = desc.Content
+		node.PaintDirty = true
+		// If display width changed, mark layout dirty so parent re-lays out.
+		if stringWidth(oldContent) != stringWidth(node.Content) {
+			node.MarkLayoutDirty()
 		}
+		changed = true
 	}
 
 	// 1b. Update placeholder
