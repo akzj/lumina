@@ -228,6 +228,12 @@ func (a *App) HandleEvent(e *event.Event) {
 			a.toggleDevToolsV2()
 			return
 		}
+		if e.Key == "F5" {
+			if a.scriptPath != "" {
+				a.reloadScript(a.scriptPath)
+			}
+			return
+		}
 		// Tab switching and Elements scroll when devtools is visible.
 		if a.devtools.Visible {
 			switch e.Key {

@@ -1,6 +1,7 @@
 package render
 
 import (
+	"log"
 	"reflect"
 	"sort"
 	"strconv"
@@ -554,6 +555,7 @@ func (e *Engine) renderComponent(comp *Component) {
 		L.Pop(1) // pop error
 		comp.Dirty = false
 		comp.LastError = errMsg
+		log.Printf("[lumina] render error in component %q (id=%s): %s", comp.Name, comp.ID, errMsg)
 		return
 	}
 	comp.LastError = "" // clear on success
