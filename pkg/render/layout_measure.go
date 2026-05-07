@@ -73,11 +73,18 @@ func measure(node *Node, c Constraints) (int, int) {
 		measuredW = outerW
 		measuredH = 1 + padH
 	case "textarea":
-		// textarea: use explicit height or default to 3 rows
+		// textarea: auto-height based on content lines, clamped by min/maxHeight
 		if outerH > 0 {
 			measuredH = outerH
 		} else {
-			measuredH = 3 + padH
+			// Count lines in content (at least 1)
+			lines := 1
+			for _, ch := range node.Content {
+				if ch == '\n' {
+					lines++
+				}
+			}
+			measuredH = lines + padH
 		}
 		measuredW = outerW
 	case "component":

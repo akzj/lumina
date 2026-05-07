@@ -246,6 +246,17 @@ func (e *Engine) HandleInputKeyDown(key string) bool {
 		}
 		return true
 
+	case "Ctrl+Enter":
+		// Ctrl+Enter fires onSubmit for textarea (and input)
+		e.fireOnChange(node)
+		for n := node; n != nil; n = n.Parent {
+			if n.OnSubmit != 0 {
+				e.callLuaRefSimple(n.OnSubmit)
+				break
+			}
+		}
+		return true
+
 	case "Enter":
 		if node.Type == "textarea" {
 			// Insert newline
