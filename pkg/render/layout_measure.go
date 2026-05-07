@@ -176,13 +176,14 @@ func resolveConstrainedHeight(style Style, c Constraints) int {
 
 // measureText computes the intrinsic size of a text node.
 func measureText(node *Node, contentW, padW, padH int) (int, int) {
-	if node.Content == "" {
+	text := nodeTextContent(node)
+	if text == "" {
 		return contentW + padW, 1 + padH
 	}
 
 	// If whiteSpace=nowrap, text is one line
 	if node.Style.WhiteSpace == "nowrap" {
-		textW := stringWidth(node.Content)
+		textW := stringWidth(text)
 		return textW + padW, 1 + padH
 	}
 
@@ -190,12 +191,29 @@ func measureText(node *Node, contentW, padW, padH int) (int, int) {
 	if contentW <= 0 {
 		contentW = 1
 	}
-	lines := wrapTextLines(node.Content, contentW)
+	lines := wrapTextLines(text, contentW)
 	h := len(lines)
 	if h < 1 {
 		h = 1
 	}
 	return contentW + padW, h + padH
+}
+
+// nodeTextContent returns the effective text content for a node.
+// If spans are present, it concatenates all span texts; otherwise returns Content.
+func nodeTextContent(node *Node) string {
+	if len(node.Spans) == 0 {
+		return node.Content
+	}
+	total := 0
+	for _, s := range node.Spans {
+		total += len(s.Text)
+	}
+	buf := make([]byte, 0, total)
+	for _, s := range node.Spans {
+		buf = append(buf, s.Text...)
+	}
+	return string(buf)
 }
 
 // wrapTextLines simulates text wrapping and returns the number of lines.
@@ -401,8 +419,9 @@ func measureHBox(node *Node, c Constraints, contentW, padW, padH int) (int, int)
 			switch child.Type {
 			case "text":
 				naturalW := 1
-				if child.Content != "" {
-					naturalW = stringWidth(child.Content)
+				textContent := nodeTextContent(child)
+				if textContent != "" {
+					naturalW = stringWidth(textContent)
 					if naturalW < 1 {
 						naturalW = 1
 					}

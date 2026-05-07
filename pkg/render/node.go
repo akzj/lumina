@@ -95,6 +95,21 @@ type Style struct {
 	ZIndex        int
 }
 
+// Span represents an inline styled text segment within a text node.
+// If a text node has non-empty Spans, they are rendered instead of Content.
+// Unset style fields inherit from the node's Style.
+type Span struct {
+	Text          string
+	Foreground    string
+	Background    string
+	Bold          *bool
+	Dim           *bool
+	Underline     *bool
+	Italic        *bool
+	Strikethrough *bool
+	Inverse       *bool
+}
+
 // Node is a persistent UI node. Created once, updated in-place.
 // Never garbage collected during normal operation.
 type Node struct {
@@ -122,6 +137,7 @@ type Node struct {
 
 	// Paint
 	Content     string // text content
+	Spans       []Span // inline styled text spans (if non-empty, used instead of Content)
 	Placeholder string // placeholder text (input/textarea)
 	Style       Style  // visual style
 	HoverStyle  *Style // hover style overrides (nil = no hover style)

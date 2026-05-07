@@ -8,6 +8,7 @@ type Descriptor struct {
 	ID       string
 	Key      string
 	Content    string
+	Spans      []Span
 
 	Style      Style
 	HoverStyle *Style // hover style overrides (nil = no hover style)

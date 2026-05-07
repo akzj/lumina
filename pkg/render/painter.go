@@ -813,6 +813,12 @@ func paintTextClipped(buf *CellBuffer, node *Node, clipX1, clipY1, clipX2, clipY
 		}
 	}
 
+	// If spans are present, use span-based painting
+	if len(node.Spans) > 0 {
+		paintTextSpansClipped(buf, node, clipX1, clipY1, clipX2, clipY2, offsetX, offsetY)
+		return
+	}
+
 	fg := node.Style.Foreground
 	bold := node.Style.Bold
 	italic := node.Style.Italic
@@ -912,6 +918,12 @@ func paintText(buf *CellBuffer, node *Node) {
 		}
 	}
 
+	// If spans are present, use span-based painting
+	if len(node.Spans) > 0 {
+		paintTextSpans(buf, node)
+		return
+	}
+
 	// Text alignment and overflow
 	textAlign := node.Style.TextAlign
 	noWrap := node.Style.WhiteSpace == "nowrap"
@@ -1009,6 +1021,274 @@ func paintText(buf *CellBuffer, node *Node) {
 				if adv > 0 {
 					x += adv
 				}
+			}
+		}
+	}
+}
+
+// resolveSpanStyle resolves a span's effective style, inheriting from the node's Style.
+func resolveSpanStyle(span *Span, nodeStyle *Style) (fg, bg string, bold, dim, underline, italic, strikethrough, inverse bool) {
+	fg = span.Foreground
+	if fg == "" {
+		fg = nodeStyle.Foreground
+	}
+	bg = span.Background
+	if bg == "" {
+		bg = nodeStyle.Background
+	}
+	if span.Bold != nil {
+		bold = *span.Bold
+	} else {
+		bold = nodeStyle.Bold
+	}
+	if span.Dim != nil {
+		dim = *span.Dim
+	} else {
+		dim = nodeStyle.Dim
+	}
+	if span.Underline != nil {
+		underline = *span.Underline
+	} else {
+		underline = nodeStyle.Underline
+	}
+	if span.Italic != nil {
+		italic = *span.Italic
+	} else {
+		italic = nodeStyle.Italic
+	}
+	if span.Strikethrough != nil {
+		strikethrough = *span.Strikethrough
+	} else {
+		strikethrough = nodeStyle.Strikethrough
+	}
+	if span.Inverse != nil {
+		inverse = *span.Inverse
+	} else {
+		inverse = nodeStyle.Inverse
+	}
+	return
+}
+
+// paintRuneCellStyled writes a single rune to the buffer with explicit style.
+// Returns the rune's display width. If rightEdge is exceeded, 0 is returned.
+func paintRuneCellStyled(buf *CellBuffer, x, y int, ch rune, fg, bg string, bold, dim, underline, italic, strikethrough, inverse bool, rightEdge int) int {
+	w := runeWidth(ch)
+	if x+w > rightEdge {
+		return 0
+	}
+	cellBG := bg
+	if cellBG == "" {
+		existing := buf.Get(x, y)
+		cellBG = existing.BG
+	}
+	buf.Set(x, y, Cell{
+		Ch:            ch,
+		FG:            fg,
+		BG:            cellBG,
+		Bold:          bold,
+		Dim:           dim,
+		Underline:     underline,
+		Italic:        italic,
+		Strikethrough: strikethrough,
+		Inverse:       inverse,
+	})
+	if w == 2 && x+1 < rightEdge {
+		buf.Set(x+1, y, Cell{Wide: true, BG: cellBG})
+	}
+	return w
+}
+
+// paintTextSpans renders spans in a text node (non-clipped path).
+func paintTextSpans(buf *CellBuffer, node *Node) {
+	textAlign := node.Style.TextAlign
+	noWrap := node.Style.WhiteSpace == "nowrap"
+	ellipsis := node.Style.TextOverflow == "ellipsis"
+	rightEdge := node.X + node.W
+	availW := node.W
+
+	if noWrap {
+		// No-wrap mode: single line, clip or ellipsis
+		// Concatenate all span text for width calculation
+		fullText := nodeTextContent(node)
+		lines := splitLines(fullText)
+		// For nowrap, only first line matters per rendered row
+		for lineIdx, line := range lines {
+			y := node.Y + lineIdx
+			if y >= node.Y+node.H {
+				break
+			}
+			lineW := stringWidth(line)
+			x := alignedX(node.X, availW, lineW, textAlign)
+
+			// Determine if truncation needed
+			truncated := ellipsis && lineW > availW
+			maxW := availW
+			if truncated {
+				maxW = availW - 1 // leave room for ellipsis
+			}
+
+			// Paint spans for this line
+			col := x
+			colW := 0 // accumulated width
+			for si := range node.Spans {
+				span := &node.Spans[si]
+				fg, bg, bold, dim, underline, italic, strikethrough, inverse := resolveSpanStyle(span, &node.Style)
+				for _, ch := range span.Text {
+					if ch == '\n' {
+						break // stop at newline in nowrap
+					}
+					w := runeWidth(ch)
+					if truncated && colW+w > maxW {
+						// Paint ellipsis with last span's style
+						paintRuneCellStyled(buf, col, y, '…', fg, bg, bold, dim, underline, italic, strikethrough, inverse, rightEdge)
+						return
+					}
+					adv := paintRuneCellStyled(buf, col, y, ch, fg, bg, bold, dim, underline, italic, strikethrough, inverse, rightEdge)
+					if adv == 0 {
+						return // clipped
+					}
+					col += adv
+					colW += w
+				}
+			}
+		}
+	} else {
+		// Wrapping mode
+		x := node.X
+		y := node.Y
+
+		if textAlign == "center" || textAlign == "right" {
+			// For alignment, compute full text and use line-by-line approach
+			fullText := nodeTextContent(node)
+			lines := splitLines(fullText)
+			// Build a flat list of (rune, spanIndex) for painting
+			type styledRune struct {
+				ch        rune
+				spanIndex int
+			}
+			var allRunes []styledRune
+			for si := range node.Spans {
+				for _, ch := range node.Spans[si].Text {
+					allRunes = append(allRunes, styledRune{ch, si})
+				}
+			}
+
+			runeIdx := 0
+			for lineIdx, line := range lines {
+				y = node.Y + lineIdx
+				if y >= node.Y+node.H {
+					break
+				}
+				lineW := stringWidth(line)
+				x = alignedX(node.X, availW, lineW, textAlign)
+
+				for _, ch := range line {
+					if runeIdx >= len(allRunes) {
+						break
+					}
+					sr := allRunes[runeIdx]
+					_ = sr // we use the span index from allRunes
+					span := &node.Spans[sr.spanIndex]
+					fg, bg, bold, dim, underline, italic, strikethrough, inverse := resolveSpanStyle(span, &node.Style)
+					w := runeWidth(ch)
+					if x+w > rightEdge {
+						y++
+						x = node.X
+					}
+					if y >= node.Y+node.H {
+						break
+					}
+					adv := paintRuneCellStyled(buf, x, y, ch, fg, bg, bold, dim, underline, italic, strikethrough, inverse, rightEdge)
+					if adv > 0 {
+						x += adv
+					}
+					runeIdx++
+				}
+				// Skip the newline character in allRunes
+				if runeIdx < len(allRunes) && allRunes[runeIdx].ch == '\n' {
+					runeIdx++
+				}
+			}
+		} else {
+			// Default left-aligned wrapping
+			for si := range node.Spans {
+				span := &node.Spans[si]
+				fg, bg, bold, dim, underline, italic, strikethrough, inverse := resolveSpanStyle(span, &node.Style)
+				for _, ch := range span.Text {
+					if ch == '\n' {
+						y++
+						x = node.X
+						continue
+					}
+					w := runeWidth(ch)
+					if x+w > rightEdge {
+						y++
+						x = node.X
+					}
+					if y >= node.Y+node.H {
+						return
+					}
+					adv := paintRuneCellStyled(buf, x, y, ch, fg, bg, bold, dim, underline, italic, strikethrough, inverse, rightEdge)
+					if adv > 0 {
+						x += adv
+					}
+				}
+			}
+		}
+	}
+}
+
+// paintTextSpansClipped renders spans in a text node with clipping (for scroll containers).
+func paintTextSpansClipped(buf *CellBuffer, node *Node, clipX1, clipY1, clipX2, clipY2, offsetX, offsetY int) {
+	screenX := node.X + offsetX
+	screenY := node.Y + offsetY
+	rightEdge := screenX + node.W
+
+	x := screenX
+	y := screenY
+	for si := range node.Spans {
+		span := &node.Spans[si]
+		fg, bg, bold, dim, underline, italic, strikethrough, inverse := resolveSpanStyle(span, &node.Style)
+		for _, ch := range span.Text {
+			if ch == '\n' {
+				y++
+				x = screenX
+				continue
+			}
+			w := runeWidth(ch)
+			if x+w > rightEdge {
+				y++
+				x = screenX
+			}
+			if y >= screenY+node.H {
+				return
+			}
+			if x+w-1 < rightEdge {
+				if y >= clipY1 && y < clipY2 {
+					if x >= clipX1 && x < clipX2 {
+						cellBG := bg
+						if cellBG == "" {
+							existing := buf.Get(x, y)
+							cellBG = existing.BG
+						}
+						if w == 2 && x+1 >= clipX2 {
+							buf.Set(x, y, Cell{Ch: ' ', FG: fg, BG: cellBG, Bold: bold, Dim: dim, Underline: underline, Italic: italic, Strikethrough: strikethrough, Inverse: inverse})
+						} else {
+							buf.Set(x, y, Cell{Ch: ch, FG: fg, BG: cellBG, Bold: bold, Dim: dim, Underline: underline, Italic: italic, Strikethrough: strikethrough, Inverse: inverse})
+							if w == 2 && x+1 >= clipX1 && x+1 < clipX2 {
+								buf.Set(x+1, y, Cell{Wide: true, BG: cellBG})
+							}
+						}
+					} else if w == 2 && x == clipX1-1 && clipX1 < clipX2 {
+						cellBG := bg
+						if cellBG == "" {
+							existing := buf.Get(clipX1, y)
+							cellBG = existing.BG
+						}
+						buf.Set(clipX1, y, Cell{Ch: ' ', FG: fg, BG: cellBG, Bold: bold, Dim: dim, Underline: underline, Italic: italic, Strikethrough: strikethrough, Inverse: inverse})
+					}
+				}
+				x += w
 			}
 		}
 	}

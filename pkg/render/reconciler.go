@@ -30,6 +30,17 @@ func reconcileImpl(node *Node, desc Descriptor, freedRefs *[]int64) bool {
 		changed = true
 	}
 
+	// 1a. Update spans
+	if !spansEqual(desc.Spans, node.Spans) {
+		oldWidth := spansWidth(node.Spans)
+		node.Spans = desc.Spans
+		node.PaintDirty = true
+		if oldWidth != spansWidth(node.Spans) {
+			node.MarkLayoutDirty()
+		}
+		changed = true
+	}
+
 	// 1b. Update placeholder
 	if desc.Placeholder != node.Placeholder {
 		node.Placeholder = desc.Placeholder
@@ -392,6 +403,7 @@ func createNodeFromDesc(desc Descriptor) *Node {
 	node.ID = desc.ID
 	node.Key = desc.Key
 	node.Content = desc.Content
+	node.Spans = desc.Spans
 	node.Placeholder = desc.Placeholder
 	node.AutoFocus = desc.AutoFocus
 	if desc.ScrollYSet {
@@ -445,6 +457,47 @@ func markRemovedRecursive(node *Node) {
 	for _, child := range node.Children {
 		markRemovedRecursive(child)
 	}
+}
+
+// spansEqual compares two Span slices for equality.
+func spansEqual(a, b []Span) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i].Text != b[i].Text ||
+			a[i].Foreground != b[i].Foreground ||
+			a[i].Background != b[i].Background ||
+			!boolPtrEqual(a[i].Bold, b[i].Bold) ||
+			!boolPtrEqual(a[i].Dim, b[i].Dim) ||
+			!boolPtrEqual(a[i].Underline, b[i].Underline) ||
+			!boolPtrEqual(a[i].Italic, b[i].Italic) ||
+			!boolPtrEqual(a[i].Strikethrough, b[i].Strikethrough) ||
+			!boolPtrEqual(a[i].Inverse, b[i].Inverse) {
+			return false
+		}
+	}
+	return true
+}
+
+// boolPtrEqual compares two *bool values.
+func boolPtrEqual(a, b *bool) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	return *a == *b
+}
+
+// spansWidth returns the total display width of all spans concatenated.
+func spansWidth(spans []Span) int {
+	w := 0
+	for _, s := range spans {
+		w += stringWidth(s.Text)
+	}
+	return w
 }
 
 // hoverStyleEqual compares two *Style pointers for equality.

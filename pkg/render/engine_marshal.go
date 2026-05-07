@@ -49,6 +49,16 @@ func descriptorFromMap(m map[string]any) Descriptor {
 		desc.Content = c
 	}
 
+	// Spans
+	if spansRaw, ok := m["spans"].([]any); ok {
+		for _, item := range spansRaw {
+			if sm, ok := item.(map[string]any); ok {
+				span := spanFromMap(sm)
+				desc.Spans = append(desc.Spans, span)
+			}
+		}
+	}
+
 	// ID
 	if id, ok := m["id"].(string); ok {
 		desc.ID = id
@@ -203,6 +213,7 @@ func (e *Engine) readDescriptor(L *lua.State, idx int) Descriptor {
 	desc.ID = getStringField(L, absIdx, "id")
 	desc.Key = getStringField(L, absIdx, "key")
 	desc.Content = getStringField(L, absIdx, "content")
+	desc.Spans = readSpansField(L, absIdx)
 	desc.Placeholder = getStringField(L, absIdx, "placeholder")
 	desc.AutoFocus = getBoolField(L, absIdx, "autoFocus")
 	L.GetField(absIdx, "scrollY")
@@ -745,6 +756,111 @@ func pushPropValue(L *lua.State, v any) {
 	default:
 		L.PushAny(v)
 	}
+}
+
+// readSpansField reads the "spans" array field from a Lua table at idx.
+// Returns nil if the field is absent or not a table.
+func readSpansField(L *lua.State, idx int) []Span {
+	absIdx := L.AbsIndex(idx)
+	L.GetField(absIdx, "spans")
+	if !L.IsTable(-1) {
+		L.Pop(1)
+		return nil
+	}
+	spansIdx := L.AbsIndex(-1)
+	n := int(L.RawLen(spansIdx))
+	if n == 0 {
+		L.Pop(1)
+		return nil
+	}
+	spans := make([]Span, 0, n)
+	for i := 1; i <= n; i++ {
+		L.RawGetI(spansIdx, int64(i))
+		if L.IsTable(-1) {
+			span := readSpan(L, -1)
+			spans = append(spans, span)
+		}
+		L.Pop(1)
+	}
+	L.Pop(1)
+	if len(spans) == 0 {
+		return nil
+	}
+	return spans
+}
+
+// readSpan reads a single Span from a Lua table at the given stack index.
+func readSpan(L *lua.State, idx int) Span {
+	absIdx := L.AbsIndex(idx)
+	var s Span
+	s.Text = getStringField(L, absIdx, "text")
+	s.Foreground = getStringField(L, absIdx, "foreground")
+	if fg := getStringField(L, absIdx, "fg"); fg != "" && s.Foreground == "" {
+		s.Foreground = fg
+	}
+	s.Background = getStringField(L, absIdx, "background")
+	if bg := getStringField(L, absIdx, "bg"); bg != "" && s.Background == "" {
+		s.Background = bg
+	}
+	// Boolean style overrides — only set if explicitly present
+	if b, ok := getBoolFieldIfPresent(L, absIdx, "bold"); ok {
+		s.Bold = &b
+	}
+	if b, ok := getBoolFieldIfPresent(L, absIdx, "dim"); ok {
+		s.Dim = &b
+	}
+	if b, ok := getBoolFieldIfPresent(L, absIdx, "underline"); ok {
+		s.Underline = &b
+	}
+	if b, ok := getBoolFieldIfPresent(L, absIdx, "italic"); ok {
+		s.Italic = &b
+	}
+	if b, ok := getBoolFieldIfPresent(L, absIdx, "strikethrough"); ok {
+		s.Strikethrough = &b
+	}
+	if b, ok := getBoolFieldIfPresent(L, absIdx, "inverse"); ok {
+		s.Inverse = &b
+	}
+	return s
+}
+
+// spanFromMap converts a Go map (from ToAny) into a Span.
+func spanFromMap(m map[string]any) Span {
+	var s Span
+	if t, ok := m["text"].(string); ok {
+		s.Text = t
+	}
+	if fg, ok := m["foreground"].(string); ok {
+		s.Foreground = fg
+	}
+	if fg, ok := m["fg"].(string); ok && s.Foreground == "" {
+		s.Foreground = fg
+	}
+	if bg, ok := m["background"].(string); ok {
+		s.Background = bg
+	}
+	if bg, ok := m["bg"].(string); ok && s.Background == "" {
+		s.Background = bg
+	}
+	if b, ok := m["bold"].(bool); ok {
+		s.Bold = &b
+	}
+	if b, ok := m["dim"].(bool); ok {
+		s.Dim = &b
+	}
+	if b, ok := m["underline"].(bool); ok {
+		s.Underline = &b
+	}
+	if b, ok := m["italic"].(bool); ok {
+		s.Italic = &b
+	}
+	if b, ok := m["strikethrough"].(bool); ok {
+		s.Strikethrough = &b
+	}
+	if b, ok := m["inverse"].(bool); ok {
+		s.Inverse = &b
+	}
+	return s
 }
 
 func getStringField(L *lua.State, idx int, field string) string {
