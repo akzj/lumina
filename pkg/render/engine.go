@@ -448,13 +448,10 @@ func (e *Engine) RenderDirty() {
 	e.firePendingEffects()
 
 	// 8. Auto-focus newly created nodes with autoFocus=true
-	// Run if: no focus, focus removed, or focused node is in a hidden subtree (display:none)
+	// Only run if no focus, focus removed, or focused node is hidden.
+	// Never steal focus from an already-focused node (e.g. after focusById).
 	if e.focusedNode == nil || e.focusedNode.Removed || isNodeHidden(e.focusedNode) {
 		e.FocusAutoFocus()
-	} else if rendered > 0 {
-		// Only steal focus when a component actually re-rendered this frame
-		// (e.g., on mount or tab switch). Don't steal on idle frames.
-		e.focusAutoFocusOnly()
 	}
 }
 

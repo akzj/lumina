@@ -113,11 +113,40 @@ func (e *Engine) FocusPrev() {
 // Returns true if the node was found and focused.
 func (e *Engine) FocusByID(id string) bool {
 	node := e.FindNodeByID(id)
-	if node != nil && node.Focusable && !node.Disabled {
+	if node == nil {
+		return false
+	}
+	// If node is directly focusable, focus it
+	if node.Focusable && !node.Disabled {
 		e.setFocus(node)
 		return true
 	}
+	// If it's a non-focusable component placeholder (e.g. Textarea component
+	// where the caller didn't pass focusable=true), search its children for
+	// the first focusable node (the rendered inner vbox with onKeyDown).
+	if node.Type == "component" {
+		if inner := findFirstFocusable(node); inner != nil {
+			e.setFocus(inner)
+			return true
+		}
+	}
 	return false
+}
+
+// findFirstFocusable finds the first focusable, non-disabled node in a subtree (DFS).
+func findFirstFocusable(node *Node) *Node {
+	if node == nil {
+		return nil
+	}
+	for _, child := range node.Children {
+		if child.Focusable && !child.Disabled {
+			return child
+		}
+		if found := findFirstFocusable(child); found != nil {
+			return found
+		}
+	}
+	return nil
 }
 
 // FindNodeByID searches all layers for a node with the given ID.
@@ -212,6 +241,12 @@ func collectFocusable(node *Node) []*Node {
 	var result []*Node
 	if node.Focusable && !node.Disabled {
 		result = append(result, node)
+		// If this is a component placeholder, don't recurse into rendered children.
+		// The component's inner focusable nodes should not appear separately in the
+		// focus list — key dispatch handles reaching them via findKeyHandlerInSubtree.
+		if node.Type == "component" {
+			return result
+		}
 	}
 	for _, child := range node.Children {
 		result = append(result, collectFocusable(child)...)

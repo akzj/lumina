@@ -498,13 +498,26 @@ func (e *Engine) HandleKeyDown(key string) {
 	// Priority: walk up from focused node first (bubble), then DFS fallback.
 	var keyHandlerNode *Node
 	if e.focusedNode != nil && !e.focusedNode.Removed {
-		for n := e.focusedNode; n != nil; n = n.Parent {
-			if n.OnKeyDown != 0 {
-				keyHandlerNode = n
-				break
+		// First: check the focused node itself
+		if e.focusedNode.OnKeyDown != 0 {
+			keyHandlerNode = e.focusedNode
+		}
+		// Then: check children (for component placeholders whose rendered
+		// content has the onKeyDown handler)
+		if keyHandlerNode == nil && len(e.focusedNode.Children) > 0 {
+			keyHandlerNode = findKeyHandlerInSubtree(e.focusedNode)
+		}
+		// Then: walk up from focused node (existing bubble logic)
+		if keyHandlerNode == nil {
+			for n := e.focusedNode; n != nil; n = n.Parent {
+				if n.OnKeyDown != 0 {
+					keyHandlerNode = n
+					break
+				}
 			}
 		}
 	}
+
 	// Fallback: DFS search from top layer down (for apps with no focused node)
 	if keyHandlerNode == nil {
 		for i := len(e.layers) - 1; i >= 0; i-- {
@@ -1241,6 +1254,25 @@ func (e *Engine) findKeyHandler(node *Node) *Node {
 	}
 	return nil
 }
+
+// findKeyHandlerInSubtree finds the first node with OnKeyDown in the subtree (DFS).
+// Used when a focused component placeholder has no handler itself but its rendered
+// children do (e.g. Lua Textarea renders a vbox with onKeyDown inside a component).
+func findKeyHandlerInSubtree(node *Node) *Node {
+	if node == nil {
+		return nil
+	}
+	if node.OnKeyDown != 0 {
+		return node
+	}
+	for _, child := range node.Children {
+		if found := findKeyHandlerInSubtree(child); found != nil {
+			return found
+		}
+	}
+	return nil
+}
+
 
 // callLuaRefSimple calls a Lua function by registry ref with an event table
 // containing only stopPropagation() and preventDefault() methods.

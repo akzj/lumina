@@ -57,6 +57,9 @@ local Textarea = lumina.defineComponent("LuxTextarea", function(props)
     local blink, setBlink = lumina.useState("blink", 0)
     local blinkRef = lumina.useRef(0)
 
+    -- Track focus state so cursor only shows when focused
+    local focused, setFocused = lumina.useState("focused", false)
+
     -- Mount-only: start blink interval + focus
     lumina.useEffect(function()
         if props.autoFocus then
@@ -71,7 +74,7 @@ local Textarea = lumina.defineComponent("LuxTextarea", function(props)
         end
     end, {})
 
-    local cursorVisible = (blink % 2 == 0)
+    local cursorVisible = focused and (blink % 2 == 0)
 
     -- Helper: get 1-based byte position from 1-based codepoint position
     local function cpToBytePos(cp)
@@ -364,6 +367,8 @@ local Textarea = lumina.defineComponent("LuxTextarea", function(props)
         focusable = props.focusable ~= false,
         autoFocus = props.autoFocus,
         onKeyDown = handleKey,
+        onFocus = function() setFocused(true) end,
+        onBlur = function() setFocused(false) end,
         cursorHintCol = hintCol,
         cursorHintRow = hintRow,
         style = baseStyle,
