@@ -1074,6 +1074,21 @@ func hasAnyDirty(node *Node) bool {
 	return false
 }
 
+// CountDirtyNodes counts nodes with PaintDirty or LayoutDirty set (exported for testing).
+func CountDirtyNodes(node *Node) int {
+	if node == nil {
+		return 0
+	}
+	c := 0
+	if node.PaintDirty || node.LayoutDirty {
+		c++
+	}
+	for _, child := range node.Children {
+		c += CountDirtyNodes(child)
+	}
+	return c
+}
+
 // graftChildComponents walks the root tree and connects child component
 // RootNodes as children of their placeholder nodes. This allows layout and
 // paint to naturally traverse into sub-components.

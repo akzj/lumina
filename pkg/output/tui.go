@@ -165,10 +165,17 @@ func (t *tuiAdapter) SetCursor(x, y int, visible bool) {
 
 // Flush flushes buffered output, positioning the hardware cursor.
 func (t *tuiAdapter) Flush() error {
-	// Always hide the hardware cursor — we use a software cursor (painted white block)
-	// to avoid terminal-dependent cursor color issues.
-	t.w.WriteString("\033[?25l")
-	t.w.WriteString("\033[1;1H")
+	if t.curVis {
+		// Position hardware cursor at the focused input's cursor location.
+		// Terminal cursor blinks natively, providing visual feedback.
+		// Coordinates are 0-based internally; ANSI escapes are 1-based.
+		fmt.Fprintf(t.w, "\033[%d;%dH", t.curY+1, t.curX+1)
+		t.w.WriteString("\033[?25h") // show cursor
+	} else {
+		// No focused input — hide cursor and park at top-left.
+		t.w.WriteString("\033[?25l") // hide cursor
+		t.w.WriteString("\033[1;1H")
+	}
 	return t.w.Flush()
 }
 
