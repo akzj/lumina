@@ -474,6 +474,10 @@ func findAutoFocus(node *Node) *Node {
 	if node == nil {
 		return nil
 	}
+	// Skip hidden nodes (display:none sets W=0, H=0)
+	if node.W == 0 && node.H == 0 {
+		return nil
+	}
 	if node.AutoFocus && node.Focusable {
 		return node
 	}
