@@ -208,6 +208,56 @@ func (e *Engine) RegisterLuaAPI() {
 	})
 	L.SetField(tblIdx, "strWidth")
 
+	// lumina.highlight(code, language?, style?) → array of line-arrays of span tables
+	L.PushFunction(func(L *lua.State) int {
+		code := L.CheckString(1)
+		language := ""
+		if L.GetTop() >= 2 && !L.IsNil(2) {
+			language = L.CheckString(2)
+		}
+		styleName := ""
+		if L.GetTop() >= 3 && !L.IsNil(3) {
+			styleName = L.CheckString(3)
+		}
+
+		lines := Highlight(code, language, styleName)
+
+		// Push as Lua table: array of arrays of span tables
+		L.CreateTable(len(lines), 0)
+		resultIdx := L.AbsIndex(-1)
+		for i, line := range lines {
+			L.CreateTable(len(line.Spans), 0)
+			lineIdx := L.AbsIndex(-1)
+			for j, span := range line.Spans {
+				L.CreateTable(0, 4)
+				spanIdx := L.AbsIndex(-1)
+				L.PushString(span.Text)
+				L.SetField(spanIdx, "text")
+				if span.Foreground != "" {
+					L.PushString(span.Foreground)
+					L.SetField(spanIdx, "foreground")
+				}
+				if span.Bold != nil && *span.Bold {
+					L.PushBoolean(true)
+					L.SetField(spanIdx, "bold")
+				}
+				if span.Italic != nil && *span.Italic {
+					L.PushBoolean(true)
+					L.SetField(spanIdx, "italic")
+				}
+				if span.Underline != nil && *span.Underline {
+					L.PushBoolean(true)
+					L.SetField(spanIdx, "underline")
+				}
+				L.RawSetI(lineIdx, int64(j+1))
+			}
+			L.RawSetI(resultIdx, int64(i+1))
+		}
+		return 1
+	})
+	L.SetField(tblIdx, "highlight")
+
+
 	L.SetGlobal("lumina")
 }
 
