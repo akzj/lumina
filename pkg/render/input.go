@@ -1,7 +1,5 @@
 package render
 
-import ()
-
 // FocusedNode returns the currently focused node.
 func (e *Engine) FocusedNode() *Node { return e.focusedNode }
 
@@ -19,8 +17,15 @@ func (e *Engine) setFocus(newNode *Node) {
 	if old != nil && !old.Removed {
 		old.Focused = false
 		old.PaintDirty = true
-		if old.OnBlur != 0 {
-			e.callLuaRefSimple(old.OnBlur)
+		blurRef := old.OnBlur
+		// For component placeholders: search children for onBlur handler
+		if blurRef == 0 && old.Type == "component" && len(old.Children) > 0 {
+			if inner := findFocusHandlerInSubtree(old, "blur"); inner != nil {
+				blurRef = inner.OnBlur
+			}
+		}
+		if blurRef != 0 {
+			e.callLuaRefSimple(blurRef)
 		}
 	}
 
@@ -30,12 +35,43 @@ func (e *Engine) setFocus(newNode *Node) {
 	if newNode != nil {
 		newNode.Focused = true
 		newNode.PaintDirty = true
-		if newNode.OnFocus != 0 {
-			e.callLuaRefSimple(newNode.OnFocus)
+		focusRef := newNode.OnFocus
+		// For component placeholders: search children for onFocus handler
+		if focusRef == 0 && newNode.Type == "component" && len(newNode.Children) > 0 {
+			if inner := findFocusHandlerInSubtree(newNode, "focus"); inner != nil {
+				focusRef = inner.OnFocus
+			}
+		}
+		if focusRef != 0 {
+			e.callLuaRefSimple(focusRef)
 		}
 	}
 
 	e.needsRender = true
+}
+
+// findFocusHandlerInSubtree finds the first node with the specified handler in the subtree.
+// Used for component placeholders where onFocus/onBlur are on the rendered child.
+func findFocusHandlerInSubtree(node *Node, handlerType string) *Node {
+	if node == nil {
+		return nil
+	}
+	for _, child := range node.Children {
+		switch handlerType {
+		case "focus":
+			if child.OnFocus != 0 {
+				return child
+			}
+		case "blur":
+			if child.OnBlur != 0 {
+				return child
+			}
+		}
+		if found := findFocusHandlerInSubtree(child, handlerType); found != nil {
+			return found
+		}
+	}
+	return nil
 }
 
 // FocusNext cycles focus to the next focusable node.
