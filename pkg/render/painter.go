@@ -842,6 +842,24 @@ func paintTextClipped(buf *CellBuffer, node *Node, clipX1, clipY1, clipX2, clipY
 			x = screenX
 			continue
 		}
+		if ch == '\t' {
+			// Render tab as 4 spaces
+			for i := 0; i < 4; i++ {
+				if x >= rightEdge {
+					break
+				}
+				if y >= clipY1 && y < clipY2 && x >= clipX1 && x < clipX2 {
+					bg := node.Style.Background
+					if bg == "" {
+						existing := buf.Get(x, y)
+						bg = existing.BG
+					}
+					buf.Set(x, y, Cell{Ch: ' ', FG: fg, BG: bg, Bold: bold, Dim: dim, Underline: underline, Italic: italic, Strikethrough: strikethrough, Inverse: inverse})
+				}
+				x++
+			}
+			continue
+		}
 		w := runeWidth(ch)
 		// Wrap to next line if character doesn't fit
 		if x+w > rightEdge {
@@ -888,6 +906,33 @@ func paintTextClipped(buf *CellBuffer, node *Node, clipX1, clipY1, clipX2, clipY
 // existing cell. Returns the rune's display width. If rightEdge is exceeded,
 // the cell is not written and 0 is returned.
 func paintRuneCell(buf *CellBuffer, x, y int, ch rune, node *Node, rightEdge int) int {
+	if ch == '\t' {
+		// Render tab as 4 spaces
+		adv := 0
+		for i := 0; i < 4; i++ {
+			if x+i >= rightEdge {
+				break
+			}
+			bg := node.Style.Background
+			if bg == "" {
+				existing := buf.Get(x+i, y)
+				bg = existing.BG
+			}
+			buf.Set(x+i, y, Cell{
+				Ch:            ' ',
+				FG:            node.Style.Foreground,
+				BG:            bg,
+				Bold:          node.Style.Bold,
+				Dim:           node.Style.Dim,
+				Underline:     node.Style.Underline,
+				Italic:        node.Style.Italic,
+				Strikethrough: node.Style.Strikethrough,
+				Inverse:       node.Style.Inverse,
+			})
+			adv++
+		}
+		return adv
+	}
 	w := runeWidth(ch)
 	if x+w > rightEdge {
 		return 0
@@ -1078,6 +1123,33 @@ func resolveSpanStyle(span *Span, nodeStyle *Style) (fg, bg string, bold, dim, u
 // paintRuneCellStyled writes a single rune to the buffer with explicit style.
 // Returns the rune's display width. If rightEdge is exceeded, 0 is returned.
 func paintRuneCellStyled(buf *CellBuffer, x, y int, ch rune, fg, bg string, bold, dim, underline, italic, strikethrough, inverse bool, rightEdge int) int {
+	if ch == '\t' {
+		// Render tab as 4 spaces
+		adv := 0
+		for i := 0; i < 4; i++ {
+			if x+i >= rightEdge {
+				break
+			}
+			cellBG := bg
+			if cellBG == "" {
+				existing := buf.Get(x+i, y)
+				cellBG = existing.BG
+			}
+			buf.Set(x+i, y, Cell{
+				Ch:            ' ',
+				FG:            fg,
+				BG:            cellBG,
+				Bold:          bold,
+				Dim:           dim,
+				Underline:     underline,
+				Italic:        italic,
+				Strikethrough: strikethrough,
+				Inverse:       inverse,
+			})
+			adv++
+		}
+		return adv
+	}
 	w := runeWidth(ch)
 	if x+w > rightEdge {
 		return 0
@@ -1259,6 +1331,24 @@ func paintTextSpansClipped(buf *CellBuffer, node *Node, clipX1, clipY1, clipX2, 
 			if ch == '\n' {
 				y++
 				x = screenX
+				continue
+			}
+			if ch == '\t' {
+				// Render tab as 4 spaces in clipped span painting
+				for i := 0; i < 4; i++ {
+					if x >= rightEdge {
+						break
+					}
+					if y >= clipY1 && y < clipY2 && x >= clipX1 && x < clipX2 {
+						cellBG := bg
+						if cellBG == "" {
+							existing := buf.Get(x, y)
+							cellBG = existing.BG
+						}
+						buf.Set(x, y, Cell{Ch: ' ', FG: fg, BG: cellBG, Bold: bold, Dim: dim, Underline: underline, Italic: italic, Strikethrough: strikethrough, Inverse: inverse})
+					}
+					x++
+				}
 				continue
 			}
 			w := runeWidth(ch)

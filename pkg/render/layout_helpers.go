@@ -145,6 +145,9 @@ func stringWidth(s string) int {
 // runeWidth returns the display width of a rune in terminal columns.
 // Uses go-runewidth for complete Unicode support (CJK, emoji, etc.).
 func runeWidth(r rune) int {
+	if r == '\t' {
+		return 4
+	}
 	return runewidth.RuneWidth(r)
 }
 

@@ -1332,7 +1332,7 @@ func TestRuneWidth(t *testing.T) {
 		{'é', 1},    // Latin extended
 		{'\x00', 0}, // null
 		{'\n', 0},   // newline (control char)
-		{'\t', 0},   // tab (control char)
+		{'\t', 4},   // tab (rendered as 4 spaces)
 	}
 	for _, tt := range tests {
 		got := runeWidth(tt.r)
