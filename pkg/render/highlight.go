@@ -55,7 +55,7 @@ func Highlight(code, language, styleName string) []HighlightLine {
 		entry := style.Get(token.Type)
 		fg := ""
 		if entry.Colour.IsSet() {
-			fg = "#" + entry.Colour.String()
+			fg = entry.Colour.String()
 		}
 		bold := entry.Bold == chroma.Yes
 		italic := entry.Italic == chroma.Yes
