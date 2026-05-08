@@ -413,10 +413,16 @@ func (e *Engine) RenderDirty() {
 				if lw <= 0 {
 					lw = e.width
 				}
+				noExplicitH := lh <= 0
 				if lh <= 0 {
 					lh = e.height
 				}
 				LayoutFull(layer.Root, lx, ly, lw, lh)
+				// Shrink overlay to content height when no explicit height was set.
+				// This prevents overlays from taking full screen height.
+				if noExplicitH && layer.Root.MeasuredH > 0 && layer.Root.MeasuredH < lh {
+					layer.Root.H = layer.Root.MeasuredH
+				}
 			}
 		} else {
 			LayoutIncremental(layer.Root)
@@ -524,10 +530,15 @@ func (e *Engine) RenderAll() {
 			if lw <= 0 {
 				lw = e.width
 			}
+			noExplicitH := lh <= 0
 			if lh <= 0 {
 				lh = e.height
 			}
 			LayoutFull(layer.Root, lx, ly, lw, lh)
+			// Shrink overlay to content height when no explicit height was set.
+			if noExplicitH && layer.Root.MeasuredH > 0 && layer.Root.MeasuredH < lh {
+				layer.Root.H = layer.Root.MeasuredH
+			}
 		}
 		populateRefs(layer.Root, e.L)
 		paintNode(e.buffer, layer.Root)
