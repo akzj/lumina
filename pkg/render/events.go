@@ -1,6 +1,8 @@
 package render
 
 import (
+	"log"
+
 	"github.com/akzj/go-lua/pkg/lua"
 )
 
@@ -1147,6 +1149,18 @@ type EventResult struct {
 	DefaultPrevented bool // preventDefault was called
 }
 
+// reportEventError logs and notifies Lua about an event handler error.
+func (e *Engine) reportEventError(errMsg string, handlerType string) {
+	log.Printf("[lumina] event handler error (%s): %s", handlerType, errMsg)
+	if e.onErrorRef != 0 {
+		L := e.L
+		L.RawGetI(lua.RegistryIndex, e.onErrorRef)
+		L.PushString(errMsg)
+		L.PushString("event:" + handlerType)
+		L.PCall(2, 0, 0) // ignore errors in error handler itself
+	}
+}
+
 // callLuaRef calls a Lua function by registry ref with an event table {x=x, y=y}.
 // The event table includes stopPropagation() and preventDefault() methods.
 func (e *Engine) callLuaRef(ref LuaRef, x, y int) EventResult {
@@ -1177,7 +1191,9 @@ func (e *Engine) callLuaRef(ref LuaRef, x, y int) EventResult {
 	})
 	L.SetField(tblIdx, "preventDefault")
 	if status := L.PCall(1, 0, 0); status != lua.OK {
-		L.Pop(1) // pop error message to prevent stack pollution
+		errMsg, _ := L.ToString(-1)
+		L.Pop(1)
+		e.reportEventError(errMsg, "onClick")
 	}
 	return result
 }
@@ -1207,7 +1223,9 @@ func (e *Engine) callLuaRefKey(ref LuaRef, key string) EventResult {
 	})
 	L.SetField(tblIdx, "preventDefault")
 	if status := L.PCall(1, 0, 0); status != lua.OK {
-		L.Pop(1) // pop error message to prevent stack pollution
+		errMsg, _ := L.ToString(-1)
+		L.Pop(1)
+		e.reportEventError(errMsg, "onKeyDown")
 	}
 	return result
 }
@@ -1240,7 +1258,9 @@ func (e *Engine) callLuaRefScroll(ref LuaRef, delta int, scrollNode *Node) {
 		L.SetField(tblIdx, "scrollHeight")
 	}
 	if status := L.PCall(1, 0, 0); status != lua.OK {
-		L.Pop(1) // pop error message to prevent stack pollution
+		errMsg, _ := L.ToString(-1)
+		L.Pop(1)
+		e.reportEventError(errMsg, "onScroll")
 	}
 }
 
@@ -1303,7 +1323,9 @@ func (e *Engine) callLuaRefSimple(ref LuaRef) EventResult {
 	})
 	L.SetField(tblIdx, "preventDefault")
 	if status := L.PCall(1, 0, 0); status != lua.OK {
-		L.Pop(1) // pop error message to prevent stack pollution
+		errMsg, _ := L.ToString(-1)
+		L.Pop(1)
+		e.reportEventError(errMsg, "event")
 	}
 	return result
 }
