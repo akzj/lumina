@@ -74,6 +74,14 @@ func paintDirtyWalk(buf *CellBuffer, node *Node) {
 	if node == nil {
 		return
 	}
+	// display:none nodes are invisible — skip painting and clear dirty flags
+	// to prevent hidden components from triggering parent container repaints.
+	if node.Style.Display == "none" {
+		if node.PaintDirty {
+			clearPaintDirty(node)
+		}
+		return
+	}
 
 	if node.PaintDirty {
 		// If any ancestor has children with fixed/absolute positioning,
