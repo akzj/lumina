@@ -33,9 +33,18 @@ func parseEscape(data []byte) []InputEvent {
 
 	switch data[1] {
 	case '[':
-		return parseCSI(data[2:])
+		events := parseCSI(data[2:])
+		// 如果parseCSI返回nil，说明是无效/不完整的转义序列，直接丢弃，不要当作普通文本
+		if events == nil {
+			return nil
+		}
+		return events
 	case 'O':
-		return parseSS3(data[2:])
+		events := parseSS3(data[2:])
+		if events == nil {
+			return nil
+		}
+		return events
 	case 0x0d, 0x0a:
 		// Alt+Enter (ESC followed by CR or LF)
 		return []InputEvent{{
@@ -78,11 +87,21 @@ func parseCSI(data []byte) []InputEvent {
 	case 'Z':
 		return []InputEvent{{Type: "keydown", Key: "Tab", Modifiers: Modifiers{Shift: true}}}
 	case '<':
-		return parseSGRMouse(data[1:])
+		events := parseSGRMouse(data[1:])
+		if events == nil {
+			// 无效鼠标序列，直接丢弃
+			return nil
+		}
+		return events
 	}
 
 	// Extended CSI: parameterized sequences
-	return parseExtendedCSI(data)
+	events := parseExtendedCSI(data)
+	if events == nil {
+		// 无效扩展CSI序列，直接丢弃
+		return nil
+	}
+	return events
 }
 
 // parseSS3 handles SS3 (ESC O) sequences — function keys on some terminals.
