@@ -431,6 +431,16 @@ func (e *Engine) RenderDirty() {
 	}
 
 	// 5. Paint all layers (bottom to top)
+	// If main layer has dirty nodes, force overlay layers to repaint.
+	// When PaintDirty clears a region on the main layer, it may erase
+	// overlay pixels. Force overlays to repaint so they are restored.
+	if len(e.layers) > 1 && e.layers[0].Root != nil && hasAnyDirty(e.layers[0].Root) {
+		for i := 1; i < len(e.layers); i++ {
+			if e.layers[i].Root != nil {
+				e.layers[i].Root.PaintDirty = true
+			}
+		}
+	}
 	for i, layer := range e.layers {
 		if layer.Root != nil {
 			if i == 0 {

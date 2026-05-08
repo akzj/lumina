@@ -190,6 +190,14 @@ func (e *Engine) RegisterLuaAPI() {
 	})
 	L.SetField(tblIdx, "onError")
 
+	// lumina.getScreenSize() → width, height
+	L.PushFunction(func(L *lua.State) int {
+		L.PushInteger(int64(e.width))
+		L.PushInteger(int64(e.height))
+		return 2
+	})
+	L.SetField(tblIdx, "getScreenSize")
+
 	L.SetGlobal("lumina")
 }
 
