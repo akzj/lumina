@@ -58,6 +58,23 @@ local ScrollView = lumina.defineComponent("LuxScrollView", function(props)
 		passProps.style.height = 20  -- fallback only when no flex and no explicit height
 	end
 	passProps.style.overflow = "scroll"
+	-- Apply scrollbar colors: explicit props > theme > engine defaults
+	if props.scrollbarThumbColor then
+		passProps.style.scrollbarThumbColor = props.scrollbarThumbColor
+	elseif lumina.getTheme then
+		local t = lumina.getTheme()
+		if t and t.primary then
+			passProps.style.scrollbarThumbColor = t.primary
+		end
+	end
+	if props.scrollbarTrackColor then
+		passProps.style.scrollbarTrackColor = props.scrollbarTrackColor
+	elseif lumina.getTheme then
+		local t = lumina.getTheme()
+		if t and t.surface0 then
+			passProps.style.scrollbarTrackColor = t.surface0
+		end
+	end
 	passProps.onScroll = onScroll
 	passProps.onKeyDown = onKeyDown
 	passProps.focusable = true
