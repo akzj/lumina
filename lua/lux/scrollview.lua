@@ -50,7 +50,13 @@ local ScrollView = lumina.defineComponent("LuxScrollView", function(props)
 	end
 	passProps.id = containerID
 	passProps.style = passProps.style or {}
-	passProps.style.height = viewH
+	-- Only set fixed height if explicitly provided via props.height.
+	-- When no height prop is given and style has flex, let flex determine height.
+	if props.height then
+		passProps.style.height = props.height
+	elseif not passProps.style.flex then
+		passProps.style.height = 20  -- fallback only when no flex and no explicit height
+	end
 	passProps.style.overflow = "scroll"
 	passProps.onScroll = onScroll
 	passProps.onKeyDown = onKeyDown
