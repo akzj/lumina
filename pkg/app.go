@@ -202,8 +202,20 @@ func (a *App) RenderDirty() {
 	a.tracker.EndFrame()
 }
 
-// setCursorFromEngine is a no-op — native input cursor removed (all text input via Lua).
-func (a *App) setCursorFromEngine() {}
+// setCursorFromEngine positions the hardware cursor at the focused node's
+// cursor hint position. This is essential for IME candidate window positioning.
+// The cursor is hidden when no node is focused or no hint is set.
+func (a *App) setCursorFromEngine() {
+	node := a.engine.FocusedNode()
+	if node == nil || node.CursorHintCol < 0 {
+		a.adapter.SetCursor(0, 0, false)
+		return
+	}
+	// Calculate absolute screen position from node position + cursor hint offset
+	x := node.X + node.CursorHintCol
+	y := node.Y + node.CursorHintRow
+	a.adapter.SetCursor(x, y, true)
+}
 
 // unionRect returns the bounding rect containing both a and b.
 func unionRect(a, b buffer.Rect) buffer.Rect {
