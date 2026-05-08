@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/akzj/go-lua/pkg/lua"
+	"github.com/mattn/go-runewidth"
 )
 
 // RegisterLuaAPI registers lumina.createElement, lumina.useState,
@@ -197,6 +198,15 @@ func (e *Engine) RegisterLuaAPI() {
 		return 2
 	})
 	L.SetField(tblIdx, "getScreenSize")
+
+	// lumina.strWidth(s) → display width in terminal columns (handles CJK, emoji, etc.)
+	L.PushFunction(func(L *lua.State) int {
+		s := L.CheckString(1)
+		w := runewidth.StringWidth(s)
+		L.PushInteger(int64(w))
+		return 1
+	})
+	L.SetField(tblIdx, "strWidth")
 
 	L.SetGlobal("lumina")
 }

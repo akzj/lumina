@@ -367,7 +367,8 @@ local Textarea = lumina.defineComponent("LuxTextarea", function(props)
     end
 
     -- Compute cursor hint for hardware cursor positioning (0-based offsets from node origin)
-    local hintCol = cursorCol  -- codepoint offset = display width for ASCII/Latin
+    local cursorLineText = lines[cursorLine] or ""
+    local hintCol = lumina.strWidth(utf8.sub(cursorLineText, 1, cursorCol))  -- display width (handles CJK)
     local hintRow = cursorLine - 1 - scrollY  -- 0-based visible row
     if hintRow < 0 then hintRow = 0 end
 
