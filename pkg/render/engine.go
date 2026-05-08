@@ -344,9 +344,8 @@ func (e *Engine) SetState(compID, key string, value any) {
 	if comp == nil {
 		return
 	}
-	oldDirty := comp.Dirty
 	comp.SetState(key, value)
-	if !oldDirty && comp.Dirty {
+	if comp.Dirty {
 		e.needsRender = true
 	}
 }
@@ -569,11 +568,15 @@ func (e *Engine) renderComponent(comp *Component) {
 	// Push props table
 	pushMap(L, comp.Props)
 
+	// Clear dirty BEFORE calling render function.
+	// If setState is called during render, it will re-set Dirty = true,
+	// and renderInOrder's loop will pick it up for another pass.
+	comp.Dirty = false
+
 	// PCall(1 arg = props, 1 result, 0 error handler)
 	if status := L.PCall(1, 1, 0); status != lua.OK {
 		errMsg, _ := L.ToString(-1)
 		L.Pop(1) // pop error
-		comp.Dirty = false
 		comp.LastError = errMsg
 		log.Printf("[lumina] render error in component %q (id=%s): %s", comp.Name, comp.ID, errMsg)
 		// Notify Lua error handler
@@ -590,7 +593,6 @@ func (e *Engine) renderComponent(comp *Component) {
 	// Read descriptor from Lua stack (the returned table)
 	if !L.IsTable(-1) {
 		L.Pop(1)
-		comp.Dirty = false
 		return
 	}
 
@@ -618,7 +620,6 @@ func (e *Engine) renderComponent(comp *Component) {
 	// Unref all freed Lua refs from this reconcile
 	e.drainPendingUnrefs()
 
-	comp.Dirty = false
 	comp.Mounted = true
 	comp.RenderCount++
 }
