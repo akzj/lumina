@@ -840,62 +840,81 @@ func paintTextClipped(buf *CellBuffer, node *Node, clipX1, clipY1, clipX2, clipY
 	inverse := node.Style.Inverse
 	dim := node.Style.Dim
 	underline := node.Style.Underline
-
-	x := screenX
-	y := screenY
+	noWrap := node.Style.WhiteSpace == "nowrap"
+	ellipsis := node.Style.TextOverflow == "ellipsis"
+	textAlign := node.Style.TextAlign
 	rightEdge := screenX + node.W
-	for _, ch := range node.Content {
-		if ch == '\n' {
-			y++
-			x = screenX
-			continue
-		}
-		if ch == '\t' {
-			// Render tab as 4 spaces
-			for i := 0; i < 4; i++ {
-				if x >= rightEdge {
+	availW := node.W
+
+	if noWrap {
+		// Nowrap clipped path: render each line independently
+		lines := splitLines(node.Content)
+		for lineIdx, line := range lines {
+			y := screenY + lineIdx
+			if y >= screenY+node.H {
+				break
+			}
+			if y < clipY1 || y >= clipY2 {
+				continue
+			}
+			lineW := stringWidth(line)
+			x := alignedX(screenX, availW, lineW, textAlign)
+
+			truncated := ellipsis && lineW > availW
+			maxW := availW
+			if truncated {
+				maxW = availW - 1 // leave room for ellipsis
+			}
+
+			col := x
+			colW := 0
+			for _, ch := range line {
+				if ch == '\t' {
+					for i := 0; i < 4; i++ {
+						if colW >= availW {
+							break
+						}
+						if col >= clipX1 && col < clipX2 {
+							bg := node.Style.Background
+							if bg == "" {
+								existing := buf.Get(col, y)
+								bg = existing.BG
+							}
+							buf.Set(col, y, Cell{Ch: ' ', FG: fg, BG: bg, Bold: bold, Dim: dim, Underline: underline, Italic: italic, Strikethrough: strikethrough, Inverse: inverse})
+						}
+						col++
+						colW++
+					}
+					continue
+				}
+				w := runeWidth(ch)
+				if truncated && colW+w > maxW {
+					// Paint ellipsis
+					if col >= clipX1 && col < clipX2 {
+						bg := node.Style.Background
+						if bg == "" {
+							existing := buf.Get(col, y)
+							bg = existing.BG
+						}
+						buf.Set(col, y, Cell{Ch: '…', FG: fg, BG: bg, Bold: bold, Dim: dim, Underline: underline, Italic: italic, Strikethrough: strikethrough, Inverse: inverse})
+					}
 					break
 				}
-				if y >= clipY1 && y < clipY2 && x >= clipX1 && x < clipX2 {
+				if col >= clipX1 && col < clipX2 {
 					bg := node.Style.Background
 					if bg == "" {
-						existing := buf.Get(x, y)
+						existing := buf.Get(col, y)
 						bg = existing.BG
 					}
-					buf.Set(x, y, Cell{Ch: ' ', FG: fg, BG: bg, Bold: bold, Dim: dim, Underline: underline, Italic: italic, Strikethrough: strikethrough, Inverse: inverse})
-				}
-				x++
-			}
-			continue
-		}
-		w := runeWidth(ch)
-		// Wrap to next line if character doesn't fit
-		if x+w > rightEdge {
-			y++
-			x = screenX
-		}
-		if y >= screenY+node.H {
-			break
-		}
-		if x+w-1 < rightEdge {
-			if y >= clipY1 && y < clipY2 {
-				if x >= clipX1 && x < clipX2 {
-					bg := node.Style.Background
-					if bg == "" {
-						existing := buf.Get(x, y)
-						bg = existing.BG
-					}
-					if w == 2 && x+1 >= clipX2 {
-						// Wide char doesn't fully fit at right clip boundary — write space
-						buf.Set(x, y, Cell{Ch: ' ', FG: fg, BG: bg, Bold: bold, Dim: dim, Underline: underline, Italic: italic, Strikethrough: strikethrough, Inverse: inverse})
+					if w == 2 && col+1 >= clipX2 {
+						buf.Set(col, y, Cell{Ch: ' ', FG: fg, BG: bg, Bold: bold, Dim: dim, Underline: underline, Italic: italic, Strikethrough: strikethrough, Inverse: inverse})
 					} else {
-						buf.Set(x, y, Cell{Ch: ch, FG: fg, BG: bg, Bold: bold, Dim: dim, Underline: underline, Italic: italic, Strikethrough: strikethrough, Inverse: inverse})
-						if w == 2 && x+1 >= clipX1 && x+1 < clipX2 {
-							buf.Set(x+1, y, Cell{Wide: true, BG: bg})
+						buf.Set(col, y, Cell{Ch: ch, FG: fg, BG: bg, Bold: bold, Dim: dim, Underline: underline, Italic: italic, Strikethrough: strikethrough, Inverse: inverse})
+						if w == 2 && col+1 >= clipX1 && col+1 < clipX2 {
+							buf.Set(col+1, y, Cell{Wide: true, BG: bg})
 						}
 					}
-				} else if w == 2 && x == clipX1-1 && clipX1 < clipX2 {
-					// Wide char straddles left clip boundary — write space at clipX1
+				} else if w == 2 && col == clipX1-1 && clipX1 < clipX2 {
 					bg := node.Style.Background
 					if bg == "" {
 						existing := buf.Get(clipX1, y)
@@ -903,8 +922,76 @@ func paintTextClipped(buf *CellBuffer, node *Node, clipX1, clipY1, clipX2, clipY
 					}
 					buf.Set(clipX1, y, Cell{Ch: ' ', FG: fg, BG: bg, Bold: bold, Dim: dim, Underline: underline, Italic: italic, Strikethrough: strikethrough, Inverse: inverse})
 				}
+				col += w
+				colW += w
 			}
-			x += w
+		}
+	} else {
+		// Wrapping mode (original logic)
+		x := screenX
+		y := screenY
+		for _, ch := range node.Content {
+			if ch == '\n' {
+				y++
+				x = screenX
+				continue
+			}
+			if ch == '\t' {
+				// Render tab as 4 spaces
+				for i := 0; i < 4; i++ {
+					if x >= rightEdge {
+						break
+					}
+					if y >= clipY1 && y < clipY2 && x >= clipX1 && x < clipX2 {
+						bg := node.Style.Background
+						if bg == "" {
+							existing := buf.Get(x, y)
+							bg = existing.BG
+						}
+						buf.Set(x, y, Cell{Ch: ' ', FG: fg, BG: bg, Bold: bold, Dim: dim, Underline: underline, Italic: italic, Strikethrough: strikethrough, Inverse: inverse})
+					}
+					x++
+				}
+				continue
+			}
+			w := runeWidth(ch)
+			// Wrap to next line if character doesn't fit
+			if x+w > rightEdge {
+				y++
+				x = screenX
+			}
+			if y >= screenY+node.H {
+				break
+			}
+			if x+w-1 < rightEdge {
+				if y >= clipY1 && y < clipY2 {
+					if x >= clipX1 && x < clipX2 {
+						bg := node.Style.Background
+						if bg == "" {
+							existing := buf.Get(x, y)
+							bg = existing.BG
+						}
+						if w == 2 && x+1 >= clipX2 {
+							// Wide char doesn't fully fit at right clip boundary — write space
+							buf.Set(x, y, Cell{Ch: ' ', FG: fg, BG: bg, Bold: bold, Dim: dim, Underline: underline, Italic: italic, Strikethrough: strikethrough, Inverse: inverse})
+						} else {
+							buf.Set(x, y, Cell{Ch: ch, FG: fg, BG: bg, Bold: bold, Dim: dim, Underline: underline, Italic: italic, Strikethrough: strikethrough, Inverse: inverse})
+							if w == 2 && x+1 >= clipX1 && x+1 < clipX2 {
+								buf.Set(x+1, y, Cell{Wide: true, BG: bg})
+							}
+						}
+					} else if w == 2 && x == clipX1-1 && clipX1 < clipX2 {
+						// Wide char straddles left clip boundary — write space at clipX1
+						bg := node.Style.Background
+						if bg == "" {
+							existing := buf.Get(clipX1, y)
+							bg = existing.BG
+						}
+						buf.Set(clipX1, y, Cell{Ch: ' ', FG: fg, BG: bg, Bold: bold, Dim: dim, Underline: underline, Italic: italic, Strikethrough: strikethrough, Inverse: inverse})
+					}
+				}
+				x += w
+			}
 		}
 	}
 }
@@ -1193,49 +1280,69 @@ func paintTextSpans(buf *CellBuffer, node *Node) {
 	availW := node.W
 
 	if noWrap {
-		// No-wrap mode: single line, clip or ellipsis
-		// Concatenate all span text for width calculation
-		fullText := nodeTextContent(node)
-		lines := splitLines(fullText)
-		// For nowrap, only first line matters per rendered row
-		for lineIdx, line := range lines {
+		// No-wrap mode: each line rendered independently, clipped or ellipsized.
+		// Build a flat list of (rune, spanIndex) to correctly track which span
+		// each character belongs to across multi-line content.
+		type runeSpan struct {
+			ch    rune
+			spanI int
+		}
+		var allRunes []runeSpan
+		for si := range node.Spans {
+			for _, ch := range node.Spans[si].Text {
+				allRunes = append(allRunes, runeSpan{ch, si})
+			}
+		}
+
+		// Split into lines by '\n'
+		var lines [][]runeSpan
+		current := []runeSpan{}
+		for _, rs := range allRunes {
+			if rs.ch == '\n' {
+				lines = append(lines, current)
+				current = []runeSpan{}
+			} else {
+				current = append(current, rs)
+			}
+		}
+		lines = append(lines, current)
+
+		// Paint each line
+		for lineIdx, lineRunes := range lines {
 			y := node.Y + lineIdx
 			if y >= node.Y+node.H {
 				break
 			}
-			lineW := stringWidth(line)
+			// Calculate line width for alignment
+			lineW := 0
+			for _, rs := range lineRunes {
+				lineW += runeWidth(rs.ch)
+			}
 			x := alignedX(node.X, availW, lineW, textAlign)
 
-			// Determine if truncation needed
 			truncated := ellipsis && lineW > availW
 			maxW := availW
 			if truncated {
 				maxW = availW - 1 // leave room for ellipsis
 			}
 
-			// Paint spans for this line
 			col := x
-			colW := 0 // accumulated width
-			for si := range node.Spans {
-				span := &node.Spans[si]
+			colW := 0
+			for _, rs := range lineRunes {
+				span := &node.Spans[rs.spanI]
 				fg, bg, bold, dim, underline, italic, strikethrough, inverse := resolveSpanStyle(span, &node.Style)
-				for _, ch := range span.Text {
-					if ch == '\n' {
-						break // stop at newline in nowrap
-					}
-					w := runeWidth(ch)
-					if truncated && colW+w > maxW {
-						// Paint ellipsis with last span's style
-						paintRuneCellStyled(buf, col, y, '…', fg, bg, bold, dim, underline, italic, strikethrough, inverse, rightEdge)
-						return
-					}
-					adv := paintRuneCellStyled(buf, col, y, ch, fg, bg, bold, dim, underline, italic, strikethrough, inverse, rightEdge)
-					if adv == 0 {
-						return // clipped
-					}
-					col += adv
-					colW += w
+				w := runeWidth(rs.ch)
+				if truncated && colW+w > maxW {
+					// Paint ellipsis with last span's style
+					paintRuneCellStyled(buf, col, y, '…', fg, bg, bold, dim, underline, italic, strikethrough, inverse, rightEdge)
+					break // break this line, continue to next line
 				}
+				adv := paintRuneCellStyled(buf, col, y, rs.ch, fg, bg, bold, dim, underline, italic, strikethrough, inverse, rightEdge)
+				if adv == 0 {
+					break // clipped on this line, continue to next
+				}
+				col += adv
+				colW += w
 			}
 		}
 	} else {
@@ -1329,70 +1436,169 @@ func paintTextSpansClipped(buf *CellBuffer, node *Node, clipX1, clipY1, clipX2, 
 	screenX := node.X + offsetX
 	screenY := node.Y + offsetY
 	rightEdge := screenX + node.W
+	availW := node.W
+	noWrap := node.Style.WhiteSpace == "nowrap"
+	ellipsis := node.Style.TextOverflow == "ellipsis"
+	textAlign := node.Style.TextAlign
 
-	x := screenX
-	y := screenY
-	for si := range node.Spans {
-		span := &node.Spans[si]
-		fg, bg, bold, dim, underline, italic, strikethrough, inverse := resolveSpanStyle(span, &node.Style)
-		for _, ch := range span.Text {
-			if ch == '\n' {
-				y++
-				x = screenX
-				continue
+	if noWrap {
+		// No-wrap mode: build flat rune list with span association, split by newlines
+		type runeSpan struct {
+			ch    rune
+			spanI int
+		}
+		var allRunes []runeSpan
+		for si := range node.Spans {
+			for _, ch := range node.Spans[si].Text {
+				allRunes = append(allRunes, runeSpan{ch, si})
 			}
-			if ch == '\t' {
-				// Render tab as 4 spaces in clipped span painting
-				for i := 0; i < 4; i++ {
-					if x >= rightEdge {
-						break
-					}
-					if y >= clipY1 && y < clipY2 && x >= clipX1 && x < clipX2 {
-						cellBG := bg
-						if cellBG == "" {
-							existing := buf.Get(x, y)
-							cellBG = existing.BG
-						}
-						buf.Set(x, y, Cell{Ch: ' ', FG: fg, BG: cellBG, Bold: bold, Dim: dim, Underline: underline, Italic: italic, Strikethrough: strikethrough, Inverse: inverse})
-					}
-					x++
-				}
-				continue
+		}
+
+		// Split into lines by '\n'
+		var lines [][]runeSpan
+		current := []runeSpan{}
+		for _, rs := range allRunes {
+			if rs.ch == '\n' {
+				lines = append(lines, current)
+				current = []runeSpan{}
+			} else {
+				current = append(current, rs)
 			}
-			w := runeWidth(ch)
-			if x+w > rightEdge {
-				y++
-				x = screenX
-			}
+		}
+		lines = append(lines, current)
+
+		// Paint each line
+		for lineIdx, lineRunes := range lines {
+			y := screenY + lineIdx
 			if y >= screenY+node.H {
-				return
+				break
 			}
-			if x+w-1 < rightEdge {
-				if y >= clipY1 && y < clipY2 {
-					if x >= clipX1 && x < clipX2 {
+			if y < clipY1 || y >= clipY2 {
+				continue
+			}
+			// Calculate line width for alignment
+			lineW := 0
+			for _, rs := range lineRunes {
+				lineW += runeWidth(rs.ch)
+			}
+			x := alignedX(screenX, availW, lineW, textAlign)
+
+			truncated := ellipsis && lineW > availW
+			maxW := availW
+			if truncated {
+				maxW = availW - 1 // leave room for ellipsis
+			}
+
+			col := x
+			colW := 0
+			for _, rs := range lineRunes {
+				span := &node.Spans[rs.spanI]
+				fg, bg, bold, dim, underline, italic, strikethrough, inverse := resolveSpanStyle(span, &node.Style)
+
+				w := runeWidth(rs.ch)
+				if truncated && colW+w > maxW {
+					// Paint ellipsis
+					if col >= clipX1 && col < clipX2 {
 						cellBG := bg
 						if cellBG == "" {
-							existing := buf.Get(x, y)
+							existing := buf.Get(col, y)
 							cellBG = existing.BG
 						}
-						if w == 2 && x+1 >= clipX2 {
-							buf.Set(x, y, Cell{Ch: ' ', FG: fg, BG: cellBG, Bold: bold, Dim: dim, Underline: underline, Italic: italic, Strikethrough: strikethrough, Inverse: inverse})
-						} else {
-							buf.Set(x, y, Cell{Ch: ch, FG: fg, BG: cellBG, Bold: bold, Dim: dim, Underline: underline, Italic: italic, Strikethrough: strikethrough, Inverse: inverse})
-							if w == 2 && x+1 >= clipX1 && x+1 < clipX2 {
-								buf.Set(x+1, y, Cell{Wide: true, BG: cellBG})
-							}
-						}
-					} else if w == 2 && x == clipX1-1 && clipX1 < clipX2 {
-						cellBG := bg
-						if cellBG == "" {
-							existing := buf.Get(clipX1, y)
-							cellBG = existing.BG
-						}
-						buf.Set(clipX1, y, Cell{Ch: ' ', FG: fg, BG: cellBG, Bold: bold, Dim: dim, Underline: underline, Italic: italic, Strikethrough: strikethrough, Inverse: inverse})
+						buf.Set(col, y, Cell{Ch: '…', FG: fg, BG: cellBG, Bold: bold, Dim: dim, Underline: underline, Italic: italic, Strikethrough: strikethrough, Inverse: inverse})
 					}
+					break
 				}
-				x += w
+				if col >= clipX1 && col < clipX2 {
+					cellBG := bg
+					if cellBG == "" {
+						existing := buf.Get(col, y)
+						cellBG = existing.BG
+					}
+					if w == 2 && col+1 >= clipX2 {
+						buf.Set(col, y, Cell{Ch: ' ', FG: fg, BG: cellBG, Bold: bold, Dim: dim, Underline: underline, Italic: italic, Strikethrough: strikethrough, Inverse: inverse})
+					} else {
+						buf.Set(col, y, Cell{Ch: rs.ch, FG: fg, BG: cellBG, Bold: bold, Dim: dim, Underline: underline, Italic: italic, Strikethrough: strikethrough, Inverse: inverse})
+						if w == 2 && col+1 >= clipX1 && col+1 < clipX2 {
+							buf.Set(col+1, y, Cell{Wide: true, BG: cellBG})
+						}
+					}
+				} else if w == 2 && col == clipX1-1 && clipX1 < clipX2 {
+					cellBG := bg
+					if cellBG == "" {
+						existing := buf.Get(clipX1, y)
+						cellBG = existing.BG
+					}
+					buf.Set(clipX1, y, Cell{Ch: ' ', FG: fg, BG: cellBG, Bold: bold, Dim: dim, Underline: underline, Italic: italic, Strikethrough: strikethrough, Inverse: inverse})
+				}
+				col += w
+				colW += w
+			}
+		}
+	} else {
+		// Wrapping mode (original logic)
+		x := screenX
+		y := screenY
+		for si := range node.Spans {
+			span := &node.Spans[si]
+			fg, bg, bold, dim, underline, italic, strikethrough, inverse := resolveSpanStyle(span, &node.Style)
+			for _, ch := range span.Text {
+				if ch == '\n' {
+					y++
+					x = screenX
+					continue
+				}
+				if ch == '\t' {
+					for i := 0; i < 4; i++ {
+						if x >= rightEdge {
+							break
+						}
+						if y >= clipY1 && y < clipY2 && x >= clipX1 && x < clipX2 {
+							cellBG := bg
+							if cellBG == "" {
+								existing := buf.Get(x, y)
+								cellBG = existing.BG
+							}
+							buf.Set(x, y, Cell{Ch: ' ', FG: fg, BG: cellBG, Bold: bold, Dim: dim, Underline: underline, Italic: italic, Strikethrough: strikethrough, Inverse: inverse})
+						}
+						x++
+					}
+					continue
+				}
+				w := runeWidth(ch)
+				if x+w > rightEdge {
+					y++
+					x = screenX
+				}
+				if y >= screenY+node.H {
+					return
+				}
+				if x+w-1 < rightEdge {
+					if y >= clipY1 && y < clipY2 {
+						if x >= clipX1 && x < clipX2 {
+							cellBG := bg
+							if cellBG == "" {
+								existing := buf.Get(x, y)
+								cellBG = existing.BG
+							}
+							if w == 2 && x+1 >= clipX2 {
+								buf.Set(x, y, Cell{Ch: ' ', FG: fg, BG: cellBG, Bold: bold, Dim: dim, Underline: underline, Italic: italic, Strikethrough: strikethrough, Inverse: inverse})
+							} else {
+								buf.Set(x, y, Cell{Ch: ch, FG: fg, BG: cellBG, Bold: bold, Dim: dim, Underline: underline, Italic: italic, Strikethrough: strikethrough, Inverse: inverse})
+								if w == 2 && x+1 >= clipX1 && x+1 < clipX2 {
+									buf.Set(x+1, y, Cell{Wide: true, BG: cellBG})
+								}
+							}
+						} else if w == 2 && x == clipX1-1 && clipX1 < clipX2 {
+							cellBG := bg
+							if cellBG == "" {
+								existing := buf.Get(clipX1, y)
+								cellBG = existing.BG
+							}
+							buf.Set(clipX1, y, Cell{Ch: ' ', FG: fg, BG: cellBG, Bold: bold, Dim: dim, Underline: underline, Italic: italic, Strikethrough: strikethrough, Inverse: inverse})
+						}
+					}
+					x += w
+				}
 			}
 		}
 	}
