@@ -233,6 +233,14 @@ func applyStyleField(s *Style, name string, value any) {
 		if str, ok := value.(string); ok {
 			s.Scrollbar = str
 		}
+	case "scrollbarThumbColor":
+		if str, ok := value.(string); ok {
+			s.ScrollbarThumbColor = str
+		}
+	case "scrollbarTrackColor":
+		if str, ok := value.(string); ok {
+			s.ScrollbarTrackColor = str
+		}
 
 	// --- Positioning ---
 	case "position":

@@ -85,8 +85,10 @@ type Style struct {
 	GridRowEnd      int    // 1-based row end (exclusive)
 
 	// Overflow
-	Overflow  string // "hidden", "scroll"
-	Scrollbar string // "" (default=show), "none" (hide scrollbar)
+	Overflow            string // "hidden", "scroll"
+	Scrollbar           string // "" (default=show), "none" (hide scrollbar)
+	ScrollbarThumbColor string // "" = default "#cdd6f4", otherwise "#RRGGBB"
+	ScrollbarTrackColor string // "" = default "#6c7086", otherwise "#RRGGBB"
 
 	// Positioning
 	Position      string // "", "relative", "absolute", "fixed"

@@ -694,10 +694,16 @@ func paintScrollbar(buf *CellBuffer, node *Node, scrollbarX, clipY1, clipY2, max
 		thumbPos = trackSpace
 	}
 
-	// Determine colors: use dim track and bright thumb
+	// Determine colors: use style overrides or defaults
 	trackBG := node.Style.Background
-	thumbFG := "#6c7086" // dim gray for track
-	thumbBright := "#cdd6f4" // bright for thumb
+	thumbFG := "#6c7086" // dim gray for track (default)
+	thumbBright := "#cdd6f4" // bright for thumb (default)
+	if node.Style.ScrollbarTrackColor != "" {
+		thumbFG = node.Style.ScrollbarTrackColor
+	}
+	if node.Style.ScrollbarThumbColor != "" {
+		thumbBright = node.Style.ScrollbarThumbColor
+	}
 
 	for row := 0; row < visibleH; row++ {
 		y := clipY1 + row
