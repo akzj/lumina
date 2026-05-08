@@ -167,15 +167,16 @@ func (t *tuiAdapter) SetCursor(x, y int, visible bool) {
 func (t *tuiAdapter) Flush() error {
 	if t.curVis {
 		// Position hardware cursor at the focused input's cursor location.
-		// Terminal cursor blinks natively, providing visual feedback.
-		// Coordinates are 0-based internally; ANSI escapes are 1-based.
+		// This is needed for IME candidate window positioning.
+		// Keep cursor hidden — Lua textarea renders its own software cursor.
 		fmt.Fprintf(t.w, "\033[%d;%dH", t.curY+1, t.curX+1)
-		t.w.WriteString("\033[?25h") // show cursor
+		// NOTE: Do NOT show cursor (\033[?25h) — software cursor handles visibility
 	} else {
-		// No focused input — hide cursor and park at top-left.
-		t.w.WriteString("\033[?25l") // hide cursor
+		// No focused input — park cursor at top-left.
 		t.w.WriteString("\033[1;1H")
 	}
+	// Always keep hardware cursor hidden — textarea renders its own blinking cursor
+	t.w.WriteString("\033[?25l")
 	return t.w.Flush()
 }
 
