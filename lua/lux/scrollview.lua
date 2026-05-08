@@ -10,12 +10,10 @@
 --   ...all other props passed through to the vbox
 
 local ScrollView = lumina.defineComponent("LuxScrollView", function(props)
-	local scrollY, setScrollY = lumina.useState("scrollY", 0)
 	local containerID = props.id or "scrollview"
 	local viewH = props.height or 20
 
 	local function onScroll(e)
-		setScrollY(e.scrollY)
 		if props.onScroll then
 			props.onScroll(e)
 		end
