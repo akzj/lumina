@@ -330,6 +330,11 @@ func (e *Engine) HandleClick(x, y int) {
 		return
 	}
 
+	// Update hover state to match click position.
+	// Terminal clients often send click without a preceding mouse-move,
+	// so hover may be stale. This prevents ghost hover backgrounds.
+	e.HandleMouseMove(x, y)
+
 	// Clear stale focused pointer if node was removed from tree
 	if e.focusedNode != nil && e.focusedNode.Removed {
 		e.focusedNode = nil

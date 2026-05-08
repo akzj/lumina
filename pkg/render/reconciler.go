@@ -72,6 +72,10 @@ func reconcileImpl(node *Node, desc Descriptor, freedRefs *[]int64) bool {
 		node.HoverStyle = desc.HoverStyle
 		node.PaintDirty = true
 		changed = true
+		// If HoverStyle was removed, clear Hovered flag to prevent stale hover painting
+		if node.HoverStyle == nil && node.Hovered {
+			node.Hovered = false
+		}
 	}
 
 	// 4. Update event handlers (just swap refs, collect old refs for cleanup)
