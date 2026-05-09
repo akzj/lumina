@@ -249,17 +249,12 @@ func (e *Engine) HandleMouseMove(x, y int) {
 	}
 
 	// Clear stale hovered pointer if node was removed from tree.
-	// Fire onMouseLeave so any layers/state created on hover get cleaned up.
+	// Fire the cached onMouseLeave ref (parent chain is broken by markRemovedRecursive).
 	if e.hoveredNode != nil && e.hoveredNode.Removed {
-		old := e.hoveredNode
 		e.hoveredNode = nil
-		// Fire onMouseLeave on the removed node (even though Removed=true)
-		// to ensure cleanup callbacks run (e.g., tooltip removeLayer).
-		for n := old; n != nil; n = n.Parent {
-			if n.OnMouseLeave != 0 {
-				e.callLuaRef(n.OnMouseLeave, 0, 0)
-				break
-			}
+		if e.hoverLeaveRef != 0 {
+			e.callLuaRef(e.hoverLeaveRef, 0, 0)
+			e.hoverLeaveRef = 0
 		}
 	}
 
@@ -280,6 +275,17 @@ func (e *Engine) HandleMouseMove(x, y int) {
 
 	old := e.hoveredNode
 	e.hoveredNode = target
+
+	// Cache the OnMouseLeave ref from the new target's ancestor chain
+	e.hoverLeaveRef = 0
+	if target != nil {
+		for n := target; n != nil; n = n.Parent {
+			if n.OnMouseLeave != 0 {
+				e.hoverLeaveRef = n.OnMouseLeave
+				break
+			}
+		}
+	}
 
 	// Update hoverStyle state: clear Hovered on old path, set on new path
 	if old != nil && !old.Removed {

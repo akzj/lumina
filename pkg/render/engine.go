@@ -46,7 +46,8 @@ type Engine struct {
 	factoryMetaRef int64
 
 	// Event state: currently hovered node for enter/leave tracking
-	hoveredNode *Node
+	hoveredNode   *Node
+	hoverLeaveRef LuaRef // cached OnMouseLeave Lua ref from hoveredNode's ancestor chain
 
 	// Focus state: currently focused input/textarea node
 	focusedNode *Node
@@ -311,6 +312,7 @@ func (e *Engine) CreateLayer(id string, root *Node, modal bool) *Layer {
 			}
 			if e.hoveredNode != nil && isDescendantOf(e.hoveredNode, layer.Root) {
 				e.hoveredNode = nil
+				e.hoverLeaveRef = 0
 			}
 			markRemovedRecursive(layer.Root)
 			collectNodeRefsRecursive(layer.Root, &e.pendingUnrefs)
@@ -355,6 +357,7 @@ func (e *Engine) RemoveLayer(id string) {
 				}
 				if e.hoveredNode != nil && isDescendantOf(e.hoveredNode, l.Root) {
 					e.hoveredNode = nil
+					e.hoverLeaveRef = 0
 				}
 				// Mark nodes as removed and collect refs to free
 				markRemovedRecursive(l.Root)
@@ -446,17 +449,13 @@ func (e *Engine) RenderDirty() {
 
 
 	// Clean up stale hovered node: if the hovered node was removed during
-	// re-render (e.g., component re-rendered while mouse was hovering),
-	// fire onMouseLeave so cleanup callbacks run (e.g., tooltip removeLayer).
+	// re-render, fire the cached onMouseLeave ref directly (parent chain is broken).
 	// This must happen every frame, not just on mouse move.
 	if e.hoveredNode != nil && e.hoveredNode.Removed {
-		old := e.hoveredNode
 		e.hoveredNode = nil
-		for n := old; n != nil; n = n.Parent {
-			if n.OnMouseLeave != 0 {
-				e.callLuaRef(n.OnMouseLeave, 0, 0)
-				break
-			}
+		if e.hoverLeaveRef != 0 {
+			e.callLuaRef(e.hoverLeaveRef, 0, 0)
+			e.hoverLeaveRef = 0
 		}
 	}
 
