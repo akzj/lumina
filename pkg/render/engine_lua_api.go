@@ -94,6 +94,60 @@ func (e *Engine) RegisterLuaAPI() {
 	})
 	L.SetField(tblIdx, "focusById")
 
+	// lumina.scrollTo(id, y) → boolean: set ScrollY of a scroll container by ID
+	L.PushFunction(func(L *lua.State) int {
+		id := L.CheckString(1)
+		targetY := int(L.CheckInteger(2))
+		node := e.FindNodeByID(id)
+		if node == nil || node.Style.Overflow != "scroll" {
+			L.PushBoolean(false)
+			return 1
+		}
+		maxScroll := computeMaxScrollY(node)
+		if targetY < 0 {
+			targetY = 0
+		}
+		if targetY > maxScroll {
+			targetY = maxScroll
+		}
+		node.ScrollY = targetY
+		node.PaintDirty = true
+		e.needsRender = true
+		L.PushBoolean(true)
+		return 1
+	})
+	L.SetField(tblIdx, "scrollTo")
+
+	// lumina.getScrollInfo(id) → {scrollY, scrollHeight, visibleH, maxScroll} or nil
+	L.PushFunction(func(L *lua.State) int {
+		id := L.CheckString(1)
+		node := e.FindNodeByID(id)
+		if node == nil || node.Style.Overflow != "scroll" {
+			L.PushNil()
+			return 1
+		}
+		maxScroll := computeMaxScrollY(node)
+		bw := 0
+		if hasBorder(node.Style) {
+			bw = 1
+		}
+		visibleH := node.H - 2*bw - node.Style.PaddingTop - node.Style.PaddingBottom
+		if visibleH < 0 {
+			visibleH = 0
+		}
+		L.NewTable()
+		L.PushInteger(int64(node.ScrollY))
+		L.SetField(-2, "scrollY")
+		L.PushInteger(int64(node.ScrollHeight))
+		L.SetField(-2, "scrollHeight")
+		L.PushInteger(int64(visibleH))
+		L.SetField(-2, "visibleH")
+		L.PushInteger(int64(maxScroll))
+		L.SetField(-2, "maxScroll")
+		return 1
+	})
+	L.SetField(tblIdx, "getScrollInfo")
+
 	// lumina.getTheme() → returns theme color table
 	L.PushFunction(e.luaGetTheme)
 	L.SetField(tblIdx, "getTheme")

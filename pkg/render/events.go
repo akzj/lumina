@@ -1264,6 +1264,20 @@ func (e *Engine) callLuaRefScroll(ref LuaRef, delta int, scrollNode *Node) {
 		L.SetField(tblIdx, "scrollY")
 		L.PushInteger(int64(scrollNode.ScrollHeight))
 		L.SetField(tblIdx, "scrollHeight")
+		// Add visibleH and maxScroll for infinite scroll support
+		maxScroll := computeMaxScrollY(scrollNode)
+		L.PushInteger(int64(maxScroll))
+		L.SetField(tblIdx, "maxScroll")
+		bw := 0
+		if hasBorder(scrollNode.Style) {
+			bw = 1
+		}
+		visibleH := scrollNode.H - 2*bw - scrollNode.Style.PaddingTop - scrollNode.Style.PaddingBottom
+		if visibleH < 0 {
+			visibleH = 0
+		}
+		L.PushInteger(int64(visibleH))
+		L.SetField(tblIdx, "visibleH")
 	}
 	if status := L.PCall(1, 0, 0); status != lua.OK {
 		errMsg, _ := L.ToString(-1)
