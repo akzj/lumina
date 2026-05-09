@@ -574,6 +574,14 @@ func (e *Engine) finishComponentPlaceholderDescriptor(L *lua.State, resultIdx in
 		} else {
 			L.Pop(1)
 		}
+
+		// Forward style to component placeholder so parent layout respects it.
+		L.GetField(propsArg, "style")
+		if L.IsTable(-1) {
+			L.SetField(resultIdx, "style")
+		} else {
+			L.Pop(1)
+		}
 	} else {
 		// No props arg: empty _props keeps the descriptor shape consistent for readDescriptor
 		// and for the optional vararg-children block below (L.GetField(resultIdx, "_props")).
