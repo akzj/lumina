@@ -185,6 +185,18 @@ func layoutVBox(node *Node, contentX, contentY, contentW, contentH int, style St
 					if graftedH > 0 {
 						children[i].fixedH = graftedH + marginV
 						fixedTotal += children[i].fixedH
+					} else if child.MeasuredH > 0 && len(child.Children) == 1 {
+						// Check if grafted root has border/padding ("card" component).
+						// Such components should size to content, not flex.
+						root := child.Children[0]
+						rootHasFrame := hasBorder(root.Style) || root.Style.PaddingTop > 0 || root.Style.PaddingBottom > 0 || root.Style.PaddingLeft > 0 || root.Style.PaddingRight > 0
+						if rootHasFrame {
+							children[i].fixedH = child.MeasuredH + marginV
+							fixedTotal += children[i].fixedH
+						} else {
+							children[i].flexGrow = 1
+							flexTotal += 1
+						}
 					} else {
 						children[i].flexGrow = 1
 						flexTotal += 1
