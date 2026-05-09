@@ -183,6 +183,19 @@ func (p *Panel) Components() []ComponentInfo {
 	return p.components
 }
 
+// SpanInfo holds a snapshot of one inline styled text segment.
+type SpanInfo struct {
+	Text          string
+	FG            string
+	BG            string
+	Bold          bool
+	Dim           bool
+	Underline     bool
+	Italic        bool
+	Strikethrough bool
+	Inverse       bool
+}
+
 // NodeInfo holds snapshot data about a render node for the Elements tree view.
 type NodeInfo struct {
 	Type    string // "box", "hbox", "vbox", "text", "input", "textarea", "component"
@@ -190,8 +203,9 @@ type NodeInfo struct {
 	W, H    int
 	BG      string
 	FG      string
-	Content string // for text nodes
-	Depth   int    // indentation level
+	Content string     // for text nodes without spans
+	Spans   []SpanInfo // for text nodes with spans (takes precedence over Content)
+	Depth   int        // indentation level
 
 	// Identity & layout (for inspect detail)
 	ID      string
@@ -227,6 +241,7 @@ func (p *Panel) elementsPanelContentLines() int {
 
 // elementsDetailReserved returns extra lines reserved below the tree when a node is selected.
 // On short panels it shrinks so the tree keeps at least elementsTreeMinLinesWhenDetail rows.
+// For text nodes with spans the ideal budget grows to fit the span list.
 func (p *Panel) elementsDetailReserved() int {
 	if p.ActiveTab != TabElements {
 		return 0
@@ -245,8 +260,18 @@ func (p *Panel) elementsDetailReserved() int {
 	if maxDetail == 0 {
 		return 0
 	}
-	if maxDetail > elementsDetailIdealLines {
-		return elementsDetailIdealLines
+	// For text nodes with spans, request enough lines to show all spans:
+	// 1 separator + 1 spans-header + N span rows + 1 geom row.
+	ideal := elementsDetailIdealLines
+	n := p.nodeTree[p.elementsSelectedIdx]
+	if n.Type == "text" && len(n.Spans) > 0 {
+		spanIdeal := len(n.Spans) + 3
+		if spanIdeal > ideal {
+			ideal = spanIdeal
+		}
+	}
+	if maxDetail > ideal {
+		return ideal
 	}
 	return maxDetail
 }
@@ -261,7 +286,14 @@ func (p *Panel) elementsTreeVisibleLines() int {
 }
 
 func (p *Panel) clampElementsScroll() {
-	maxScroll := len(p.visibleIndices) - p.elementsTreeVisibleLines()
+	vis := p.elementsTreeVisibleLines()
+	maxScroll := len(p.visibleIndices) - vis
+	if maxScroll > 0 {
+		// When scrollY > 0 the "↑ N above" indicator steals one row,
+		// so the visible window holds only vis-1 tree items. We need
+		// one extra scroll step to reach the last item.
+		maxScroll++
+	}
 	if maxScroll < 0 {
 		maxScroll = 0
 	}
@@ -288,16 +320,39 @@ func (p *Panel) ensureElementsScrollShowsSelection() {
 	if vi < 0 {
 		return // selected node is hidden (ancestor is collapsed)
 	}
+	p.scrollToShowVisibleIndex(vi)
+}
+
+// scrollToShowVisibleIndex adjusts elementsScrollY so that the visible-index vi
+// is within the painted window. It accounts for the ↑ indicator row that appears
+// whenever scrollY > 0, which shrinks the usable window by one.
+func (p *Panel) scrollToShowVisibleIndex(vi int) {
 	vis := p.elementsTreeVisibleLines()
 	if vis < 1 {
 		return
 	}
+	// Scroll up if vi is above the current window.
 	if p.elementsScrollY > vi {
 		p.elementsScrollY = vi
+		p.clampElementsScroll()
+		return
 	}
-	if vi >= p.elementsScrollY+vis {
-		p.elementsScrollY = vi - vis + 1
+	// Determine the actual bottom of the visible window.
+	// When scrollY > 0 the ↑ indicator occupies one row, leaving vis-1 item slots.
+	visEnd := p.elementsScrollY + vis
+	if p.elementsScrollY > 0 {
+		visEnd--
 	}
+	if vi < visEnd {
+		return // already visible
+	}
+	// Scroll down so vi is the last visible item.
+	// If the new scrollY > 0 the indicator will appear, so we need one extra step.
+	newScrollY := vi - vis + 2 // assumes indicator will be present (scrollY > 0)
+	if newScrollY <= 0 {
+		newScrollY = 0 // no indicator at scrollY=0; vi < vis is guaranteed
+	}
+	p.elementsScrollY = newScrollY
 	p.clampElementsScroll()
 }
 
@@ -335,15 +390,21 @@ func (p *Panel) ElementsTreeVisibleLines() int { return p.elementsTreeVisibleLin
 func (p *Panel) ElementsDetailReservedLines() int { return p.elementsDetailReserved() }
 
 // OnElementsTreeRebuilt clamps selection after a new snapshot (e.g. shallower tree).
+// Only snaps scroll to show the selection when the selection index was out-of-bounds
+// and had to be clamped. If selection is still valid, preserve the user's scroll position.
 func (p *Panel) OnElementsTreeRebuilt(newLen int) {
+	selectionClamped := false
 	if p.elementsSelectedIdx >= newLen {
 		if newLen == 0 {
 			p.elementsSelectedIdx = -1
 		} else {
 			p.elementsSelectedIdx = newLen - 1
 		}
+		selectionClamped = true
 	}
-	p.ensureElementsScrollShowsSelection()
+	if selectionClamped {
+		p.ensureElementsScrollShowsSelection()
+	}
 	p.clampElementsScroll()
 }
 
@@ -621,14 +682,7 @@ func (p *Panel) ExpandToNode(nodeIdx int) {
 	p.rebuildVisibleIndices()
 	for vi, ni := range p.visibleIndices {
 		if ni == nodeIdx {
-			vis := p.elementsTreeVisibleLines()
-			if p.elementsScrollY > vi {
-				p.elementsScrollY = vi
-			}
-			if vi >= p.elementsScrollY+vis {
-				p.elementsScrollY = vi - vis + 1
-			}
-			p.clampElementsScroll()
+			p.scrollToShowVisibleIndex(vi)
 			return
 		}
 	}

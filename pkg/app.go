@@ -310,24 +310,11 @@ func (a *App) HandleEvent(e *event.Event) {
 	if a.devtools.Visible {
 		switch e.Type {
 		case "mousedown":
-			// Elements inspect: one-shot pick — mousedown anywhere above the panel.
+			// Elements inspect pick: click disarms pick (selection was already set by hover).
 			if a.devtools.ElementsPickArmed() {
 				a.devtools.ClearElementsPickArm()
 				a.mouseDownX = -1
 				a.mouseDownY = -1
-				// Accept clicks in the app content area (not inside the panel).
-				inAppArea := !a.devtools.ContainsPoint(e.X, e.Y, a.width, a.height)
-				if a.devtools.ActiveTab == devtools.TabElements && inAppArea {
-					r := a.engine.Root()
-					if r != nil && r.RootNode != nil {
-						if hit := a.engine.HitTestScreen(e.X, e.Y); hit != nil {
-							if idx := preorderIndexOfHit(r.RootNode, hit); idx >= 0 {
-								a.devtools.SetElementsSelection(idx)
-								a.devtools.ExpandToNode(idx)
-							}
-						}
-					}
-				}
 				a.refreshDevToolsV2()
 				return
 			}
@@ -358,6 +345,25 @@ func (a *App) HandleEvent(e *event.Event) {
 				a.syncEngineViewport()
 				a.refreshDevToolsV2()
 				return
+			}
+			// Elements inspect pick: hover over app area to preview selection in real-time.
+			if a.devtools.ElementsPickArmed() && a.devtools.ActiveTab == devtools.TabElements {
+				inAppArea := !a.devtools.ContainsPoint(e.X, e.Y, a.width, a.height)
+				if inAppArea {
+					r := a.engine.Root()
+					if r != nil && r.RootNode != nil {
+						if hit := a.engine.HitTestScreen(e.X, e.Y); hit != nil {
+							if idx := preorderIndexOfHit(r.RootNode, hit); idx >= 0 {
+								if idx != a.devtools.ElementsSelectedIdx() {
+									a.devtools.SetElementsSelection(idx)
+									a.devtools.ExpandToNode(idx)
+									a.paintDevToolsV2()
+								}
+							}
+						}
+					}
+				}
+				return // suppress engine hover events during pick mode
 			}
 
 		case "mouseup":

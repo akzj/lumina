@@ -10,6 +10,7 @@ import (
 	"github.com/akzj/lumina/pkg/devtools"
 	"github.com/akzj/lumina/pkg/perf"
 	"github.com/akzj/lumina/pkg/render"
+	"github.com/mattn/go-runewidth"
 )
 
 // toggleDevToolsV2 shows or hides the DevTools panel in V2 engine mode.
@@ -103,6 +104,52 @@ func buildElementsNodeInfos(root *render.Node) []devtools.NodeInfo {
 			Flex:             n.Style.Flex,
 			ComponentID:      cid,
 			ComponentFactory: cfactory,
+		}
+		if len(n.Spans) > 0 {
+			info.Spans = make([]devtools.SpanInfo, len(n.Spans))
+			for i, s := range n.Spans {
+				// Resolve effective style: span overrides inherit from node style.
+				si := devtools.SpanInfo{Text: s.Text}
+				si.FG = s.Foreground
+				if si.FG == "" {
+					si.FG = n.Style.Foreground
+				}
+				si.BG = s.Background
+				if si.BG == "" {
+					si.BG = n.Style.Background
+				}
+				if s.Bold != nil {
+					si.Bold = *s.Bold
+				} else {
+					si.Bold = n.Style.Bold
+				}
+				if s.Dim != nil {
+					si.Dim = *s.Dim
+				} else {
+					si.Dim = n.Style.Dim
+				}
+				if s.Underline != nil {
+					si.Underline = *s.Underline
+				} else {
+					si.Underline = n.Style.Underline
+				}
+				if s.Italic != nil {
+					si.Italic = *s.Italic
+				} else {
+					si.Italic = n.Style.Italic
+				}
+				if s.Strikethrough != nil {
+					si.Strikethrough = *s.Strikethrough
+				} else {
+					si.Strikethrough = n.Style.Strikethrough
+				}
+				if s.Inverse != nil {
+					si.Inverse = *s.Inverse
+				} else {
+					si.Inverse = n.Style.Inverse
+				}
+				info.Spans[i] = si
+			}
 		}
 		infos = append(infos, info)
 		if depth >= devtools.ElementsWalkMaxDepth {
@@ -268,7 +315,7 @@ func buildTabBar(panel *devtools.Panel) string {
 	}
 	pickHint := "[i pick]"
 	if panel.ElementsPickArmed() {
-		pickHint = "⊕ PICK — click element"
+		pickHint = "[PICK] click element"
 	}
 	return fmt.Sprintf(" %sElements  %sPerf   %d FPS  [F12] [1/2 tab] [3 pos] %s [0/Esc clr]",
 		elemMark, perfMark, panel.FPS(), pickHint)
@@ -276,17 +323,25 @@ func buildTabBar(panel *devtools.Panel) string {
 
 // paintLine writes a string at a given row with specified colors.
 // startX is the leftmost column to start writing; maxX is the exclusive right bound.
+// Wide characters (runewidth 2) are placed correctly with a padding marker cell.
 func paintLine(cb *render.CellBuffer, row, startX, maxX int, text, bg, fg string) {
 	if row >= cb.Height() {
 		return
 	}
 	x := startX
 	for _, ch := range text {
-		if x >= maxX || x >= cb.Width() {
+		w := runewidth.RuneWidth(ch)
+		if w == 0 {
+			continue
+		}
+		if x+w > maxX || x+w > cb.Width() {
 			break
 		}
 		cb.Set(x, row, render.Cell{Ch: ch, FG: fg, BG: bg})
-		x++
+		if w == 2 {
+			cb.Set(x+1, row, render.Cell{Wide: true, BG: bg})
+		}
+		x += w
 	}
 	// Fill rest of panel row with background.
 	for ; x < maxX && x < cb.Width(); x++ {
@@ -295,17 +350,25 @@ func paintLine(cb *render.CellBuffer, row, startX, maxX int, text, bg, fg string
 }
 
 // paintTextLine writes a simple text line starting at startX.
+// Wide characters (runewidth 2) are placed correctly with a padding marker cell.
 func paintTextLine(cb *render.CellBuffer, row, startX, maxX int, text, fg, bg string) {
 	if row >= cb.Height() {
 		return
 	}
 	x := startX
 	for _, ch := range text {
-		if x >= maxX || x >= cb.Width() {
+		w := runewidth.RuneWidth(ch)
+		if w == 0 {
+			continue
+		}
+		if x+w > maxX || x+w > cb.Width() {
 			break
 		}
 		cb.Set(x, row, render.Cell{Ch: ch, FG: fg, BG: bg})
-		x++
+		if w == 2 {
+			cb.Set(x+1, row, render.Cell{Wide: true, BG: bg})
+		}
+		x += w
 	}
 	// Fill rest with background.
 	for ; x < maxX && x < cb.Width(); x++ {
@@ -375,7 +438,7 @@ func paintElementsTab(cb *render.CellBuffer, panel *devtools.Panel, startRow, st
 		var icon string
 		if panel.NodeHasChildren(ni) {
 			if panel.IsCollapsed(ni) {
-				icon = "▶"
+				icon = "▸"
 			} else {
 				icon = "▾"
 			}
@@ -385,7 +448,12 @@ func paintElementsTab(cb *render.CellBuffer, panel *devtools.Panel, startRow, st
 
 		var line string
 		if node.Type == "text" {
-			line = fmt.Sprintf("%s%s <text> %q", indent, icon, node.Content)
+			if len(node.Spans) > 0 {
+				combined := spansText(node.Spans)
+				line = fmt.Sprintf("%s%s <text spans:%d> %q", indent, icon, len(node.Spans), combined)
+			} else {
+				line = fmt.Sprintf("%s%s <text> %q", indent, icon, node.Content)
+			}
 		} else {
 			line = fmt.Sprintf("%s%s <%s> %dx%d", indent, icon, node.Type, node.W, node.H)
 			if node.BG != "" {
@@ -427,24 +495,55 @@ func paintElementsTab(cb *render.CellBuffer, panel *devtools.Panel, startRow, st
 			paintTextLine(cb, row, startX, maxX, "  ── selection ──", titleColor, bgColor)
 			row++
 		}
-		detail := []string{
-			fmt.Sprintf("  geom   %d,%d  %dx%d", n.X, n.Y, n.W, n.H),
-			fmt.Sprintf("  id=%s key=%s", n.ID, n.Key),
-			fmt.Sprintf("  path   %s", n.Path),
-			fmt.Sprintf("  scrollY=%d overflow=%s border=%s flex=%d", n.ScrollY, n.Overflow, n.Border, n.Flex),
-			fmt.Sprintf("  fg=%s bg=%s", n.FG, n.BG),
-		}
-		if n.ComponentID != "" || n.ComponentFactory != "" {
-			detail = append(detail, fmt.Sprintf("  component id=%s type=%s", n.ComponentID, n.ComponentFactory))
-		}
-		remaining := budget - 1 // after separator
-		for _, s := range detail {
-			if remaining <= 0 || row >= cb.Height() {
-				break
+		remaining := budget - 1 // lines left after separator
+
+		// For text nodes with spans: show spans first with their actual colors.
+		if n.Type == "text" && len(n.Spans) > 0 && remaining > 0 {
+			if row < cb.Height() && remaining > 0 {
+				header := fmt.Sprintf("  spans (%d)  geom %d,%d %dx%d", len(n.Spans), n.X, n.Y, n.W, n.H)
+				paintTextLine(cb, row, startX, maxX, truncateElementsLine(header, panelW), titleColor, bgColor)
+				row++
+				remaining--
 			}
-			paintTextLine(cb, row, startX, maxX, truncateElementsLine(s, panelW), fgColor, bgColor)
-			row++
-			remaining--
+			for i, sp := range n.Spans {
+				if remaining <= 0 || row >= cb.Height() {
+					break
+				}
+				attrs := spanAttrs(sp)
+				var label string
+				if attrs != "" {
+					label = fmt.Sprintf("  [%d] %q  %s", i, sp.Text, attrs)
+				} else {
+					label = fmt.Sprintf("  [%d] %q", i, sp.Text)
+				}
+				spFG := sp.FG
+				if spFG == "" {
+					spFG = fgColor
+				}
+				paintTextLine(cb, row, startX, maxX, truncateElementsLine(label, panelW), spFG, bgColor)
+				row++
+				remaining--
+			}
+		} else {
+			// Generic detail for non-span nodes.
+			detail := []string{
+				fmt.Sprintf("  geom   %d,%d  %dx%d", n.X, n.Y, n.W, n.H),
+				fmt.Sprintf("  id=%s key=%s", n.ID, n.Key),
+				fmt.Sprintf("  path   %s", n.Path),
+				fmt.Sprintf("  scrollY=%d overflow=%s border=%s flex=%d", n.ScrollY, n.Overflow, n.Border, n.Flex),
+				fmt.Sprintf("  fg=%s bg=%s", n.FG, n.BG),
+			}
+			if n.ComponentID != "" || n.ComponentFactory != "" {
+				detail = append(detail, fmt.Sprintf("  component id=%s type=%s", n.ComponentID, n.ComponentFactory))
+			}
+			for _, s := range detail {
+				if remaining <= 0 || row >= cb.Height() {
+					break
+				}
+				paintTextLine(cb, row, startX, maxX, truncateElementsLine(s, panelW), fgColor, bgColor)
+				row++
+				remaining--
+			}
 		}
 	}
 
@@ -532,6 +631,45 @@ func formatBytesV2(b uint64) string {
 	default:
 		return fmt.Sprintf("%d B", b)
 	}
+}
+
+// spansText returns the combined plain text of all spans.
+func spansText(spans []devtools.SpanInfo) string {
+	var b strings.Builder
+	for _, s := range spans {
+		b.WriteString(s.Text)
+	}
+	return b.String()
+}
+
+// spanAttrs returns a compact string of non-default style attributes for a span.
+func spanAttrs(s devtools.SpanInfo) string {
+	var b strings.Builder
+	if s.FG != "" {
+		fmt.Fprintf(&b, "fg=%s ", s.FG)
+	}
+	if s.BG != "" {
+		fmt.Fprintf(&b, "bg=%s ", s.BG)
+	}
+	if s.Bold {
+		b.WriteString("bold ")
+	}
+	if s.Italic {
+		b.WriteString("italic ")
+	}
+	if s.Underline {
+		b.WriteString("underline ")
+	}
+	if s.Dim {
+		b.WriteString("dim ")
+	}
+	if s.Strikethrough {
+		b.WriteString("strike ")
+	}
+	if s.Inverse {
+		b.WriteString("inverse ")
+	}
+	return strings.TrimRight(b.String(), " ")
 }
 
 
