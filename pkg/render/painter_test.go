@@ -128,7 +128,7 @@ func TestPaintFull_TextNode(t *testing.T) {
 	node := &Node{
 		Type:    "text",
 		Content: "Hello",
-		X: 2, Y: 1, W: 10, H: 1,
+		X:       2, Y: 1, W: 10, H: 1,
 		Style: Style{Foreground: "#FFFFFF", Right: -1, Bottom: -1},
 	}
 
@@ -156,7 +156,7 @@ func TestPaintFull_BoxWithBackground(t *testing.T) {
 	buf := NewCellBuffer(10, 5)
 	node := &Node{
 		Type: "box",
-		X: 0, Y: 0, W: 5, H: 3,
+		X:    0, Y: 0, W: 5, H: 3,
 		Style: Style{Background: "#1E1E2E", Right: -1, Bottom: -1},
 	}
 
@@ -186,7 +186,7 @@ func TestPaintFull_Border(t *testing.T) {
 	buf := NewCellBuffer(10, 5)
 	node := &Node{
 		Type: "box",
-		X: 0, Y: 0, W: 5, H: 3,
+		X:    0, Y: 0, W: 5, H: 3,
 		Style: Style{Border: "single", Right: -1, Bottom: -1},
 	}
 
@@ -223,13 +223,13 @@ func TestPaintFull_NestedBoxText(t *testing.T) {
 	buf := NewCellBuffer(20, 10)
 	parent := &Node{
 		Type: "box",
-		X: 0, Y: 0, W: 20, H: 10,
+		X:    0, Y: 0, W: 20, H: 10,
 		Style: Style{Background: "#111111", Right: -1, Bottom: -1},
 	}
 	child := &Node{
 		Type:    "text",
 		Content: "Hi",
-		X: 2, Y: 1, W: 5, H: 1,
+		X:       2, Y: 1, W: 5, H: 1,
 		Style: Style{Foreground: "#FFFFFF", Right: -1, Bottom: -1},
 	}
 	parent.AddChild(child)
@@ -259,19 +259,19 @@ func TestPaintDirty_OnlyDirtyNodes(t *testing.T) {
 	// Create two text nodes
 	root := &Node{
 		Type: "box",
-		X: 0, Y: 0, W: 20, H: 5,
+		X:    0, Y: 0, W: 20, H: 5,
 		Style: Style{Right: -1, Bottom: -1},
 	}
 	text1 := &Node{
 		Type:    "text",
 		Content: "AAA",
-		X: 0, Y: 0, W: 10, H: 1,
+		X:       0, Y: 0, W: 10, H: 1,
 		Style: Style{Foreground: "#FF0000", Right: -1, Bottom: -1},
 	}
 	text2 := &Node{
 		Type:    "text",
 		Content: "BBB",
-		X: 0, Y: 1, W: 10, H: 1,
+		X:       0, Y: 1, W: 10, H: 1,
 		Style: Style{Foreground: "#00FF00", Right: -1, Bottom: -1},
 	}
 	root.AddChild(text1)
@@ -303,9 +303,9 @@ func TestPaintDirty_OnlyDirtyNodes(t *testing.T) {
 func TestPaintDirty_ClearsFlag(t *testing.T) {
 	buf := NewCellBuffer(10, 5)
 	node := &Node{
-		Type:       "text",
-		Content:    "Test",
-		X: 0, Y: 0, W: 10, H: 1,
+		Type:    "text",
+		Content: "Test",
+		X:       0, Y: 0, W: 10, H: 1,
 		PaintDirty: true,
 		Style:      Style{Right: -1, Bottom: -1},
 	}
@@ -323,9 +323,9 @@ func TestPaintDirty_DeepDirty(t *testing.T) {
 	root := &Node{Type: "box", X: 0, Y: 0, W: 20, H: 10, Style: Style{Right: -1, Bottom: -1}}
 	mid := &Node{Type: "box", X: 0, Y: 0, W: 20, H: 10, Style: Style{Right: -1, Bottom: -1}}
 	leaf := &Node{
-		Type:       "text",
-		Content:    "Deep",
-		X: 5, Y: 5, W: 10, H: 1,
+		Type:    "text",
+		Content: "Deep",
+		X:       5, Y: 5, W: 10, H: 1,
 		PaintDirty: true,
 		Style:      Style{Foreground: "#AABBCC", Right: -1, Bottom: -1},
 	}
@@ -347,16 +347,16 @@ func TestPaintDirty_ParentDirty(t *testing.T) {
 	buf := NewCellBuffer(20, 10)
 
 	parent := &Node{
-		Type:       "box",
-		X: 0, Y: 0, W: 20, H: 10,
+		Type: "box",
+		X:    0, Y: 0, W: 20, H: 10,
 		PaintDirty: true,
 		Style:      Style{Background: "#222222", Right: -1, Bottom: -1},
 	}
 	child := &Node{
 		Type:    "text",
 		Content: "Child",
-		X: 1, Y: 1, W: 10, H: 1,
-		Style:   Style{Foreground: "#FFFFFF", Right: -1, Bottom: -1},
+		X:       1, Y: 1, W: 10, H: 1,
+		Style: Style{Foreground: "#FFFFFF", Right: -1, Bottom: -1},
 	}
 	parent.AddChild(child)
 
@@ -417,7 +417,7 @@ func TestPaintFull_MultilineText(t *testing.T) {
 	node := &Node{
 		Type:    "text",
 		Content: "AB\nCD",
-		X: 1, Y: 2, W: 10, H: 3,
+		X:       1, Y: 2, W: 10, H: 3,
 		Style: Style{Right: -1, Bottom: -1},
 	}
 
@@ -452,7 +452,7 @@ func TestPaintFull_RoundedBorder(t *testing.T) {
 	buf := NewCellBuffer(10, 5)
 	node := &Node{
 		Type: "box",
-		X: 0, Y: 0, W: 6, H: 4,
+		X:    0, Y: 0, W: 6, H: 4,
 		Style: Style{Border: "rounded", Right: -1, Bottom: -1},
 	}
 
@@ -504,7 +504,7 @@ func TestPaintFull_DoubleBorder(t *testing.T) {
 	buf := NewCellBuffer(10, 5)
 	node := &Node{
 		Type: "box",
-		X: 0, Y: 0, W: 4, H: 3,
+		X:    0, Y: 0, W: 4, H: 3,
 		Style: Style{Border: "double", Right: -1, Bottom: -1},
 	}
 
@@ -586,6 +586,43 @@ func TestCellBuffer_Stats_ClearRect(t *testing.T) {
 	}
 }
 
+func TestCellBuffer_Stats_WideCharCleanupTracksAdjacentCells(t *testing.T) {
+	buf := NewCellBuffer(4, 1)
+	buf.Set(0, 0, Cell{Ch: '界'})
+	buf.Set(1, 0, Cell{Wide: true})
+
+	buf.ResetStats()
+	buf.SetChar(1, 0, 'x', "", "", false)
+
+	s := buf.Stats()
+	if s.DirtyX != 0 || s.DirtyY != 0 || s.DirtyW != 2 || s.DirtyH != 1 {
+		t.Fatalf("overwriting wide padding dirty rect: got (%d,%d,%d,%d), want (0,0,2,1)", s.DirtyX, s.DirtyY, s.DirtyW, s.DirtyH)
+	}
+	if c := buf.Get(0, 0); c.Ch != 0 || c.Wide {
+		t.Fatalf("wide main cell should be cleared, got %+v", c)
+	}
+	if c := buf.Get(1, 0); c.Ch != 'x' || c.Wide {
+		t.Fatalf("target cell should contain replacement, got %+v", c)
+	}
+
+	buf = NewCellBuffer(4, 1)
+	buf.Set(0, 0, Cell{Ch: '界'})
+	buf.Set(1, 0, Cell{Wide: true})
+	buf.ResetStats()
+	buf.ClearRect(1, 0, 1, 1)
+
+	s = buf.Stats()
+	if s.DirtyX != 0 || s.DirtyY != 0 || s.DirtyW != 2 || s.DirtyH != 1 {
+		t.Fatalf("clearing wide padding dirty rect: got (%d,%d,%d,%d), want (0,0,2,1)", s.DirtyX, s.DirtyY, s.DirtyW, s.DirtyH)
+	}
+	if c := buf.Get(0, 0); c.Ch != 0 || c.Wide {
+		t.Fatalf("wide main cell should be cleared after ClearRect, got %+v", c)
+	}
+	if c := buf.Get(1, 0); c.Ch != 0 || c.Wide {
+		t.Fatalf("wide padding cell should be cleared after ClearRect, got %+v", c)
+	}
+}
+
 func TestCellBuffer_Stats_Clear(t *testing.T) {
 	buf := NewCellBuffer(4, 3)
 	buf.Clear()
@@ -640,22 +677,22 @@ func TestPaintDirty_ParentDirtyClearsChildFlags(t *testing.T) {
 	buf := NewCellBuffer(20, 10)
 
 	parent := &Node{
-		Type:       "box",
-		X: 0, Y: 0, W: 20, H: 10,
+		Type: "box",
+		X:    0, Y: 0, W: 20, H: 10,
 		PaintDirty: true,
 		Style:      Style{Background: "#222222", Right: -1, Bottom: -1},
 	}
 	child := &Node{
-		Type:       "text",
-		Content:    "Child",
-		X: 1, Y: 1, W: 10, H: 1,
+		Type:    "text",
+		Content: "Child",
+		X:       1, Y: 1, W: 10, H: 1,
 		PaintDirty: true,
 		Style:      Style{Foreground: "#FFFFFF", Right: -1, Bottom: -1},
 	}
 	grandchild := &Node{
-		Type:       "text",
-		Content:    "GC",
-		X: 2, Y: 2, W: 5, H: 1,
+		Type:    "text",
+		Content: "GC",
+		X:       2, Y: 2, W: 5, H: 1,
 		PaintDirty: true,
 		Style:      Style{Foreground: "#AAAAAA", Right: -1, Bottom: -1},
 	}
@@ -683,7 +720,7 @@ func TestPaintText_CJKWideChars(t *testing.T) {
 	node := &Node{
 		Type:    "text",
 		Content: "你好",
-		X: 0, Y: 0, W: 10, H: 1,
+		X:       0, Y: 0, W: 10, H: 1,
 		Style: Style{Foreground: "#FFFFFF", Right: -1, Bottom: -1},
 	}
 
@@ -723,7 +760,7 @@ func TestPaintText_MixedASCIIAndCJK(t *testing.T) {
 	node := &Node{
 		Type:    "text",
 		Content: "A你B",
-		X: 0, Y: 0, W: 10, H: 1,
+		X:       0, Y: 0, W: 10, H: 1,
 		Style: Style{Foreground: "#FFFFFF", Right: -1, Bottom: -1},
 	}
 

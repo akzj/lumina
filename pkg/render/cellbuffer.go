@@ -6,12 +6,12 @@ import (
 
 // Cell represents a single terminal cell.
 type Cell struct {
-	Ch        rune
-	FG        string // color string e.g. "#FF0000" or "" for default
-	BG        string // color string e.g. "#1E1E2E" or "" for default
-	Bold      bool
-	Dim       bool
-	Underline bool
+	Ch            rune
+	FG            string // color string e.g. "#FF0000" or "" for default
+	BG            string // color string e.g. "#1E1E2E" or "" for default
+	Bold          bool
+	Dim           bool
+	Underline     bool
 	Italic        bool
 	Strikethrough bool
 	Inverse       bool
@@ -31,7 +31,9 @@ type CellBuffer struct {
 	dirtyMinX  int // bounding box of dirty region
 	dirtyMinY  int
 	dirtyMaxX  int // exclusive
-	dirtyMaxY int // exclusive
+	dirtyMaxY  int // exclusive
+
+
 }
 
 // NewCellBuffer creates a buffer of the given size.
@@ -43,9 +45,10 @@ func NewCellBuffer(width, height int) *CellBuffer {
 		height = 0
 	}
 	cb := &CellBuffer{
-		cells:  make([]Cell, width*height),
-		width:  width,
-		height: height,
+		cells:            make([]Cell, width*height),
+		width:            width,
+		height:           height,
+
 	}
 	cb.ResetStats()
 	return cb
@@ -125,16 +128,21 @@ func (cb *CellBuffer) Set(x, y int, c Cell) {
 		// If overwriting the first cell of a wide char, clear its padding cell
 		if !old.Wide && old.Ch != 0 && runewidth.RuneWidth(old.Ch) == 2 && x+1 < cb.width {
 			cb.cells[idx+1] = Cell{BG: c.BG}
+			cb.writeCount++
+			cb.trackDirty(x+1, y)
 		}
 		// If overwriting the padding cell of a wide char, clear the first half
 		if old.Wide && x-1 >= 0 {
 			cb.cells[idx-1] = Cell{BG: cb.cells[idx-1].BG}
+			cb.writeCount++
+			cb.trackDirty(x-1, y)
 		}
 		cb.cells[idx] = c
 		cb.writeCount++
 		cb.trackDirty(x, y)
 	}
 }
+
 
 // SetChar writes a character with colors at (x, y).
 func (cb *CellBuffer) SetChar(x, y int, ch rune, fg, bg string, bold bool) {
@@ -145,10 +153,14 @@ func (cb *CellBuffer) SetChar(x, y int, ch rune, fg, bg string, bold bool) {
 		// If overwriting the first cell of a wide char, clear its padding cell
 		if !old.Wide && old.Ch != 0 && runewidth.RuneWidth(old.Ch) == 2 && x+1 < cb.width {
 			cb.cells[idx+1] = Cell{BG: bg}
+			cb.writeCount++
+			cb.trackDirty(x+1, y)
 		}
 		// If overwriting the padding cell of a wide char, clear the first half
 		if old.Wide && x-1 >= 0 {
 			cb.cells[idx-1] = Cell{BG: cb.cells[idx-1].BG}
+			cb.writeCount++
+			cb.trackDirty(x-1, y)
 		}
 		cb.cells[idx] = Cell{Ch: ch, FG: fg, BG: bg, Bold: bold}
 		cb.writeCount++
@@ -180,7 +192,19 @@ func (cb *CellBuffer) ClearRect(x, y, w, h int) {
 			if col < 0 {
 				continue
 			}
-			cb.cells[row*cb.width+col] = Cell{}
+			idx := row*cb.width + col
+			old := cb.cells[idx]
+			if !old.Wide && old.Ch != 0 && runewidth.RuneWidth(old.Ch) == 2 && col+1 < cb.width {
+				cb.cells[idx+1] = Cell{}
+				cb.clearCount++
+				cb.trackDirty(col+1, row)
+			}
+			if old.Wide && col-1 >= 0 {
+				cb.cells[idx-1] = Cell{}
+				cb.clearCount++
+				cb.trackDirty(col-1, row)
+			}
+			cb.cells[idx] = Cell{}
 			cb.clearCount++
 			cb.trackDirty(col, row)
 		}

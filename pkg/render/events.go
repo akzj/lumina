@@ -248,9 +248,19 @@ func (e *Engine) HandleMouseMove(x, y int) {
 		return
 	}
 
-	// Clear stale hovered pointer if node was removed from tree
+	// Clear stale hovered pointer if node was removed from tree.
+	// Fire onMouseLeave so any layers/state created on hover get cleaned up.
 	if e.hoveredNode != nil && e.hoveredNode.Removed {
+		old := e.hoveredNode
 		e.hoveredNode = nil
+		// Fire onMouseLeave on the removed node (even though Removed=true)
+		// to ensure cleanup callbacks run (e.g., tooltip removeLayer).
+		for n := old; n != nil; n = n.Parent {
+			if n.OnMouseLeave != 0 {
+				e.callLuaRef(n.OnMouseLeave, 0, 0)
+				break
+			}
+		}
 	}
 
 	target, _ := e.hitTestLayers(x, y)

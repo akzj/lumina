@@ -231,6 +231,63 @@ func TestLayerRemove(t *testing.T) {
 	}
 }
 
+func TestCreateLayerReplacesExistingID(t *testing.T) {
+	e, L := newLayerTestEngine(t)
+
+	err := L.DoString(`
+		lumina.createComponent({
+			id = "root",
+			render = function(props)
+				return lumina.createElement("vbox", {
+					style = {width = "100%", height = "100%", background = "#000"},
+				}, lumina.createElement("text", {}, "MAIN"))
+			end,
+		})
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.RenderAll()
+
+	first := NewNode("text")
+	first.Content = "OLD"
+	first.Style.Width = 6
+	first.Style.Height = 1
+	first.Style.Left = 0
+	first.Style.Top = 0
+
+	second := NewNode("text")
+	second.Content = "NEW"
+	second.Style.Width = 6
+	second.Style.Height = 1
+	second.Style.Left = 10
+	second.Style.Top = 0
+
+	e.CreateLayer("tooltip", first, false)
+	e.RenderDirty()
+	e.CreateLayer("tooltip", second, false)
+	e.RenderDirty()
+
+	if got := len(e.Layers()); got != 2 {
+		t.Fatalf("expected main layer plus one tooltip layer, got %d", got)
+	}
+	if c := e.Buffer().Get(0, 0); c.Ch != 'M' {
+		t.Fatalf("old tooltip region should be restored, got %q", c.Ch)
+	}
+	if c := e.Buffer().Get(10, 0); c.Ch != 'N' {
+		t.Fatalf("new tooltip should be painted, got %q", c.Ch)
+	}
+
+	e.RemoveLayer("tooltip")
+	e.RenderDirty()
+	if got := len(e.Layers()); got != 1 {
+		t.Fatalf("expected tooltip to be removable with one call, got %d layers", got)
+	}
+	if c := e.Buffer().Get(10, 0); c.Ch != ' ' && c.Ch != 0 {
+		t.Fatalf("new tooltip region should be restored after removal, got %q", c.Ch)
+	}
+}
+
 func TestLayerRemoveMainBlocked(t *testing.T) {
 	e, _ := newLayerTestEngine(t)
 	e.syncMainLayer()

@@ -1,5 +1,9 @@
 package render
 
+import (
+	"fmt"
+	"os"
+)
 
 // painter.go — paint engine primitives (vbox, hbox, text, component) to CellBuffer.
 
@@ -48,7 +52,13 @@ func PaintDirty(buf *CellBuffer, root *Node) {
 		return
 	}
 	if root.PaintDirty {
-		buf.ClearRect(root.X, root.Y, root.W, root.H)
+		// Use background-aware clear so any cells not covered by paintNode
+		// still show the root's background color (not terminal default).
+		bg := root.Style.Background
+		if bg == "" {
+			bg = findAncestorBackground(root)
+		}
+		clearRectWithBG(buf, root.X, root.Y, root.W, root.H, bg)
 		paintNode(buf, root)
 		clearPaintDirty(root)
 		return
@@ -108,28 +118,45 @@ func paintDirtyWalk(buf *CellBuffer, node *Node) {
 		// This is critical for nested scroll: inner scroll containers inside
 		// outer scroll containers need the outer to repaint with correct offsets.
 		scrollAncestor := findScrollableAncestor(node.Parent)
-		if scrollAncestor != nil && !scrollAncestor.PaintDirty {
-			scrollAncestor.PaintDirty = true
-			bg := findAncestorBackground(scrollAncestor)
-			clearRectWithBG(buf, scrollAncestor.X, scrollAncestor.Y, scrollAncestor.W, scrollAncestor.H, bg)
-			paintNode(buf, scrollAncestor)
-			scrollAncestor.PaintDirty = false
-			clearPaintDirtyBelow(scrollAncestor)
-			// Repaint overlapping windows above this scroll container
-			repaintOverlappingSiblings(buf, scrollAncestor)
+		if scrollAncestor != nil {
+			if !scrollAncestor.PaintDirty {
+				scrollAncestor.PaintDirty = true
+				bg := findAncestorBackground(scrollAncestor)
+				clearRectWithBG(buf, scrollAncestor.X, scrollAncestor.Y, scrollAncestor.W, scrollAncestor.H, bg)
+				paintNode(buf, scrollAncestor)
+				scrollAncestor.PaintDirty = false
+				clearPaintDirtyBelow(scrollAncestor)
+				// Repaint overlapping windows above this scroll container
+				repaintOverlappingSiblings(buf, scrollAncestor)
+			} else {
+				// Scroll ancestor is already dirty — it will be repainted later
+				// in the walk with proper scroll offset/clip. Just clear our
+				// dirty flag and skip; the ancestor's repaint will cover us.
+				node.PaintDirty = false
+				clearPaintDirtyBelow(node)
+			}
 			return
 		}
 		// If this node is inside an overflow:hidden container, escalate to that
 		// container so its full area gets cleared before repainting. This prevents
 		// residual content when children change (e.g. tab switches).
 		hiddenAncestor := findHiddenAncestor(node.Parent)
-		if hiddenAncestor != nil && !hiddenAncestor.PaintDirty {
-			hiddenAncestor.PaintDirty = true
-			bg := findAncestorBackground(hiddenAncestor)
-			clearRectWithBG(buf, hiddenAncestor.X, hiddenAncestor.Y, hiddenAncestor.W, hiddenAncestor.H, bg)
-			paintNode(buf, hiddenAncestor)
-			hiddenAncestor.PaintDirty = false
-			clearPaintDirtyBelow(hiddenAncestor)
+		if hiddenAncestor != nil {
+			if !hiddenAncestor.PaintDirty {
+				// Normal escalation: repaint the entire hidden ancestor
+				hiddenAncestor.PaintDirty = true
+				bg := findAncestorBackground(hiddenAncestor)
+				clearRectWithBG(buf, hiddenAncestor.X, hiddenAncestor.Y, hiddenAncestor.W, hiddenAncestor.H, bg)
+				paintNode(buf, hiddenAncestor)
+				hiddenAncestor.PaintDirty = false
+				clearPaintDirtyBelow(hiddenAncestor)
+			} else {
+				// Hidden ancestor is already dirty — it will be repainted later
+				// in the walk. Just clear our dirty flag and skip; the ancestor's
+				// repaint will cover us with proper clipping.
+				node.PaintDirty = false
+				clearPaintDirtyBelow(node)
+			}
 			return
 		}
 
@@ -514,6 +541,14 @@ func paintNode(buf *CellBuffer, node *Node) {
 	}
 	defer func() { paintDepth-- }()
 
+
+	// DEBUG: detect painting of nodes whose parent is nil (detached/root nodes)
+	// that are NOT the layer root (which legitimately has no parent)
+	if node.Parent == nil && node.X > 0 && node.W < 200 {
+		fmt.Fprintf(os.Stderr, "DEBUG_DETACHED_PAINT: type=%q id=%q X=%d W=%d H=%d overflow=%q numChildren=%d\n",
+			node.Type, node.ID, node.X, node.W, node.H, node.Style.Overflow, len(node.Children))
+	}
+
 	// Apply hover style: temporarily swap node.Style with merged version
 	var savedStyle Style
 	if node.Hovered && node.HoverStyle != nil {
@@ -634,7 +669,20 @@ func paintScrollChildrenClipped(buf *CellBuffer, node *Node, outerClipX1, outerC
 
 	// Paint scrollbar in the reserved right column (unless hidden)
 	if node.Style.Scrollbar != "none" {
-		paintScrollbar(buf, node, innerX2-1, innerY1, innerY2, clipX1, clipX2, maxScrollY)
+		sbX := innerX2 - 1
+		// DEBUG: detect scrollbar position anomaly — scrollbar should be inside
+		// the effective clip area. If it's outside, log for diagnosis.
+		if sbX < clipX1 || sbX >= clipX2 {
+			// Scrollbar X is outside effective clip — this is the leak!
+			fmt.Fprintf(os.Stderr, "DEBUG_SB_LEAK: scrollbarX=%d clipX1=%d clipX2=%d node.X=%d node.W=%d screenX=%d innerX2=%d outerClipX1=%d outerClipX2=%d parentOffsetX=%d node.ID=%q\n",
+				sbX, clipX1, clipX2, node.X, node.W, screenX, innerX2, outerClipX1, outerClipX2, parentOffsetX, node.ID)
+			// Print parent chain
+			for i, p := 0, node.Parent; p != nil && i < 5; i, p = i+1, p.Parent {
+				fmt.Fprintf(os.Stderr, "  DEBUG_SB_LEAK: parent[%d] type=%q id=%q X=%d W=%d overflow=%q\n",
+					i, p.Type, p.ID, p.X, p.W, p.Style.Overflow)
+			}
+		}
+		paintScrollbar(buf, node, sbX, innerY1, innerY2, clipX1, clipX2, maxScrollY)
 	}
 }
 
@@ -684,6 +732,20 @@ func paintScrollbar(buf *CellBuffer, node *Node, scrollbarX, clipY1, clipY2, cli
 	if scrollbarX < node.X || scrollbarX >= node.X+node.W {
 		return
 	}
+	// Extra safety: verify against nearest overflow:hidden ancestor bounds.
+	// If the scroll container's layout coordinates are stale/wrong, this prevents
+	// the scrollbar from leaking into other panels.
+	for p := node.Parent; p != nil; p = p.Parent {
+		if p.Type == "component" {
+			continue
+		}
+		if p.Style.Overflow == "hidden" || p.Style.Overflow == "scroll" {
+			if scrollbarX < p.X || scrollbarX >= p.X+p.W {
+				return // scrollbar would be outside parent clip — skip
+			}
+			break
+		}
+	}
 
 	visibleH := clipY2 - clipY1
 	if visibleH <= 0 {
@@ -729,6 +791,12 @@ func paintScrollbar(buf *CellBuffer, node *Node, scrollbarX, clipY1, clipY2, cli
 
 	for row := 0; row < visibleH; row++ {
 		y := clipY1 + row
+		// DEBUG: detect scrollbar writing to left panel area
+		if scrollbarX < 33 {
+			fmt.Fprintf(os.Stderr, "DEBUG_SB_WRITE: scrollbarX=%d y=%d node.X=%d node.W=%d clipX1=%d clipX2=%d\n",
+				scrollbarX, y, node.X, node.W, clipX1, clipX2)
+			// Don't return — scrollbarX < 33 is valid for the left panel's own scrollbar
+		}
 		if row >= thumbPos && row < thumbPos+thumbSize {
 			// Thumb
 			buf.Set(scrollbarX, y, Cell{Ch: '█', FG: thumbBright, BG: trackBG})
@@ -787,6 +855,19 @@ func paintNodeClipped(buf *CellBuffer, node *Node, clipX1, clipY1, clipX2, clipY
 func paintBoxClipped(buf *CellBuffer, node *Node, clipX1, clipY1, clipX2, clipY2, offsetX, offsetY int) {
 	screenX := node.X + offsetX
 	screenY := node.Y + offsetY
+
+	// DEBUG: detect cross-panel painting leak.
+	// If a node with W > 40 is being painted into a narrow clip (< 35 wide),
+	// it likely means a right-panel node is being drawn through left-panel clip.
+	if node.W > 40 && clipX2-clipX1 < 35 && node.Style.Background != "" {
+		fmt.Fprintf(os.Stderr, "DEBUG_BOX_LEAK: node.X=%d node.W=%d screenX=%d clipX1=%d clipX2=%d bg=%q type=%q id=%q offsetX=%d\n",
+			node.X, node.W, screenX, clipX1, clipX2, node.Style.Background, node.Type, node.ID, offsetX)
+		for i, p := 0, node.Parent; p != nil && i < 6; i, p = i+1, p.Parent {
+			fmt.Fprintf(os.Stderr, "  parent[%d] type=%q id=%q X=%d W=%d overflow=%q bg=%q\n",
+				i, p.Type, p.ID, p.X, p.W, p.Style.Overflow, p.Style.Background)
+		}
+	}
+
 	// Fill background (clipped)
 	if node.Style.Background != "" {
 		for y := screenY; y < screenY+node.H; y++ {
@@ -1069,6 +1150,18 @@ func paintRuneCell(buf *CellBuffer, x, y int, ch rune, node *Node, rightEdge int
 }
 
 func paintText(buf *CellBuffer, node *Node) {
+	// DEBUG: detect text nodes being painted non-clipped that cross panel boundary
+	if node.X+node.W > 32 && node.X < 32 {
+		fmt.Fprintf(os.Stderr, "DEBUG_TEXT_OVERFLOW: paintText(NON-CLIPPED) node.X=%d node.W=%d rightEdge=%d content=%q id=%q\n",
+			node.X, node.W, node.X+node.W, truncStr(node.Content, 40), node.ID)
+		for i, p := 0, node.Parent; p != nil && i < 5; i, p = i+1, p.Parent {
+			fmt.Fprintf(os.Stderr, "  parent[%d] type=%q id=%q X=%d W=%d overflow=%q\n",
+				i, p.Type, p.ID, p.X, p.W, p.Style.Overflow)
+		}
+		if node.Parent != nil && node.Parent.Parent == nil {
+			fmt.Fprintf(os.Stderr, "  *** DETACHED: parent vbox has NO grandparent (Parent.Parent=nil). This node is in a detached subtree!\n")
+		}
+	}
 	// DON'T fill background if not set (preserve parent's background)
 	if node.Style.Background != "" {
 		for y := node.Y; y < node.Y+node.H; y++ {
@@ -1287,6 +1380,25 @@ func paintRuneCellStyled(buf *CellBuffer, x, y int, ch rune, fg, bg string, bold
 
 // paintTextSpans renders spans in a text node (non-clipped path).
 func paintTextSpans(buf *CellBuffer, node *Node) {
+	// DEBUG: detect span text nodes being painted non-clipped that cross panel boundary
+	if node.X+node.W > 32 && node.X < 32 {
+		var spanPreview string
+		for i, sp := range node.Spans {
+			if i > 2 {
+				break
+			}
+			spanPreview += sp.Text
+		}
+		fmt.Fprintf(os.Stderr, "DEBUG_TEXT_OVERFLOW: paintTextSpans(NON-CLIPPED) node.X=%d node.W=%d rightEdge=%d spans=%q id=%q\n",
+			node.X, node.W, node.X+node.W, truncStr(spanPreview, 40), node.ID)
+		for i, p := 0, node.Parent; p != nil && i < 5; i, p = i+1, p.Parent {
+			fmt.Fprintf(os.Stderr, "  parent[%d] type=%q id=%q X=%d W=%d overflow=%q\n",
+				i, p.Type, p.ID, p.X, p.W, p.Style.Overflow)
+		}
+		if node.Parent != nil && node.Parent.Parent == nil {
+			fmt.Fprintf(os.Stderr, "  *** DETACHED: parent vbox has NO grandparent (Parent.Parent=nil). This node is in a detached subtree!\n")
+		}
+	}
 	textAlign := node.Style.TextAlign
 	noWrap := node.Style.WhiteSpace == "nowrap"
 	ellipsis := node.Style.TextOverflow == "ellipsis"
@@ -1752,4 +1864,12 @@ func truncateRunesForWidth(runes []rune, maxW int) int {
 		w += rw
 	}
 	return len(runes)
+}
+
+// truncStr truncates a string to max characters (DEBUG helper).
+func truncStr(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	return s[:max] + "..."
 }

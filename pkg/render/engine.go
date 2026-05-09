@@ -1,7 +1,9 @@
 package render
 
 import (
+	"fmt"
 	"log"
+	"os"
 	"reflect"
 	"sort"
 	"strconv"
@@ -26,7 +28,7 @@ type AnimationManager interface {
 // It replaces the VNode-based rendering pipeline with direct Lua→Descriptor→Reconcile.
 type Engine struct {
 	L          *lua.State
-	root       *Component       // root component (or nil)
+	root       *Component // root component (or nil)
 	components map[string]*Component
 	width      int // full buffer/screen width
 	height     int // full buffer/screen height
@@ -90,9 +92,9 @@ type Engine struct {
 	NowMs func() int64
 
 	// Scrollbar drag state
-	scrollbarDragNode        *Node // node being scrollbar-dragged (nil = no drag)
-	scrollbarDragStartY      int   // mouse Y at drag start
-	scrollbarDragStartScrollY int // ScrollY at drag start
+	scrollbarDragNode         *Node // node being scrollbar-dragged (nil = no drag)
+	scrollbarDragStartY       int   // mouse Y at drag start
+	scrollbarDragStartScrollY int   // ScrollY at drag start
 
 	// Lua error callback ref (set via lumina.onError)
 	onErrorRef int64
@@ -189,14 +191,13 @@ func (e *Engine) Destroy() {
 // NewEngine creates a new render engine.
 func NewEngine(L *lua.State, width, height int) *Engine {
 	return &Engine{
-		L:              L,
-		components:     make(map[string]*Component),
-		factories:      make(map[string]int64),
-		width:          width,
-		height:         height,
-		buffer:         NewCellBuffer(width, height),
-		layers:         make([]*Layer, 0, 4),
-
+		L:          L,
+		components: make(map[string]*Component),
+		factories:  make(map[string]int64),
+		width:      width,
+		height:     height,
+		buffer:     NewCellBuffer(width, height),
+		layers:     make([]*Layer, 0, 4),
 	}
 }
 
@@ -292,6 +293,37 @@ func (e *Engine) syncMainLayer() {
 // CreateLayer creates a new overlay layer and pushes it onto the stack.
 // The root node should have position/size set via its Style (Left, Top, Width, Height).
 func (e *Engine) CreateLayer(id string, root *Node, modal bool) *Layer {
+	for _, layer := range e.layers {
+		if layer.ID != id || layer.ID == "_main" {
+			continue
+		}
+		if layer.Root != nil && layer.Root.W > 0 && layer.Root.H > 0 {
+			for _, below := range e.layers {
+				if below == layer {
+					break
+				}
+				if below.Root != nil {
+					markOverlappingDirty(below.Root, layer.Root.X, layer.Root.Y, layer.Root.W, layer.Root.H)
+				}
+			}
+			if e.focusedNode != nil && isDescendantOf(e.focusedNode, layer.Root) {
+				e.focusedNode = nil
+			}
+			if e.hoveredNode != nil && isDescendantOf(e.hoveredNode, layer.Root) {
+				e.hoveredNode = nil
+			}
+			markRemovedRecursive(layer.Root)
+			collectNodeRefsRecursive(layer.Root, &e.pendingUnrefs)
+		}
+		layer.Root = root
+		layer.Modal = modal
+		if root != nil {
+			root.LayoutDirty = true
+			root.PaintDirty = true
+		}
+		e.needsRender = true
+		return layer
+	}
 	layer := &Layer{ID: id, Root: root, Modal: modal}
 	e.layers = append(e.layers, layer)
 	if root != nil {
@@ -494,6 +526,29 @@ func (e *Engine) RenderDirty() {
 			} else {
 				// Overlay layers: repaint without clearing (paint on top)
 				PaintDirtyOverlay(e.buffer, layer.Root)
+			}
+		}
+	}
+
+	// DEBUG: Check buffer content at panel boundaries after paint
+	if bstats := e.buffer.Stats(); bstats.DirtyW > 0 {
+		// Only log when dirty rect crosses X=32 (left panel boundary)
+		if bstats.DirtyX < 33 && bstats.DirtyX+bstats.DirtyW > 32 {
+			// Sample a few rows
+			for _, sampleY := range []int{5, 10, 15, 20} {
+				if sampleY >= e.height {
+					break
+				}
+				var cells [5]rune
+				for i, x := range []int{30, 31, 32, 33, 34} {
+					c := e.buffer.Get(x, sampleY)
+					cells[i] = c.Ch
+					if cells[i] == 0 {
+						cells[i] = ' '
+					}
+				}
+				fmt.Fprintf(os.Stderr, "DEBUG_BOUNDARY: y=%d x30=%c x31=%c |x32=%c| x33=%c x34=%c\n",
+					sampleY, cells[0], cells[1], cells[2], cells[3], cells[4])
 			}
 		}
 	}
