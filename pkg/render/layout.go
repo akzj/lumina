@@ -233,8 +233,12 @@ func computeFlex(node *Node, x, y, w, h int, depth int) {
 		node.OldX, node.OldY, node.OldW, node.OldH = node.X, node.Y, node.W, node.H
 		node.PositionChanged = true
 		node.PaintDirty = true
-		// Parent must repaint to clear the old position area
-		if node.Parent != nil {
+		// Parent must repaint to clear the old position area — BUT not if the
+		// parent is a scroll container. Scroll containers handle their own
+		// internal repainting via paintScrollChildren with clipping. Propagating
+		// PaintDirty upward from scroll children causes unnecessary full-tree
+		// repaints that leave artifacts in sibling panels.
+		if node.Parent != nil && node.Parent.Style.Overflow != "scroll" {
 			node.Parent.PaintDirty = true
 		}
 	}

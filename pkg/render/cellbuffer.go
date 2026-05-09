@@ -1,6 +1,8 @@
 package render
 
-import "github.com/mattn/go-runewidth"
+import (
+	"github.com/mattn/go-runewidth"
+)
 
 // Cell represents a single terminal cell.
 type Cell struct {
