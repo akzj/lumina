@@ -142,6 +142,11 @@ func (e *Engine) drainPendingUnrefs() {
 	}
 	L := e.L
 	for _, ref := range e.pendingUnrefs {
+		// Don't free the cached hoverLeaveRef — we may still need to call it
+		// after reconciliation completes (when hoveredNode.Removed is detected).
+		if ref == e.hoverLeaveRef && e.hoverLeaveRef != 0 {
+			continue
+		}
 		// If this ref is a table (useRef), set current = nil before unreffing
 		L.RawGetI(lua.RegistryIndex, ref)
 		if L.IsTable(-1) {
@@ -455,6 +460,8 @@ func (e *Engine) RenderDirty() {
 		e.hoveredNode = nil
 		if e.hoverLeaveRef != 0 {
 			e.callLuaRef(e.hoverLeaveRef, 0, 0)
+			// Now unref it since we skipped it in drainPendingUnrefs
+			e.L.Unref(lua.RegistryIndex, int(e.hoverLeaveRef))
 			e.hoverLeaveRef = 0
 		}
 	}

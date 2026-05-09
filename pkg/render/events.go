@@ -254,6 +254,7 @@ func (e *Engine) HandleMouseMove(x, y int) {
 		e.hoveredNode = nil
 		if e.hoverLeaveRef != 0 {
 			e.callLuaRef(e.hoverLeaveRef, 0, 0)
+			e.L.Unref(lua.RegistryIndex, int(e.hoverLeaveRef))
 			e.hoverLeaveRef = 0
 		}
 	}
