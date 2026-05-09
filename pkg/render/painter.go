@@ -1,5 +1,11 @@
 package render
 
+import (
+	"fmt"
+	"os"
+	"runtime"
+)
+
 // painter.go — paint engine primitives (vbox, hbox, text, component) to CellBuffer.
 
 // PaintFull paints the entire node tree into the buffer.
@@ -181,6 +187,16 @@ func paintDirtyWalk(buf *CellBuffer, node *Node) {
 		}
 		// Clear this node's region first, then repaint
 		bg := findAncestorBackground(node)
+		// DEBUG_LEAK: Log when final-path paint writes to left panel area (X < 32)
+		if node.X < 32 && node.W > 0 {
+			fmt.Fprintf(os.Stderr, "DEBUG_LEAK: final-path paint node type=%q id=%q X=%d Y=%d W=%d H=%d bg=%q ancestorBG=%q\n",
+				node.Type, node.ID, node.X, node.Y, node.W, node.H, node.Style.Background, bg)
+			// Print parent chain for context
+			for p, depth := node.Parent, 0; p != nil && depth < 5; p, depth = p.Parent, depth+1 {
+				fmt.Fprintf(os.Stderr, "  DEBUG_LEAK:   parent[%d] type=%q id=%q X=%d W=%d overflow=%q\n",
+					depth, p.Type, p.ID, p.X, p.W, p.Style.Overflow)
+			}
+		}
 		clearRectWithBG(buf, node.X, node.Y, node.W, node.H, bg)
 		paintNode(buf, node)
 		node.PaintDirty = false
@@ -406,6 +422,20 @@ func findAncestorBackground(node *Node) string {
 // clearRectWithBG clears a rectangular area and fills it with the given
 // background color. If bg is empty, falls back to plain ClearRect.
 func clearRectWithBG(buf *CellBuffer, x, y, w, h int, bg string) {
+	// DEBUG_LEAK: Detect suspiciously wide clears starting at X=0
+	if x == 0 && w > 40 {
+		var pcs [8]uintptr
+		n := runtime.Callers(2, pcs[:])
+		frames := runtime.CallersFrames(pcs[:n])
+		fmt.Fprintf(os.Stderr, "DEBUG_LEAK: clearRectWithBG x=0 w=%d h=%d bg=%q callers:\n", w, h, bg)
+		for {
+			frame, more := frames.Next()
+			fmt.Fprintf(os.Stderr, "  DEBUG_LEAK:   %s:%d %s\n", frame.File, frame.Line, frame.Function)
+			if !more {
+				break
+			}
+		}
+	}
 	if bg == "" {
 		buf.ClearRect(x, y, w, h)
 		return
@@ -537,6 +567,15 @@ func paintNode(buf *CellBuffer, node *Node) {
 func paintBox(buf *CellBuffer, node *Node) {
 	// 1. Fill background
 	if node.Style.Background != "" {
+		// DEBUG_LEAK: Detect non-root box painting at X=0 with wide width
+		if node.X == 0 && node.W > 40 && node.Parent != nil {
+			fmt.Fprintf(os.Stderr, "DEBUG_LEAK: paintBox X=0 W=%d type=%q id=%q bg=%q\n",
+				node.W, node.Type, node.ID, node.Style.Background)
+			for p, depth := node.Parent, 0; p != nil && depth < 4; p, depth = p.Parent, depth+1 {
+				fmt.Fprintf(os.Stderr, "  DEBUG_LEAK:   parent[%d] type=%q id=%q X=%d W=%d overflow=%q\n",
+					depth, p.Type, p.ID, p.X, p.W, p.Style.Overflow)
+			}
+		}
 		for y := node.Y; y < node.Y+node.H; y++ {
 			for x := node.X; x < node.X+node.W; x++ {
 				buf.SetChar(x, y, ' ', "", node.Style.Background, false)
@@ -633,7 +672,7 @@ func paintScrollChildrenClipped(buf *CellBuffer, node *Node, outerClipX1, outerC
 
 	// Paint scrollbar in the reserved right column (unless hidden)
 	if node.Style.Scrollbar != "none" {
-		paintScrollbar(buf, node, innerX2-1, innerY1, innerY2, maxScrollY)
+		paintScrollbar(buf, node, innerX2-1, innerY1, innerY2, clipX1, clipX2, maxScrollY)
 	}
 }
 
@@ -670,10 +709,18 @@ func paintHiddenChildrenClipped(buf *CellBuffer, node *Node, outerClipX1, outerC
 // paintScrollbar draws a vertical scrollbar in the reserved right column of a scroll container.
 // scrollbarX is the x-coordinate of the scrollbar column.
 // clipY1/clipY2 define the vertical extent of the content area.
+// clipX1/clipX2 define the horizontal clip bounds (scrollbar is only drawn if within these bounds).
 // maxScroll is the maximum scroll offset (0 means no overflow, no scrollbar drawn).
-func paintScrollbar(buf *CellBuffer, node *Node, scrollbarX, clipY1, clipY2, maxScroll int) {
+func paintScrollbar(buf *CellBuffer, node *Node, scrollbarX, clipY1, clipY2, clipX1, clipX2, maxScroll int) {
 	if maxScroll <= 0 {
 		return // content fits, no scrollbar needed
+	}
+	// Defensive: scrollbar must be within horizontal clip bounds and within the node's own area
+	if scrollbarX < clipX1 || scrollbarX >= clipX2 {
+		return
+	}
+	if scrollbarX < node.X || scrollbarX >= node.X+node.W {
+		return
 	}
 
 	visibleH := clipY2 - clipY1
