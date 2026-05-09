@@ -1,9 +1,7 @@
 package render
 
 import (
-	"fmt"
 	"log"
-	"os"
 	"reflect"
 	"sort"
 	"strconv"
@@ -53,7 +51,9 @@ type Engine struct {
 	focusedNode *Node
 
 	// Mouse capture: node that has captured mouse events (drag/resize)
-	capturedNode *Node
+	capturedNode      *Node
+	captureMoveRef    LuaRef
+	captureMouseUpRef LuaRef
 
 	// Click prevention: set by HandleMouseDown when handler calls preventDefault
 	clickPrevented bool
@@ -142,9 +142,9 @@ func (e *Engine) drainPendingUnrefs() {
 	}
 	L := e.L
 	for _, ref := range e.pendingUnrefs {
-		// Don't free the cached hoverLeaveRef — we may still need to call it
-		// after reconciliation completes (when hoveredNode.Removed is detected).
-		if ref == e.hoverLeaveRef && e.hoverLeaveRef != 0 {
+		// Event refs cached for removed nodes must stay alive until the matching
+		// synthetic leave or captured mouse release is delivered.
+		if e.shouldRetainPendingRef(LuaRef(ref)) {
 			continue
 		}
 		// If this ref is a table (useRef), set current = nil before unreffing
@@ -156,7 +156,24 @@ func (e *Engine) drainPendingUnrefs() {
 		L.Pop(1)
 		L.Unref(lua.RegistryIndex, int(ref))
 	}
-	e.pendingUnrefs = e.pendingUnrefs[:0]
+	if e.hoverLeaveRef == 0 && e.captureMoveRef == 0 && e.captureMouseUpRef == 0 {
+		e.pendingUnrefs = e.pendingUnrefs[:0]
+		return
+	}
+	kept := e.pendingUnrefs[:0]
+	for _, ref := range e.pendingUnrefs {
+		if e.shouldRetainPendingRef(LuaRef(ref)) {
+			kept = append(kept, ref)
+		}
+	}
+	e.pendingUnrefs = kept
+}
+
+func (e *Engine) shouldRetainPendingRef(ref LuaRef) bool {
+	return ref != 0 &&
+		(ref == e.hoverLeaveRef ||
+			ref == e.captureMoveRef ||
+			ref == e.captureMouseUpRef)
 }
 
 // Destroy releases all Lua registry refs held by the engine.
@@ -435,6 +452,8 @@ func (e *Engine) RenderDirty() {
 	// Always reset stats so callers see accurate per-frame numbers.
 	e.buffer.ResetStats()
 
+	e.cleanupRemovedHoveredNode(false)
+
 	if !e.needsRender {
 		return // Nothing dirty — skip all tree walks
 	}
@@ -452,32 +471,7 @@ func (e *Engine) RenderDirty() {
 	// Sync main layer
 	e.syncMainLayer()
 
-
-	// Clean up stale hovered node: if the hovered node was removed during
-	// re-render, fire the cached onMouseLeave ref and remove hover-related layers.
-	if e.hoveredNode != nil && e.hoveredNode.Removed {
-		fmt.Fprintf(os.Stderr, "DEBUG_HOVER_CLEANUP: hoveredNode removed, hoverLeaveRef=%d, layerCount=%d\n",
-			e.hoverLeaveRef, len(e.layers))
-		e.hoveredNode = nil
-		if e.hoverLeaveRef != 0 {
-			e.callLuaRef(e.hoverLeaveRef, 0, 0)
-			fmt.Fprintf(os.Stderr, "DEBUG_HOVER_CLEANUP: after callLuaRef, layerCount=%d\n", len(e.layers))
-			// Now unref it since we skipped it in drainPendingUnrefs
-			e.L.Unref(lua.RegistryIndex, int(e.hoverLeaveRef))
-			e.hoverLeaveRef = 0
-		} else {
-			fmt.Fprintf(os.Stderr, "DEBUG_HOVER_CLEANUP: hoverLeaveRef is 0! Cannot fire onMouseLeave\n")
-		}
-		// Defensive: remove any non-main, non-modal overlay layers.
-		// These are typically tooltips created during hover that couldn't be
-		// cleaned up because the Lua callback ref was stale.
-		for i := len(e.layers) - 1; i > 0; i-- {
-			if !e.layers[i].Modal {
-				fmt.Fprintf(os.Stderr, "DEBUG_HOVER_CLEANUP: removing non-modal layer %q after hover end\n", e.layers[i].ID)
-				e.RemoveLayer(e.layers[i].ID)
-			}
-		}
-	}
+	e.cleanupRemovedHoveredNode(true)
 
 	// 3. Early exit: check all layers for dirty nodes
 	anyDirty := false
@@ -565,29 +559,6 @@ func (e *Engine) RenderDirty() {
 		}
 	}
 
-	// DEBUG: Check buffer content at panel boundaries after paint
-	if bstats := e.buffer.Stats(); bstats.DirtyW > 0 {
-		// Only log when dirty rect crosses X=32 (left panel boundary)
-		if bstats.DirtyX < 33 && bstats.DirtyX+bstats.DirtyW > 32 {
-			// Sample a few rows
-			for _, sampleY := range []int{5, 10, 15, 20} {
-				if sampleY >= e.height {
-					break
-				}
-				var cells [5]rune
-				for i, x := range []int{30, 31, 32, 33, 34} {
-					c := e.buffer.Get(x, sampleY)
-					cells[i] = c.Ch
-					if cells[i] == 0 {
-						cells[i] = ' '
-					}
-				}
-				fmt.Fprintf(os.Stderr, "DEBUG_BOUNDARY: y=%d x30=%c x31=%c |x32=%c| x33=%c x34=%c\n",
-					sampleY, cells[0], cells[1], cells[2], cells[3], cells[4])
-			}
-		}
-	}
-
 	// 6. Record paint stats from CellBuffer.
 	if e.tracker != nil {
 		stats := e.buffer.Stats()
@@ -605,6 +576,52 @@ func (e *Engine) RenderDirty() {
 	if e.focusedNode == nil || e.focusedNode.Removed || isNodeHidden(e.focusedNode) {
 		e.FocusAutoFocus()
 	}
+}
+
+func (e *Engine) cleanupRemovedHoveredNode(checkHandlerRef bool) {
+	if e.hoveredNode == nil {
+		return
+	}
+	if !e.hoveredNode.Removed && (!checkHandlerRef || e.hoverPathHasLeaveRef()) {
+		return
+	}
+
+	e.hoveredNode = nil
+	if e.hoverLeaveRef == 0 {
+		return
+	}
+
+	e.callLuaRef(e.hoverLeaveRef, 0, 0)
+	if e.L != nil {
+		e.L.Unref(lua.RegistryIndex, int(e.hoverLeaveRef))
+	}
+	e.removePendingUnref(e.hoverLeaveRef)
+	e.hoverLeaveRef = 0
+}
+
+func (e *Engine) removePendingUnref(ref LuaRef) {
+	if ref == 0 || len(e.pendingUnrefs) == 0 {
+		return
+	}
+	kept := e.pendingUnrefs[:0]
+	for _, pending := range e.pendingUnrefs {
+		if pending != ref {
+			kept = append(kept, pending)
+		}
+	}
+	e.pendingUnrefs = kept
+}
+
+func (e *Engine) hoverPathHasLeaveRef() bool {
+	if e.hoverLeaveRef == 0 {
+		return true
+	}
+	for n := e.hoveredNode; n != nil; n = n.Parent {
+		if n.OnMouseLeave == e.hoverLeaveRef {
+			return true
+		}
+	}
+	return false
 }
 
 // isNodeHidden returns true if the node or any ancestor has display:none.

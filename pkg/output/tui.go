@@ -25,12 +25,13 @@ type tuiState struct {
 
 // NewTUIAdapter creates a TUI adapter that writes ANSI escape sequences to w.
 func NewTUIAdapter(w io.Writer) Adapter {
-	return &tuiAdapter{w: bufio.NewWriter(w)}
+	return &tuiAdapter{w: bufio.NewWriterSize(w, 256*1024)} // 256KB — enough for full screen
 }
 
 // WriteFull writes the entire screen buffer as ANSI output.
 func (t *tuiAdapter) WriteFull(screen *buffer.Buffer) error {
-	t.w.WriteString("\033[0m") // reset at start
+	t.w.WriteString("\033[?2026h") // begin synchronized update
+	t.w.WriteString("\033[0m")     // reset at start
 	var st tuiState
 
 	for y := 0; y < screen.Height(); y++ {
@@ -44,12 +45,14 @@ func (t *tuiAdapter) WriteFull(screen *buffer.Buffer) error {
 			}
 		}
 	}
+	t.w.WriteString("\033[?2026l") // end synchronized update
 	return nil
 }
 
 // WriteDirty writes only the cells within the dirty rects.
 func (t *tuiAdapter) WriteDirty(screen *buffer.Buffer, dirtyRects []buffer.Rect) error {
-	t.w.WriteString("\033[0m") // reset at start
+	t.w.WriteString("\033[?2026h") // begin synchronized update
+	t.w.WriteString("\033[0m")     // reset at start
 	var st tuiState
 
 	bounds := buffer.Rect{X: 0, Y: 0, W: screen.Width(), H: screen.Height()}
@@ -70,6 +73,7 @@ func (t *tuiAdapter) WriteDirty(screen *buffer.Buffer, dirtyRects []buffer.Rect)
 			}
 		}
 	}
+	t.w.WriteString("\033[?2026l") // end synchronized update
 	return nil
 }
 

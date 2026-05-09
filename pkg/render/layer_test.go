@@ -288,6 +288,56 @@ func TestCreateLayerReplacesExistingID(t *testing.T) {
 	}
 }
 
+func TestRenderDirtyCleansRemovedHoveredLayer(t *testing.T) {
+	e, L := newLayerTestEngine(t)
+
+	err := L.DoString(`
+		lumina.createComponent({
+			id = "root",
+			render = function(props)
+				return lumina.createElement("vbox", {
+					style = {width = "100%", height = "100%", background = "#000"},
+				}, lumina.createElement("text", {
+					style = {width = 10, height = 1},
+					onMouseLeave = function()
+						lumina.removeLayer("tip")
+					end,
+				}, "ROW"))
+			end,
+		})
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.RenderAll()
+
+	e.HandleMouseMove(0, 0)
+	if e.hoveredNode == nil || e.hoverLeaveRef == 0 {
+		t.Fatal("test setup failed to establish hovered node with leave handler")
+	}
+
+	tip := NewNode("text")
+	tip.Content = "TIP"
+	tip.Style.Width = 6
+	tip.Style.Height = 1
+	tip.Style.Left = 0
+	tip.Style.Top = 0
+	e.CreateLayer("tip", tip, false)
+	e.RenderDirty()
+	if got := len(e.Layers()); got != 2 {
+		t.Fatalf("expected tooltip layer to be visible, got %d layers", got)
+	}
+
+	e.hoveredNode.Removed = true
+	e.RenderDirty()
+	if got := len(e.Layers()); got != 1 {
+		t.Fatalf("removed hovered node should fire onMouseLeave and remove tooltip layer, got %d layers", got)
+	}
+	if e.hoveredNode != nil || e.hoverLeaveRef != 0 {
+		t.Fatalf("hover state was not cleared: node=%v ref=%d", e.hoveredNode, e.hoverLeaveRef)
+	}
+}
+
 func TestLayerRemoveMainBlocked(t *testing.T) {
 	e, _ := newLayerTestEngine(t)
 	e.syncMainLayer()

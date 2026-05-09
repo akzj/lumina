@@ -1,10 +1,5 @@
 package render
 
-import (
-	"fmt"
-	"os"
-)
-
 // painter.go — paint engine primitives (vbox, hbox, text, component) to CellBuffer.
 
 // PaintFull paints the entire node tree into the buffer.
@@ -405,6 +400,7 @@ func findOverlayAncestor(node *Node) *Node {
 	}
 	return nil
 }
+
 // findHiddenAncestor walks up from node.Parent to find the nearest ancestor
 // with overflow:"hidden". This is used to escalate dirty painting to the
 // hidden container so its full area gets cleared before repainting.
@@ -450,7 +446,6 @@ func clearRectWithBG(buf *CellBuffer, x, y, w, h int, bg string) {
 		}
 	}
 }
-
 
 func parentHasOverlayChildren(node *Node) bool {
 	for _, child := range node.Children {
@@ -540,14 +535,6 @@ func paintNode(buf *CellBuffer, node *Node) {
 		return
 	}
 	defer func() { paintDepth-- }()
-
-
-	// DEBUG: detect painting of nodes whose parent is nil (detached/root nodes)
-	// that are NOT the layer root (which legitimately has no parent)
-	if node.Parent == nil && node.X > 0 && node.W < 200 {
-		fmt.Fprintf(os.Stderr, "DEBUG_DETACHED_PAINT: type=%q id=%q X=%d W=%d H=%d overflow=%q numChildren=%d\n",
-			node.Type, node.ID, node.X, node.W, node.H, node.Style.Overflow, len(node.Children))
-	}
 
 	// Apply hover style: temporarily swap node.Style with merged version
 	var savedStyle Style
@@ -670,18 +657,6 @@ func paintScrollChildrenClipped(buf *CellBuffer, node *Node, outerClipX1, outerC
 	// Paint scrollbar in the reserved right column (unless hidden)
 	if node.Style.Scrollbar != "none" {
 		sbX := innerX2 - 1
-		// DEBUG: detect scrollbar position anomaly — scrollbar should be inside
-		// the effective clip area. If it's outside, log for diagnosis.
-		if sbX < clipX1 || sbX >= clipX2 {
-			// Scrollbar X is outside effective clip — this is the leak!
-			fmt.Fprintf(os.Stderr, "DEBUG_SB_LEAK: scrollbarX=%d clipX1=%d clipX2=%d node.X=%d node.W=%d screenX=%d innerX2=%d outerClipX1=%d outerClipX2=%d parentOffsetX=%d node.ID=%q\n",
-				sbX, clipX1, clipX2, node.X, node.W, screenX, innerX2, outerClipX1, outerClipX2, parentOffsetX, node.ID)
-			// Print parent chain
-			for i, p := 0, node.Parent; p != nil && i < 5; i, p = i+1, p.Parent {
-				fmt.Fprintf(os.Stderr, "  DEBUG_SB_LEAK: parent[%d] type=%q id=%q X=%d W=%d overflow=%q\n",
-					i, p.Type, p.ID, p.X, p.W, p.Style.Overflow)
-			}
-		}
 		paintScrollbar(buf, node, sbX, innerY1, innerY2, clipX1, clipX2, maxScrollY)
 	}
 }
@@ -780,7 +755,7 @@ func paintScrollbar(buf *CellBuffer, node *Node, scrollbarX, clipY1, clipY2, cli
 
 	// Determine colors: use style overrides or defaults
 	trackBG := node.Style.Background
-	thumbFG := "#6c7086" // dim gray for track (default)
+	thumbFG := "#6c7086"     // dim gray for track (default)
 	thumbBright := "#cdd6f4" // bright for thumb (default)
 	if node.Style.ScrollbarTrackColor != "" {
 		trackBG = node.Style.ScrollbarTrackColor
@@ -791,12 +766,6 @@ func paintScrollbar(buf *CellBuffer, node *Node, scrollbarX, clipY1, clipY2, cli
 
 	for row := 0; row < visibleH; row++ {
 		y := clipY1 + row
-		// DEBUG: detect scrollbar writing to left panel area
-		if scrollbarX < 33 {
-			fmt.Fprintf(os.Stderr, "DEBUG_SB_WRITE: scrollbarX=%d y=%d node.X=%d node.W=%d clipX1=%d clipX2=%d\n",
-				scrollbarX, y, node.X, node.W, clipX1, clipX2)
-			// Don't return — scrollbarX < 33 is valid for the left panel's own scrollbar
-		}
 		if row >= thumbPos && row < thumbPos+thumbSize {
 			// Thumb
 			buf.Set(scrollbarX, y, Cell{Ch: '█', FG: thumbBright, BG: trackBG})
@@ -806,8 +775,6 @@ func paintScrollbar(buf *CellBuffer, node *Node, scrollbarX, clipY1, clipY2, cli
 		}
 	}
 }
-
-
 
 // paintNodeClipped paints a node, but only writes cells within the clip rect [clipX1, clipY1) to [clipX2, clipY2).
 // offsetY is a paint-time vertical offset (used for scroll containers: -scrollY).
@@ -855,18 +822,6 @@ func paintNodeClipped(buf *CellBuffer, node *Node, clipX1, clipY1, clipX2, clipY
 func paintBoxClipped(buf *CellBuffer, node *Node, clipX1, clipY1, clipX2, clipY2, offsetX, offsetY int) {
 	screenX := node.X + offsetX
 	screenY := node.Y + offsetY
-
-	// DEBUG: detect cross-panel painting leak.
-	// If a node with W > 40 is being painted into a narrow clip (< 35 wide),
-	// it likely means a right-panel node is being drawn through left-panel clip.
-	if node.W > 40 && clipX2-clipX1 < 35 && node.Style.Background != "" {
-		fmt.Fprintf(os.Stderr, "DEBUG_BOX_LEAK: node.X=%d node.W=%d screenX=%d clipX1=%d clipX2=%d bg=%q type=%q id=%q offsetX=%d\n",
-			node.X, node.W, screenX, clipX1, clipX2, node.Style.Background, node.Type, node.ID, offsetX)
-		for i, p := 0, node.Parent; p != nil && i < 6; i, p = i+1, p.Parent {
-			fmt.Fprintf(os.Stderr, "  parent[%d] type=%q id=%q X=%d W=%d overflow=%q bg=%q\n",
-				i, p.Type, p.ID, p.X, p.W, p.Style.Overflow, p.Style.Background)
-		}
-	}
 
 	// Fill background (clipped)
 	if node.Style.Background != "" {
@@ -1150,18 +1105,6 @@ func paintRuneCell(buf *CellBuffer, x, y int, ch rune, node *Node, rightEdge int
 }
 
 func paintText(buf *CellBuffer, node *Node) {
-	// DEBUG: detect text nodes being painted non-clipped that cross panel boundary
-	if node.X+node.W > 32 && node.X < 32 {
-		fmt.Fprintf(os.Stderr, "DEBUG_TEXT_OVERFLOW: paintText(NON-CLIPPED) node.X=%d node.W=%d rightEdge=%d content=%q id=%q\n",
-			node.X, node.W, node.X+node.W, truncStr(node.Content, 40), node.ID)
-		for i, p := 0, node.Parent; p != nil && i < 5; i, p = i+1, p.Parent {
-			fmt.Fprintf(os.Stderr, "  parent[%d] type=%q id=%q X=%d W=%d overflow=%q\n",
-				i, p.Type, p.ID, p.X, p.W, p.Style.Overflow)
-		}
-		if node.Parent != nil && node.Parent.Parent == nil {
-			fmt.Fprintf(os.Stderr, "  *** DETACHED: parent vbox has NO grandparent (Parent.Parent=nil). This node is in a detached subtree!\n")
-		}
-	}
 	// DON'T fill background if not set (preserve parent's background)
 	if node.Style.Background != "" {
 		for y := node.Y; y < node.Y+node.H; y++ {
@@ -1380,25 +1323,6 @@ func paintRuneCellStyled(buf *CellBuffer, x, y int, ch rune, fg, bg string, bold
 
 // paintTextSpans renders spans in a text node (non-clipped path).
 func paintTextSpans(buf *CellBuffer, node *Node) {
-	// DEBUG: detect span text nodes being painted non-clipped that cross panel boundary
-	if node.X+node.W > 32 && node.X < 32 {
-		var spanPreview string
-		for i, sp := range node.Spans {
-			if i > 2 {
-				break
-			}
-			spanPreview += sp.Text
-		}
-		fmt.Fprintf(os.Stderr, "DEBUG_TEXT_OVERFLOW: paintTextSpans(NON-CLIPPED) node.X=%d node.W=%d rightEdge=%d spans=%q id=%q\n",
-			node.X, node.W, node.X+node.W, truncStr(spanPreview, 40), node.ID)
-		for i, p := 0, node.Parent; p != nil && i < 5; i, p = i+1, p.Parent {
-			fmt.Fprintf(os.Stderr, "  parent[%d] type=%q id=%q X=%d W=%d overflow=%q\n",
-				i, p.Type, p.ID, p.X, p.W, p.Style.Overflow)
-		}
-		if node.Parent != nil && node.Parent.Parent == nil {
-			fmt.Fprintf(os.Stderr, "  *** DETACHED: parent vbox has NO grandparent (Parent.Parent=nil). This node is in a detached subtree!\n")
-		}
-	}
 	textAlign := node.Style.TextAlign
 	noWrap := node.Style.WhiteSpace == "nowrap"
 	ellipsis := node.Style.TextOverflow == "ellipsis"
@@ -1864,12 +1788,4 @@ func truncateRunesForWidth(runes []rune, maxW int) int {
 		w += rw
 	}
 	return len(runes)
-}
-
-// truncStr truncates a string to max characters (DEBUG helper).
-func truncStr(s string, max int) string {
-	if len(s) <= max {
-		return s
-	}
-	return s[:max] + "..."
 }

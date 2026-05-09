@@ -317,6 +317,111 @@ func TestEngine_HandleKeyDown(t *testing.T) {
 	}
 }
 
+func TestEngine_MouseCaptureRefsSurviveRemovedCapturedNode(t *testing.T) {
+	e, L := newTestEngine(t)
+
+	err := L.DoString(`
+		moved = 0
+		upped = 0
+		lumina.createComponent({
+			id = "drag",
+			name = "Drag",
+			render = function(props)
+				return lumina.createElement("box", {
+					style = {width = 10, height = 3},
+					onMouseDown = function(ev) end,
+					onMouseMove = function(ev) moved = moved + 1 end,
+					onMouseUp = function(ev) upped = upped + 1 end,
+				})
+			end,
+		})
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	e.RenderAll()
+	e.HandleMouseDown(1, 1)
+
+	captured := e.capturedNode
+	if captured == nil {
+		t.Fatal("expected captured node after mousedown")
+	}
+	markRemovedRecursive(captured)
+	collectNodeRefsRecursive(captured, &e.pendingUnrefs)
+	e.drainPendingUnrefs()
+
+	e.HandleMouseMove(2, 1)
+	e.HandleMouseUp(2, 1)
+
+	L.GetGlobal("moved")
+	moved, _ := L.ToInteger(-1)
+	L.Pop(1)
+	L.GetGlobal("upped")
+	upped, _ := L.ToInteger(-1)
+	L.Pop(1)
+
+	if moved != 1 {
+		t.Fatalf("expected captured mousemove to survive removed node, got %d", moved)
+	}
+	if upped != 1 {
+		t.Fatalf("expected captured mouseup to survive removed node, got %d", upped)
+	}
+	if len(e.pendingUnrefs) != 0 {
+		t.Fatalf("expected retained capture refs to be drained after mouseup, got %d pending", len(e.pendingUnrefs))
+	}
+}
+
+func TestEngine_MouseDownWithoutMoveDoesNotCapture(t *testing.T) {
+	e, L := newTestEngine(t)
+
+	err := L.DoString(`
+		down = 0
+		up = 0
+		clicked = 0
+		lumina.createComponent({
+			id = "buttonish",
+			name = "Buttonish",
+			render = function(props)
+				return lumina.createElement("box", {
+					style = {width = 10, height = 3},
+					onMouseDown = function(ev) down = down + 1 end,
+					onMouseUp = function(ev) up = up + 1 end,
+					onClick = function(ev) clicked = clicked + 1 end,
+				})
+			end,
+		})
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	e.RenderAll()
+	e.HandleMouseDown(1, 1)
+	e.HandleMouseUp(1, 1)
+	if !e.ClickPrevented() {
+		e.HandleClick(1, 1)
+	}
+
+	if e.capturedNode != nil {
+		t.Fatal("button-like node without onMouseMove should not capture")
+	}
+
+	L.GetGlobal("down")
+	down, _ := L.ToInteger(-1)
+	L.Pop(1)
+	L.GetGlobal("up")
+	up, _ := L.ToInteger(-1)
+	L.Pop(1)
+	L.GetGlobal("clicked")
+	clicked, _ := L.ToInteger(-1)
+	L.Pop(1)
+
+	if down != 1 || up != 1 || clicked != 1 {
+		t.Fatalf("expected down/up/click all once, got down=%d up=%d clicked=%d", down, up, clicked)
+	}
+}
+
 func TestEngine_HandleScroll(t *testing.T) {
 	e, L := newTestEngine(t)
 
@@ -355,8 +460,8 @@ func TestEngine_HandleKeyDown_PageUpPageDown(t *testing.T) {
 	e.layers = append(e.layers, &Layer{})
 
 	root := &Node{
-		Type:         "vbox",
-		X:            0, Y: 0, W: 20, H: 10,
+		Type: "vbox",
+		X:    0, Y: 0, W: 20, H: 10,
 		Style:        Style{Overflow: "scroll"},
 		ScrollHeight: 100,
 	}
@@ -383,7 +488,6 @@ func TestEngine_HandleKeyDown_PageUpPageDown(t *testing.T) {
 }
 
 // Benchmarks
-
 
 func TestEngine_StaleHoveredNode_AfterRemoval(t *testing.T) {
 	// Bug #2: hoveredNode points to an orphaned node after reconcile removes it.

@@ -354,6 +354,58 @@ func TestParse_MouseWithModifiers(t *testing.T) {
 	}
 }
 
+func TestInputParser_SplitSGRMouseDoesNotLeakText(t *testing.T) {
+	var p inputParser
+	chunks := [][]byte{
+		{0x1b, '[', '<', '6', '4', ';', '1', '0', '1'},
+		{';', '2', '0', 'M'},
+	}
+
+	if events := p.Parse(chunks[0]); len(events) != 0 {
+		t.Fatalf("partial mouse sequence should not emit events, got %+v", events)
+	}
+
+	events := p.Parse(chunks[1])
+	if len(events) != 1 {
+		t.Fatalf("completed mouse sequence should emit one event, got %+v", events)
+	}
+	if events[0].Type != "scroll" || events[0].Button != "up" || events[0].X != 100 || events[0].Y != 19 {
+		t.Fatalf("unexpected event: %+v", events[0])
+	}
+	if flushed := p.Flush(); len(flushed) != 0 {
+		t.Fatalf("parser should not keep mouse fragments, got %+v", flushed)
+	}
+}
+
+func TestInputParser_MultipleSGRMouseSequencesInOneRead(t *testing.T) {
+	var p inputParser
+	data := []byte("\x1b[<64;101;20M\x1b[<65;101;20M")
+
+	events := p.Parse(data)
+	if len(events) != 2 {
+		t.Fatalf("expected 2 scroll events, got %+v", events)
+	}
+	if events[0].Type != "scroll" || events[0].Button != "up" {
+		t.Fatalf("unexpected first event: %+v", events[0])
+	}
+	if events[1].Type != "scroll" || events[1].Button != "down" {
+		t.Fatalf("unexpected second event: %+v", events[1])
+	}
+}
+
+func TestInputParser_LoneEscapeFlushesOnTimeout(t *testing.T) {
+	var p inputParser
+	if events := p.Parse([]byte{0x1b}); len(events) != 0 {
+		t.Fatalf("lone escape should wait for timeout, got %+v", events)
+	}
+
+	events := p.Flush()
+	if len(events) != 1 {
+		t.Fatalf("expected Escape after timeout flush, got %+v", events)
+	}
+	assertKey(t, events[0], "Escape")
+}
+
 func TestParse_Insert(t *testing.T) {
 	e := mustParseOne(t, []byte{0x1b, '[', '2', '~'})
 	assertKey(t, e, "Insert")
