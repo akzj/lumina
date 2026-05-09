@@ -234,17 +234,11 @@ func layoutText(node *Node, availW int) {
 		return
 	}
 
-	// Split by newlines and calculate height for each line (with wrapping)
-	lines := strings.Split(node.Content, "\n")
-	totalH := 0
-	for _, line := range lines {
-		lineW := stringWidth(line)
-		if lineW == 0 {
-			totalH += 1 // empty line still takes 1 row
-		} else {
-			totalH += (lineW + availW - 1) / availW // ceiling division for wrapping
-		}
-	}
+	// Use wrapTextLines for accurate height calculation.
+	// This handles tabs, wide chars, and mixed-width content correctly
+	// (ceiling division was inaccurate for lines with variable-width chars).
+	lines := wrapTextLines(node.Content, availW)
+	totalH := len(lines)
 	if totalH < 1 {
 		totalH = 1
 	}
