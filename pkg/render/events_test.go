@@ -1042,3 +1042,80 @@ func TestHitTest_ScrollContainer_BorderClipping(t *testing.T) {
 		t.Errorf("click inside content should return child, got node at Y=%d", hit.Y)
 	}
 }
+
+func TestEngine_HoverLeaveRef_FiresOnRerender(t *testing.T) {
+	// Verify that when a hovered node is removed during re-render,
+	// the cached hoverLeaveRef fires onMouseLeave, which removes the tooltip layer.
+	e, L := newTestEngine(t)
+
+	err := L.DoString(`
+		show_box = true
+		leave_called = false
+		lumina.createComponent({
+			id = "hover_test",
+			name = "HoverTest",
+			render = function(props)
+				if show_box then
+					return lumina.createElement("vbox", {style={width=80, height=24}},
+						lumina.createElement("box", {
+							key = "hoverable",
+							id = "hoverable",
+							style = {width = 40, height = 12},
+							onMouseEnter = function()
+								lumina.createLayer("test-tooltip",
+									lumina.createElement("box", {
+										style = {left=10, top=5, width=20, height=5, background="#333"},
+									})
+								)
+							end,
+							onMouseLeave = function()
+								leave_called = true
+								lumina.removeLayer("test-tooltip")
+							end,
+						})
+					)
+				else
+					return lumina.createElement("vbox", {style={width=80, height=24}},
+						lumina.createElement("box", {
+							key = "replacement",
+							style = {width = 40, height = 12},
+						})
+					)
+				end
+			end,
+		})
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	e.RenderAll()
+
+	// Step 1: Hover over the box → triggers onMouseEnter → creates tooltip layer
+	e.HandleMouseMove(5, 3)
+
+	// Verify tooltip layer exists
+	if len(e.Layers()) < 2 {
+		t.Fatal("expected tooltip layer to be created")
+	}
+
+	// Step 2: Re-render component, removing the hovered box (simulates scroll)
+	err = L.DoString(`show_box = false`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.GetComponent("hover_test").Dirty = true
+	e.MarkNeedsRender()
+	e.RenderDirty() // This should fire onMouseLeave via hoverLeaveRef
+
+	// Step 3: Verify tooltip layer was removed (without any mouse movement!)
+	if len(e.Layers()) > 1 {
+		t.Fatalf("expected tooltip layer to be removed after re-render, got %d layers", len(e.Layers()))
+	}
+
+	// Verify leave_called flag
+	err = L.DoString(`assert(leave_called == true, "onMouseLeave was not called")`)
+	if err != nil {
+		t.Fatalf("onMouseLeave not called: %v", err)
+	}
+}
