@@ -93,7 +93,7 @@ func layoutVBox(node *Node, contentX, contentY, contentW, contentH int, style St
 				if mnh := resolveMinH(cs, contentH); mnh > 0 && children[i].finalH < mnh+marginV {
 					children[i].finalH = mnh + marginV
 				}
-			} else if len(child.Children) > 0 {
+			} else if len(child.Children) > 0 || child.Type == "text" {
 				// Use pre-computed measurement from measure pass.
 				children[i].finalH = child.MeasuredH
 				if children[i].finalH < 1+marginV {
