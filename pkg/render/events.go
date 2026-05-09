@@ -749,43 +749,35 @@ func (e *Engine) handleScrollbarClick(node *Node, x, y int) bool {
 		thumbPos = node.ScrollY * trackSpace / maxScroll
 	}
 
-	clickRel := y - innerY1 // click position relative to top of visible area
+	clickRel := y - innerY1 // click position relative to top of track
 
-	if clickRel < thumbPos {
-		// Click above thumb → page up
-		contentH := visibleH
-		newSY := node.ScrollY - contentH
-		if newSY < 0 {
-			newSY = 0
-		}
-		node.ScrollY = newSY
-		node.PaintDirty = true
-		return true
-	} else if clickRel < thumbPos+thumbSize {
-		// Click on thumb → jump to proportional position
-		thumbCenter := thumbPos + thumbSize/2
-		fraction := float64(thumbCenter) / float64(visibleH)
-		newSY := int(fraction * float64(totalH))
-		if newSY < 0 {
-			newSY = 0
-		}
-		if newSY > maxScroll {
-			newSY = maxScroll
-		}
-		node.ScrollY = newSY
-		node.PaintDirty = true
-		return true
-	} else {
-		// Click below thumb → page down
-		contentH := visibleH
-		newSY := node.ScrollY + contentH
-		if newSY > maxScroll {
-			newSY = maxScroll
-		}
-		node.ScrollY = newSY
-		node.PaintDirty = true
+	if clickRel >= thumbPos && clickRel < thumbPos+thumbSize {
+		// Click on thumb itself → do nothing (drag handles this)
 		return true
 	}
+
+	// Click on track (above or below thumb) → jump to proportional position
+	// Center the thumb on the click position
+	targetThumbPos := clickRel - thumbSize/2
+	if targetThumbPos < 0 {
+		targetThumbPos = 0
+	}
+	if targetThumbPos > trackSpace {
+		targetThumbPos = trackSpace
+	}
+	newSY := 0
+	if trackSpace > 0 {
+		newSY = targetThumbPos * maxScroll / trackSpace
+	}
+	if newSY < 0 {
+		newSY = 0
+	}
+	if newSY > maxScroll {
+		newSY = maxScroll
+	}
+	node.ScrollY = newSY
+	node.PaintDirty = true
+	return true
 }
 
 // handleScrollbarDragStart checks if (x,y) is on a scrollbar thumb and starts drag if so.
