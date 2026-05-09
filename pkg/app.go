@@ -315,8 +315,9 @@ func (a *App) HandleEvent(e *event.Event) {
 				a.devtools.ClearElementsPickArm()
 				a.mouseDownX = -1
 				a.mouseDownY = -1
-				_, panelY, _, _ := a.devtools.PanelRect(a.width, a.height)
-				if a.devtools.ActiveTab == devtools.TabElements && e.Y < panelY {
+				// Accept clicks in the app content area (not inside the panel).
+				inAppArea := !a.devtools.ContainsPoint(e.X, e.Y, a.width, a.height)
+				if a.devtools.ActiveTab == devtools.TabElements && inAppArea {
 					r := a.engine.Root()
 					if r != nil && r.RootNode != nil {
 						if hit := a.engine.HitTestScreen(e.X, e.Y); hit != nil {

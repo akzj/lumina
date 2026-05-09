@@ -266,8 +266,12 @@ func buildTabBar(panel *devtools.Panel) string {
 	if panel.ActiveTab == devtools.TabPerf {
 		perfMark = "▸"
 	}
-	return fmt.Sprintf(" %sElements  %sPerf   %d FPS  [F12] [1/2 tab] [3 pos] [i pick] [0/Esc clr]",
-		elemMark, perfMark, panel.FPS())
+	pickHint := "[i pick]"
+	if panel.ElementsPickArmed() {
+		pickHint = "⊕ PICK — click element"
+	}
+	return fmt.Sprintf(" %sElements  %sPerf   %d FPS  [F12] [1/2 tab] [3 pos] %s [0/Esc clr]",
+		elemMark, perfMark, panel.FPS(), pickHint)
 }
 
 // paintLine writes a string at a given row with specified colors.
