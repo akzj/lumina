@@ -9,7 +9,6 @@ import (
 // Thread-safe because layout is single-threaded.
 var layoutViewportW, layoutViewportH int
 
-
 // No real UI tree exceeds this depth.
 const maxLayoutDepth = 500
 
@@ -57,6 +56,21 @@ func layoutDirtyWalkImpl(node *Node, visited map[*Node]bool) {
 		return
 	}
 	visited[node] = true
+
+	if node.LayoutDirty && node.Parent != nil && node.Parent.Type == "component" && !node.Parent.LayoutDirty {
+		parent := node.Parent
+		normalizeSpacingInTree(parent)
+		measure(parent, Constraints{
+			Width:      parent.W,
+			WidthMode:  SizeModeExact,
+			Height:     parent.H,
+			HeightMode: SizeModeExact,
+		})
+		computeFlex(parent, parent.X, parent.Y, parent.W, parent.H, 0)
+		parent.LayoutDirty = false
+		clearLayoutDirtyBelow(parent)
+		return
+	}
 
 	if !node.LayoutDirty {
 		// This node's layout is cached and valid.
@@ -173,7 +187,6 @@ func normalizeSpacing(node *Node) {
 		}
 	}
 }
-
 
 // --- Core flexbox layout ---
 

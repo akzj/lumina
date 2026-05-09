@@ -657,6 +657,11 @@ func (e *Engine) HandleScroll(x, y, delta int) {
 	if target != nil && target.OnScroll != 0 {
 		e.callLuaRefScroll(target.OnScroll, delta, scrollNode)
 	}
+
+	// Step 3: Re-evaluate hover after scroll offset changed.
+	// The node under (x, y) may have changed due to scroll, so fire
+	// onMouseLeave/onMouseEnter as needed (e.g., dismiss tooltip).
+	e.HandleMouseMove(x, y)
 }
 
 // findScrollableAncestor walks up from node to find the nearest ancestor with overflow=scroll.
@@ -1164,6 +1169,9 @@ func (e *Engine) HandleScrollH(x, y, delta int) {
 	if scrollNode != nil {
 		e.autoScrollX(scrollNode, delta)
 	}
+
+	// Re-evaluate hover after horizontal scroll offset changed.
+	e.HandleMouseMove(x, y)
 }
 
 

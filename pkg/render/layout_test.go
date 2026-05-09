@@ -1,6 +1,9 @@
 package render
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // --- Helpers ---
 
@@ -882,6 +885,39 @@ func TestLayout_Incremental_SubtreeOnly(t *testing.T) {
 	}
 }
 
+func TestLayout_Incremental_ComponentRootUsesPlaceholderBounds(t *testing.T) {
+	componentRoot := makeNode("vbox", Style{WidthPercent: 100, HeightPercent: 100},
+		makeText(strings.Repeat("x", 64000)),
+	)
+	component := makeNode("component", ds(), componentRoot)
+	root := makeNode("hbox", Style{WidthPercent: 100, HeightPercent: 100, Justify: "start", Align: "stretch"},
+		makeNode("vbox", Style{Width: 32, HeightPercent: 100}),
+		makeNode("vbox", Style{Width: 1, HeightPercent: 100}),
+		makeNode("vbox", Style{Flex: 1, HeightPercent: 100}, component),
+	)
+
+	LayoutFull(root, 0, 0, 120, 40)
+	wantX, wantW := component.X, component.W
+	if wantX <= 0 || wantW >= 120 {
+		t.Fatalf("test setup produced bad component bounds: X=%d W=%d", wantX, wantW)
+	}
+
+	// Simulate a grafted component root carrying stale full-screen bounds from a
+	// prior visible/hidden render. Incremental layout must constrain it to the
+	// placeholder, not recompute it using its own stale X/W.
+	componentRoot.X = 0
+	componentRoot.Y = 0
+	componentRoot.W = 120
+	componentRoot.H = 40
+	componentRoot.LayoutDirty = true
+
+	LayoutIncremental(root)
+
+	if componentRoot.X != wantX || componentRoot.W != wantW {
+		t.Fatalf("component root bounds = X:%d W:%d, want X:%d W:%d", componentRoot.X, componentRoot.W, wantX, wantW)
+	}
+}
+
 // --- Test: Incremental — position change marks PaintDirty ---
 
 func TestLayout_Incremental_MarksPaintDirty(t *testing.T) {
@@ -1326,9 +1362,9 @@ func TestRuneWidth(t *testing.T) {
 	}{
 		{'A', 1},    // ASCII
 		{'z', 1},    // ASCII lowercase
-		{'中', 2},   // CJK Unified Ideograph
-		{'あ', 2},   // Hiragana
-		{'한', 2},   // Korean Hangul
+		{'中', 2},    // CJK Unified Ideograph
+		{'あ', 2},    // Hiragana
+		{'한', 2},    // Korean Hangul
 		{'é', 1},    // Latin extended
 		{'\x00', 0}, // null
 		{'\n', 0},   // newline (control char)
