@@ -1,6 +1,7 @@
 package render
 
 import (
+	"fmt"
 	"log"
 
 	"github.com/akzj/go-lua/pkg/lua"
@@ -775,8 +776,23 @@ func (e *Engine) handleScrollbarClick(node *Node, x, y int) bool {
 	if newSY > maxScroll {
 		newSY = maxScroll
 	}
-	node.ScrollY = newSY
-	node.PaintDirty = true
+	if e.AnimManager != nil && e.NowMs != nil {
+		fromSY := node.ScrollY
+		animID := fmt.Sprintf("__scrollbar_scroll_%p", node)
+		nowMs := e.NowMs()
+		e.AnimManager.StartAnim(animID, float64(fromSY), float64(newSY), 300, "easeOut", false, func(value float64) {
+			node.ScrollY = int(value)
+			node.PaintDirty = true
+			e.needsRender = true
+		}, func() {
+			node.ScrollY = newSY
+			node.PaintDirty = true
+			e.needsRender = true
+		}, nowMs)
+	} else {
+		node.ScrollY = newSY
+		node.PaintDirty = true
+	}
 	return true
 }
 
