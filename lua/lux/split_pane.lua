@@ -119,17 +119,20 @@ local SplitPane = lumina.defineComponent("SplitPane", function(props)
                     local startPos = (direction == "horizontal") and event.x or event.y
                     local idx = divIdx
                     local origSize = currentSizes[divIdx] or 0
+                    local sign = 1
                     -- If the left pane is flex (size=0), drag the right pane instead.
                     -- This enables resizing when the divider is between a flex and a fixed pane.
                     if origSize == 0 and divIdx < #currentSizes then
                         idx = divIdx + 1
                         origSize = currentSizes[idx] or 0
+                        sign = -1
                     end
                     dragRef.current = {
                         active = true,
                         paneIndex = idx,
                         startPos = startPos,
                         origSize = origSize,
+                        sign = sign,
                     }
                 end,
                 onMouseMove = function(event)
@@ -140,7 +143,7 @@ local SplitPane = lumina.defineComponent("SplitPane", function(props)
                     local origSize = dragRef.current.origSize
                     if origSize == 0 then return end
 
-                    local newSize = origSize + delta
+                    local newSize = origSize + delta * (dragRef.current.sign or 1)
 
                     local minS = minSizes[idx]
                     if not minS or minS == 0 then minS = 10 end
