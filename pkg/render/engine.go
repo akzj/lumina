@@ -444,6 +444,22 @@ func (e *Engine) RenderDirty() {
 	// Sync main layer
 	e.syncMainLayer()
 
+
+	// Clean up stale hovered node: if the hovered node was removed during
+	// re-render (e.g., component re-rendered while mouse was hovering),
+	// fire onMouseLeave so cleanup callbacks run (e.g., tooltip removeLayer).
+	// This must happen every frame, not just on mouse move.
+	if e.hoveredNode != nil && e.hoveredNode.Removed {
+		old := e.hoveredNode
+		e.hoveredNode = nil
+		for n := old; n != nil; n = n.Parent {
+			if n.OnMouseLeave != 0 {
+				e.callLuaRef(n.OnMouseLeave, 0, 0)
+				break
+			}
+		}
+	}
+
 	// 3. Early exit: check all layers for dirty nodes
 	anyDirty := false
 	for _, layer := range e.layers {
