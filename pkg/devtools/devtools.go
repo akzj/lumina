@@ -23,13 +23,18 @@ const (
 	ElementsWalkMaxNodes = 4000
 )
 
-// ElementsPanelOverheadLines is the number of rows consumed by the resize handle,
-// tab bar, and blank separator before the tree content begins.
-// Exported so app.go can compute the click-to-row mapping.
-const ElementsPanelOverheadLines = 4
-
-// elementsPanelOverheadLines is the internal alias used within the package.
-const elementsPanelOverheadLines = ElementsPanelOverheadLines
+// ContentStartRow returns the number of panel rows occupied by chrome
+// (resize handle, tab bar, blank) before tree content begins. Anchor-specific:
+//   - AnchorBottom: resize_row(1) + tab_bar(1) + blank(1) = 3
+//   - AnchorRight:  tab_bar(1)   + blank(1)              = 2  (resize is a column)
+//
+// Used by both the paint layer and the click-to-row mapper to stay in sync.
+func (p *Panel) ContentStartRow() int {
+	if p.Anchor == AnchorRight {
+		return 2
+	}
+	return 3
+}
 
 // Panel anchor positions.
 const (
@@ -208,7 +213,7 @@ func (p *Panel) NodeTree() []NodeInfo {
 
 // elementsPanelContentLines is rows available under the tab bar for Elements (tree + optional detail).
 func (p *Panel) elementsPanelContentLines() int {
-	n := p.panelVisibleRows() - elementsPanelOverheadLines
+	n := p.panelVisibleRows() - p.ContentStartRow()
 	if n < 0 {
 		return 0
 	}
@@ -243,7 +248,7 @@ func (p *Panel) elementsDetailReserved() int {
 
 // elementsTreeVisibleLines is how many tree lines fit in the panel (excluding tab bar and detail block).
 func (p *Panel) elementsTreeVisibleLines() int {
-	lines := p.panelVisibleRows() - elementsPanelOverheadLines - p.elementsDetailReserved()
+	lines := p.panelVisibleRows() - p.ContentStartRow() - p.elementsDetailReserved()
 	if lines < 1 {
 		lines = 1
 	}

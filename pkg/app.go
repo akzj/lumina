@@ -500,7 +500,7 @@ func (a *App) handleDevToolsPanelClick(mx, my int) {
 func (a *App) handleDevToolsElementsClick(mx, my int) {
 	_, panelY, _, _ := a.devtools.PanelRect(a.width, a.height)
 	// Content starts after resize handle + tab bar + blank separator.
-	contentStartY := panelY + devtools.ElementsPanelOverheadLines
+	contentStartY := panelY + a.devtools.ContentStartRow()
 	row := my - contentStartY
 	if row < 0 {
 		return

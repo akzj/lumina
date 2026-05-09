@@ -66,7 +66,7 @@ func TestPanel_ElementsDetailReservedShrinksOnShortPanel(t *testing.T) {
 	tracker := perf.NewTracker(10)
 	p := NewPanel(tracker)
 	p.ActiveTab = TabElements
-	p.Height = 11 // content = 11 - 4(overhead) = 7; detail = min(7-2, 7) = 5
+	p.Height = 10 // bottom anchor: content = 10 - 3(overhead) = 7; detail = min(7-2, 7) = 5
 	p.UpdateNodeTree([]NodeInfo{{Type: "box"}})
 	p.SetElementsSelection(0)
 	if got := p.ElementsDetailReservedLines(); got != 5 {
@@ -81,7 +81,7 @@ func TestPanel_ElementsDetailOmitsWhenNoRoom(t *testing.T) {
 	tracker := perf.NewTracker(10)
 	p := NewPanel(tracker)
 	p.ActiveTab = TabElements
-	p.Height = 6 // content = 6 - 4(overhead) = 2; avail - minTree = 0 → no detail
+	p.Height = 5 // bottom anchor: content = 5 - 3(overhead) = 2; avail - minTree = 0 → no detail
 	p.UpdateNodeTree([]NodeInfo{{Type: "box"}})
 	p.SetElementsSelection(0)
 	if got := p.ElementsDetailReservedLines(); got != 0 {
@@ -96,7 +96,7 @@ func TestPanel_ElementsDetailSingleLineBudget(t *testing.T) {
 	tracker := perf.NewTracker(10)
 	p := NewPanel(tracker)
 	p.ActiveTab = TabElements
-	p.Height = 7 // content = 7 - 4(overhead) = 3; detail = 3-2 = 1
+	p.Height = 6 // bottom anchor: content = 6 - 3(overhead) = 3; detail = 3-2 = 1
 	p.UpdateNodeTree([]NodeInfo{{Type: "vbox"}})
 	p.SetElementsSelection(0)
 	if got := p.ElementsDetailReservedLines(); got != 1 {
