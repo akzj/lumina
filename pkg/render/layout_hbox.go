@@ -353,6 +353,21 @@ func layoutHBox(node *Node, contentX, contentY, contentW, contentH int, style St
 				maxBottom = bottom
 			}
 		}
+
+		// Scroll anchoring
+		oldScrollHeight := node.ScrollHeight
+		if oldScrollHeight > 0 && maxBottom > oldScrollHeight && style.ScrollAnchor == "top" {
+			delta := maxBottom - oldScrollHeight
+			node.ScrollY += delta
+			maxScroll := maxBottom - contentH
+			if maxScroll < 0 {
+				maxScroll = 0
+			}
+			if node.ScrollY > maxScroll {
+				node.ScrollY = maxScroll
+			}
+		}
+
 		node.ScrollHeight = maxBottom
 
 		// Also compute ScrollWidth for horizontal scrolling

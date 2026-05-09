@@ -89,6 +89,7 @@ type Style struct {
 	Scrollbar           string // "" (default=show), "none" (hide scrollbar)
 	ScrollbarThumbColor string // "" = default "#cdd6f4", otherwise "#RRGGBB"
 	ScrollbarTrackColor string // "" = default "#6c7086", otherwise "#RRGGBB"
+	ScrollAnchor        string // "" = default (no anchoring), "top" = adjust ScrollY when content prepended
 
 	// Positioning
 	Position      string // "", "relative", "absolute", "fixed"

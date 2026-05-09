@@ -426,7 +426,26 @@ func layoutVBox(node *Node, contentX, contentY, contentW, contentH int, style St
 
 	// For scroll containers, store the total content height and width
 	if isScroll && lastFlowChildNode != nil {
-		node.ScrollHeight = (lastFlowChildNode.Y + lastFlowChildNode.H) - contentY
+		newScrollHeight := (lastFlowChildNode.Y + lastFlowChildNode.H) - contentY
+
+		// Scroll anchoring: if ScrollHeight grew and scrollAnchor=="top",
+		// adjust ScrollY so the previously-visible content stays in place.
+		oldScrollHeight := node.ScrollHeight
+		if oldScrollHeight > 0 && newScrollHeight > oldScrollHeight && style.ScrollAnchor == "top" {
+			delta := newScrollHeight - oldScrollHeight
+			node.ScrollY += delta
+			// Clamp to max scroll
+			viewH := contentH
+			maxScroll := newScrollHeight - viewH
+			if maxScroll < 0 {
+				maxScroll = 0
+			}
+			if node.ScrollY > maxScroll {
+				node.ScrollY = maxScroll
+			}
+		}
+
+		node.ScrollHeight = newScrollHeight
 
 		// Also compute ScrollWidth for horizontal scrolling
 		maxRight := 0

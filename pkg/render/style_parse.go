@@ -241,6 +241,10 @@ func applyStyleField(s *Style, name string, value any) {
 		if str, ok := value.(string); ok {
 			s.ScrollbarTrackColor = str
 		}
+	case "scrollAnchor":
+		if str, ok := value.(string); ok {
+			s.ScrollAnchor = str
+		}
 
 	// --- Positioning ---
 	case "position":
