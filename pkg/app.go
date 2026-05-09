@@ -322,6 +322,7 @@ func (a *App) HandleEvent(e *event.Event) {
 						if hit := a.engine.HitTestScreen(e.X, e.Y); hit != nil {
 							if idx := preorderIndexOfHit(r.RootNode, hit); idx >= 0 {
 								a.devtools.SetElementsSelection(idx)
+								a.devtools.ExpandToNode(idx)
 							}
 						}
 					}
@@ -496,16 +497,15 @@ func (a *App) handleDevToolsPanelClick(mx, my int) {
 }
 
 // handleDevToolsElementsClick maps a mouse click inside the Elements content area
-// to a tree node index and selects it.
+// to a visible tree row. Clicking the fold icon toggles collapse; clicking elsewhere selects.
 func (a *App) handleDevToolsElementsClick(mx, my int) {
-	_, panelY, _, _ := a.devtools.PanelRect(a.width, a.height)
-	// Content starts after resize handle + tab bar + blank separator.
+	panelX, panelY, _, _ := a.devtools.PanelRect(a.width, a.height)
 	contentStartY := panelY + a.devtools.ContentStartRow()
 	row := my - contentStartY
 	if row < 0 {
 		return
 	}
-	// Account for scroll offset and scroll-up indicator row.
+	// Account for scroll-up indicator row.
 	scrollY := a.devtools.ElementsScrollY()
 	if scrollY > 0 {
 		row-- // first content row is the "↑ N more above" indicator
@@ -513,11 +513,31 @@ func (a *App) handleDevToolsElementsClick(mx, my int) {
 	if row < 0 {
 		return
 	}
-	idx := scrollY + row
-	nodes := a.devtools.NodeTree()
-	if idx >= 0 && idx < len(nodes) {
-		a.devtools.SetElementsSelection(idx)
-		a.refreshDevToolsV2()
+	vi := scrollY + row
+	visIndices := a.devtools.VisibleIndices()
+	if vi < 0 || vi >= len(visIndices) {
+		return
 	}
-	_ = mx
+	ni := visIndices[vi]
+	nodes := a.devtools.NodeTree()
+	if ni < 0 || ni >= len(nodes) {
+		return
+	}
+	node := nodes[ni]
+
+	// Content column offset: right anchor has a resize column before content.
+	contentStartX := panelX
+	if a.devtools.Anchor == devtools.AnchorRight {
+		contentStartX = panelX + devtools.ResizeHandleThick
+	}
+	// Icon is at: contentStartX + 2 (leading spaces) + 2*depth (indent)
+	iconCol := contentStartX + 2 + 2*node.Depth
+	if mx == iconCol && a.devtools.NodeHasChildren(ni) {
+		a.devtools.ToggleCollapse(vi)
+		a.refreshDevToolsV2()
+		return
+	}
+
+	a.devtools.SetElementsSelection(ni)
+	a.refreshDevToolsV2()
 }

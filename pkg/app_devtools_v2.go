@@ -329,7 +329,8 @@ func paintElementsTab(cb *render.CellBuffer, panel *devtools.Panel, startRow, st
 	panelW := maxX - startX
 
 	nodes := panel.NodeTree()
-	if len(nodes) == 0 {
+	visIndices := panel.VisibleIndices()
+	if len(nodes) == 0 || len(visIndices) == 0 {
 		paintTextLine(cb, row, startX, maxX, "  No nodes", dimColor, bgColor)
 		row++
 		return row
@@ -353,32 +354,42 @@ func paintElementsTab(cb *render.CellBuffer, panel *devtools.Panel, startRow, st
 	}
 
 	end := scrollY + visibleLines
-	if end > len(nodes) {
-		end = len(nodes)
+	if end > len(visIndices) {
+		end = len(visIndices)
 	}
 
 	sel := panel.ElementsSelectedIdx()
-	for i := scrollY; i < end; i++ {
+	for vi := scrollY; vi < end; vi++ {
 		if row >= cb.Height() {
 			break
 		}
-		node := nodes[i]
+		ni := visIndices[vi]
+		node := nodes[ni]
 		indent := strings.Repeat("  ", node.Depth)
+
+		// Fold icon: ▶ collapsed, ▾ expanded, · leaf
+		var icon string
+		if panel.NodeHasChildren(ni) {
+			if panel.IsCollapsed(ni) {
+				icon = "▶"
+			} else {
+				icon = "▾"
+			}
+		} else {
+			icon = "·"
+		}
+
 		var line string
 		if node.Type == "text" {
-			content := node.Content
-			if len(content) > 30 {
-				content = content[:27] + "..."
-			}
-			line = fmt.Sprintf("%s<text> %q", indent, content)
+			line = fmt.Sprintf("%s%s <text> %q", indent, icon, node.Content)
 		} else {
-			line = fmt.Sprintf("%s▸ <%s> %dx%d", indent, node.Type, node.W, node.H)
+			line = fmt.Sprintf("%s%s <%s> %dx%d", indent, icon, node.Type, node.W, node.H)
 			if node.BG != "" {
 				line += " bg=" + node.BG
 			}
 		}
 		lineFg := greenColor
-		if i == sel {
+		if ni == sel {
 			lineFg = activeColor
 		}
 		paintTextLine(cb, row, startX, maxX, "  "+line, lineFg, bgColor)
@@ -386,8 +397,8 @@ func paintElementsTab(cb *render.CellBuffer, panel *devtools.Panel, startRow, st
 	}
 
 	// Show scroll indicator if more below
-	if end < len(nodes) {
-		remaining := len(nodes) - end
+	if end < len(visIndices) {
+		remaining := len(visIndices) - end
 		indicator := fmt.Sprintf("  ↓ %d more below", remaining)
 		paintTextLine(cb, row, startX, maxX, indicator, dimColor, bgColor)
 		row++

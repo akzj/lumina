@@ -4,6 +4,7 @@ package devtools
 
 import (
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/akzj/lumina/pkg/perf"
@@ -93,11 +94,13 @@ type Panel struct {
 	// Data sources
 	tracker             *perf.Tracker
 	components          []ComponentInfo
-	nodeTree            []NodeInfo   // flattened node tree for Elements tab
-	elementsScrollY     int          // scroll offset for Elements tab
-	elementsPickArmed   bool         // next mousedown above panel picks a node (Elements tab)
-	elementsSelectedIdx int          // flat preorder index in nodeTree, or -1
-	perfSnap            PerfSnapshot // frozen perf data for display
+	nodeTree            []NodeInfo         // flattened node tree for Elements tab
+	visibleIndices      []int              // nodeTree indices visible given collapse state
+	collapsedPaths      map[string]struct{} // paths of collapsed nodes
+	elementsScrollY     int                // scroll offset (into visibleIndices)
+	elementsPickArmed   bool               // next mousedown above panel picks a node (Elements tab)
+	elementsSelectedIdx int                // flat preorder index in nodeTree, or -1
+	perfSnap            PerfSnapshot       // frozen perf data for display
 
 	// FPS tracking (updated by TickFPS, called from event loop)
 	fpsFrameCount int
@@ -117,6 +120,7 @@ func NewPanel(tracker *perf.Tracker) *Panel {
 		fpsLastTime:         time.Now(),
 		elementsSelectedIdx: -1,
 		Anchor:              AnchorBottom,
+		collapsedPaths:      make(map[string]struct{}),
 	}
 }
 
@@ -204,6 +208,7 @@ type NodeInfo struct {
 // UpdateNodeTree replaces the node tree snapshot for the Elements tab.
 func (p *Panel) UpdateNodeTree(infos []NodeInfo) {
 	p.nodeTree = infos
+	p.rebuildVisibleIndices()
 }
 
 // NodeTree returns the current node tree snapshot.
@@ -256,7 +261,7 @@ func (p *Panel) elementsTreeVisibleLines() int {
 }
 
 func (p *Panel) clampElementsScroll() {
-	maxScroll := len(p.nodeTree) - p.elementsTreeVisibleLines()
+	maxScroll := len(p.visibleIndices) - p.elementsTreeVisibleLines()
 	if maxScroll < 0 {
 		maxScroll = 0
 	}
@@ -269,18 +274,29 @@ func (p *Panel) clampElementsScroll() {
 }
 
 func (p *Panel) ensureElementsScrollShowsSelection() {
-	if p.elementsSelectedIdx < 0 || len(p.nodeTree) == 0 {
+	if p.elementsSelectedIdx < 0 || len(p.visibleIndices) == 0 {
 		return
+	}
+	// Find visible row index for the selected flat node index.
+	vi := -1
+	for i, ni := range p.visibleIndices {
+		if ni == p.elementsSelectedIdx {
+			vi = i
+			break
+		}
+	}
+	if vi < 0 {
+		return // selected node is hidden (ancestor is collapsed)
 	}
 	vis := p.elementsTreeVisibleLines()
 	if vis < 1 {
 		return
 	}
-	if p.elementsScrollY > p.elementsSelectedIdx {
-		p.elementsScrollY = p.elementsSelectedIdx
+	if p.elementsScrollY > vi {
+		p.elementsScrollY = vi
 	}
-	if p.elementsSelectedIdx >= p.elementsScrollY+vis {
-		p.elementsScrollY = p.elementsSelectedIdx - vis + 1
+	if vi >= p.elementsScrollY+vis {
+		p.elementsScrollY = vi - vis + 1
 	}
 	p.clampElementsScroll()
 }
@@ -526,6 +542,96 @@ func (p *Panel) CycleAnchor(screenW, screenH int) {
 		p.Anchor = AnchorRight
 	}
 	p.InitSizeForAnchor(screenW, screenH)
+}
+
+// ---------------------------------------------------------------------------
+// Collapse / expand (tree folding)
+// ---------------------------------------------------------------------------
+
+// rebuildVisibleIndices recomputes p.visibleIndices from the current nodeTree
+// and collapsedPaths. A node is visible if none of its ancestors are collapsed.
+func (p *Panel) rebuildVisibleIndices() {
+	p.visibleIndices = p.visibleIndices[:0]
+	skipDepth := -1
+	for i, node := range p.nodeTree {
+		if skipDepth >= 0 && node.Depth > skipDepth {
+			continue
+		}
+		skipDepth = -1
+		p.visibleIndices = append(p.visibleIndices, i)
+		if _, collapsed := p.collapsedPaths[node.Path]; collapsed {
+			skipDepth = node.Depth
+		}
+	}
+}
+
+// VisibleIndices returns the nodeTree indices that are currently visible
+// (not hidden by a collapsed ancestor).
+func (p *Panel) VisibleIndices() []int { return p.visibleIndices }
+
+// NodeHasChildren reports whether the node at flat index nodeIdx has children.
+func (p *Panel) NodeHasChildren(nodeIdx int) bool {
+	if nodeIdx < 0 || nodeIdx+1 >= len(p.nodeTree) {
+		return false
+	}
+	return p.nodeTree[nodeIdx+1].Depth > p.nodeTree[nodeIdx].Depth
+}
+
+// IsCollapsed reports whether the node at flat index nodeIdx is currently collapsed.
+func (p *Panel) IsCollapsed(nodeIdx int) bool {
+	if nodeIdx < 0 || nodeIdx >= len(p.nodeTree) {
+		return false
+	}
+	_, ok := p.collapsedPaths[p.nodeTree[nodeIdx].Path]
+	return ok
+}
+
+// ToggleCollapse toggles the collapsed state of the node at visible index vi.
+// Nodes without children cannot be collapsed.
+func (p *Panel) ToggleCollapse(vi int) {
+	if vi < 0 || vi >= len(p.visibleIndices) {
+		return
+	}
+	ni := p.visibleIndices[vi]
+	if !p.NodeHasChildren(ni) {
+		return
+	}
+	path := p.nodeTree[ni].Path
+	if _, ok := p.collapsedPaths[path]; ok {
+		delete(p.collapsedPaths, path)
+	} else {
+		p.collapsedPaths[path] = struct{}{}
+	}
+	p.rebuildVisibleIndices()
+	p.clampElementsScroll()
+}
+
+// ExpandToNode removes all ancestor collapse states for the node at flat index
+// nodeIdx, rebuilds visible indices, and scrolls to show the node.
+// Used by inspect-pick to reveal a selected node that may be inside a collapsed subtree.
+func (p *Panel) ExpandToNode(nodeIdx int) {
+	if nodeIdx < 0 || nodeIdx >= len(p.nodeTree) {
+		return
+	}
+	node := p.nodeTree[nodeIdx]
+	parts := strings.Split(node.Path, "/")
+	for i := 1; i < len(parts); i++ {
+		delete(p.collapsedPaths, strings.Join(parts[:i], "/"))
+	}
+	p.rebuildVisibleIndices()
+	for vi, ni := range p.visibleIndices {
+		if ni == nodeIdx {
+			vis := p.elementsTreeVisibleLines()
+			if p.elementsScrollY > vi {
+				p.elementsScrollY = vi
+			}
+			if vi >= p.elementsScrollY+vis {
+				p.elementsScrollY = vi - vis + 1
+			}
+			p.clampElementsScroll()
+			return
+		}
+	}
 }
 
 func clampInt(v, lo, hi int) int {

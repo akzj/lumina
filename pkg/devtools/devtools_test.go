@@ -181,3 +181,75 @@ func TestPanel_UpdateComponents(t *testing.T) {
 		t.Errorf("expected component ID 'counter', got %q", p.Components()[0].ID)
 	}
 }
+
+func TestPanel_Collapse(t *testing.T) {
+	tracker := perf.NewTracker(10)
+	p := NewPanel(tracker)
+
+	// Build a small tree: root → child0 → grandchild, child1
+	tree := []NodeInfo{
+		{Type: "box", Depth: 0, Path: "0"},
+		{Type: "vbox", Depth: 1, Path: "0/0"},
+		{Type: "text", Depth: 2, Path: "0/0/0"},
+		{Type: "hbox", Depth: 1, Path: "0/1"},
+	}
+	p.UpdateNodeTree(tree)
+
+	// All nodes visible initially.
+	if got := len(p.VisibleIndices()); got != 4 {
+		t.Fatalf("expected 4 visible, got %d", got)
+	}
+
+	// Collapse root (vi=0, ni=0) → should hide all children.
+	p.ToggleCollapse(0)
+	if got := len(p.VisibleIndices()); got != 1 {
+		t.Fatalf("after collapse root: expected 1 visible, got %d", got)
+	}
+
+	// Expand root again.
+	p.ToggleCollapse(0)
+	if got := len(p.VisibleIndices()); got != 4 {
+		t.Fatalf("after expand root: expected 4 visible, got %d", got)
+	}
+
+	// Collapse vbox (vi=1, ni=1) → hides grandchild only.
+	p.ToggleCollapse(1)
+	if got := len(p.VisibleIndices()); got != 3 {
+		t.Fatalf("after collapse vbox: expected 3 visible, got %d", got)
+	}
+	// NodeHasChildren / IsCollapsed checks.
+	if !p.NodeHasChildren(0) {
+		t.Error("root should have children")
+	}
+	if !p.IsCollapsed(1) {
+		t.Error("vbox should be collapsed")
+	}
+	if p.IsCollapsed(3) {
+		t.Error("hbox should not be collapsed")
+	}
+}
+
+func TestPanel_ExpandToNode(t *testing.T) {
+	tracker := perf.NewTracker(10)
+	p := NewPanel(tracker)
+	p.Height = 24
+
+	tree := []NodeInfo{
+		{Type: "box", Depth: 0, Path: "0"},
+		{Type: "vbox", Depth: 1, Path: "0/0"},
+		{Type: "text", Depth: 2, Path: "0/0/0"},
+	}
+	p.UpdateNodeTree(tree)
+
+	// Collapse root → grandchild hidden.
+	p.ToggleCollapse(0)
+	if len(p.VisibleIndices()) != 1 {
+		t.Fatal("collapse root: expected 1 visible")
+	}
+
+	// ExpandToNode for grandchild (ni=2) should reveal all nodes.
+	p.ExpandToNode(2)
+	if got := len(p.VisibleIndices()); got != 3 {
+		t.Fatalf("after ExpandToNode: expected 3 visible, got %d", got)
+	}
+}
