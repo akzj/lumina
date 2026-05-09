@@ -86,14 +86,19 @@ func paintDirtyWalk(buf *CellBuffer, node *Node) {
 	if node.PaintDirty {
 		// If any ancestor has children with fixed/absolute positioning,
 		// escalate to that ancestor for full repaint to maintain correct z-order.
-		if overlayParent := findOverlayAncestor(node); overlayParent != nil && !overlayParent.PaintDirty {
-			overlayParent.PaintDirty = true
-			bg := findAncestorBackground(overlayParent)
-			clearRectWithBG(buf, overlayParent.X, overlayParent.Y, overlayParent.W, overlayParent.H, bg)
-			paintNode(buf, overlayParent)
-			overlayParent.PaintDirty = false
-			clearPaintDirtyBelow(overlayParent)
-			return
+		// EXCEPTION: scroll containers clip their own content and don't affect
+		// z-order of siblings — no need to escalate to a larger ancestor which
+		// would unnecessarily clear/repaint unrelated sibling panels.
+		if node.Style.Overflow != "scroll" && node.Style.Overflow != "hidden" {
+			if overlayParent := findOverlayAncestor(node); overlayParent != nil && !overlayParent.PaintDirty {
+				overlayParent.PaintDirty = true
+				bg := findAncestorBackground(overlayParent)
+				clearRectWithBG(buf, overlayParent.X, overlayParent.Y, overlayParent.W, overlayParent.H, bg)
+				paintNode(buf, overlayParent)
+				overlayParent.PaintDirty = false
+				clearPaintDirtyBelow(overlayParent)
+				return
+			}
 		}
 
 		// If this node is inside a scroll container (at any ancestor level),
