@@ -454,15 +454,28 @@ func (e *Engine) RenderDirty() {
 
 
 	// Clean up stale hovered node: if the hovered node was removed during
-	// re-render, fire the cached onMouseLeave ref directly (parent chain is broken).
-	// This must happen every frame, not just on mouse move.
+	// re-render, fire the cached onMouseLeave ref and remove hover-related layers.
 	if e.hoveredNode != nil && e.hoveredNode.Removed {
+		fmt.Fprintf(os.Stderr, "DEBUG_HOVER_CLEANUP: hoveredNode removed, hoverLeaveRef=%d, layerCount=%d\n",
+			e.hoverLeaveRef, len(e.layers))
 		e.hoveredNode = nil
 		if e.hoverLeaveRef != 0 {
 			e.callLuaRef(e.hoverLeaveRef, 0, 0)
+			fmt.Fprintf(os.Stderr, "DEBUG_HOVER_CLEANUP: after callLuaRef, layerCount=%d\n", len(e.layers))
 			// Now unref it since we skipped it in drainPendingUnrefs
 			e.L.Unref(lua.RegistryIndex, int(e.hoverLeaveRef))
 			e.hoverLeaveRef = 0
+		} else {
+			fmt.Fprintf(os.Stderr, "DEBUG_HOVER_CLEANUP: hoverLeaveRef is 0! Cannot fire onMouseLeave\n")
+		}
+		// Defensive: remove any non-main, non-modal overlay layers.
+		// These are typically tooltips created during hover that couldn't be
+		// cleaned up because the Lua callback ref was stale.
+		for i := len(e.layers) - 1; i > 0; i-- {
+			if !e.layers[i].Modal {
+				fmt.Fprintf(os.Stderr, "DEBUG_HOVER_CLEANUP: removing non-modal layer %q after hover end\n", e.layers[i].ID)
+				e.RemoveLayer(e.layers[i].ID)
+			}
 		}
 	}
 
