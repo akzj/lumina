@@ -296,12 +296,14 @@ func TestAppV2Engine_F12DevToolsToggle(t *testing.T) {
 		t.Fatal("expected screen output")
 	}
 
-	// Check that the bottom area has devtools content (tab bar with "Elements").
+	// Check that the bottom area has devtools content.
+	// Row panelY is the resize handle; tab bar (with "Elements") is at panelY+1.
 	panelH := 20 * 4 / 10 // 8 rows
 	panelY := 20 - panelH  // row 12
+	tabBarRow := panelY + 1 // row 13 (after resize handle)
 	found := false
 	for x := 0; x < 40; x++ {
-		cell := screen.Get(x, panelY)
+		cell := screen.Get(x, tabBarRow)
 		if cell.Char == 'E' { // "Elements" in tab bar
 			found = true
 			break

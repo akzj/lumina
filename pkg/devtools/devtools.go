@@ -23,8 +23,25 @@ const (
 	ElementsWalkMaxNodes = 4000
 )
 
-// Tab bar + blank after tab bar (see paintDevToolsOverlay).
-const elementsPanelOverheadLines = 3
+// ElementsPanelOverheadLines is the number of rows consumed by the resize handle,
+// tab bar, and blank separator before the tree content begins.
+// Exported so app.go can compute the click-to-row mapping.
+const ElementsPanelOverheadLines = 4
+
+// elementsPanelOverheadLines is the internal alias used within the package.
+const elementsPanelOverheadLines = ElementsPanelOverheadLines
+
+// Panel anchor positions.
+const (
+	AnchorBottom = "bottom"
+	AnchorRight  = "right"
+)
+
+// ResizeHandleThick is the number of rows (bottom) or columns (right) used by the resize handle.
+const ResizeHandleThick = 1
+
+// resizeHandleThick is the internal alias used within the package.
+const resizeHandleThick = ResizeHandleThick
 
 // Full selection block: separator + detail lines (see paintElementsTab).
 const elementsDetailIdealLines = 7
@@ -54,16 +71,28 @@ type Panel struct {
 	Visible   bool
 	ActiveTab Tab
 	Width     int
-	Height    int // panel height (bottom portion of screen)
+	Height    int // panel height (AnchorBottom) or panel width (AnchorRight)
+
+	// last known screen dimensions — updated by InitSizeForAnchor / UpdateResize
+	screenW int
+	screenH int
+
+	// Position anchor
+	Anchor string // AnchorBottom | AnchorRight
+
+	// Resize drag state
+	resizing         bool
+	resizeStartMouse int // mouseY (bottom) or mouseX (right) at drag start
+	resizeStartSize  int // panel Height (bottom) or Width (right) at drag start
 
 	// Data sources
-	tracker          *perf.Tracker
-	components       []ComponentInfo
-	nodeTree         []NodeInfo   // flattened node tree for Elements tab
-	elementsScrollY  int          // scroll offset for Elements tab
-	elementsPickArmed bool        // next mousedown above panel picks a node (Elements tab)
-	elementsSelectedIdx int       // flat preorder index in nodeTree, or -1
-	perfSnap         PerfSnapshot // frozen perf data for display
+	tracker             *perf.Tracker
+	components          []ComponentInfo
+	nodeTree            []NodeInfo   // flattened node tree for Elements tab
+	elementsScrollY     int          // scroll offset for Elements tab
+	elementsPickArmed   bool         // next mousedown above panel picks a node (Elements tab)
+	elementsSelectedIdx int          // flat preorder index in nodeTree, or -1
+	perfSnap            PerfSnapshot // frozen perf data for display
 
 	// FPS tracking (updated by TickFPS, called from event loop)
 	fpsFrameCount int
@@ -82,6 +111,7 @@ func NewPanel(tracker *perf.Tracker) *Panel {
 		tracker:             tracker,
 		fpsLastTime:         time.Now(),
 		elementsSelectedIdx: -1,
+		Anchor:              AnchorBottom,
 	}
 }
 
@@ -178,7 +208,7 @@ func (p *Panel) NodeTree() []NodeInfo {
 
 // elementsPanelContentLines is rows available under the tab bar for Elements (tree + optional detail).
 func (p *Panel) elementsPanelContentLines() int {
-	n := p.Height - elementsPanelOverheadLines
+	n := p.panelVisibleRows() - elementsPanelOverheadLines
 	if n < 0 {
 		return 0
 	}
@@ -213,7 +243,7 @@ func (p *Panel) elementsDetailReserved() int {
 
 // elementsTreeVisibleLines is how many tree lines fit in the panel (excluding tab bar and detail block).
 func (p *Panel) elementsTreeVisibleLines() int {
-	lines := p.Height - elementsPanelOverheadLines - p.elementsDetailReserved()
+	lines := p.panelVisibleRows() - elementsPanelOverheadLines - p.elementsDetailReserved()
 	if lines < 1 {
 		lines = 1
 	}
@@ -322,4 +352,183 @@ func (p *Panel) Snapshot() PerfSnapshot {
 func (p *Panel) UpdateLuaMetrics(cpuTime time.Duration, memBytes uint64) {
 	p.LuaCPUTime = cpuTime
 	p.LuaMemBytes = memBytes
+}
+
+// ---------------------------------------------------------------------------
+// Geometry helpers
+// ---------------------------------------------------------------------------
+
+// InitSizeForAnchor initialises panel Height (bottom) or Width (right) when zero,
+// and records the current screen dimensions for content-line calculations.
+func (p *Panel) InitSizeForAnchor(screenW, screenH int) {
+	p.screenW = screenW
+	p.screenH = screenH
+	if p.Anchor == AnchorRight {
+		if p.Width <= 0 {
+			p.Width = screenW * 4 / 10
+			if p.Width < 20 {
+				p.Width = 20
+			}
+		}
+	} else {
+		if p.Height <= 0 {
+			p.Height = screenH * 4 / 10
+			if p.Height < 8 {
+				p.Height = 8
+			}
+		}
+	}
+}
+
+// panelVisibleRows returns the number of terminal rows the panel occupies.
+func (p *Panel) panelVisibleRows() int {
+	if p.Anchor == AnchorRight {
+		if p.screenH > 0 {
+			return p.screenH
+		}
+		return p.Height // fallback
+	}
+	return p.Height
+}
+
+// PanelRect returns the panel's screen rectangle (x, y, w, h).
+func (p *Panel) PanelRect(screenW, screenH int) (x, y, w, h int) {
+	if p.Anchor == AnchorRight {
+		pw := p.Width
+		if pw <= 0 {
+			pw = screenW * 4 / 10
+		}
+		return screenW - pw, 0, pw, screenH
+	}
+	ph := p.Height
+	if ph <= 0 {
+		ph = screenH * 4 / 10
+	}
+	return 0, screenH - ph, screenW, ph
+}
+
+// AppRect returns the app content area dimensions when the panel is docked.
+// AnchorBottom shrinks height; AnchorRight shrinks width.
+func (p *Panel) AppRect(screenW, screenH int) (appW, appH int) {
+	_, _, pw, ph := p.PanelRect(screenW, screenH)
+	if p.Anchor == AnchorRight {
+		return screenW - pw, screenH
+	}
+	return screenW, screenH - ph
+}
+
+// ContainsPoint reports whether (mx, my) lies inside the panel rectangle.
+func (p *Panel) ContainsPoint(mx, my, screenW, screenH int) bool {
+	px, py, pw, ph := p.PanelRect(screenW, screenH)
+	return mx >= px && mx < px+pw && my >= py && my < py+ph
+}
+
+// HitResizeBorder reports whether (mx, my) is on the resize drag handle.
+// Bottom anchor: top row of the panel.
+// Right anchor: left column of the panel.
+func (p *Panel) HitResizeBorder(mx, my, screenW, screenH int) bool {
+	px, py, pw, ph := p.PanelRect(screenW, screenH)
+	if p.Anchor == AnchorRight {
+		return mx == px && my >= py && my < py+ph
+	}
+	return my == py && mx >= px && mx < px+pw
+}
+
+// HitTabBar reports whether (mx, my) is on the tab bar row.
+func (p *Panel) HitTabBar(mx, my, screenW, screenH int) bool {
+	px, py, pw, _ := p.PanelRect(screenW, screenH)
+	tabRow := py + resizeHandleThick
+	if p.Anchor == AnchorRight {
+		tabRow = py
+		return my == tabRow && mx >= px+resizeHandleThick && mx < px+pw
+	}
+	return my == tabRow && mx >= px && mx < px+pw
+}
+
+// tabBarElementsStart is the column (relative to tab bar start) where "Elements" label begins.
+const tabBarElementsStart = 1  // after leading space
+const tabBarElementsEnd = 10
+const tabBarPerfStart = 12
+const tabBarPerfEnd = 17
+
+// TabAtPoint returns which tab was clicked, or -1 if neither.
+func (p *Panel) TabAtPoint(mx, my, screenW, screenH int) Tab {
+	if !p.HitTabBar(mx, my, screenW, screenH) {
+		return -1
+	}
+	px, _, _, _ := p.PanelRect(screenW, screenH)
+	tabStartX := px
+	if p.Anchor == AnchorRight {
+		tabStartX = px + resizeHandleThick
+	}
+	rel := mx - tabStartX
+	if rel >= tabBarElementsStart && rel < tabBarElementsEnd {
+		return TabElements
+	}
+	if rel >= tabBarPerfStart && rel < tabBarPerfEnd {
+		return TabPerf
+	}
+	return -1
+}
+
+// ---------------------------------------------------------------------------
+// Resize drag
+// ---------------------------------------------------------------------------
+
+// StartResize begins a resize drag. mouseCoord is Y (bottom) or X (right).
+func (p *Panel) StartResize(mouseCoord int) {
+	p.resizing = true
+	p.resizeStartMouse = mouseCoord
+	if p.Anchor == AnchorRight {
+		p.resizeStartSize = p.Width
+	} else {
+		p.resizeStartSize = p.Height
+	}
+}
+
+// UpdateResize updates panel size while dragging.
+func (p *Panel) UpdateResize(mouseCoord, screenW, screenH int) {
+	if !p.resizing {
+		return
+	}
+	p.screenW = screenW
+	p.screenH = screenH
+	delta := p.resizeStartMouse - mouseCoord
+	if p.Anchor == AnchorRight {
+		// dragging left border right → delta negative → panel narrows
+		p.Width = clampInt(p.resizeStartSize+delta, 20, screenW-10)
+	} else {
+		// dragging top border down → delta negative → panel shrinks
+		p.Height = clampInt(p.resizeStartSize+delta, 8, screenH-3)
+	}
+}
+
+// EndResize finishes the resize drag.
+func (p *Panel) EndResize() { p.resizing = false }
+
+// IsResizing reports whether a resize drag is in progress.
+func (p *Panel) IsResizing() bool { return p.resizing }
+
+// ---------------------------------------------------------------------------
+// Anchor management
+// ---------------------------------------------------------------------------
+
+// CycleAnchor toggles between AnchorBottom and AnchorRight.
+func (p *Panel) CycleAnchor(screenW, screenH int) {
+	if p.Anchor == AnchorRight {
+		p.Anchor = AnchorBottom
+	} else {
+		p.Anchor = AnchorRight
+	}
+	p.InitSizeForAnchor(screenW, screenH)
+}
+
+func clampInt(v, lo, hi int) int {
+	if v < lo {
+		return lo
+	}
+	if v > hi {
+		return hi
+	}
+	return v
 }

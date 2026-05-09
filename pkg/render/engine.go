@@ -28,8 +28,10 @@ type Engine struct {
 	L          *lua.State
 	root       *Component       // root component (or nil)
 	components map[string]*Component
-	width      int
-	height     int
+	width      int // full buffer/screen width
+	height     int // full buffer/screen height
+	layoutW    int // layout-only width (app content area; 0 = use width)
+	layoutH    int // layout-only height (app content area; 0 = use height)
 	buffer     *CellBuffer
 
 	// Hook context: which component is currently rendering
@@ -219,10 +221,13 @@ func (e *Engine) CurrentComponent() *Component { return e.currentComp }
 // AllComponents returns all registered components.
 func (e *Engine) AllComponents() map[string]*Component { return e.components }
 
-// Resize updates the engine dimensions and buffer.
+// Resize updates the engine dimensions and buffer (full screen resize).
+// Clears any layout bounds set by SetLayoutBounds.
 func (e *Engine) Resize(width, height int) {
 	e.width = width
 	e.height = height
+	e.layoutW = 0
+	e.layoutH = 0
 	e.buffer.Resize(width, height)
 	// Mark all layers for re-layout
 	for _, layer := range e.layers {
@@ -234,6 +239,40 @@ func (e *Engine) Resize(width, height int) {
 		e.root.RootNode.MarkLayoutDirty()
 	}
 	e.needsRender = true
+}
+
+// SetLayoutBounds constrains the layout dimensions without resizing the CellBuffer.
+// Used by devtools to shrink the app content area while keeping the full-screen
+// buffer available for the panel overlay.
+// Pass (0, 0) to restore full-screen layout (same as width/height).
+func (e *Engine) SetLayoutBounds(width, height int) {
+	e.layoutW = width
+	e.layoutH = height
+	for _, layer := range e.layers {
+		if layer.Root != nil {
+			layer.Root.MarkLayoutDirty()
+		}
+	}
+	if e.root != nil && e.root.RootNode != nil {
+		e.root.RootNode.MarkLayoutDirty()
+	}
+	e.needsRender = true
+}
+
+// layoutWidth returns the effective layout width.
+func (e *Engine) layoutWidth() int {
+	if e.layoutW > 0 {
+		return e.layoutW
+	}
+	return e.width
+}
+
+// layoutHeight returns the effective layout height.
+func (e *Engine) layoutHeight() int {
+	if e.layoutH > 0 {
+		return e.layoutH
+	}
+	return e.height
 }
 
 // syncMainLayer ensures layers[0] points to the root component's RootNode.
@@ -397,7 +436,7 @@ func (e *Engine) RenderDirty() {
 		}
 		if layer.Root.LayoutDirty {
 			if i == 0 {
-				LayoutFull(layer.Root, 0, 0, e.width, e.height)
+				LayoutFull(layer.Root, 0, 0, e.layoutWidth(), e.layoutHeight())
 			} else {
 				// Overlay layers: use their root node's style for position/size
 				lx := layer.Root.Style.Left
@@ -515,7 +554,7 @@ func (e *Engine) RenderAll() {
 			continue
 		}
 		if i == 0 {
-			LayoutFull(layer.Root, 0, 0, e.width, e.height)
+			LayoutFull(layer.Root, 0, 0, e.layoutWidth(), e.layoutHeight())
 		} else {
 			lx := layer.Root.Style.Left
 			ly := layer.Root.Style.Top

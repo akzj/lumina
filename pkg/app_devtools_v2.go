@@ -19,16 +19,11 @@ func (a *App) toggleDevToolsV2() {
 	a.devtools.Toggle()
 	if a.devtools.Visible {
 		a.tracker.Enable()
-
-		panelH := a.height * 4 / 10
-		if panelH < 8 {
-			panelH = 8
-		}
-		a.devtools.Width = a.width
-		a.devtools.Height = panelH
+		a.devtools.InitSizeForAnchor(a.width, a.height)
 	} else {
 		a.devtools.ResetElementsInspect()
 	}
+	a.syncEngineViewport()
 	a.paintDevToolsV2()
 }
 
@@ -155,7 +150,7 @@ func preorderIndexOfHit(root, hit *render.Node) int {
 }
 
 // paintDevToolsV2 paints the devtools panel directly onto the engine's CellBuffer.
-// When visible, it draws a panel at the bottom of the screen.
+// When visible, it draws a panel at the bottom or right of the screen.
 // When hidden, it clears the panel area and triggers a full re-render.
 func (a *App) paintDevToolsV2() {
 	cb := a.engine.Buffer()
@@ -169,14 +164,13 @@ func (a *App) paintDevToolsV2() {
 		return
 	}
 
-	panelH := a.devtools.Height
-	panelY := a.height - panelH
+	panelX, panelY, panelW, panelH := a.devtools.PanelRect(a.width, a.height)
 
-	// First render the app normally.
+	// First render the app normally (engine is already sized to the app content area).
 	a.engine.RenderDirty()
 
 	// Then paint the devtools overlay on top.
-	paintDevToolsOverlay(cb, a.devtools, panelY, a.width, panelH)
+	paintDevToolsOverlay(cb, a.devtools, panelX, panelY, panelW, panelH)
 
 	// Output the full screen (devtools toggle is a major visual change).
 	screen := a.engine.ToBuffer()
@@ -185,7 +179,7 @@ func (a *App) paintDevToolsV2() {
 }
 
 // paintDevToolsOverlay renders the devtools panel content directly onto a CellBuffer.
-func paintDevToolsOverlay(cb *render.CellBuffer, panel *devtools.Panel, startY, width, height int) {
+func paintDevToolsOverlay(cb *render.CellBuffer, panel *devtools.Panel, startX, startY, width, height int) {
 	// Colors
 	const (
 		bgColor      = "#1E1E2E"
@@ -195,32 +189,71 @@ func paintDevToolsOverlay(cb *render.CellBuffer, panel *devtools.Panel, startY, 
 		dimColor     = "#6C7086"
 		titleColor   = "#F9E2AF"
 		greenColor   = "#A6E3A1"
+		resizeBg     = "#2A2A3E"
+		resizeFg     = "#6C7086"
 	)
 
 	// Clear the panel area with background.
 	for y := startY; y < startY+height && y < cb.Height(); y++ {
-		for x := 0; x < width && x < cb.Width(); x++ {
+		for x := startX; x < startX+width && x < cb.Width(); x++ {
 			cb.Set(x, y, render.Cell{Ch: ' ', BG: bgColor})
 		}
 	}
 
 	row := startY
+	contentStartX := startX
 
-	// --- Tab bar ---
-	tabLine := buildTabBar(panel)
-	paintLine(cb, row, 0, width, tabLine, tabBgColor, fgColor, panel)
-	row++
+	if panel.Anchor == devtools.AnchorRight {
+		// Resize handle: vertical bar on the leftmost column.
+		for y := startY; y < startY+height && y < cb.Height(); y++ {
+			cb.Set(startX, y, render.Cell{Ch: '▐', FG: resizeFg, BG: resizeBg})
+		}
+		contentStartX = startX + devtools.ResizeHandleThick
 
-	// --- Content ---
-	row++ // blank line after tab bar
+		// Tab bar in first row.
+		tabLine := buildTabBar(panel)
+		paintLine(cb, row, contentStartX, startX+width, tabLine, tabBgColor, fgColor)
+		row++
+		// Blank separator.
+		row++
+	} else {
+		// Resize handle: horizontal bar at the top row.
+		paintResizeHandleRow(cb, row, startX, width, resizeBg, resizeFg)
+		row++
+
+		// Tab bar.
+		tabLine := buildTabBar(panel)
+		paintLine(cb, row, startX, startX+width, tabLine, tabBgColor, fgColor)
+		row++
+		// Blank separator.
+		row++
+	}
 
 	switch panel.ActiveTab {
 	case devtools.TabElements:
-		row = paintElementsTab(cb, panel, row, width, fgColor, bgColor, greenColor, dimColor, activeColor, titleColor)
+		row = paintElementsTab(cb, panel, row, contentStartX, startX+width, fgColor, bgColor, greenColor, dimColor, activeColor, titleColor)
 	case devtools.TabPerf:
-		row = paintPerfTab(cb, panel, row, width, fgColor, bgColor, titleColor)
+		row = paintPerfTab(cb, panel, row, contentStartX, startX+width, fgColor, bgColor, titleColor)
 	}
 	_ = row
+}
+
+// paintResizeHandleRow draws the horizontal resize drag handle.
+func paintResizeHandleRow(cb *render.CellBuffer, row, startX, width int, bg, fg string) {
+	if row >= cb.Height() {
+		return
+	}
+	hint := " ↕ drag to resize ─ [3] pos"
+	hintRunes := []rune(hint)
+	hi := 0
+	for x := startX; x < startX+width && x < cb.Width(); x++ {
+		ch := '─'
+		if hi < len(hintRunes) {
+			ch = hintRunes[hi]
+			hi++
+		}
+		cb.Set(x, row, render.Cell{Ch: ch, FG: fg, BG: bg})
+	}
 }
 
 // buildTabBar creates the tab bar string.
@@ -233,44 +266,45 @@ func buildTabBar(panel *devtools.Panel) string {
 	if panel.ActiveTab == devtools.TabPerf {
 		perfMark = "▸"
 	}
-	return fmt.Sprintf(" %sElements  %sPerf   %d FPS  [F12] [1/2 tab] [i pick] [0/Esc clr]",
+	return fmt.Sprintf(" %sElements  %sPerf   %d FPS  [F12] [1/2 tab] [3 pos] [i pick] [0/Esc clr]",
 		elemMark, perfMark, panel.FPS())
 }
 
 // paintLine writes a string at a given row with specified colors.
-func paintLine(cb *render.CellBuffer, row, startX, maxWidth int, text, bg, fg string, _ *devtools.Panel) {
+// startX is the leftmost column to start writing; maxX is the exclusive right bound.
+func paintLine(cb *render.CellBuffer, row, startX, maxX int, text, bg, fg string) {
 	if row >= cb.Height() {
 		return
 	}
 	x := startX
 	for _, ch := range text {
-		if x >= maxWidth || x >= cb.Width() {
+		if x >= maxX || x >= cb.Width() {
 			break
 		}
 		cb.Set(x, row, render.Cell{Ch: ch, FG: fg, BG: bg})
 		x++
 	}
-	// Fill rest of line with background.
-	for ; x < maxWidth && x < cb.Width(); x++ {
+	// Fill rest of panel row with background.
+	for ; x < maxX && x < cb.Width(); x++ {
 		cb.Set(x, row, render.Cell{Ch: ' ', BG: bg})
 	}
 }
 
-// paintTextLine writes a simple text line.
-func paintTextLine(cb *render.CellBuffer, row, maxWidth int, text, fg, bg string) {
+// paintTextLine writes a simple text line starting at startX.
+func paintTextLine(cb *render.CellBuffer, row, startX, maxX int, text, fg, bg string) {
 	if row >= cb.Height() {
 		return
 	}
-	x := 0
+	x := startX
 	for _, ch := range text {
-		if x >= maxWidth || x >= cb.Width() {
+		if x >= maxX || x >= cb.Width() {
 			break
 		}
 		cb.Set(x, row, render.Cell{Ch: ch, FG: fg, BG: bg})
 		x++
 	}
 	// Fill rest with background.
-	for ; x < maxWidth && x < cb.Width(); x++ {
+	for ; x < maxX && x < cb.Width(); x++ {
 		cb.Set(x, row, render.Cell{Ch: ' ', BG: bg})
 	}
 }
@@ -289,12 +323,14 @@ func truncateElementsLine(s string, maxW int) string {
 }
 
 // paintElementsTab renders the Elements tab content as a node tree.
-func paintElementsTab(cb *render.CellBuffer, panel *devtools.Panel, startRow, width int, fgColor, bgColor, greenColor, dimColor, activeColor, titleColor string) int {
+// startX / maxX bound the horizontal paint region (for right-anchor support).
+func paintElementsTab(cb *render.CellBuffer, panel *devtools.Panel, startRow, startX, maxX int, fgColor, bgColor, greenColor, dimColor, activeColor, titleColor string) int {
 	row := startRow
+	panelW := maxX - startX
 
 	nodes := panel.NodeTree()
 	if len(nodes) == 0 {
-		paintTextLine(cb, row, width, "  No nodes", dimColor, bgColor)
+		paintTextLine(cb, row, startX, maxX, "  No nodes", dimColor, bgColor)
 		row++
 		return row
 	}
@@ -308,7 +344,7 @@ func paintElementsTab(cb *render.CellBuffer, panel *devtools.Panel, startRow, wi
 	// Show scroll indicator if scrolled
 	if scrollY > 0 {
 		indicator := fmt.Sprintf("  ↑ %d more above", scrollY)
-		paintTextLine(cb, row, width, indicator, dimColor, bgColor)
+		paintTextLine(cb, row, startX, maxX, indicator, dimColor, bgColor)
 		row++
 		visibleLines--
 		if visibleLines < 1 {
@@ -345,7 +381,7 @@ func paintElementsTab(cb *render.CellBuffer, panel *devtools.Panel, startRow, wi
 		if i == sel {
 			lineFg = activeColor
 		}
-		paintTextLine(cb, row, width, "  "+line, lineFg, bgColor)
+		paintTextLine(cb, row, startX, maxX, "  "+line, lineFg, bgColor)
 		row++
 	}
 
@@ -353,7 +389,7 @@ func paintElementsTab(cb *render.CellBuffer, panel *devtools.Panel, startRow, wi
 	if end < len(nodes) {
 		remaining := len(nodes) - end
 		indicator := fmt.Sprintf("  ↓ %d more below", remaining)
-		paintTextLine(cb, row, width, indicator, dimColor, bgColor)
+		paintTextLine(cb, row, startX, maxX, indicator, dimColor, bgColor)
 		row++
 	}
 
@@ -367,13 +403,13 @@ func paintElementsTab(cb *render.CellBuffer, panel *devtools.Panel, startRow, wi
 		if budget == 1 {
 			if row < cb.Height() {
 				compact := fmt.Sprintf("  sel <%s> %d,%d %dx%d id=%s", n.Type, n.X, n.Y, n.W, n.H, n.ID)
-				paintTextLine(cb, row, width, truncateElementsLine(compact, width), fgColor, bgColor)
+				paintTextLine(cb, row, startX, maxX, truncateElementsLine(compact, panelW), fgColor, bgColor)
 				row++
 			}
 			return row
 		}
 		if row < cb.Height() {
-			paintTextLine(cb, row, width, "  ── selection ──", titleColor, bgColor)
+			paintTextLine(cb, row, startX, maxX, "  ── selection ──", titleColor, bgColor)
 			row++
 		}
 		detail := []string{
@@ -391,7 +427,7 @@ func paintElementsTab(cb *render.CellBuffer, panel *devtools.Panel, startRow, wi
 			if remaining <= 0 || row >= cb.Height() {
 				break
 			}
-			paintTextLine(cb, row, width, truncateElementsLine(s, width), fgColor, bgColor)
+			paintTextLine(cb, row, startX, maxX, truncateElementsLine(s, panelW), fgColor, bgColor)
 			row++
 			remaining--
 		}
@@ -401,11 +437,12 @@ func paintElementsTab(cb *render.CellBuffer, panel *devtools.Panel, startRow, wi
 }
 
 // paintPerfTab renders the Perf tab content.
-func paintPerfTab(cb *render.CellBuffer, panel *devtools.Panel, startRow, width int, fgColor, bgColor, titleColor string) int {
+// startX / maxX bound the horizontal paint region.
+func paintPerfTab(cb *render.CellBuffer, panel *devtools.Panel, startRow, startX, maxX int, fgColor, bgColor, titleColor string) int {
 	row := startRow
 
 	// Section: Frame Stats
-	paintTextLine(cb, row, width, "  ── Frame Stats ──", titleColor, bgColor)
+	paintTextLine(cb, row, startX, maxX, "  ── Frame Stats ──", titleColor, bgColor)
 	row++
 
 	snap := panel.Snapshot()
@@ -437,13 +474,13 @@ func paintPerfTab(cb *render.CellBuffer, panel *devtools.Panel, startRow, width 
 			break
 		}
 		text := fmt.Sprintf("    %-20s %s", l.label, l.value)
-		paintTextLine(cb, row, width, text, fgColor, bgColor)
+		paintTextLine(cb, row, startX, maxX, text, fgColor, bgColor)
 		row++
 	}
 
 	// Section: Runtime
 	row++
-	paintTextLine(cb, row, width, "  ── Runtime ──", titleColor, bgColor)
+	paintTextLine(cb, row, startX, maxX, "  ── Runtime ──", titleColor, bgColor)
 	row++
 
 	var memStats runtime.MemStats
@@ -461,7 +498,7 @@ func paintPerfTab(cb *render.CellBuffer, panel *devtools.Panel, startRow, width 
 			break
 		}
 		text := fmt.Sprintf("    %-20s %s", l.label, l.value)
-		paintTextLine(cb, row, width, text, fgColor, bgColor)
+		paintTextLine(cb, row, startX, maxX, text, fgColor, bgColor)
 		row++
 	}
 

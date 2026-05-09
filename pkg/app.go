@@ -183,10 +183,9 @@ func (a *App) RenderDirty() {
 	if dirtyRect.W > 0 && dirtyRect.H > 0 {
 		// If devtools visible, repaint overlay on dirty frames only
 		if a.devtools.Visible {
-			panelH := a.devtools.Height
-			panelY := a.height - panelH
-			paintDevToolsOverlay(a.engine.Buffer(), a.devtools, panelY, a.width, panelH)
-			panelRect := buffer.Rect{X: 0, Y: panelY, W: a.width, H: panelH}
+			panelX, panelY, panelW, panelH := a.devtools.PanelRect(a.width, a.height)
+			paintDevToolsOverlay(a.engine.Buffer(), a.devtools, panelX, panelY, panelW, panelH)
+			panelRect := buffer.Rect{X: panelX, Y: panelY, W: panelW, H: panelH}
 			dirtyRect = unionRect(dirtyRect, panelRect)
 		}
 		screen := a.engine.ToBuffer()
@@ -269,6 +268,11 @@ func (a *App) HandleEvent(e *event.Event) {
 				a.devtools.SetTab(devtools.TabPerf)
 				a.refreshDevToolsV2()
 				return
+			case "3":
+				a.devtools.CycleAnchor(a.width, a.height)
+				a.syncEngineViewport()
+				a.paintDevToolsV2()
+				return
 			}
 			// Elements tab: inspect pick, clear selection, scroll
 			if a.devtools.ActiveTab == devtools.TabElements {
@@ -302,25 +306,77 @@ func (a *App) HandleEvent(e *event.Event) {
 		}
 	}
 
-	// Elements inspect: one-shot mousedown pick above the panel (no engine mousedown).
-	if e.Type == "mousedown" && a.devtools.Visible && a.devtools.ElementsPickArmed() {
-		a.devtools.ClearElementsPickArm()
-		panelY := a.height - a.devtools.Height
-		// Prevent spurious click synthesis on the following mouseup.
-		a.mouseDownX = -1
-		a.mouseDownY = -1
-		if a.devtools.ActiveTab == devtools.TabElements && e.Y < panelY {
-			r := a.engine.Root()
-			if r != nil && r.RootNode != nil {
-				if hit := a.engine.HitTestScreen(e.X, e.Y); hit != nil {
-					if idx := preorderIndexOfHit(r.RootNode, hit); idx >= 0 {
-						a.devtools.SetElementsSelection(idx)
+	// Panel mouse routing: intercept events inside/on the devtools panel before engine.
+	if a.devtools.Visible {
+		switch e.Type {
+		case "mousedown":
+			// Elements inspect: one-shot pick — mousedown anywhere above the panel.
+			if a.devtools.ElementsPickArmed() {
+				a.devtools.ClearElementsPickArm()
+				a.mouseDownX = -1
+				a.mouseDownY = -1
+				_, panelY, _, _ := a.devtools.PanelRect(a.width, a.height)
+				if a.devtools.ActiveTab == devtools.TabElements && e.Y < panelY {
+					r := a.engine.Root()
+					if r != nil && r.RootNode != nil {
+						if hit := a.engine.HitTestScreen(e.X, e.Y); hit != nil {
+							if idx := preorderIndexOfHit(r.RootNode, hit); idx >= 0 {
+								a.devtools.SetElementsSelection(idx)
+							}
+						}
 					}
 				}
+				a.refreshDevToolsV2()
+				return
+			}
+			// Resize border drag start.
+			if a.devtools.HitResizeBorder(e.X, e.Y, a.width, a.height) {
+				coord := e.Y
+				if a.devtools.Anchor == devtools.AnchorRight {
+					coord = e.X
+				}
+				a.devtools.StartResize(coord)
+				return
+			}
+			// Click inside panel content.
+			if a.devtools.ContainsPoint(e.X, e.Y, a.width, a.height) {
+				a.mouseDownX = -1
+				a.mouseDownY = -1
+				a.handleDevToolsPanelClick(e.X, e.Y)
+				return
+			}
+
+		case "mousemove":
+			if a.devtools.IsResizing() {
+				coord := e.Y
+				if a.devtools.Anchor == devtools.AnchorRight {
+					coord = e.X
+				}
+				a.devtools.UpdateResize(coord, a.width, a.height)
+				a.syncEngineViewport()
+				a.refreshDevToolsV2()
+				return
+			}
+
+		case "mouseup":
+			if a.devtools.IsResizing() {
+				a.devtools.EndResize()
+				return
+			}
+
+		case "scroll":
+			if a.devtools.ContainsPoint(e.X, e.Y, a.width, a.height) {
+				if a.devtools.ActiveTab == devtools.TabElements {
+					delta := 1
+					if e.Key == "up" {
+						delta = -1
+					}
+					a.devtools.ScrollElements(delta)
+					a.refreshDevToolsV2()
+				}
+				return
 			}
 		}
-		a.refreshDevToolsV2()
-		return
 	}
 
 	switch e.Type {
@@ -358,14 +414,9 @@ func (a *App) HandleEvent(e *event.Event) {
 		if e.Key == "up" {
 			delta = -1
 		}
-		// If scroll is in devtools panel area, scroll the Elements tab
-		if a.devtools.Visible && a.devtools.ActiveTab == devtools.TabElements {
-			panelY := a.height - a.devtools.Height
-			if e.Y >= panelY {
-				a.devtools.ScrollElements(delta)
-				a.refreshDevToolsV2()
-				return
-			}
+		// Panel scroll is handled in the routing block above; skip engine scroll if in panel.
+		if a.devtools.Visible && a.devtools.ContainsPoint(e.X, e.Y, a.width, a.height) {
+			return
 		}
 		// Windows Terminal / ConPTY often omit Shift on wheel in SGR reports; many
 		// terminals still set Alt or Ctrl — treat any of them like Shift+wheel for
@@ -394,11 +445,28 @@ func (a *App) FocusedID() string {
 	return ""
 }
 
-// Resize resizes the screen.
+// Resize resizes the screen (terminal size change).
 func (a *App) Resize(w, h int) {
 	a.width = w
 	a.height = h
+	// Always resize the buffer to the full terminal size.
 	a.engine.Resize(w, h)
+	if a.devtools.Visible {
+		a.devtools.InitSizeForAnchor(w, h) // re-clamp panel size on terminal resize
+		a.syncEngineViewport()
+	}
+}
+
+// syncEngineViewport constrains the engine layout to the app content area (excluding
+// the devtools panel). The CellBuffer stays at full terminal size so the panel can
+// be painted on top.
+func (a *App) syncEngineViewport() {
+	if a.devtools.Visible {
+		appW, appH := a.devtools.AppRect(a.width, a.height)
+		a.engine.SetLayoutBounds(appW, appH)
+	} else {
+		a.engine.SetLayoutBounds(a.width, a.height)
+	}
 }
 
 // SetState updates a component's state (marks it dirty for re-render).
@@ -409,4 +477,47 @@ func (a *App) SetState(compID string, key string, value any) {
 // tickDevTools is called every frame tick from the event loop.
 func (a *App) tickDevTools() {
 	a.tickDevToolsV2()
+}
+
+// handleDevToolsPanelClick handles a mousedown inside the panel area.
+func (a *App) handleDevToolsPanelClick(mx, my int) {
+	// Tab bar click → switch tab.
+	if a.devtools.HitTabBar(mx, my, a.width, a.height) {
+		if tab := a.devtools.TabAtPoint(mx, my, a.width, a.height); tab >= 0 {
+			a.devtools.SetTab(tab)
+			a.refreshDevToolsV2()
+		}
+		return
+	}
+	// Elements content area click → select tree node.
+	if a.devtools.ActiveTab == devtools.TabElements {
+		a.handleDevToolsElementsClick(mx, my)
+	}
+}
+
+// handleDevToolsElementsClick maps a mouse click inside the Elements content area
+// to a tree node index and selects it.
+func (a *App) handleDevToolsElementsClick(mx, my int) {
+	_, panelY, _, _ := a.devtools.PanelRect(a.width, a.height)
+	// Content starts after resize handle + tab bar + blank separator.
+	contentStartY := panelY + devtools.ElementsPanelOverheadLines
+	row := my - contentStartY
+	if row < 0 {
+		return
+	}
+	// Account for scroll offset and scroll-up indicator row.
+	scrollY := a.devtools.ElementsScrollY()
+	if scrollY > 0 {
+		row-- // first content row is the "↑ N more above" indicator
+	}
+	if row < 0 {
+		return
+	}
+	idx := scrollY + row
+	nodes := a.devtools.NodeTree()
+	if idx >= 0 && idx < len(nodes) {
+		a.devtools.SetElementsSelection(idx)
+		a.refreshDevToolsV2()
+	}
+	_ = mx
 }
