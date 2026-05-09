@@ -190,8 +190,19 @@ func layoutVBox(node *Node, contentX, contentY, contentW, contentH int, style St
 						flexTotal += 1
 					}
 				default:
-					children[i].flexGrow = 1
-					flexTotal += 1
+					// Container with no flex and no explicit height:
+					// If it has border or padding AND a measured height, use that as fixed height.
+					// This ensures bordered/padded containers ("cards") size to content
+					// rather than stretching via flex. Plain containers without border/padding
+					// still get implicit flex=1 to stretch and fill available space.
+					hasFrame := hasBorder(cs) || cs.PaddingTop > 0 || cs.PaddingBottom > 0 || cs.PaddingLeft > 0 || cs.PaddingRight > 0
+					if hasFrame && child.MeasuredH > 0 {
+						children[i].fixedH = child.MeasuredH + marginV
+						fixedTotal += children[i].fixedH
+					} else {
+						children[i].flexGrow = 1
+						flexTotal += 1
+					}
 				}
 			}
 		}
