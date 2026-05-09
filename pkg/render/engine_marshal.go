@@ -407,6 +407,7 @@ func (e *Engine) readStyle(L *lua.State, idx int) Style {
 	s.Scrollbar = getStringField(L, absIdx, "scrollbar")
 	s.ScrollbarThumbColor = getStringField(L, absIdx, "scrollbarThumbColor")
 	s.ScrollbarTrackColor = getStringField(L, absIdx, "scrollbarTrackColor")
+	s.ScrollAnchor = getStringField(L, absIdx, "scrollAnchor")
 	s.Position = getStringField(L, absIdx, "position")
 	s.Top = int(getIntField(L, absIdx, "top"))
 	s.Left = int(getIntField(L, absIdx, "left"))
