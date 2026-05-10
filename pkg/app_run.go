@@ -280,6 +280,8 @@ func (a *App) reloadScript(path string) {
 		if a.scheduler != nil {
 			a.engine.SetScheduler(a.scheduler)
 		}
+		// Re-register Lua API to refresh lumina.* closures after Destroy.
+		a.engine.RegisterLuaAPI()
 	}
 
 	// Free global key handler refs.
