@@ -282,6 +282,12 @@ func (a *App) reloadScript(path string) {
 	// Embedded modules (lux.*, theme, lumina) are kept cached since they don't change.
 	clearFileModulesFromPackageLoaded(a.luaState)
 
+	// Force a full GC cycle to collect old module userdata (e.g. bolt DB handles).
+	// Without this, old userdata with __gc finalizers won't be collected until later,
+	// and resources like file locks remain held — causing deadlocks when DoFile
+	// tries to re-open the same resources.
+	a.luaState.GCCollect()
+
 	// Reinstall require hook (full reload re-executes everything from scratch,
 	// so the previous hook wrapper is gone).
 	if a.watcher != nil {
