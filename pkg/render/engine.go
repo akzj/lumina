@@ -190,6 +190,14 @@ func (e *Engine) Destroy() {
 		e.root = nil
 	}
 
+	// Clear stale node pointers to prevent freed refs from being called
+	// after reload (e.g. onBlur/onFocus refs that were reused by new objects).
+	e.focusedNode = nil
+	e.hoveredNode = nil
+	e.hoverLeaveRef = 0
+	e.capturedNode = nil
+	e.scrollbarDragNode = nil
+
 	// Clear ALL components (not just root — sub-components may have stale entries).
 	for id := range e.components {
 		delete(e.components, id)
