@@ -926,8 +926,13 @@ func (e *Engine) cleanupRemovedChildComponents(parent *Component, rootNode *Node
 		if activeKeys[mapKey] {
 			kept = append(kept, child)
 		} else {
-			// Remove from engine
-			delete(e.components, child.ID)
+			// Remove from engine — but only if the map entry still points to THIS component.
+			// When a component type changes at the same position (e.g. LoginPage → WorkspaceListPage),
+			// reconcileChildComponents may have already registered a NEW component with the same ID.
+			// We must not delete the new one.
+			if e.components[child.ID] == child {
+				delete(e.components, child.ID)
+			}
 			// Recursively cleanup grandchildren
 			e.cleanupComponentTree(child)
 		}
@@ -999,7 +1004,10 @@ func collectActiveComponentKeys(node *Node, keys map[string]bool) {
 // any refs on their render nodes.
 func (e *Engine) cleanupComponentTree(comp *Component) {
 	for _, child := range comp.Children {
-		delete(e.components, child.ID)
+		// Only delete from map if it still points to this exact component instance.
+		if e.components[child.ID] == child {
+			delete(e.components, child.ID)
+		}
 		e.cleanupComponentTree(child)
 	}
 
