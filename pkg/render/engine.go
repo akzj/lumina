@@ -841,12 +841,22 @@ func (e *Engine) reconcileChildComponents(parent *Component, node *Node) {
 
 	// Recurse into children, assigning positional keys to same-type siblings
 	// that lack explicit keys (like React's implicit array index keys).
-	typeCount := make(map[string]int) // tracks occurrence index per component type
+	seenKeys := make(map[string]string) // key → componentType (for duplicate detection)
+	typeCount := make(map[string]int)   // tracks occurrence index per component type
 	for _, ch := range node.Children {
 		if ch != nil && ch.Type == "component" && ch.ComponentType != "" {
 			explicitKey := ch.ID
 			if explicitKey == "" {
 				explicitKey = ch.Key
+			}
+			// Warn on duplicate explicit keys (like React's key uniqueness warning)
+			if explicitKey != "" {
+				if prevType, exists := seenKeys[explicitKey]; exists {
+					log.Printf("[lumina] WARNING: duplicate key %q in children of %q (component types: %q and %q). Each child should have a unique key.",
+						explicitKey, parent.Name, prevType, ch.ComponentType)
+				} else {
+					seenKeys[explicitKey] = ch.ComponentType
+				}
 			}
 			if explicitKey == "" {
 				idx := typeCount[ch.ComponentType]
