@@ -22,7 +22,7 @@ local _fallback = {
 }
 
 -- Built-in theme names (for reference in Lua)
-M.themes = { "mocha", "latte", "nord", "dracula" }
+M.themes = { "mocha", "latte", "nord", "dracula", "amber", "crimson", "forest" }
 
 function M.current()
     -- Try to get from Go engine first

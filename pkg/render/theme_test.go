@@ -126,18 +126,18 @@ func TestThemeToMap(t *testing.T) {
 	if m["error"] != DefaultTheme.Error {
 		t.Errorf("ThemeToMap error: got %q, want %q", m["error"], DefaultTheme.Error)
 	}
-	// Verify all 13 fields are present
-	expected := 13
+	// Verify all fields are present
+	expected := 30
 	if len(m) != expected {
 		t.Errorf("ThemeToMap returned %d keys, want %d", len(m), expected)
 	}
 }
 
 func TestBuiltinThemesMap(t *testing.T) {
-	if len(BuiltinThemes) != 4 {
-		t.Errorf("BuiltinThemes has %d entries, want 4", len(BuiltinThemes))
+	if len(BuiltinThemes) != 7 {
+		t.Errorf("BuiltinThemes has %d entries, want 7", len(BuiltinThemes))
 	}
-	names := []string{"mocha", "latte", "nord", "dracula"}
+	names := []string{"mocha", "latte", "nord", "dracula", "amber", "crimson", "forest"}
 	for _, name := range names {
 		if _, ok := BuiltinThemes[name]; !ok {
 			t.Errorf("BuiltinThemes missing %q", name)
