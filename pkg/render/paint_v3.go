@@ -833,3 +833,67 @@ func paintDirtyWalkScrollV3(w CellWriter, node *Node, depth int) {
 		paintDirtyWalkV3(childWriter, child, depth+1)
 	}
 }
+
+// PaintOverlayV3 paints an overlay layer on top of existing buffer content.
+// Unlike PaintDirtyV3, it does NOT clear areas before painting — overlays
+// are painted on top of the main layer.
+func PaintOverlayV3(buf *CellBuffer, root *Node) {
+	if buf == nil || root == nil {
+		return
+	}
+	if root.PaintDirty {
+		// Full repaint of overlay (no clear — paint on top)
+		w := NewCellWriter(buf)
+		paintNodeV3(w, root, 0)
+		clearPaintDirty(root)
+		return
+	}
+	// Walk for dirty children within overlay
+	w := NewCellWriter(buf)
+	paintDirtyOverlayWalkV3(w, root, 0)
+}
+
+// paintDirtyOverlayWalkV3 walks an overlay tree for dirty nodes.
+// When a dirty node is found, it's repainted WITHOUT clearing (painted on top).
+func paintDirtyOverlayWalkV3(w CellWriter, node *Node, depth int) {
+	if node == nil || node.W <= 0 || node.H <= 0 {
+		return
+	}
+	if node.Style.Display == "none" {
+		if node.PaintDirty {
+			clearPaintDirty(node)
+		}
+		return
+	}
+	if depth > v3MaxDepth {
+		return
+	}
+
+	if node.PaintDirty {
+		// Repaint without clearing (overlay paints on top)
+		paintNodeV3(w, node, depth)
+		node.PaintDirty = false
+		clearPaintDirtyBelow(node)
+		return
+	}
+
+	// Propagate clip to children
+	switch node.Type {
+	case "text":
+		return
+	case "component":
+		for _, child := range node.Children {
+			paintDirtyOverlayWalkV3(w, child, depth+1)
+		}
+	case "box", "vbox", "hbox":
+		if node.Style.Overflow == "scroll" {
+			paintDirtyWalkScrollV3(w, node, depth)
+		} else if node.Style.Overflow == "hidden" {
+			paintDirtyWalkHiddenV3(w, node, depth)
+		} else {
+			for _, child := range node.Children {
+				paintDirtyOverlayWalkV3(w, child, depth+1)
+			}
+		}
+	}
+}

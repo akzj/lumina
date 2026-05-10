@@ -541,11 +541,11 @@ func (e *Engine) RenderDirty() {
 	for i, layer := range e.layers {
 		if layer.Root != nil {
 			if i == 0 {
-				// Main layer: full clear + repaint when dirty
-				PaintDirty(e.buffer, layer.Root)
+				// Main layer: V3 dirty paint (clip-safe by construction)
+				PaintDirtyV3(e.buffer, layer.Root)
 			} else {
-				// Overlay layers: repaint without clearing (paint on top)
-				PaintDirtyOverlay(e.buffer, layer.Root)
+				// Overlay layers: paint on top without clearing underlying content
+				PaintOverlayV3(e.buffer, layer.Root)
 			}
 		}
 	}
@@ -678,7 +678,8 @@ func (e *Engine) RenderAll() {
 			}
 		}
 		populateRefs(layer.Root, e.L)
-		paintNode(e.buffer, layer.Root)
+		w := NewCellWriter(e.buffer)
+		paintNodeV3(w, layer.Root, 0)
 		clearPaintDirty(layer.Root)
 	}
 
