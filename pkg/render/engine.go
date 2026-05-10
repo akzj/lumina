@@ -51,7 +51,9 @@ type Engine struct {
 	focusedNode *Node
 
 	// Mouse capture: node that has captured mouse events (drag/resize)
-	capturedNode *Node
+	capturedNode      *Node
+	captureMoveRef    LuaRef
+	captureMouseUpRef LuaRef
 
 	// Click prevention: set by HandleMouseDown when handler calls preventDefault
 	clickPrevented bool
@@ -140,9 +142,9 @@ func (e *Engine) drainPendingUnrefs() {
 	}
 	L := e.L
 	for _, ref := range e.pendingUnrefs {
-		// The hovered node may have been removed during reconcile. Keep its leave
-		// handler alive until RenderDirty can fire it and remove hover overlays.
-		if ref == e.hoverLeaveRef && e.hoverLeaveRef != 0 {
+		// Event refs cached for removed nodes must stay alive until the matching
+		// synthetic leave or captured mouse release is delivered.
+		if e.shouldRetainPendingRef(LuaRef(ref)) {
 			continue
 		}
 		// If this ref is a table (useRef), set current = nil before unreffing
@@ -154,17 +156,24 @@ func (e *Engine) drainPendingUnrefs() {
 		L.Pop(1)
 		L.Unref(lua.RegistryIndex, int(ref))
 	}
-	if e.hoverLeaveRef == 0 {
+	if e.hoverLeaveRef == 0 && e.captureMoveRef == 0 && e.captureMouseUpRef == 0 {
 		e.pendingUnrefs = e.pendingUnrefs[:0]
 		return
 	}
 	kept := e.pendingUnrefs[:0]
 	for _, ref := range e.pendingUnrefs {
-		if ref == e.hoverLeaveRef {
+		if e.shouldRetainPendingRef(LuaRef(ref)) {
 			kept = append(kept, ref)
 		}
 	}
 	e.pendingUnrefs = kept
+}
+
+func (e *Engine) shouldRetainPendingRef(ref LuaRef) bool {
+	return ref != 0 &&
+		(ref == e.hoverLeaveRef ||
+			ref == e.captureMoveRef ||
+			ref == e.captureMouseUpRef)
 }
 
 // Destroy releases all Lua registry refs held by the engine.
