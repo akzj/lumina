@@ -456,7 +456,6 @@ func clearFileModulesFromPackageLoaded(L *lua.State) {
 	for L.Next(loadedIdx) {
 		key, ok := L.ToString(-2)
 		if ok && key != "" {
-			// Keep embedded modules
 			if !isEmbeddedModule(key) {
 				toRemove = append(toRemove, key)
 			}
@@ -471,15 +470,18 @@ func clearFileModulesFromPackageLoaded(L *lua.State) {
 	}
 }
 
-// isEmbeddedModule returns true for modules that are embedded (preloaded from Go)
-// and should NOT be cleared during hot reload.
+// isEmbeddedModule returns true for modules that should NOT be cleared from
+// package.loaded during hot reload.
+//
+// Only "lumina" and "theme" are kept:
+//   - "lumina" just returns the global lumina table (no side effects).
+//   - "theme" is data-only (no defineComponent calls).
+//
+// Everything else is cleared, including:
+//   - lux.* modules (they call defineComponent, must re-register factories)
+//   - Go-registered modules like "zerofas", "bolt", "async" (safe to clear
+//     because they live in package.preload and will be re-loaded on require)
+//   - File-based user modules (re-loaded from disk via package.path)
 func isEmbeddedModule(name string) bool {
-	// Keep: lumina, lux, lux.*, theme
-	if name == "lumina" || name == "theme" {
-		return true
-	}
-	if strings.HasPrefix(name, "lux") {
-		return true
-	}
-	return false
+	return name == "lumina" || name == "theme"
 }

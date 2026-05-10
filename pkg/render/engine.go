@@ -201,11 +201,10 @@ func (e *Engine) Destroy() {
 		delete(e.factories, name)
 	}
 
-	// Free factory metatable ref.
-	if e.factoryMetaRef != 0 {
-		L.Unref(lua.RegistryIndex, int(e.factoryMetaRef))
-		e.factoryMetaRef = 0
-	}
+	// Keep factory metatable ref alive across reloads — the __call metamethod
+	// (luaFactoryCall) is a Go closure that remains valid, and re-required lux
+	// modules need it when calling defineComponent to set callable metatables.
+	// (factoryMetaRef is freed in App.Stop via the final engine cleanup.)
 
 	// Drain any pending unrefs accumulated during cleanup.
 	e.drainPendingUnrefs()
