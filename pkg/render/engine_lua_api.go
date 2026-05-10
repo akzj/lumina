@@ -79,6 +79,11 @@ func (e *Engine) RegisterLuaAPI() {
 	L.SetField(tblIdx, "fetch")
 
 	// Create shared callable metatable for factory tables (__call → createElement)
+	// Create shared callable metatable for factory tables (__call → createElement)
+	// Release old metatable ref first (called again during hotreload full reload)
+	if e.factoryMetaRef != 0 {
+		L.Unref(lua.RegistryIndex, int(e.factoryMetaRef))
+	}
 	L.NewTable()
 	L.PushFunction(e.luaFactoryCall)
 	L.SetField(-2, "__call")
