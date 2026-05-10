@@ -258,14 +258,28 @@ func (a *App) reloadScript(path string) {
 		a.timerMgr.releaseAll(a.luaState)
 	}
 
-	// Cancel pending async coroutines.
+	// Cancel pending async coroutines and create a fresh scheduler.
 	if a.scheduler != nil {
 		a.scheduler.Destroy()
+		a.scheduler = lua.NewScheduler(a.luaState)
+		a.scheduler.OnError = func(err error) {
+			fmt.Fprintf(os.Stderr, "coroutine error: %v\n", err)
+			if a.engine != nil && a.engine.GetOnErrorRef() != 0 {
+				a.luaState.RawGetI(lua.RegistryIndex, a.engine.GetOnErrorRef())
+				a.luaState.PushString(err.Error())
+				a.luaState.PushString("coroutine")
+				a.luaState.PCall(2, 0, 0)
+			}
+		}
 	}
 
 	// Free all engine refs (component tree, factories, factory metatable).
 	if a.engine != nil {
 		a.engine.Destroy()
+		// Re-attach fresh scheduler to engine after cleanup.
+		if a.scheduler != nil {
+			a.engine.SetScheduler(a.scheduler)
+		}
 	}
 
 	// Free global key handler refs.
