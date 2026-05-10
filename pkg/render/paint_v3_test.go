@@ -2,6 +2,7 @@ package render
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -712,5 +713,111 @@ func TestV3PaintMatchesV2_DoubleBorder(t *testing.T) {
 		for _, d := range diffs {
 			t.Errorf("  %s", d)
 		}
+	}
+}
+
+func TestV3PaintMatchesV2_SplitPaneResizeLargeText(t *testing.T) {
+	// This is the exact scenario that causes rendering tearing in V2's dirty paint.
+	// V3 full paint should produce identical output to V2 full paint.
+	const bufW, bufH = 180, 40
+
+	build := func(rightW int) *Node {
+		leftRows := make([]*Node, 12)
+		for i := range leftRows {
+			leftRows[i] = &Node{
+				Type:    "text",
+				Content: "● agent-row-" + string(rune('a'+i)) + " · leaf",
+				Style:   Style{Foreground: "#ffffff", WidthPercent: 100, Height: 1},
+			}
+		}
+		leftScroll := &Node{Type: "vbox", Style: Style{
+			Overflow: "scroll", Flex: 1, WidthPercent: 100, Background: "#120d1a",
+		}, Children: leftRows}
+		pane1 := &Node{Type: "vbox", ID: "split-pane-1", Style: Style{
+			Width: 32, HeightPercent: 100, Overflow: "hidden", Background: "#120d1a",
+		}, Children: []*Node{leftScroll}}
+
+		divider1 := &Node{Type: "vbox", Style: Style{Width: 1, Background: "#38605c"}}
+		divider2 := &Node{Type: "vbox", Style: Style{Width: 1, Background: "#38605c"}}
+
+		bigText := strings.Repeat("Rewrite a1c08a842bb505d407544f8bbbd6b0121ccd309 (179/893) (4 seconds passed, remaining 15 predicted)    ", 700)
+		rows := make([]*Node, 18)
+		for i := range rows {
+			content := "normal row"
+			if i == 8 {
+				content = bigText
+			}
+			rows[i] = &Node{Type: "text", Content: content, Style: Style{Foreground: "#cdd6f4", WidthPercent: 100}}
+		}
+		chatScroll := &Node{Type: "vbox", ID: "chat-scroll", Style: Style{
+			Overflow: "scroll", Flex: 1, WidthPercent: 100, Background: "#1a1626",
+		}, Children: rows}
+		pane2 := &Node{Type: "vbox", ID: "split-pane-2", Style: Style{
+			Flex: 1, HeightPercent: 100, Overflow: "hidden", Background: "#1a1626",
+		}, Children: []*Node{chatScroll}}
+
+		pane3 := &Node{Type: "vbox", ID: "split-pane-3", Style: Style{
+			Width: rightW, HeightPercent: 100, Overflow: "hidden", Background: "#120d1a",
+		}, Children: []*Node{
+			{Type: "text", Content: "LLM Configuration", Style: Style{Height: 1, WidthPercent: 100}},
+			{Type: "text", Content: "Provider : anthropic", Style: Style{Height: 1, WidthPercent: 100}},
+		}}
+
+		root := &Node{Type: "hbox", Style: Style{WidthPercent: 100, HeightPercent: 100},
+			Children: []*Node{pane1, divider1, pane2, divider2, pane3}}
+		setParentsRecursive(root)
+		return root
+	}
+
+	// Test both initial layout and after resize
+	for _, tc := range []struct {
+		name   string
+		rightW int
+	}{
+		{"initial_36", 36},
+		{"resized_58", 58},
+		{"resized_20", 20},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := build(tc.rightW)
+			LayoutFull(root, 0, 0, bufW, bufH)
+
+			// Set scroll to middle
+			chatScroll := findSplitResizeNodeByID(root, "chat-scroll")
+			if chatScroll != nil {
+				chatScroll.ScrollY = computeMaxScrollY(chatScroll) / 2
+			}
+
+			buf2 := NewCellBuffer(bufW, bufH)
+			PaintFull(buf2, root)
+
+			buf3 := NewCellBuffer(bufW, bufH)
+			PaintFullV3(buf3, root)
+
+			diffs := compareBufs(buf2, buf3, 20)
+			if len(diffs) > 0 {
+				t.Errorf("V3 differs from V2 (%d diffs):", len(diffs))
+				for _, d := range diffs {
+					t.Errorf("  %s", d)
+				}
+			}
+
+			// Also verify: no text bleeds past pane boundaries
+			// Pane2 (center) ends where divider2 starts
+			// Find divider2 X position
+			for _, child := range root.Children {
+				if child.Style.Width == 1 && child.X > 33 { // divider2
+					divX := child.X
+					// Check that V3 buffer has divider bg at divX for all rows
+					for y := 0; y < bufH; y++ {
+						c := buf3.Get(divX, y)
+						if c.BG != "" && c.BG != "#38605c" && c.BG != "#120d1a" && c.BG != "#1a1626" {
+							t.Errorf("unexpected content at divider x=%d y=%d: ch=%c bg=%s", divX, y, c.Ch, c.BG)
+						}
+					}
+					break
+				}
+			}
+		})
 	}
 }
