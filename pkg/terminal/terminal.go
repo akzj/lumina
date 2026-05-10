@@ -58,11 +58,11 @@ func (t *Terminal) EnableRawMode() error {
 	raw.Cflag &^= unix.CSIZE | unix.PARENB
 	raw.Cflag |= unix.CS8
 
-	// Read returns after input is available or after a short timeout. The
-	// timeout lets the input parser flush a lone Escape key without treating
-	// split mouse/CSI sequences as text.
-	raw.Cc[unix.VMIN] = 0
-	raw.Cc[unix.VTIME] = 1
+	// Block until at least one byte is available. The streaming input parser
+	// keeps partial escape sequences pending across reads, so split mouse/CSI
+	// reports are completed by later reads instead of being flushed mid-sequence.
+	raw.Cc[unix.VMIN] = 1
+	raw.Cc[unix.VTIME] = 0
 
 	if err := tcsetattr(t.fd, &raw); err != nil {
 		return err

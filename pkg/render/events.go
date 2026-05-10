@@ -235,11 +235,15 @@ func (e *Engine) HandleMouseMove(x, y int) {
 	}
 
 	// Mouse capture: if a node has captured mouse, send events directly to it
-	// Note: the captured node can be removed by a drag-triggered re-render. Use the
-	// cached handler ref so resize/drag state keeps receiving events until mouseup.
+	// Note: we deliver events even if the node is Removed — the Lua refs are still
+	// valid (pendingUnrefs aren't drained until next renderInOrder), and we MUST
+	// deliver mouseMove to avoid drag state leaks.
 	if e.capturedNode != nil {
-		if e.captureMoveRef != 0 {
-			e.callLuaRef(e.captureMoveRef, x, y)
+		for n := e.capturedNode; n != nil; n = n.Parent {
+			if n.OnMouseMove != 0 {
+				e.callLuaRef(n.OnMouseMove, x, y)
+				break
+			}
 		}
 		return
 	}
@@ -436,13 +440,9 @@ func (e *Engine) HandleMouseDown(x, y int) {
 		}
 	}
 
-	// Mouse capture is only needed for drag/resize interactions that keep handling
-	// motion after the pointer leaves the original node. Plain buttons also have
-	// onMouseDown/onMouseUp for pressed state, but should not capture the mouse.
-	if target != nil && findMouseMoveRef(target) != 0 {
+	// Mouse capture: target already has onMouseDown (found by hitTestLayersWithHandler)
+	if target != nil {
 		e.capturedNode = target
-		e.captureMoveRef = findMouseMoveRef(target)
-		e.captureMouseUpRef = findMouseUpRef(target)
 	}
 }
 
@@ -464,16 +464,16 @@ func (e *Engine) HandleMouseUp(x, y int) {
 	// Send mouseup to captured node first (critical for drag release)
 	captured := e.capturedNode
 	e.capturedNode = nil // release capture
-	mouseUpRef := e.captureMouseUpRef
-	e.captureMoveRef = 0
-	e.captureMouseUpRef = 0
 
-	// Deliver mouseup even if captured node was Removed — this resets drag/resize state.
+	// Deliver mouseup even if captured node was Removed — Lua refs are still valid
+	// in this frame, and we MUST deliver mouseup to reset drag/resize state.
 	if captured != nil {
-		if mouseUpRef != 0 {
-			e.callLuaRef(mouseUpRef, x, y)
+		for n := captured; n != nil; n = n.Parent {
+			if n.OnMouseUp != 0 {
+				e.callLuaRef(n.OnMouseUp, x, y)
+				break
+			}
 		}
-		e.drainPendingUnrefs()
 		return // captured node handled it, don't also dispatch to hitTest target
 	}
 
@@ -485,24 +485,6 @@ func (e *Engine) HandleMouseUp(x, y int) {
 	if target != nil && target.OnMouseUp != 0 && !target.Disabled {
 		e.callLuaRef(target.OnMouseUp, x, y)
 	}
-}
-
-func findMouseMoveRef(node *Node) LuaRef {
-	for n := node; n != nil; n = n.Parent {
-		if n.OnMouseMove != 0 {
-			return n.OnMouseMove
-		}
-	}
-	return 0
-}
-
-func findMouseUpRef(node *Node) LuaRef {
-	for n := node; n != nil; n = n.Parent {
-		if n.OnMouseUp != 0 {
-			return n.OnMouseUp
-		}
-	}
-	return 0
 }
 
 // HandleKeyDown processes a key event.
