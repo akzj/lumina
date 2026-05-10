@@ -690,3 +690,146 @@ func paintTextSpansV3(w CellWriter, node *Node) {
 		}
 	}
 }
+
+// PaintDirtyV3 incrementally repaints only dirty nodes.
+// It walks the tree top-down, accumulating clip through overflow containers.
+// When a dirty node is found, its area is cleared and repainted.
+// Key advantage over V2: no escalation logic needed — the CellWriter carries
+// the correct clip as we walk down the tree.
+func PaintDirtyV3(buf *CellBuffer, root *Node) {
+	if buf == nil || root == nil {
+		return
+	}
+	w := NewCellWriter(buf)
+	paintDirtyWalkV3(w, root, 0)
+}
+
+func paintDirtyWalkV3(w CellWriter, node *Node, depth int) {
+	if node == nil || node.W <= 0 || node.H <= 0 {
+		return
+	}
+	if node.Style.Display == "none" {
+		if node.PaintDirty {
+			clearPaintDirty(node)
+		}
+		return
+	}
+	if depth > v3MaxDepth {
+		return
+	}
+
+	// Early out: if node is entirely outside current clip, skip
+	ox, oy := w.Offset()
+	screenX := node.X + ox
+	screenY := node.Y + oy
+	clip := w.Clip()
+	cx1, cy1, cx2, cy2 := clip.Bounds()
+	if screenX >= cx2 || screenX+node.W <= cx1 || screenY >= cy2 || screenY+node.H <= cy1 {
+		if node.PaintDirty {
+			clearPaintDirty(node)
+		}
+		return
+	}
+
+	if node.PaintDirty {
+		// Clear the node's area (within clip) then repaint it fully.
+		// If node moved, also clear old position.
+		if node.PositionChanged {
+			bg := findAncestorBackground(node)
+			w.ClearRect(node.OldX, node.OldY, node.OldW, node.OldH, bg)
+			node.PositionChanged = false
+		}
+
+		bg := findAncestorBackground(node)
+		w.ClearRect(node.X, node.Y, node.W, node.H, bg)
+		paintNodeV3(w, node, depth)
+		node.PaintDirty = false
+		clearPaintDirtyBelow(node)
+		return
+	}
+
+	// Not dirty — propagate clip to children and recurse
+	switch node.Type {
+	case "text":
+		// Text nodes have no children — nothing to do if not dirty
+		return
+	case "component":
+		for _, child := range node.Children {
+			paintDirtyWalkV3(w, child, depth+1)
+		}
+	case "box", "vbox", "hbox":
+		if node.Style.Overflow == "scroll" {
+			paintDirtyWalkScrollV3(w, node, depth)
+		} else if node.Style.Overflow == "hidden" {
+			paintDirtyWalkHiddenV3(w, node, depth)
+		} else {
+			for _, child := range node.Children {
+				paintDirtyWalkV3(w, child, depth+1)
+			}
+		}
+	}
+}
+
+func paintDirtyWalkHiddenV3(w CellWriter, node *Node, depth int) {
+	ox, oy := w.Offset()
+	screenX := node.X + ox
+	screenY := node.Y + oy
+
+	bw := 0
+	if hasBorder(node.Style) {
+		bw = 1
+	}
+	contentX := screenX + bw + node.Style.PaddingLeft
+	contentY := screenY + bw + node.Style.PaddingTop
+	contentW := node.W - 2*bw - node.Style.PaddingLeft - node.Style.PaddingRight
+	contentH := node.H - 2*bw - node.Style.PaddingTop - node.Style.PaddingBottom
+	if contentW <= 0 || contentH <= 0 {
+		return
+	}
+
+	childWriter := w.WithClip(contentX, contentY, contentW, contentH)
+	for _, child := range node.Children {
+		paintDirtyWalkV3(childWriter, child, depth+1)
+	}
+}
+
+func paintDirtyWalkScrollV3(w CellWriter, node *Node, depth int) {
+	ox, oy := w.Offset()
+	screenX := node.X + ox
+	screenY := node.Y + oy
+
+	// Clamp scroll
+	maxScrollY := computeMaxScrollY(node)
+	if node.ScrollY > maxScrollY {
+		node.ScrollY = maxScrollY
+	}
+	if node.ScrollY < 0 {
+		node.ScrollY = 0
+	}
+	maxScrollX := computeMaxScrollX(node)
+	if node.ScrollX > maxScrollX {
+		node.ScrollX = maxScrollX
+	}
+	if node.ScrollX < 0 {
+		node.ScrollX = 0
+	}
+
+	bw := 0
+	if hasBorder(node.Style) {
+		bw = 1
+	}
+	contentX := screenX + bw + node.Style.PaddingLeft
+	contentY := screenY + bw + node.Style.PaddingTop
+	contentW := node.W - 2*bw - node.Style.PaddingLeft - node.Style.PaddingRight
+	contentH := node.H - 2*bw - node.Style.PaddingTop - node.Style.PaddingBottom
+	if contentW <= 0 || contentH <= 0 {
+		return
+	}
+
+	childWriter := w.WithClip(contentX, contentY, contentW, contentH)
+	childWriter = childWriter.WithOffset(-node.ScrollX, -node.ScrollY)
+
+	for _, child := range node.Children {
+		paintDirtyWalkV3(childWriter, child, depth+1)
+	}
+}
