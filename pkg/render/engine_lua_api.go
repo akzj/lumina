@@ -1,6 +1,7 @@
 package render
 
 import (
+	"fmt"
 	"runtime"
 	"strings"
 
@@ -724,7 +725,36 @@ func (e *Engine) luaCreateComponent(L *lua.State) int {
 func (e *Engine) luaUseState(L *lua.State) int {
 	comp := e.currentComp
 	if comp == nil {
-		L.PushString("useState: no current component")
+		// Include the key name and Lua traceback for debugging.
+		key := ""
+		if L.GetTop() >= 1 {
+			if s, ok := L.ToString(1); ok {
+				key = s
+			}
+		}
+		// Get Lua traceback via debug.traceback
+		tb := ""
+		L.GetGlobal("debug")
+		if L.IsTable(-1) {
+			L.GetField(-1, "traceback")
+			if L.IsFunction(-1) {
+				L.PushString("")
+				L.PushInteger(2) // skip this function
+				if L.PCall(2, 1, 0) == 0 {
+					if s, ok := L.ToString(-1); ok {
+						tb = s
+					}
+					L.Pop(1)
+				}
+			} else {
+				L.Pop(1) // pop non-function
+			}
+			L.Pop(1) // pop debug table
+		} else {
+			L.Pop(1) // pop non-table
+		}
+		errMsg := fmt.Sprintf("useState(%q): no current component (called outside render)\n%s", key, tb)
+		L.PushString(errMsg)
 		L.Error()
 		return 0
 	}

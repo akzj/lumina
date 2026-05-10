@@ -3,6 +3,7 @@ package render
 import (
 	"fmt"
 	"log"
+	"os"
 
 	"github.com/akzj/go-lua/pkg/lua"
 )
@@ -1201,6 +1202,7 @@ type EventResult struct {
 
 // reportEventError logs and notifies Lua about an event handler error.
 func (e *Engine) reportEventError(errMsg string, handlerType string) {
+	fmt.Fprintf(os.Stderr, "[lumina] event handler error (%s): %s\n", handlerType, errMsg)
 	log.Printf("[lumina] event handler error (%s): %s", handlerType, errMsg)
 	if e.onErrorRef != 0 {
 		L := e.L
