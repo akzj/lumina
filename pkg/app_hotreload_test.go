@@ -1,11 +1,13 @@
 package v2
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/akzj/go-lua/pkg/lua"
+	"github.com/akzj/lumina/pkg/event"
 	"github.com/akzj/lumina/pkg/output"
 )
 
@@ -566,5 +568,154 @@ func TestMarkAllComponentsDirty(t *testing.T) {
 	}
 	if !app.engine.NeedsRender() {
 		t.Error("engine should need render after MarkAllComponentsDirty")
+	}
+}
+
+// --- F5 full reload tests ---
+
+func TestHotReload_F5_TriggersFullReload(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+	ta := output.NewTestAdapter()
+	app := NewApp(L, 40, 10, ta)
+
+	dir := t.TempDir()
+	mainPath := filepath.Join(dir, "main.lua")
+	writeFile(t, mainPath, `
+		lumina.createComponent({
+			id = "root",
+			render = function(props)
+				return lumina.createElement("text", {content = "before-f5"})
+			end
+		})
+	`)
+
+	if err := app.RunScript(mainPath); err != nil {
+		t.Fatalf("RunScript: %v", err)
+	}
+	app.scriptPath = mainPath // RunScript doesn't set this; only Run(cfg) does
+	app.RenderAll()
+
+	screen := app.engine.ToBuffer()
+	_ = ta.WriteFull(screen)
+	if !screenHasString(ta, "before-f5") {
+		t.Fatal("expected 'before-f5' on screen")
+	}
+
+	// Modify script
+	writeFile(t, mainPath, `
+		lumina.createComponent({
+			id = "root",
+			render = function(props)
+				return lumina.createElement("text", {content = "after-f5"})
+			end
+		})
+	`)
+
+	// Simulate F5 keypress via HandleEvent (same path as real user pressing F5)
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "F5"})
+
+	screen = app.engine.ToBuffer()
+	_ = ta.WriteFull(screen)
+	if !screenHasString(ta, "after-f5") {
+		t.Fatal("expected 'after-f5' on screen after F5 reload")
+	}
+	if screenHasString(ta, "before-f5") {
+		t.Fatal("'before-f5' should no longer be on screen after F5 reload")
+	}
+}
+
+func TestHotReload_FullReload_ClearsModuleState(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+	ta := output.NewTestAdapter()
+	app := NewApp(L, 40, 10, ta)
+
+	dir := t.TempDir()
+
+	// Module that tracks how many times it's been loaded
+	libPath := filepath.Join(dir, "counter.lua")
+	writeFile(t, libPath, `
+		local M = {}
+		M.value = "first-load"
+		return M
+	`)
+
+	mainPath := filepath.Join(dir, "main.lua")
+	writeFile(t, mainPath, `
+		local counter = require("counter")
+		lumina.createComponent({
+			id = "root",
+			render = function(props)
+				return lumina.createElement("text", {content = counter.value})
+			end
+		})
+	`)
+
+	if err := app.RunScript(mainPath); err != nil {
+		t.Fatalf("RunScript: %v", err)
+	}
+	app.RenderAll()
+
+	screen := app.engine.ToBuffer()
+	_ = ta.WriteFull(screen)
+	if !screenHasString(ta, "first-load") {
+		t.Fatal("expected 'first-load' on screen")
+	}
+
+	// Change the module content
+	writeFile(t, libPath, `
+		local M = {}
+		M.value = "reloaded"
+		return M
+	`)
+
+	// Full reload via reloadScript (same as F5 for main script)
+	app.reloadScript(mainPath)
+
+	screen = app.engine.ToBuffer()
+	_ = ta.WriteFull(screen)
+	if !screenHasString(ta, "reloaded") {
+		t.Fatal("expected 'reloaded' on screen after full reload — module should be re-required")
+	}
+}
+
+func TestHotReload_F5_MultipleReloads(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+	ta := output.NewTestAdapter()
+	app := NewApp(L, 40, 10, ta)
+
+	dir := t.TempDir()
+	mainPath := filepath.Join(dir, "main.lua")
+
+	for i := 0; i < 5; i++ {
+		content := fmt.Sprintf(`
+			lumina.createComponent({
+				id = "root",
+				render = function(props)
+					return lumina.createElement("text", {content = "v%d"})
+				end
+			})
+		`, i)
+		writeFile(t, mainPath, content)
+
+		if i == 0 {
+			if err := app.RunScript(mainPath); err != nil {
+				t.Fatalf("RunScript: %v", err)
+			}
+			app.RenderAll()
+			app.scriptPath = mainPath // RunScript doesn't set this; only Run(cfg) does
+		} else {
+			// Simulate F5
+			app.HandleEvent(&event.Event{Type: "keydown", Key: "F5"})
+		}
+
+		screen := app.engine.ToBuffer()
+		_ = ta.WriteFull(screen)
+		expected := fmt.Sprintf("v%d", i)
+		if !screenHasString(ta, expected) {
+			t.Fatalf("reload %d: expected %q on screen", i, expected)
+		}
 	}
 }
