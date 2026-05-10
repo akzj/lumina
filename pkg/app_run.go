@@ -282,6 +282,15 @@ func (a *App) reloadScript(path string) {
 		}
 		// Re-register Lua API to refresh lumina.* closures after Destroy.
 		a.engine.RegisterLuaAPI()
+		log.Printf("[DEBUG reload] RegisterLuaAPI called, checking lumina.useRef type...")
+		L := a.luaState
+		L.GetGlobal("lumina")
+		if L.IsTable(-1) {
+			L.GetField(-1, "useRef")
+			log.Printf("[DEBUG reload] lumina.useRef type = %v", L.Type(-1))
+			L.Pop(1)
+		}
+		L.Pop(1) // pop lumina table
 	}
 
 	// Free global key handler refs.
@@ -316,6 +325,16 @@ func (a *App) reloadScript(path string) {
 		log.Printf("[hotreload] error reloading %s: %v", path, err)
 		return
 	}
+
+	log.Printf("[DEBUG reload] DoFile completed, checking lumina.useRef type...")
+	L = a.luaState
+	L.GetGlobal("lumina")
+	if L.IsTable(-1) {
+		L.GetField(-1, "useRef")
+		log.Printf("[DEBUG reload] after DoFile: lumina.useRef type = %v", L.Type(-1))
+		L.Pop(1)
+	}
+	L.Pop(1)
 
 	// Full re-render.
 	a.RenderAll()

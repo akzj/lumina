@@ -2,6 +2,7 @@ package render
 
 import (
 	"fmt"
+	"log"
 	"reflect"
 	"sort"
 
@@ -97,6 +98,7 @@ func getHookSlot(L *lua.State, comp *Component, kind hookKind) (*hookSlot, bool)
 //   - {a, b, ...} = run when any dep changes
 func (e *Engine) luaUseEffect(L *lua.State) int {
 	comp := e.currentComp
+	log.Printf("[DEBUG useRef] comp=%v currentComp=%v top=%d", comp != nil, e.currentComp != nil, L.GetTop())
 	if comp == nil {
 		L.PushString("useEffect: no current component")
 		L.Error()
@@ -148,6 +150,7 @@ func (e *Engine) luaUseEffect(L *lua.State) int {
 // Returns the same table {current = value} across renders.
 func (e *Engine) luaUseRef(L *lua.State) int {
 	comp := e.currentComp
+	log.Printf("[DEBUG useRef] comp=%v currentComp=%v top=%d", comp != nil, e.currentComp != nil, L.GetTop())
 	if comp == nil {
 		L.PushString("useRef: no current component")
 		L.Error()
@@ -170,11 +173,16 @@ func (e *Engine) luaUseRef(L *lua.State) int {
 		L.SetField(tbl, "current")
 		// Store table in registry so we return the SAME table each render
 		ref := L.Ref(lua.RegistryIndex)
+		log.Printf("[DEBUG useRef] isNew=true tableRef=%d", ref)
 		slot.ref = &refSlot{tableRef: ref}
 	}
 
 	// Push the same table every render
+	log.Printf("[DEBUG useRef] retrieving tableRef=%d", slot.ref.tableRef)
 	L.RawGetI(lua.RegistryIndex, int64(slot.ref.tableRef))
+	if !L.IsTable(-1) {
+		log.Printf("[DEBUG useRef] ERROR: RawGetI returned type %s (tableRef=%d)", L.Type(-1), slot.ref.tableRef)
+	}
 	return 1
 }
 
@@ -186,6 +194,7 @@ func (e *Engine) luaUseRef(L *lua.State) int {
 // Returns cached value if deps haven't changed.
 func (e *Engine) luaUseMemo(L *lua.State) int {
 	comp := e.currentComp
+	log.Printf("[DEBUG useRef] comp=%v currentComp=%v top=%d", comp != nil, e.currentComp != nil, L.GetTop())
 	if comp == nil {
 		L.PushString("useMemo: no current component")
 		L.Error()
@@ -239,6 +248,7 @@ func (e *Engine) luaUseMemo(L *lua.State) int {
 // Sugar for useMemo that caches the function itself (not calling it).
 func (e *Engine) luaUseCallback(L *lua.State) int {
 	comp := e.currentComp
+	log.Printf("[DEBUG useRef] comp=%v currentComp=%v top=%d", comp != nil, e.currentComp != nil, L.GetTop())
 	if comp == nil {
 		L.PushString("useCallback: no current component")
 		L.Error()

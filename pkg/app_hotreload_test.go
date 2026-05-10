@@ -719,3 +719,50 @@ func TestHotReload_F5_MultipleReloads(t *testing.T) {
 		}
 	}
 }
+// --- Full reload useRef preservation test ---
+
+func TestHotReload_FullReload_PreservesUseRef(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+	ta := output.NewTestAdapter()
+	app := NewApp(L, 40, 20, ta)
+
+	dir := t.TempDir()
+	mainPath := filepath.Join(dir, "main.lua")
+
+	// Script v1: uses useRef to store a counter
+	writeFile(t, mainPath, `
+		lumina.createComponent({
+			id = "root",
+			render = function(props)
+				local counterRef = lumina.useRef(0)
+				counterRef.current = counterRef.current + 1
+				return lumina.createElement("text", {
+					content = "count=" .. tostring(counterRef.current)
+				})
+			end
+		})
+	`)
+
+	if err := app.RunScript(mainPath); err != nil {
+		t.Fatalf("RunScript: %v", err)
+	}
+	app.scriptPath = mainPath
+	app.RenderAll()
+
+	screen := app.engine.ToBuffer()
+	_ = ta.WriteFull(screen)
+	if !screenHasString(ta, "count=1") {
+		t.Fatalf("expected 'count=1' on screen (initial render)")
+	}
+
+	// Trigger F5 full reload with same script
+	app.HandleEvent(&event.Event{Type: "keydown", Key: "F5"})
+
+	screen = app.engine.ToBuffer()
+	_ = ta.WriteFull(screen)
+	// After full reload, component is recreated, so counter starts at 1 again
+	if !screenHasString(ta, "count=1") {
+		t.Fatalf("after F5 reload: expected 'count=1' on screen")
+	}
+}
