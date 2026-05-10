@@ -197,7 +197,7 @@ func TestHorizontalScroll_PaintOffset(t *testing.T) {
 	root.Children = []*Node{textNode}
 
 	buf := NewCellBuffer(20, 5)
-	paintScrollChildren(buf, root)
+	PaintFullV3(buf, root)
 
 	// After scrolling 10 right, the first visible char should be 'K' (index 10)
 	cell := buf.Get(0, 0)

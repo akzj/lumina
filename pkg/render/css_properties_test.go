@@ -60,7 +60,7 @@ func TestDisplayNone_Paint(t *testing.T) {
 		Style:   Style{Display: "none", Foreground: "#FF0000"},
 		X: 0, Y: 0, W: 10, H: 1,
 	}
-	paintNode(buf, node)
+	PaintFullV3(buf, node)
 
 	// Buffer should be empty
 	for x := 0; x < 10; x++ {
@@ -114,7 +114,7 @@ func TestVisibilityHidden_Paint(t *testing.T) {
 		Style:   Style{Visibility: "hidden", Foreground: "#FF0000"},
 		X: 0, Y: 0, W: 10, H: 1,
 	}
-	paintNode(buf, node)
+	PaintFullV3(buf, node)
 
 	// Buffer should be empty — visibility:hidden doesn't paint
 	for x := 0; x < 6; x++ {
@@ -147,7 +147,7 @@ func TestItalic_Cell(t *testing.T) {
 		Style:   Style{Italic: true, Foreground: "#FFFFFF"},
 		X: 0, Y: 0, W: 10, H: 1,
 	}
-	paintNode(buf, node)
+	PaintFullV3(buf, node)
 
 	c := buf.Get(0, 0)
 	if c.Ch != 'H' {
@@ -166,7 +166,7 @@ func TestStrikethrough_Cell(t *testing.T) {
 		Style:   Style{Strikethrough: true, Foreground: "#FFFFFF"},
 		X: 0, Y: 0, W: 10, H: 1,
 	}
-	paintNode(buf, node)
+	PaintFullV3(buf, node)
 
 	c := buf.Get(0, 0)
 	if !c.Strikethrough {
@@ -182,7 +182,7 @@ func TestInverse_Cell(t *testing.T) {
 		Style:   Style{Inverse: true, Foreground: "#FFFFFF"},
 		X: 0, Y: 0, W: 10, H: 1,
 	}
-	paintNode(buf, node)
+	PaintFullV3(buf, node)
 
 	c := buf.Get(0, 0)
 	if !c.Inverse {
@@ -200,7 +200,7 @@ func TestTextAlign_Center(t *testing.T) {
 		Style:   Style{TextAlign: "center", WhiteSpace: "nowrap"},
 		X: 0, Y: 0, W: 10, H: 1,
 	}
-	paintNode(buf, node)
+	PaintFullV3(buf, node)
 
 	// "Hi" is 2 chars wide, centered in 10 → offset = (10-2)/2 = 4
 	c := buf.Get(4, 0)
@@ -226,7 +226,7 @@ func TestTextAlign_Right(t *testing.T) {
 		Style:   Style{TextAlign: "right", WhiteSpace: "nowrap"},
 		X: 0, Y: 0, W: 10, H: 1,
 	}
-	paintNode(buf, node)
+	PaintFullV3(buf, node)
 
 	// "Hi" is 2 chars wide, right-aligned in 10 → offset = 10-2 = 8
 	c := buf.Get(8, 0)
@@ -248,7 +248,7 @@ func TestTextAlign_Center_WrapMode(t *testing.T) {
 		Style:   Style{TextAlign: "center"},
 		X: 0, Y: 0, W: 10, H: 1,
 	}
-	paintNode(buf, node)
+	PaintFullV3(buf, node)
 
 	// "AB" is 2 chars wide, centered in 10 → offset = 4
 	c := buf.Get(4, 0)
@@ -286,7 +286,7 @@ func TestWhiteSpace_Nowrap_Paint(t *testing.T) {
 		Style:   Style{WhiteSpace: "nowrap"},
 		X: 0, Y: 0, W: 5, H: 2,
 	}
-	paintNode(buf, node)
+	PaintFullV3(buf, node)
 
 	// Only first 5 chars should be visible on row 0
 	for i, expected := range "ABCDE" {
@@ -312,7 +312,7 @@ func TestTextOverflow_Ellipsis(t *testing.T) {
 		Style:   Style{WhiteSpace: "nowrap", TextOverflow: "ellipsis"},
 		X: 0, Y: 0, W: 5, H: 1,
 	}
-	paintNode(buf, node)
+	PaintFullV3(buf, node)
 
 	// Should show "ABCD…" (4 chars + ellipsis)
 	for i, expected := range "ABCD" {
@@ -336,7 +336,7 @@ func TestTextOverflow_Ellipsis_ShortText(t *testing.T) {
 		Style:   Style{WhiteSpace: "nowrap", TextOverflow: "ellipsis"},
 		X: 0, Y: 0, W: 10, H: 1,
 	}
-	paintNode(buf, node)
+	PaintFullV3(buf, node)
 
 	c := buf.Get(0, 0)
 	if c.Ch != 'H' {
@@ -362,7 +362,7 @@ func TestBorderColor(t *testing.T) {
 		Style: Style{Border: "single", BorderColor: "#00FF00", Foreground: "#FF0000", Background: "#000000"},
 		X: 0, Y: 0, W: 10, H: 5,
 	}
-	paintNode(buf, node)
+	PaintFullV3(buf, node)
 
 	// Border should use BorderColor (#00FF00), not Foreground (#FF0000)
 	c := buf.Get(0, 0) // top-left corner
@@ -383,7 +383,7 @@ func TestBorderColor_Fallback(t *testing.T) {
 		Style: Style{Border: "single", Foreground: "#FF0000", Background: "#000000"},
 		X: 0, Y: 0, W: 10, H: 5,
 	}
-	paintNode(buf, node)
+	PaintFullV3(buf, node)
 
 	c := buf.Get(0, 0)
 	if c.FG != "#FF0000" {

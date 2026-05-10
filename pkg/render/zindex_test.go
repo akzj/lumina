@@ -35,7 +35,7 @@ func TestZIndex_PaintOrder(t *testing.T) {
 	root.Children = []*Node{childA, childB, childC}
 
 	buf := NewCellBuffer(5, 3)
-	PaintFull(buf, root)
+	PaintFullV3(buf, root)
 
 	// B has highest ZIndex (2), so it paints last → its chars should be visible
 	for x := 0; x < 3; x++ {
@@ -107,7 +107,7 @@ func TestZIndex_DefaultPreservesOrder(t *testing.T) {
 
 	// Paint: B is last in array → paints on top → cells show "B"
 	buf := NewCellBuffer(5, 3)
-	PaintFull(buf, root)
+	PaintFullV3(buf, root)
 	for x := 0; x < 3; x++ {
 		c := buf.Get(x, 0)
 		if c.Ch != 'B' {
@@ -159,7 +159,7 @@ func TestZIndex_Negative(t *testing.T) {
 	root.Children = []*Node{childA, childB}
 
 	buf := NewCellBuffer(5, 3)
-	PaintFull(buf, root)
+	PaintFullV3(buf, root)
 
 	// B has ZIndex=0 > A's ZIndex=-1, so B paints on top
 	for x := 0; x < 3; x++ {
@@ -217,7 +217,7 @@ func TestZIndex_EqualZIndex_ArrayOrderPreserved(t *testing.T) {
 	root.Children = []*Node{childA, childB, childC}
 
 	buf := NewCellBuffer(5, 3)
-	PaintFull(buf, root)
+	PaintFullV3(buf, root)
 
 	// B is last among ZIndex=5 siblings → paints last → visible
 	for x := 0; x < 3; x++ {
@@ -250,7 +250,7 @@ func TestZIndex_ComponentChildren(t *testing.T) {
 	root.Children = []*Node{childA, childB}
 
 	buf := NewCellBuffer(5, 3)
-	PaintFull(buf, root)
+	PaintFullV3(buf, root)
 
 	// B has higher ZIndex → paints on top
 	for x := 0; x < 3; x++ {
