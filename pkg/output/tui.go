@@ -151,9 +151,13 @@ func (t *tuiAdapter) writeCell(c buffer.Cell, st *tuiState) {
 		st.strikethrough = true
 	}
 
-	// Write the character. Zero cells render as space.
+	// Write the character. Control characters must not reach the terminal —
+	// they would corrupt cursor positioning (e.g. \r resets to column 0).
 	ch := c.Char
-	if ch == 0 {
+	if ch < 0x20 {
+		// Control characters (including \0, \r, \n, \t, etc.) must not be
+		// written to the terminal — they would corrupt cursor positioning.
+		// Replace with space to preserve cell spacing.
 		ch = ' '
 	}
 	t.w.WriteRune(ch)
