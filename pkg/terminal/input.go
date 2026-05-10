@@ -4,25 +4,9 @@ package terminal
 
 import (
 	"io"
-	"log"
 	"os"
-	"sync"
 	"unicode/utf8"
 )
-
-var inputDebugLog *log.Logger
-var inputDebugOnce sync.Once
-
-func getInputDebugLog() *log.Logger {
-	inputDebugOnce.Do(func() {
-		f, err := os.OpenFile("input_debug.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-		if err != nil {
-			return
-		}
-		inputDebugLog = log.New(f, "", log.LstdFlags|log.Lmicroseconds)
-	})
-	return inputDebugLog
-}
 
 // InputEvent represents a parsed terminal input event.
 // The caller converts InputEvent → event.Event to avoid circular deps.
@@ -97,11 +81,6 @@ func (ir *InputReader) readLoop() {
 		if err != nil {
 			return
 		}
-		if n > 0 {
-			if dl := getInputDebugLog(); dl != nil {
-				dl.Printf("[RAW] %d bytes: %x | ascii: %q", n, buf[:n], buf[:n])
-			}
-		}
 		if n == 0 {
 			events := parser.Flush()
 			for i := range events {
@@ -115,12 +94,6 @@ func (ir *InputReader) readLoop() {
 		}
 
 		events := parser.Parse(buf[:n])
-		if dl := getInputDebugLog(); dl != nil {
-			for _, ev := range events {
-				dl.Printf("[EVENT] type=%s key=%q char=%q mods={ctrl=%v alt=%v shift=%v}",
-					ev.Type, ev.Key, ev.Char, ev.Modifiers.Ctrl, ev.Modifiers.Alt, ev.Modifiers.Shift)
-			}
-		}
 		for i := range events {
 			select {
 			case ir.events <- events[i]:
