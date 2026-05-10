@@ -730,9 +730,9 @@ func TestHotReload_FullReload_PreservesUseRef(t *testing.T) {
 	dir := t.TempDir()
 	mainPath := filepath.Join(dir, "main.lua")
 
-	// Script v1: uses useRef to store a counter
+	// Script v1: uses useRef to store a counter (via lumina.app, matching zerofas)
 	writeFile(t, mainPath, `
-		lumina.createComponent({
+		lumina.app({
 			id = "root",
 			render = function(props)
 				local counterRef = lumina.useRef(0)
