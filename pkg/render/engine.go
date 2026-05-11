@@ -3,7 +3,6 @@ package render
 import (
 	"fmt"
 	"log"
-	"math"
 	"os"
 	"reflect"
 	"sort"
@@ -24,7 +23,7 @@ func init() {
 		f, err := os.Create("/tmp/lumina_scroll_metrics.log")
 		if err == nil {
 			scrollMetricsLog = f
-			fmt.Fprintln(f, "frame,scrollY,velocity,linesThisFrame,accum")
+			fmt.Fprintln(f, "frame,scrollY,move,remaining")
 		}
 	}
 }
@@ -174,79 +173,35 @@ func (e *Engine) TickSmoothScroll() bool {
 	return changed
 }
 
-// tickSmoothScrollNode recursively finds scroll containers and animates scrolling.
-// Supports two modes:
-//   - Velocity-based (ScrollVelocity != 0): momentum scrolling from wheel events
-//   - Target-based (TargetScrollY != ScrollY, velocity == 0): for keyboard/scrollbar
+// tickSmoothScrollNode recursively finds scroll containers and moves ScrollY toward TargetScrollY.
+// Uses move=1 for small diffs (smooth slow scroll) and proportional move for large diffs (PageDown).
 func tickSmoothScrollNode(node *Node) bool {
 	if node == nil {
 		return false
 	}
 	changed := false
 
-	if node.Style.Overflow == "scroll" {
-		if node.ScrollVelocity != 0 {
-			// --- Velocity-based momentum scrolling ---
-			// Apply friction
-			node.ScrollVelocity *= scrollFriction
-
-			// Accumulate fractional movement
-			node.ScrollAccum += node.ScrollVelocity
-
-			// Extract integer lines to scroll
-			lines := int(node.ScrollAccum)
-			if lines != 0 {
-				node.ScrollAccum -= float64(lines)
-
-				// Apply scroll with clamping
-				maxScroll := computeMaxScrollY(node)
-				newScrollY := node.ScrollY + lines
-				if newScrollY < 0 {
-					newScrollY = 0
-				}
-				if newScrollY > maxScroll {
-					newScrollY = maxScroll
-				}
-
-				if newScrollY != node.ScrollY {
-					node.ScrollY = newScrollY
-					node.TargetScrollY = node.ScrollY
-					node.PaintDirty = true
-					changed = true
-					// Log scroll metrics
-					if scrollMetricsLog != nil {
-						fmt.Fprintf(scrollMetricsLog, "%d,%d,%.3f,%d,%.3f\n",
-							scrollMetricsFrame, node.ScrollY, node.ScrollVelocity, lines, node.ScrollAccum)
-					}
-				} else {
-					// Hit boundary, stop
-					node.ScrollVelocity = 0
-					node.ScrollAccum = 0
-				}
-			}
-
-			// Stop when velocity is negligible
-			if math.Abs(node.ScrollVelocity) < 0.1 {
-				node.ScrollVelocity = 0
-				node.ScrollAccum = 0
-			} else {
-				// Still animating — need render tick even if no lines moved yet
-				changed = true
-			}
-		} else if node.ScrollY != node.TargetScrollY {
-			// --- Target-based scrolling (keyboard, scrollbar, programmatic) ---
-			diff := node.TargetScrollY - node.ScrollY
-			move := abs(diff)/3 + 1
-			if move > abs(diff) {
-				move = abs(diff)
-			}
-			if diff > 0 {
-				node.ScrollY += move
-			} else {
-				node.ScrollY -= move
-			}
-			node.PaintDirty = true
-			changed = true
+	if node.Style.Overflow == "scroll" && node.ScrollY != node.TargetScrollY {
+		diff := node.TargetScrollY - node.ScrollY
+		// move=1 for small diffs (smooth), proportional for large diffs (fast PageDown)
+		move := 1
+		if abs(diff) > 6 {
+			move = abs(diff) / 6 // large jumps reach target in ~6 frames
+		}
+		if move > abs(diff) {
+			move = abs(diff)
+		}
+		if diff > 0 {
+			node.ScrollY += move
+		} else {
+			node.ScrollY -= move
+		}
+		node.PaintDirty = true
+		changed = true
+		// Log scroll metrics
+		if scrollMetricsLog != nil {
+			fmt.Fprintf(scrollMetricsLog, "%d,%d,%d,%d\n",
+				scrollMetricsFrame, node.ScrollY, move, node.TargetScrollY-node.ScrollY)
 		}
 	}
 

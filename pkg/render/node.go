@@ -191,13 +191,11 @@ type Node struct {
 	positionalKey string
 
 	// Scroll state
-	ScrollY         int
-	TargetScrollY   int     // smooth scroll target (animated toward by engine tick)
-	ScrollVelocity  float64 // velocity-based momentum: lines per frame (fractional)
-	ScrollAccum     float64 // accumulated fractional lines for sub-pixel scrolling
-	ScrollHeight    int     // total content height (set by layout for overflow=scroll containers)
-	ScrollX         int
-	ScrollWidth     int // total content width (set by layout for overflow=scroll containers)
+	ScrollY       int
+	TargetScrollY int // smooth scroll target (animated toward by engine tick)
+	ScrollHeight  int // total content height (set by layout for overflow=scroll containers)
+	ScrollX       int
+	ScrollWidth   int // total content width (set by layout for overflow=scroll containers)
 }
 
 // Component is a stateful UI unit.

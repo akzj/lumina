@@ -755,29 +755,32 @@ func TestEngine_AutoScroll_CustomHandlerPriority(t *testing.T) {
 		t.Error("expected custom onScroll handler to be called")
 	}
 
-	// With velocity-based scrolling, autoScroll adds velocity impulse.
-	// Animate momentum to completion and verify ScrollY moved.
+	// With target-based scrolling, autoScroll sets TargetScrollY (step=3, delta=1 → TargetScrollY=3).
+	// ScrollY is animated toward target by TickSmoothScroll (move=1 per frame).
 	scrollNode := root.RootNode
 	if len(scrollNode.Children) > 0 && scrollNode.Children[0].Style.Overflow == "scroll" {
 		scrollNode = scrollNode.Children[0]
 	}
+	if scrollNode.TargetScrollY != 3 {
+		t.Errorf("auto-scroll should have set TargetScrollY = %d, want 3", scrollNode.TargetScrollY)
+	}
 
-	// Animate until momentum stops
+	// Animate until ScrollY reaches target
 	for i := 0; i < 100; i++ {
 		if !e.TickSmoothScroll() {
 			break
 		}
 	}
-	if scrollNode.ScrollY <= 0 {
-		t.Errorf("after TickSmoothScroll, ScrollY = %d, want > 0", scrollNode.ScrollY)
+	if scrollNode.ScrollY != 3 {
+		t.Errorf("after TickSmoothScroll, ScrollY = %d, want 3", scrollNode.ScrollY)
 	}
 
-	// Verify handler received a predicted scrollY > 0
+	// Verify handler received TargetScrollY (=3)
 	L.GetGlobal("scroll_received_y")
 	receivedY, _ := L.ToInteger(-1)
 	L.Pop(1)
-	if receivedY <= 0 {
-		t.Errorf("onScroll handler received scrollY = %d, want > 0", receivedY)
+	if receivedY != 3 {
+		t.Errorf("onScroll handler received scrollY = %d, want 3", receivedY)
 	}
 }
 
