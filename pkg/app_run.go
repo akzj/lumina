@@ -234,8 +234,10 @@ func (a *App) eventLoop(cfg RunConfig) error {
 			// Render dirty components.
 			a.RenderDirty()
 
-			// Tick FPS counter with actual render status, and auto-refresh devtools.
-			a.tickDevTools(a.lastFrameRendered)
+			// Tick FPS counter with accumulated render count, then reset.
+			rendered := a.renderedFrameCount
+			a.renderedFrameCount = 0
+			a.tickDevTools(rendered)
 
 			// Native cursor blink removed — Lua Textarea handles cursor via re-render.
 		}

@@ -39,7 +39,7 @@ func (a *App) refreshDevToolsV2() {
 
 // tickDevToolsV2 is called every frame tick when V2 engine is active.
 // It updates FPS and repaints the devtools overlay if visible (throttled to ~3Hz).
-func (a *App) tickDevToolsV2(rendered bool) {
+func (a *App) tickDevToolsV2(rendered int) {
 	a.devtools.TickFPS(rendered)
 	if !a.devtools.Visible {
 		return
