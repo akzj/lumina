@@ -442,6 +442,7 @@ func layoutVBox(node *Node, contentX, contentY, contentW, contentH int, style St
 			}
 			if node.ScrollY > maxScroll {
 				node.ScrollY = maxScroll
+				node.TargetScrollY = node.ScrollY
 			}
 		}
 

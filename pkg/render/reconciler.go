@@ -51,6 +51,7 @@ func reconcileImpl(node *Node, desc Descriptor, freedRefs *[]int64) bool {
 	// 1c. Update scroll position (only when Lua explicitly sets scrollY)
 	if desc.ScrollYSet && desc.ScrollY != node.ScrollY {
 		node.ScrollY = desc.ScrollY
+		node.TargetScrollY = node.ScrollY
 		node.PaintDirty = true
 		changed = true
 	}
@@ -416,6 +417,7 @@ func createNodeFromDesc(desc Descriptor) *Node {
 	node.AutoFocus = desc.AutoFocus
 	if desc.ScrollYSet {
 		node.ScrollY = desc.ScrollY
+		node.TargetScrollY = node.ScrollY
 	}
 	node.Style = desc.Style
 	node.HoverStyle = desc.HoverStyle

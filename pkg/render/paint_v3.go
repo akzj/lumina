@@ -130,9 +130,11 @@ func paintScrollChildrenV3(w CellWriter, node *Node, depth int) {
 	maxScrollY := computeMaxScrollY(node)
 	if node.ScrollY > maxScrollY {
 		node.ScrollY = maxScrollY
+		node.TargetScrollY = node.ScrollY
 	}
 	if node.ScrollY < 0 {
 		node.ScrollY = 0
+		node.TargetScrollY = node.ScrollY
 	}
 	maxScrollX := computeMaxScrollX(node)
 	if node.ScrollX > maxScrollX {
@@ -802,9 +804,11 @@ func paintDirtyWalkScrollV3(w CellWriter, node *Node, depth int) {
 	maxScrollY := computeMaxScrollY(node)
 	if node.ScrollY > maxScrollY {
 		node.ScrollY = maxScrollY
+		node.TargetScrollY = node.ScrollY
 	}
 	if node.ScrollY < 0 {
 		node.ScrollY = 0
+		node.TargetScrollY = node.ScrollY
 	}
 	maxScrollX := computeMaxScrollX(node)
 	if node.ScrollX > maxScrollX {

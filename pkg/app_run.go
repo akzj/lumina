@@ -237,6 +237,9 @@ func (a *App) eventLoop(cfg RunConfig) error {
 				a.scheduler.Tick()
 			}
 
+			// Tick smooth scroll animation (move toward target each frame).
+			a.engine.TickSmoothScroll()
+
 			// Render dirty components.
 			a.RenderDirty()
 

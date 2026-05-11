@@ -117,6 +117,7 @@ func (e *Engine) RegisterLuaAPI() {
 			targetY = maxScroll
 		}
 		node.ScrollY = targetY
+		node.TargetScrollY = node.ScrollY
 		node.PaintDirty = true
 		e.needsRender = true
 		L.PushBoolean(true)

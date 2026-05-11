@@ -468,6 +468,12 @@ func (fw *testFramework) luaCreateApp(L *lua.State) int {
 		y := int(L.CheckInteger(3))
 		delta := int(L.CheckInteger(4))
 		handle.app.engine.HandleScroll(x, y, delta)
+		// Animate smooth scroll to completion so tests see immediate effect
+		for i := 0; i < 200; i++ {
+			if !handle.app.engine.TickSmoothScroll() {
+				break
+			}
+		}
 		handle.app.engine.RenderDirty()
 		return 0
 	})

@@ -137,6 +137,64 @@ func (e *Engine) MarkAllComponentsDirty() {
 	e.needsRender = true
 }
 
+// TickSmoothScroll advances all scroll containers by moving ScrollY toward TargetScrollY.
+// Call this once per frame tick (60Hz) for smooth scrolling animation.
+// Returns true if any scroll position changed (needs render).
+func (e *Engine) TickSmoothScroll() bool {
+	changed := false
+	for _, layer := range e.layers {
+		if layer.Root != nil {
+			if tickSmoothScrollNode(layer.Root) {
+				changed = true
+			}
+		}
+	}
+	if changed {
+		e.needsRender = true
+	}
+	return changed
+}
+
+// tickSmoothScrollNode recursively finds scroll containers and moves ScrollY toward TargetScrollY.
+func tickSmoothScrollNode(node *Node) bool {
+	if node == nil {
+		return false
+	}
+	changed := false
+
+	if node.Style.Overflow == "scroll" && node.ScrollY != node.TargetScrollY {
+		diff := node.TargetScrollY - node.ScrollY
+		// Move at least 1, scale with distance for eased catch-up
+		move := abs(diff)/3 + 1
+		if move > abs(diff) {
+			move = abs(diff)
+		}
+		if diff > 0 {
+			node.ScrollY += move
+		} else {
+			node.ScrollY -= move
+		}
+		node.PaintDirty = true
+		changed = true
+	}
+
+	for _, child := range node.Children {
+		if tickSmoothScrollNode(child) {
+			changed = true
+		}
+	}
+	return changed
+}
+
+// abs returns the absolute value of an int.
+func abs(x int) int {
+	if x < 0 {
+		return -x
+	}
+	return x
+}
+
+
 // drainPendingUnrefs frees all Lua registry refs collected during reconcile.
 // For table refs (useRef), sets ref.current = nil before unreffing.
 func (e *Engine) drainPendingUnrefs() {

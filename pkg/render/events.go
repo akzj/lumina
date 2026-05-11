@@ -647,6 +647,7 @@ func (e *Engine) handlePageScrollKey(key string) bool {
 		return true // at boundary; still "handled" so we don't fall through to Lua
 	}
 	scroll.ScrollY = newY
+	scroll.TargetScrollY = scroll.ScrollY
 	scroll.PaintDirty = true
 	e.needsRender = true
 	return true
@@ -708,7 +709,8 @@ func findScrollableAncestor(node *Node) *Node {
 	return nil
 }
 
-// autoScroll adjusts a scroll container's ScrollY by delta, clamped to [0, maxScroll].
+// autoScroll adjusts a scroll container's TargetScrollY by delta, clamped to [0, maxScroll].
+// The actual ScrollY is animated toward TargetScrollY by TickSmoothScroll (called at 60Hz).
 func (e *Engine) autoScroll(node *Node, delta int) {
 	maxScroll := computeMaxScrollY(node)
 	if maxScroll <= 0 {
@@ -720,23 +722,23 @@ func (e *Engine) autoScroll(node *Node, delta int) {
 		return
 	}
 
-	const step = 2 // scroll 2 lines per wheel tick (balance of smooth + fast)
-	newScrollY := node.ScrollY + delta*step
+	const step = 3 // scroll speed: 3 lines per wheel tick
+	newTarget := node.TargetScrollY + delta*step
 
 	// Clamp
-	if newScrollY < 0 {
-		newScrollY = 0
+	if newTarget < 0 {
+		newTarget = 0
 	}
-	if newScrollY > maxScroll {
-		newScrollY = maxScroll
+	if newTarget > maxScroll {
+		newTarget = maxScroll
 	}
 
-	if newScrollY == node.ScrollY {
+	if newTarget == node.TargetScrollY {
 		return // no change
 	}
 
-	node.ScrollY = newScrollY
-	node.PaintDirty = true
+	node.TargetScrollY = newTarget
+	// Don't set ScrollY directly — TickSmoothScroll will animate it
 	e.needsRender = true
 }
 
@@ -838,15 +840,18 @@ func (e *Engine) handleScrollbarClick(node *Node, x, y int) bool {
 		nowMs := e.NowMs()
 		e.AnimManager.StartAnim(animID, float64(fromSY), float64(newSY), 300, "easeOut", false, func(value float64) {
 			node.ScrollY = int(value)
+			node.TargetScrollY = node.ScrollY
 			node.PaintDirty = true
 			e.needsRender = true
 		}, func() {
 			node.ScrollY = newSY
+			node.TargetScrollY = node.ScrollY
 			node.PaintDirty = true
 			e.needsRender = true
 		}, nowMs)
 	} else {
 		node.ScrollY = newSY
+		node.TargetScrollY = node.ScrollY
 		node.PaintDirty = true
 	}
 	return true
@@ -974,6 +979,7 @@ func (e *Engine) handleScrollbarDrag(x, y int) {
 
 	if newScrollY != node.ScrollY {
 		node.ScrollY = newScrollY
+		node.TargetScrollY = node.ScrollY
 		node.PaintDirty = true
 		e.needsRender = true
 	}
@@ -1015,6 +1021,7 @@ func (e *Engine) scrollNodeBy(node *Node, lines int) {
 	}
 
 	scrollNode.ScrollY = newScrollY
+	scrollNode.TargetScrollY = scrollNode.ScrollY
 	scrollNode.PaintDirty = true
 	e.needsRender = true
 }
@@ -1060,6 +1067,7 @@ func (e *Engine) ScrollNodeByID(id string, delta int) int {
 				}
 				if newSY != scrollNode.ScrollY {
 					scrollNode.ScrollY = newSY
+					scrollNode.TargetScrollY = scrollNode.ScrollY
 					scrollNode.PaintDirty = true
 					e.needsRender = true
 				}
@@ -1318,9 +1326,11 @@ func (e *Engine) callLuaRefScroll(ref LuaRef, delta int, scrollNode *Node) {
 		L.PushString("down")
 	}
 	L.SetField(tblIdx, "key")
-	// Include absolute scrollY and scrollHeight so handlers can compute visible range
+	// Include absolute scrollY and scrollHeight so handlers can compute visible range.
+	// Use TargetScrollY so Lua handlers see the intended scroll position (smooth scroll
+	// animates ScrollY toward TargetScrollY, but Lua logic should use the target).
 	if scrollNode != nil {
-		L.PushInteger(int64(scrollNode.ScrollY))
+		L.PushInteger(int64(scrollNode.TargetScrollY))
 		L.SetField(tblIdx, "scrollY")
 		L.PushInteger(int64(scrollNode.ScrollHeight))
 		L.SetField(tblIdx, "scrollHeight")
