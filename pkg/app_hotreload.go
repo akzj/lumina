@@ -111,3 +111,19 @@ func (a *App) isModuleLoaded(name string) bool {
 	L.GetField(-1, name)
 	return !L.IsNil(-1)
 }
+
+// isEntryScript checks if the given path is the application's entry script
+// (the script loaded via DoFile at startup, not via require).
+// Entry scripts are not in package.loaded, so module-level reload cannot
+// work for them — full reload is expected behavior, not a fallback.
+func (a *App) isEntryScript(path string) bool {
+	if a.scriptPath == "" {
+		return false
+	}
+	absPath, err1 := filepath.Abs(path)
+	absScript, err2 := filepath.Abs(a.scriptPath)
+	if err1 != nil || err2 != nil {
+		return path == a.scriptPath
+	}
+	return absPath == absScript
+}

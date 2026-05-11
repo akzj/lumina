@@ -277,8 +277,15 @@ func (a *App) reloadScript(path string) {
 		return
 	}
 
-	// Fallback: full script re-execution (destroys state).
-	log.Printf("[hotreload] falling back to full reload for %s", path)
+	// Determine if this is the entry script (loaded via DoFile, not require).
+	// Entry scripts are not in package.loaded, so module-level reload cannot
+	// work for them — full reload is expected and not a failure.
+	isEntryScript := a.isEntryScript(path)
+	if isEntryScript {
+		log.Printf("[hotreload] reloading entry script %s", path)
+	} else {
+		log.Printf("[hotreload] falling back to full reload for %s", path)
+	}
 
 	// Reset timers.
 	if a.timerMgr != nil {
@@ -323,8 +330,12 @@ func (a *App) reloadScript(path string) {
 	addScriptDirToPackagePath(a.luaState, path)
 
 	// Clear file-based modules from package.loaded so they get re-required.
-	// Embedded modules (lux.*, theme, lumina) are kept cached since they don't change.
-	clearFileModulesFromPackageLoaded(a.luaState)
+	// Exception: when only the entry script changed (detected by file watcher),
+	// sub-modules haven't changed and can stay cached — preserving their state.
+	// Embedded modules (lux.*, theme, lumina) are always kept cached.
+	if !isEntryScript {
+		clearFileModulesFromPackageLoaded(a.luaState)
+	}
 
 	// Force a full GC cycle to collect old module userdata (e.g. bolt DB handles).
 	// Without this, old userdata with __gc finalizers won't be collected until later,
