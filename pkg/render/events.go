@@ -709,8 +709,9 @@ func findScrollableAncestor(node *Node) *Node {
 	return nil
 }
 
-// autoScroll adjusts a scroll container's TargetScrollY by delta, clamped to [0, maxScroll].
-// The actual ScrollY is animated toward TargetScrollY by TickSmoothScroll (called at 60Hz).
+// autoScroll directly moves ScrollY for immediate "跟手" scrolling.
+// macOS trackpad sends high-frequency delta=1 events with its own inertia,
+// so step=1 + immediate render gives smooth finger-tracking scroll.
 func (e *Engine) autoScroll(node *Node, delta int) {
 	maxScroll := computeMaxScrollY(node)
 	if maxScroll <= 0 {
@@ -722,24 +723,31 @@ func (e *Engine) autoScroll(node *Node, delta int) {
 		return
 	}
 
-	const step = 3 // scroll 3 lines per wheel tick
-	newTarget := node.TargetScrollY + delta*step
+	const step = 1 // direct scroll: 1 line per event (trackpad sends high-frequency events)
+	newScrollY := node.ScrollY + delta*step
 
 	// Clamp
-	if newTarget < 0 {
-		newTarget = 0
+	if newScrollY < 0 {
+		newScrollY = 0
 	}
-	if newTarget > maxScroll {
-		newTarget = maxScroll
+	if newScrollY > maxScroll {
+		newScrollY = maxScroll
 	}
 
-	if newTarget == node.TargetScrollY {
+	if newScrollY == node.ScrollY {
 		return // no change
 	}
 
-	node.TargetScrollY = newTarget
-	// Don't set ScrollY directly — TickSmoothScroll will animate it
+	node.ScrollY = newScrollY
+	node.TargetScrollY = newScrollY // keep in sync
+	node.PaintDirty = true
 	e.needsRender = true
+
+	// Log scroll metrics
+	if scrollMetricsLog != nil {
+		fmt.Fprintf(scrollMetricsLog, "%d,%d,direct,%d\n",
+			scrollMetricsFrame, node.ScrollY, delta*step)
+	}
 }
 
 

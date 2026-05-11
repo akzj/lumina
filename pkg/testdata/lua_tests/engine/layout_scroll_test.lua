@@ -44,8 +44,8 @@ test.describe("Engine: Scroll", function()
         -- Initially Row 01 visible, Row 20 not
         test.assert.eq(app:screenContains("Row 01"), true)
         test.assert.eq(app:screenContains("Row 20"), false)
-        -- Scroll down (delta=5 ticks * 3 lines/tick = 15 lines)
-        for i = 1, 5 do
+        -- Scroll down (15 ticks * 1 line/tick = 15 lines)
+        for i = 1, 15 do
             app:scroll(5, 2, 1)
         end
         -- After scrolling 15 lines, Row 01 should be gone, later rows visible

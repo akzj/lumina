@@ -137,8 +137,8 @@ test.describe("VList", function()
 		test.assert.eq(app:screenContains("Item 0"), true)
 		test.assert.eq(app:screenContains("Item 50"), false)
 
-		-- Scroll down: 5 ticks * 3 lines/tick = 15 lines → scrollY=15
-		for i = 1, 5 do
+		-- Scroll down: 15 ticks * 1 line/tick = 15 lines → scrollY=15
+		for i = 1, 15 do
 			app:scroll(5, 2, 1)
 		end
 
@@ -154,16 +154,16 @@ test.describe("VList", function()
 	test.it("scrolling up brings back earlier items", function()
 		loadVList(app, { totalCount = 100, height = 10, overscan = 3, estimateHeight = 1 })
 
-		-- Scroll down first: 5 ticks * 3 lines/tick = 15 → scrollY=15
-		for i = 1, 5 do
+		-- Scroll down first: 15 ticks * 1 line/tick = 15 → scrollY=15
+		for i = 1, 15 do
 			app:scroll(5, 2, 1)
 		end
 
 		-- Item 0 should be gone
 		test.assert.eq(app:screenContains("Item 0"), false)
 
-		-- Scroll back up: 5 ticks * -1 delta * 3 lines/tick = -15 → scrollY=0
-		for i = 1, 5 do
+		-- Scroll back up: 15 ticks * -1 delta * 1 line/tick = -15 → scrollY=0
+		for i = 1, 15 do
 			app:scroll(5, 2, -1)
 		end
 
@@ -244,8 +244,8 @@ test.describe("VList", function()
 		test.assert.eq(app:screenContains("Item 0"), true)
 		test.assert.eq(app:screenContains("Item 4"), true)
 
-		-- Scroll down 4 ticks (4 * 3 = 12 lines)
-		for i = 1, 4 do
+		-- Scroll down 12 ticks (12 * 1 = 12 lines)
+		for i = 1, 12 do
 			app:scroll(5, 2, 1)
 		end
 
@@ -293,8 +293,8 @@ test.describe("VList", function()
 		test.assert.notNil(scrollBox)
 		test.assert.eq(scrollBox.scrollHeight, 100)
 
-		-- Scroll down and verify: 5 ticks * 3 lines/tick = 15 → scrollY=15
-		for i = 1, 5 do
+		-- Scroll down and verify: 15 ticks * 1 line/tick = 15 → scrollY=15
+		for i = 1, 15 do
 			app:scroll(5, 2, 1)
 		end
 		test.assert.eq(app:screenContains("ReqItem 0"), false)
@@ -333,11 +333,11 @@ test.describe("VList", function()
 
 		-- Scroll a few times — onScroll sets isClipped=false (active scrolling mode)
 		-- This exercises the clip-on-idle timer setup/teardown
-		for i = 1, 3 do
+		for i = 1, 9 do
 			app:scroll(5, 2, 1)
 		end
 
-		-- After scrolling (3*3=9 lines), items in the new viewport should render (no crash)
+		-- After scrolling 9 lines, items in the new viewport should render (no crash)
 		test.assert.eq(app:screenContains("ClipItem 9"), true)
 		-- The component should not have crashed
 		local tree = app:vnodeTree()
