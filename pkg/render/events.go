@@ -730,14 +730,14 @@ func (e *Engine) autoScroll(node *Node, delta int) {
 	e.lastScrollTime = now
 
 	step := 1
-	if dt < 16 { // >60 events/sec → very fast
+	if dt < 6 { // >160 events/sec → extreme burst
 		step = 4
-	} else if dt < 30 { // >33 events/sec → fast
+	} else if dt < 10 { // 100-160 events/sec → fast
 		step = 3
-	} else if dt < 50 { // >20 events/sec → medium
+	} else if dt < 16 { // 60-100 events/sec → medium
 		step = 2
 	}
-	// dt >= 50ms → step stays 1 (slow, precision mode)
+	// dt >= 16ms (≤60Hz) → step stays 1 (precision mode)
 
 	newScrollY := node.ScrollY + delta*step
 
