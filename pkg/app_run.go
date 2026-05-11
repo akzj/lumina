@@ -231,11 +231,11 @@ func (a *App) eventLoop(cfg RunConfig) error {
 				a.scheduler.Tick()
 			}
 
-			// Tick FPS counter and auto-refresh devtools.
-			a.tickDevTools()
-
 			// Render dirty components.
 			a.RenderDirty()
+
+			// Tick FPS counter with actual render status, and auto-refresh devtools.
+			a.tickDevTools(a.lastFrameRendered)
 
 			// Native cursor blink removed — Lua Textarea handles cursor via re-render.
 		}
@@ -400,7 +400,7 @@ func (a *App) handleInputEvent(ie InputEvent) {
 			Alt:   ie.Modifiers.Alt,
 			Ctrl:  ie.Modifiers.Ctrl,
 		})
-		// Don't render immediately — let the 60Hz ticker coalesce multiple scroll events.
+		a.RenderDirty()
 
 	case "resize":
 		a.Resize(ie.X, ie.Y)

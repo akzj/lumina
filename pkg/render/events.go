@@ -720,7 +720,7 @@ func (e *Engine) autoScroll(node *Node, delta int) {
 		return
 	}
 
-	const step = 3 // scroll 3 lines per wheel tick
+	const step = 1 // scroll 1 line per wheel tick (smoother scrolling)
 	newScrollY := node.ScrollY + delta*step
 
 	// Clamp

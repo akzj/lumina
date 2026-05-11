@@ -143,10 +143,13 @@ func (p *Panel) FPS() int {
 }
 
 // TickFPS should be called once per frame tick (from the event loop).
+// Only frames where rendered=true (actual output was produced) count toward FPS.
 // It uses exponential moving average (EMA) to smooth the FPS measurement,
 // updating every 300ms like the v1 implementation.
-func (p *Panel) TickFPS() {
-	p.fpsFrameCount++
+func (p *Panel) TickFPS(rendered bool) {
+	if rendered {
+		p.fpsFrameCount++
+	}
 	now := time.Now()
 	elapsed := now.Sub(p.fpsLastTime)
 	if elapsed >= 300*time.Millisecond {

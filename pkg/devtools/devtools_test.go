@@ -131,7 +131,7 @@ func TestPanel_TickFPS(t *testing.T) {
 	// Simulate 60 ticks over 1 second (300ms measurement window)
 	p.fpsLastTime = time.Now().Add(-350 * time.Millisecond)
 	p.fpsFrameCount = 20 // ~57 fps
-	p.TickFPS()
+	p.TickFPS(true)
 
 	fps := p.FPS()
 	if fps < 40 || fps > 80 {

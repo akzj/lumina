@@ -65,6 +65,9 @@ type App struct {
 
 	// Mouse click tracking: synthesize click only when mouseup at same position
 	mouseDownX, mouseDownY int
+
+	// FPS tracking: true when RenderDirty produced visible output this tick
+	lastFrameRendered bool
 }
 
 // NewApp creates a new App with the V2 render engine.
@@ -175,12 +178,14 @@ func (a *App) RenderAll() {
 
 // RenderDirty renders only dirty components and outputs changed regions.
 func (a *App) RenderDirty() {
+	a.lastFrameRendered = false
 	a.tracker.BeginFrame()
 
 	a.engine.RenderDirty()
 
 	dirtyRect := a.engine.DirtyRect()
 	if dirtyRect.W > 0 && dirtyRect.H > 0 {
+		a.lastFrameRendered = true
 		// If devtools visible, repaint overlay on dirty frames only
 		if a.devtools.Visible {
 			panelX, panelY, panelW, panelH := a.devtools.PanelRect(a.width, a.height)
@@ -483,8 +488,8 @@ func (a *App) SetState(compID string, key string, value any) {
 }
 
 // tickDevTools is called every frame tick from the event loop.
-func (a *App) tickDevTools() {
-	a.tickDevToolsV2()
+func (a *App) tickDevTools(rendered bool) {
+	a.tickDevToolsV2(rendered)
 }
 
 // handleDevToolsPanelClick handles a mousedown inside the panel area.
