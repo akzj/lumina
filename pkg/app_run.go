@@ -330,12 +330,10 @@ func (a *App) reloadScript(path string) {
 	addScriptDirToPackagePath(a.luaState, path)
 
 	// Clear file-based modules from package.loaded so they get re-required.
-	// Exception: when only the entry script changed (detected by file watcher),
-	// sub-modules haven't changed and can stay cached — preserving their state.
+	// This is necessary because engine.Destroy() clears the factories map,
+	// so sub-modules must re-execute their defineComponent calls to re-register.
 	// Embedded modules (lux.*, theme, lumina) are always kept cached.
-	if !isEntryScript {
-		clearFileModulesFromPackageLoaded(a.luaState)
-	}
+	clearFileModulesFromPackageLoaded(a.luaState)
 
 	// Force a full GC cycle to collect old module userdata (e.g. bolt DB handles).
 	// Without this, old userdata with __gc finalizers won't be collected until later,
