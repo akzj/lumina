@@ -732,12 +732,12 @@ func (e *Engine) autoScroll(node *Node, delta int) {
 	step := 1
 	if dt < 4 { // >250Hz → step=4
 		step = 4
-	} else if dt < 6 { // 166-250Hz → step=3
+	} else if dt < 5 { // 200-250Hz → step=3
 		step = 3
-	} else if dt < 8 { // 120-166Hz → step=2
+	} else if dt < 7 { // 140-200Hz → step=2
 		step = 2
 	}
-	// dt >= 8ms (≤120Hz) → step=1
+	// dt >= 7ms (≤140Hz) → step=1
 
 	newScrollY := node.ScrollY + delta*step
 
