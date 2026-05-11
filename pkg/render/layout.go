@@ -417,10 +417,18 @@ func computeFlex(node *Node, x, y, w, h int, depth int) {
 			}
 			// Default to remaining parent dimensions when no explicit size
 			if cw <= 0 {
-				cw = contentW - cs.Left
+				if child.MeasuredW > 0 {
+					cw = child.MeasuredW
+				} else {
+					cw = contentW - cs.Left
+				}
 			}
 			if ch <= 0 {
-				ch = 1 // text nodes default to 1 row
+				if child.MeasuredH > 0 {
+					ch = child.MeasuredH
+				} else {
+					ch = 1 // text nodes default to 1 row
+				}
 			}
 			if cs.Right >= 0 && cs.Left == 0 {
 				cx = contentX + contentW - cw - cs.Right
@@ -448,10 +456,18 @@ func computeFlex(node *Node, x, y, w, h int, depth int) {
 			// Default to parent dimensions for fixed-positioned elements
 			// that don't have explicit width/height set
 			if cw <= 0 {
-				cw = node.W - cs.Left // fill remaining width from left edge
+				if child.MeasuredW > 0 {
+					cw = child.MeasuredW
+				} else {
+					cw = node.W - cs.Left // fill remaining width from left edge
+				}
 			}
 			if ch <= 0 {
-				ch = 1 // text nodes default to 1 row
+				if child.MeasuredH > 0 {
+					ch = child.MeasuredH
+				} else {
+					ch = 1 // text nodes default to 1 row
+				}
 			}
 			child.X = cx
 			child.Y = cy
