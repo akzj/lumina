@@ -90,6 +90,9 @@ type Engine struct {
 	// Render flag: true when any component is dirty or any node needs layout/paint
 	needsRender bool
 
+	// Scroll acceleration: timestamp of last scroll event (UnixMilli)
+	lastScrollTime int64
+
 	// Layer stack: [0] = main app layer, [1..n] = overlay layers
 	layers []*Layer
 

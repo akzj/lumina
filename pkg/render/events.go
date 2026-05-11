@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	"github.com/akzj/go-lua/pkg/lua"
 )
@@ -709,9 +710,9 @@ func findScrollableAncestor(node *Node) *Node {
 	return nil
 }
 
-// autoScroll directly moves ScrollY for immediate "跟手" scrolling.
-// macOS trackpad sends high-frequency delta=1 events with its own inertia,
-// so step=1 + immediate render gives smooth finger-tracking scroll.
+// autoScroll directly moves ScrollY with time-based acceleration.
+// Slow scroll (dt >= 50ms): step=1 for precision finger-tracking.
+// Fast scroll (dt < 16ms): step=4 for burst power like browsers.
 func (e *Engine) autoScroll(node *Node, delta int) {
 	maxScroll := computeMaxScrollY(node)
 	if maxScroll <= 0 {
@@ -723,7 +724,21 @@ func (e *Engine) autoScroll(node *Node, delta int) {
 		return
 	}
 
-	const step = 1 // direct scroll: 1 line per event (trackpad sends high-frequency events)
+	// Time-based scroll acceleration: faster events → larger step
+	now := time.Now().UnixMilli()
+	dt := now - e.lastScrollTime
+	e.lastScrollTime = now
+
+	step := 1
+	if dt < 16 { // >60 events/sec → very fast
+		step = 4
+	} else if dt < 30 { // >33 events/sec → fast
+		step = 3
+	} else if dt < 50 { // >20 events/sec → medium
+		step = 2
+	}
+	// dt >= 50ms → step stays 1 (slow, precision mode)
+
 	newScrollY := node.ScrollY + delta*step
 
 	// Clamp
@@ -745,8 +760,8 @@ func (e *Engine) autoScroll(node *Node, delta int) {
 
 	// Log scroll metrics
 	if scrollMetricsLog != nil {
-		fmt.Fprintf(scrollMetricsLog, "%d,%d,direct,%d\n",
-			scrollMetricsFrame, node.ScrollY, delta*step)
+		fmt.Fprintf(scrollMetricsLog, "%d,%d,direct,%d,dt=%d,step=%d\n",
+			scrollMetricsFrame, node.ScrollY, delta*step, dt, step)
 	}
 }
 
