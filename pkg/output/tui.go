@@ -15,11 +15,12 @@ type tuiAdapter struct {
 	curX   int
 	curY   int
 	curVis bool
+	prev   *buffer.Buffer // previous frame for cell-level diffing
 }
 
 // tuiState tracks current ANSI attribute state for incremental output.
 type tuiState struct {
-	fg, bg                                                  string
+	fg, bg                                               string
 	bold, dim, underline, italic, strikethrough, inverse bool
 }
 
@@ -46,14 +47,27 @@ func (t *tuiAdapter) WriteFull(screen *buffer.Buffer) error {
 		}
 	}
 	t.w.WriteString("\033[?2026l") // end synchronized update
+
+	// Update prev buffer so subsequent WriteDirty calls can diff against this frame.
+	t.snapshotPrev(screen)
+
 	return nil
 }
 
-// WriteDirty writes only the cells within the dirty rects.
+// WriteDirty writes only the cells within the dirty rects that actually changed
+// compared to the previous frame (cell-level diffing).
 func (t *tuiAdapter) WriteDirty(screen *buffer.Buffer, dirtyRects []buffer.Rect) error {
+	// Allocate prev buffer on first call or if size changed.
+	if t.prev == nil || t.prev.Width() != screen.Width() || t.prev.Height() != screen.Height() {
+		// No previous frame to diff against — fall back to writing everything.
+		t.prev = buffer.New(screen.Width(), screen.Height())
+	}
+
 	t.w.WriteString("\033[?2026h") // begin synchronized update
 	t.w.WriteString("\033[0m")     // reset at start
 	var st tuiState
+	needsMove := true    // track if we need a cursor-move before next write
+	lastX, lastY := -1, -1
 
 	bounds := buffer.Rect{X: 0, Y: 0, W: screen.Width(), H: screen.Height()}
 	for _, dr := range dirtyRects {
@@ -62,19 +76,53 @@ func (t *tuiAdapter) WriteDirty(screen *buffer.Buffer, dirtyRects []buffer.Rect)
 			continue
 		}
 		for y := region.Y; y < region.Y+region.H; y++ {
-			// Move cursor to start of this dirty row segment.
-			fmt.Fprintf(t.w, "\033[%d;%dH", y+1, region.X+1)
 			for x := region.X; x < region.X+region.W; x++ {
 				c := screen.Get(x, y)
+				prev := t.prev.Get(x, y)
+				if c == prev {
+					// Cell unchanged — skip it.
+					needsMove = true
+					if c.Wide {
+						x++ // skip padding cell
+					}
+					continue
+				}
+				// Cell changed — emit it.
+				if needsMove || lastX != x || lastY != y {
+					fmt.Fprintf(t.w, "\033[%d;%dH", y+1, x+1)
+					needsMove = false
+				}
 				t.writeCell(c, &st)
+				t.prev.Set(x, y, c)
+				lastX = x + 1 // cursor auto-advances after writing a character
+				lastY = y
 				if c.Wide {
-					x++ // skip the next padding cell — terminal already advanced cursor by 2
+					// Also update the padding cell in prev.
+					if x+1 < region.X+region.W {
+						t.prev.Set(x+1, y, screen.Get(x+1, y))
+					}
+					x++
+					lastX = x + 1
 				}
 			}
+			needsMove = true // new row always needs cursor move
 		}
 	}
 	t.w.WriteString("\033[?2026l") // end synchronized update
 	return nil
+}
+
+// snapshotPrev copies the current screen into the prev buffer for future diffing.
+func (t *tuiAdapter) snapshotPrev(screen *buffer.Buffer) {
+	w, h := screen.Width(), screen.Height()
+	if t.prev == nil || t.prev.Width() != w || t.prev.Height() != h {
+		t.prev = buffer.New(w, h)
+	}
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			t.prev.Set(x, y, screen.Get(x, y))
+		}
+	}
 }
 
 // writeCell emits ANSI escape sequences for a single cell, optimizing by

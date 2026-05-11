@@ -400,7 +400,7 @@ func (a *App) handleInputEvent(ie InputEvent) {
 			Alt:   ie.Modifiers.Alt,
 			Ctrl:  ie.Modifiers.Ctrl,
 		})
-		a.RenderDirty()
+		// Don't render immediately — let the 60Hz ticker coalesce multiple scroll events.
 
 	case "resize":
 		a.Resize(ie.X, ie.Y)

@@ -380,3 +380,117 @@ func stripANSI(s string) string {
 	}
 	return result.String()
 }
+
+func TestTUIAdapter_CellDiffing(t *testing.T) {
+	// Test that WriteDirty skips unchanged cells on second call.
+	var buf bytes.Buffer
+	adapter := NewTUIAdapter(&buf)
+
+	// First frame: write "ABC" on row 0.
+	screen := buffer.New(3, 1)
+	screen.Set(0, 0, buffer.Cell{Char: 'A', Foreground: "#ffffff"})
+	screen.Set(1, 0, buffer.Cell{Char: 'B', Foreground: "#ffffff"})
+	screen.Set(2, 0, buffer.Cell{Char: 'C', Foreground: "#ffffff"})
+
+	dirty := []buffer.Rect{{X: 0, Y: 0, W: 3, H: 1}}
+	if err := adapter.WriteDirty(screen, dirty); err != nil {
+		t.Fatalf("WriteDirty error: %v", err)
+	}
+	if err := adapter.Flush(); err != nil {
+		t.Fatalf("Flush error: %v", err)
+	}
+
+	firstOutput := buf.String()
+	// First frame should contain all three characters.
+	if !strings.Contains(firstOutput, "A") || !strings.Contains(firstOutput, "B") || !strings.Contains(firstOutput, "C") {
+		t.Error("first frame should contain A, B, and C")
+	}
+
+	// Second frame: only change cell 1 from 'B' to 'X'.
+	buf.Reset()
+	screen.Set(1, 0, buffer.Cell{Char: 'X', Foreground: "#ffffff"})
+
+	if err := adapter.WriteDirty(screen, dirty); err != nil {
+		t.Fatalf("WriteDirty error (2nd): %v", err)
+	}
+	if err := adapter.Flush(); err != nil {
+		t.Fatalf("Flush error (2nd): %v", err)
+	}
+
+	secondOutput := buf.String()
+	stripped := stripANSI(secondOutput)
+
+	// Second frame should contain 'X' but NOT 'A' or 'C' (those are unchanged).
+	if !strings.Contains(stripped, "X") {
+		t.Error("second frame should contain changed cell 'X'")
+	}
+	if strings.Contains(stripped, "A") {
+		t.Error("second frame should NOT re-emit unchanged cell 'A'")
+	}
+	if strings.Contains(stripped, "C") {
+		t.Error("second frame should NOT re-emit unchanged cell 'C'")
+	}
+}
+
+func TestTUIAdapter_CellDiffing_AllSame(t *testing.T) {
+	// Test that if nothing changes, no cell characters are emitted.
+	var buf bytes.Buffer
+	adapter := NewTUIAdapter(&buf)
+
+	screen := buffer.New(4, 2)
+	for y := 0; y < 2; y++ {
+		for x := 0; x < 4; x++ {
+			screen.Set(x, y, buffer.Cell{Char: 'Z', Foreground: "#aabbcc"})
+		}
+	}
+
+	dirty := []buffer.Rect{{X: 0, Y: 0, W: 4, H: 2}}
+
+	// First frame populates prev buffer.
+	if err := adapter.WriteDirty(screen, dirty); err != nil {
+		t.Fatalf("WriteDirty error: %v", err)
+	}
+	_ = adapter.Flush()
+
+	// Second frame: same content.
+	buf.Reset()
+	if err := adapter.WriteDirty(screen, dirty); err != nil {
+		t.Fatalf("WriteDirty error (2nd): %v", err)
+	}
+	_ = adapter.Flush()
+
+	stripped := stripANSI(buf.String())
+	// No 'Z' should appear since nothing changed.
+	if strings.Contains(stripped, "Z") {
+		t.Error("second frame should emit no characters when nothing changed")
+	}
+}
+
+func TestTUIAdapter_WriteFull_UpdatesPrev(t *testing.T) {
+	// After WriteFull, subsequent WriteDirty should diff against it.
+	var buf bytes.Buffer
+	adapter := NewTUIAdapter(&buf)
+
+	screen := buffer.New(2, 1)
+	screen.Set(0, 0, buffer.Cell{Char: 'M', Foreground: "#112233"})
+	screen.Set(1, 0, buffer.Cell{Char: 'N', Foreground: "#112233"})
+
+	// WriteFull should update prev.
+	if err := adapter.WriteFull(screen); err != nil {
+		t.Fatalf("WriteFull error: %v", err)
+	}
+	_ = adapter.Flush()
+
+	// Now WriteDirty with same content — should emit nothing.
+	buf.Reset()
+	dirty := []buffer.Rect{{X: 0, Y: 0, W: 2, H: 1}}
+	if err := adapter.WriteDirty(screen, dirty); err != nil {
+		t.Fatalf("WriteDirty error: %v", err)
+	}
+	_ = adapter.Flush()
+
+	stripped := stripANSI(buf.String())
+	if strings.Contains(stripped, "M") || strings.Contains(stripped, "N") {
+		t.Error("WriteDirty after WriteFull with same content should emit no characters")
+	}
+}
