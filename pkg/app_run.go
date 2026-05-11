@@ -402,7 +402,8 @@ func (a *App) handleInputEvent(ie InputEvent) {
 			Alt:   ie.Modifiers.Alt,
 			Ctrl:  ie.Modifiers.Ctrl,
 		})
-		a.RenderDirty()
+		// Don't render immediately — HandleScroll already sets needsRender=true.
+		// The 60Hz ticker will coalesce multiple scroll events into one render frame.
 
 	case "resize":
 		a.Resize(ie.X, ie.Y)
