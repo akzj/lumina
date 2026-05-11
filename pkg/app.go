@@ -391,17 +391,17 @@ func (a *App) HandleEvent(e *event.Event) {
 	case "mousedown":
 		a.mouseDownX = e.X
 		a.mouseDownY = e.Y
-		a.engine.HandleMouseDown(e.X, e.Y)
+		a.engine.HandleMouseDown(e.X, e.Y, e.Button)
 	case "mouseup":
 		a.engine.HandleMouseUp(e.X, e.Y)
 		// Synthesize click only if mouseup at same position as mousedown
 		// AND mousedown handler did not call preventDefault
 		if e.X == a.mouseDownX && e.Y == a.mouseDownY && !a.engine.ClickPrevented() {
-			a.engine.HandleClick(e.X, e.Y)
+			a.engine.HandleClick(e.X, e.Y, e.Button)
 		}
 	case "click":
 		// Explicit click event (e.g. from WebSocket adapter)
-		a.engine.HandleClick(e.X, e.Y)
+		a.engine.HandleClick(e.X, e.Y, e.Button)
 	case "mousemove":
 		a.engine.HandleMouseMove(e.X, e.Y)
 	case "keydown":

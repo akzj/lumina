@@ -9,6 +9,7 @@ type Event struct {
 	LocalX    int    // mouse position relative to target VNode
 	LocalY    int
 	Key       string // key name for keyboard events
+	Button    string // mouse button: "left", "middle", "right", "" for non-mouse events
 	Target    string // VNode ID that should handle this event
 	Bubbles   bool
 	Timestamp int64

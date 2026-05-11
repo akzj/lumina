@@ -58,6 +58,9 @@ type Engine struct {
 	// Click prevention: set by HandleMouseDown when handler calls preventDefault
 	clickPrevented bool
 
+	// currentButton: the mouse button for the current event ("left", "right", "middle", "")
+	currentButton string
+
 	// Lua ref cleanup: refs to unref after reconcile
 	pendingUnrefs []int64
 

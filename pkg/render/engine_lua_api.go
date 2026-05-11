@@ -611,6 +611,7 @@ func (e *Engine) finishComponentPlaceholderDescriptor(L *lua.State, resultIdx in
 		eventKeys := []string{
 			"onClick", "onMouseEnter", "onMouseLeave", "onKeyDown",
 			"onChange", "onScroll", "onMouseDown", "onMouseUp",
+			"onRightClick",
 			"onFocus", "onBlur", "onSubmit", "onOutsideClick",
 		}
 		for _, key := range eventKeys {

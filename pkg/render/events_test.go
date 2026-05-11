@@ -128,7 +128,7 @@ func TestEngine_HandleClick(t *testing.T) {
 	}
 
 	e.RenderAll()
-	e.HandleClick(10, 2)
+	e.HandleClick(10, 2, "")
 
 	L.GetGlobal("clicked")
 	clicked, _ := L.ToString(-1)
@@ -175,7 +175,7 @@ func TestEngine_HandleClick_StateChange_Reconcile(t *testing.T) {
 	}
 
 	// Click → setState(count+1) → RenderDirty → reconcile
-	e.HandleClick(10, 10)
+	e.HandleClick(10, 10, "")
 	e.RenderDirty()
 
 	if comp.RootNode.Children[0].Content != "1" {
@@ -183,7 +183,7 @@ func TestEngine_HandleClick_StateChange_Reconcile(t *testing.T) {
 	}
 
 	// Click again
-	e.HandleClick(10, 10)
+	e.HandleClick(10, 10, "")
 	e.RenderDirty()
 
 	if comp.RootNode.Children[0].Content != "2" {
@@ -477,7 +477,7 @@ func TestEngine_StaleFocusedNode_AfterRemoval(t *testing.T) {
 	e.RenderAll()
 
 	// Focus the box by clicking it
-	e.HandleClick(5, 0)
+	e.HandleClick(5, 0, "")
 	if e.FocusedNode() == nil {
 		t.Fatal("expected focusable box to be focused after click")
 	}
@@ -1143,7 +1143,7 @@ func TestEngine_MouseCaptureRefsSurviveRemovedCapturedNode(t *testing.T) {
 	}
 
 	e.RenderAll()
-	e.HandleMouseDown(1, 1)
+	e.HandleMouseDown(1, 1, "")
 
 	captured := e.capturedNode
 	if captured == nil {
@@ -1199,10 +1199,10 @@ func TestEngine_MouseDownWithoutMoveDoesNotCapture(t *testing.T) {
 	}
 
 	e.RenderAll()
-	e.HandleMouseDown(1, 1)
+	e.HandleMouseDown(1, 1, "")
 	e.HandleMouseUp(1, 1)
 	if !e.ClickPrevented() {
-		e.HandleClick(1, 1)
+		e.HandleClick(1, 1, "")
 	}
 
 	if e.capturedNode != nil {

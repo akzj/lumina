@@ -32,6 +32,7 @@ type Descriptor struct {
 
 	// Event handler refs (Lua registry refs)
 	OnClick        LuaRef
+	OnRightClick   LuaRef
 	OnMouseEnter   LuaRef
 	OnMouseLeave   LuaRef
 	OnKeyDown      LuaRef

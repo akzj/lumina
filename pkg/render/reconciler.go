@@ -80,6 +80,7 @@ func reconcileImpl(node *Node, desc Descriptor, freedRefs *[]int64) bool {
 
 	// 4. Update event handlers (just swap refs, collect old refs for cleanup)
 	changed = updateRef(&node.OnClick, desc.OnClick, freedRefs) || changed
+	changed = updateRef(&node.OnRightClick, desc.OnRightClick, freedRefs) || changed
 	changed = updateRef(&node.OnMouseEnter, desc.OnMouseEnter, freedRefs) || changed
 	changed = updateRef(&node.OnMouseLeave, desc.OnMouseLeave, freedRefs) || changed
 	changed = updateRef(&node.OnKeyDown, desc.OnKeyDown, freedRefs) || changed
@@ -332,6 +333,9 @@ func collectNodeRefs(node *Node, refs *[]int64) {
 	if node.OnClick != 0 {
 		*refs = append(*refs, node.OnClick)
 	}
+	if node.OnRightClick != 0 {
+		*refs = append(*refs, node.OnRightClick)
+	}
 	if node.OnMouseEnter != 0 {
 		*refs = append(*refs, node.OnMouseEnter)
 	}
@@ -423,6 +427,7 @@ func createNodeFromDesc(desc Descriptor) *Node {
 	node.CursorHintCol = desc.CursorHintCol
 	node.CursorHintRow = desc.CursorHintRow
 	node.OnClick = desc.OnClick
+	node.OnRightClick = desc.OnRightClick
 	node.OnMouseEnter = desc.OnMouseEnter
 	node.OnMouseLeave = desc.OnMouseLeave
 	node.OnKeyDown = desc.OnKeyDown

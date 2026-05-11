@@ -152,6 +152,8 @@ func hasHandler(n *Node, eventType string) bool {
 	switch eventType {
 	case "click":
 		return n.OnClick != 0
+	case "rightclick":
+		return n.OnRightClick != 0
 	case "mouseenter":
 		return n.OnMouseEnter != 0
 	case "mouseleave":
@@ -342,7 +344,11 @@ func (e *Engine) HandleMouseMove(x, y int) {
 // HandleClick processes a click event at screen coordinates (x, y).
 // Finds the deepest node with an onClick handler (bubbling) and dispatches.
 // Also handles focus: clicking a focusable node focuses it.
-func (e *Engine) HandleClick(x, y int) {
+// button is "left", "right", "middle", or "".
+// Right-clicks dispatch to OnRightClick instead of OnClick.
+func (e *Engine) HandleClick(x, y int, button string) {
+	e.currentButton = button
+
 	if len(e.layers) == 0 {
 		return
 	}
@@ -404,21 +410,29 @@ func (e *Engine) HandleClick(x, y int) {
 		e.setFocus(nil)
 	}
 
-	// Dispatch onClick (bubble up from hit node, skip disabled)
-	// Stops at the first handler found (standard Lumina behavior).
-	// Handlers can call event.stopPropagation() for explicit control.
-	for n := hitNode; n != nil; n = n.Parent {
-		if n.OnClick != 0 && !n.Disabled {
-			e.callLuaRef(n.OnClick, x, y)
-			break
+	// Dispatch click: right-click → OnRightClick, left/middle → OnClick
+	if button == "right" {
+		for n := hitNode; n != nil; n = n.Parent {
+			if n.OnRightClick != 0 && !n.Disabled {
+				e.callLuaRef(n.OnRightClick, x, y)
+				break
+			}
+		}
+	} else {
+		for n := hitNode; n != nil; n = n.Parent {
+			if n.OnClick != 0 && !n.Disabled {
+				e.callLuaRef(n.OnClick, x, y)
+				break
+			}
 		}
 	}
 }
 
 // HandleMouseDown processes a mousedown event at screen coordinates (x, y).
 // Finds the deepest node with an onMouseDown handler (bubbling) and dispatches.
-func (e *Engine) HandleMouseDown(x, y int) {
+func (e *Engine) HandleMouseDown(x, y int, button string) {
 	e.clickPrevented = false // reset at start of each mousedown
+	e.currentButton = button
 
 	if len(e.layers) == 0 {
 		return
@@ -1213,7 +1227,7 @@ func (e *Engine) reportEventError(errMsg string, handlerType string) {
 	}
 }
 
-// callLuaRef calls a Lua function by registry ref with an event table {x=x, y=y}.
+// callLuaRef calls a Lua function by registry ref with an event table {x=x, y=y, button=button}.
 // The event table includes stopPropagation() and preventDefault() methods.
 func (e *Engine) callLuaRef(ref LuaRef, x, y int) EventResult {
 	result := EventResult{}
@@ -1223,13 +1237,15 @@ func (e *Engine) callLuaRef(ref LuaRef, x, y int) EventResult {
 		L.Pop(1)
 		return result
 	}
-	// Push event table: {x=x, y=y, stopPropagation=func, preventDefault=func}
+	// Push event table: {x=x, y=y, button=button, stopPropagation=func, preventDefault=func}
 	L.NewTable()
 	tblIdx := L.AbsIndex(-1)
 	L.PushInteger(int64(x))
 	L.SetField(tblIdx, "x")
 	L.PushInteger(int64(y))
 	L.SetField(tblIdx, "y")
+	L.PushString(e.currentButton)
+	L.SetField(tblIdx, "button")
 	// event.stopPropagation() — Go closure that sets result.Stopped
 	L.PushFunction(func(L *lua.State) int {
 		result.Stopped = true

@@ -163,6 +163,7 @@ type Node struct {
 
 	// Events (persistent references, not re-registered per frame)
 	OnClick        LuaRef
+	OnRightClick   LuaRef
 	OnMouseEnter   LuaRef
 	OnMouseLeave   LuaRef
 	OnKeyDown      LuaRef

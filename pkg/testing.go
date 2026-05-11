@@ -451,11 +451,11 @@ func (fw *testFramework) luaCreateApp(L *lua.State) int {
 				L.Error()
 				return 0
 			}
-			handle.app.engine.HandleClick(found.X+found.W/2, found.Y+found.H/2)
+			handle.app.engine.HandleClick(found.X+found.W/2, found.Y+found.H/2, "")
 		} else {
 			x := int(L.CheckInteger(2))
 			y := int(L.CheckInteger(3))
-			handle.app.engine.HandleClick(x, y)
+			handle.app.engine.HandleClick(x, y, "")
 		}
 		handle.app.engine.RenderDirty()
 		return 0
@@ -477,7 +477,7 @@ func (fw *testFramework) luaCreateApp(L *lua.State) int {
 	L.PushFunction(func(L *lua.State) int {
 		x := int(L.CheckInteger(2))
 		y := int(L.CheckInteger(3))
-		handle.app.engine.HandleMouseDown(x, y)
+		handle.app.engine.HandleMouseDown(x, y, "")
 		handle.app.engine.RenderDirty()
 		return 0
 	})

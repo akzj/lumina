@@ -150,6 +150,9 @@ func descriptorFromMap(m map[string]any) Descriptor {
 	if ref, ok := m["onClick"].(propFuncRef); ok {
 		desc.OnClick = LuaRef(ref)
 	}
+	if ref, ok := m["onRightClick"].(propFuncRef); ok {
+		desc.OnRightClick = LuaRef(ref)
+	}
 	if ref, ok := m["onMouseEnter"].(propFuncRef); ok {
 		desc.OnMouseEnter = LuaRef(ref)
 	}
@@ -244,6 +247,7 @@ func (e *Engine) readDescriptor(L *lua.State, idx int) Descriptor {
 
 	// Read event handlers (store as Lua refs)
 	desc.OnClick = getRefField(L, absIdx, "onClick")
+	desc.OnRightClick = getRefField(L, absIdx, "onRightClick")
 	desc.OnMouseEnter = getRefField(L, absIdx, "onMouseEnter")
 	desc.OnMouseLeave = getRefField(L, absIdx, "onMouseLeave")
 	desc.OnKeyDown = getRefField(L, absIdx, "onKeyDown")

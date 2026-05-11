@@ -423,7 +423,7 @@ func TestSingleLayerBackwardCompat(t *testing.T) {
 
 	// Verify events still work (HandleMouseMove should not panic)
 	e.HandleMouseMove(5, 5)
-	e.HandleClick(5, 5)
+	e.HandleClick(5, 5, "")
 	e.HandleKeyDown("a")
 	e.HandleScroll(5, 5, 1)
 }

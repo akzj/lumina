@@ -282,15 +282,7 @@ func (a *App) reloadScript(path string) {
 		}
 		// Re-register Lua API to refresh lumina.* closures after Destroy.
 		a.engine.RegisterLuaAPI()
-		log.Printf("[DEBUG reload] RegisterLuaAPI called, checking lumina.useRef type...")
-		L := a.luaState
-		L.GetGlobal("lumina")
-		if L.IsTable(-1) {
-			L.GetField(-1, "useRef")
-			log.Printf("[DEBUG reload] lumina.useRef type = %v", L.Type(-1))
-			L.Pop(1)
-		}
-		L.Pop(1) // pop lumina table
+		
 	}
 
 	// Free global key handler refs.
@@ -326,15 +318,7 @@ func (a *App) reloadScript(path string) {
 		return
 	}
 
-	log.Printf("[DEBUG reload] DoFile completed, checking lumina.useRef type...")
-	L = a.luaState
-	L.GetGlobal("lumina")
-	if L.IsTable(-1) {
-		L.GetField(-1, "useRef")
-		log.Printf("[DEBUG reload] after DoFile: lumina.useRef type = %v", L.Type(-1))
-		L.Pop(1)
-	}
-	L.Pop(1)
+	
 
 	// Full re-render.
 	a.RenderAll()
@@ -398,9 +382,10 @@ func (a *App) handleInputEvent(ie InputEvent) {
 
 	case "mousedown", "mouseup", "mousemove":
 		a.HandleEvent(&event.Event{
-			Type: ie.Type,
-			X:    ie.X,
-			Y:    ie.Y,
+			Type:   ie.Type,
+			X:      ie.X,
+			Y:      ie.Y,
+			Button: ie.Button,
 		})
 		// Render immediately after mouse events for responsive feedback
 		a.RenderDirty()
