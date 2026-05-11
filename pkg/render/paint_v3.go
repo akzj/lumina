@@ -732,16 +732,25 @@ func paintDirtyWalkV3(w CellWriter, node *Node, depth int) {
 	}
 
 	if node.PaintDirty {
+		// Determine if this node is opaque (has background or border that fills its area).
+		// Transparent nodes (no background, no border) should NOT clear their area,
+		// because they don't paint over it — clearing would wipe underlying content.
+		opaque := node.Style.Background != "" || hasBorder(node.Style)
+
 		// Clear the node's area (within clip) then repaint it fully.
 		// If node moved, also clear old position.
 		if node.PositionChanged {
-			bg := findAncestorBackground(node)
-			w.ClearRect(node.OldX, node.OldY, node.OldW, node.OldH, bg)
+			if opaque {
+				bg := findAncestorBackground(node)
+				w.ClearRect(node.OldX, node.OldY, node.OldW, node.OldH, bg)
+			}
 			node.PositionChanged = false
 		}
 
-		bg := findAncestorBackground(node)
-		w.ClearRect(node.X, node.Y, node.W, node.H, bg)
+		if opaque {
+			bg := findAncestorBackground(node)
+			w.ClearRect(node.X, node.Y, node.W, node.H, bg)
+		}
 		paintNodeV3(w, node, depth)
 		node.PaintDirty = false
 		clearPaintDirtyBelow(node)
