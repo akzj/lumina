@@ -211,11 +211,17 @@ func (a *App) eventLoop(cfg RunConfig) error {
 				return nil // input channel closed
 			}
 			a.handleInputEvent(ie)
+			// Drain all remaining pending events (non-blocking).
+			// This ensures scroll events are coalesced before the next render.
+			a.drainEvents(events)
 
 		case path := <-reloadCh:
 			a.reloadScript(path)
 
 		case <-ticker.C:
+			// Drain any pending events that arrived since last tick.
+			a.drainEvents(events)
+
 			// Tick animations.
 			if a.animMgr != nil && a.animMgr.IsRunning() {
 				nowMs := time.Now().UnixMilli()
@@ -240,6 +246,22 @@ func (a *App) eventLoop(cfg RunConfig) error {
 			a.tickDevTools(rendered)
 
 			// Native cursor blink removed — Lua Textarea handles cursor via re-render.
+		}
+	}
+}
+
+// drainEvents processes all pending input events without blocking.
+// This ensures scroll events (and other events) are coalesced before rendering.
+func (a *App) drainEvents(events <-chan InputEvent) {
+	for {
+		select {
+		case ie, ok := <-events:
+			if !ok {
+				return
+			}
+			a.handleInputEvent(ie)
+		default:
+			return // no more pending events
 		}
 	}
 }

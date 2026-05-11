@@ -137,24 +137,24 @@ test.describe("VList", function()
 		test.assert.eq(app:screenContains("Item 0"), true)
 		test.assert.eq(app:screenContains("Item 50"), false)
 
-		-- Scroll down: 5 ticks * 3 lines/tick = 15 lines → scrollY=15
+		-- Scroll down: 5 ticks * 2 lines/tick = 10 lines → scrollY=10
 		for i = 1, 5 do
 			app:scroll(5, 2, 1)
 		end
 
-		-- After scrolling 15 lines, viewport shows rows 15-24
+		-- After scrolling 10 lines, viewport shows rows 10-19
 		-- Item 0 at row 0 is scrolled off screen
 		test.assert.eq(app:screenContains("Item 0"), false)
-		-- Item 15 at row 15 should be at top of viewport
+		-- Item 10 at row 10 should be at top of viewport
+		test.assert.eq(app:screenContains("Item 10"), true)
+		-- Item 15 at row 15 should be visible
 		test.assert.eq(app:screenContains("Item 15"), true)
-		-- Item 20 at row 20 should be visible
-		test.assert.eq(app:screenContains("Item 20"), true)
 	end)
 
 	test.it("scrolling up brings back earlier items", function()
 		loadVList(app, { totalCount = 100, height = 10, overscan = 3, estimateHeight = 1 })
 
-		-- Scroll down first
+		-- Scroll down first: 5 ticks * 2 lines/tick = 10 → scrollY=10
 		for i = 1, 5 do
 			app:scroll(5, 2, 1)
 		end
@@ -162,7 +162,7 @@ test.describe("VList", function()
 		-- Item 0 should be gone
 		test.assert.eq(app:screenContains("Item 0"), false)
 
-		-- Scroll back up: 5 ticks * -1 delta * 3 lines/tick = -15 → scrollY=0
+		-- Scroll back up: 5 ticks * -1 delta * 2 lines/tick = -10 → scrollY=0
 		for i = 1, 5 do
 			app:scroll(5, 2, -1)
 		end
@@ -245,18 +245,18 @@ test.describe("VList", function()
 		test.assert.eq(app:screenContains("Item 4"), true)
 		-- Item 5 starts at row 10, which is at the very bottom edge — may or may not be visible
 
-		-- Scroll down 4 ticks (4 * 3 = 12 lines)
+		-- Scroll down 4 ticks (4 * 2 = 8 lines)
 		for i = 1, 4 do
 			app:scroll(5, 2, 1)
 		end
 
-		-- scrollY = 12, viewport shows rows 12-21
+		-- scrollY = 8, viewport shows rows 8-17
 		-- Item 0 at rows 0-1: scrolled off
 		test.assert.eq(app:screenContains("Item 0"), false)
-		-- Item 6 at rows 12-13: at top of viewport
-		test.assert.eq(app:screenContains("Item 6"), true)
-		-- Item 10 at rows 20-21: at bottom of viewport
-		test.assert.eq(app:screenContains("Item 10"), true)
+		-- Item 4 at rows 8-9: at top of viewport
+		test.assert.eq(app:screenContains("Item 4"), true)
+		-- Item 8 at rows 16-17: at bottom of viewport
+		test.assert.eq(app:screenContains("Item 8"), true)
 	end)
 
 	test.it("via require('lux.vlist') — module loads and renders", function()
@@ -294,12 +294,12 @@ test.describe("VList", function()
 		test.assert.notNil(scrollBox)
 		test.assert.eq(scrollBox.scrollHeight, 100)
 
-		-- Scroll down and verify
+		-- Scroll down and verify: 5 ticks * 2 lines/tick = 10 → scrollY=10
 		for i = 1, 5 do
 			app:scroll(5, 2, 1)
 		end
 		test.assert.eq(app:screenContains("ReqItem 0"), false)
-		test.assert.eq(app:screenContains("ReqItem 15"), true)
+		test.assert.eq(app:screenContains("ReqItem 10"), true)
 	end)
 
 	test.it("clip-on-idle: component has isClipped state and renders", function()

@@ -94,7 +94,8 @@ test.describe("ScrollbarHidden", function()
 		test.assert.eq(app:screenContains("Line 1"), true)
 
 		-- Scroll down many times (x=5, y=5, delta=1 means scroll down)
-		for i = 1, 20 do
+		-- step=2, 25 ticks = 50 lines → clamped to maxScroll
+		for i = 1, 25 do
 			app:scroll(5, 5, 1)
 		end
 		-- After heavy scrolling, Line 1 should be gone and later lines visible

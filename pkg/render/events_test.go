@@ -729,21 +729,21 @@ func TestEngine_AutoScroll_CustomHandlerPriority(t *testing.T) {
 		t.Error("expected custom onScroll handler to be called")
 	}
 
-	// Verify auto-scroll DID change ScrollY (step=1, delta=1 → ScrollY=1)
+	// Verify auto-scroll DID change ScrollY (step=2, delta=1 → ScrollY=2)
 	scrollNode := root.RootNode
 	if len(scrollNode.Children) > 0 && scrollNode.Children[0].Style.Overflow == "scroll" {
 		scrollNode = scrollNode.Children[0]
 	}
-	if scrollNode.ScrollY != 1 {
-		t.Errorf("auto-scroll should have fired; ScrollY = %d, want 1", scrollNode.ScrollY)
+	if scrollNode.ScrollY != 2 {
+		t.Errorf("auto-scroll should have fired; ScrollY = %d, want 2", scrollNode.ScrollY)
 	}
 
 	// Verify handler received the updated scrollY
 	L.GetGlobal("scroll_received_y")
 	receivedY, _ := L.ToInteger(-1)
 	L.Pop(1)
-	if receivedY != 1 {
-		t.Errorf("onScroll handler received scrollY = %d, want 1", receivedY)
+	if receivedY != 2 {
+		t.Errorf("onScroll handler received scrollY = %d, want 2", receivedY)
 	}
 }
 
