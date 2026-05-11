@@ -735,24 +735,13 @@ func paintDirtyWalkV3(w CellWriter, node *Node, depth int) {
 		// Clear the node's area (within clip) then repaint it fully.
 		// If node moved, also clear old position.
 		if node.PositionChanged {
-			// Only clear old position if it was a real area (not a newly created node)
-			if node.OldW > 0 && node.OldH > 0 {
-				bg := findAncestorBackground(node)
-				w.ClearRect(node.OldX, node.OldY, node.OldW, node.OldH, bg)
-			}
+			bg := findAncestorBackground(node)
+			w.ClearRect(node.OldX, node.OldY, node.OldW, node.OldH, bg)
 			node.PositionChanged = false
 		}
 
-		// For newly created transparent nodes (no background, no border, never had size),
-		// skip clearing the current area — it would wipe underlying content that this
-		// transparent node won't repaint. Just paint children on top.
-		// For all other cases, clear the area first.
-		newlyCreated := node.OldW == 0 && node.OldH == 0
-		transparent := node.Style.Background == "" && !hasBorder(node.Style)
-		if !(newlyCreated && transparent) {
-			bg := findAncestorBackground(node)
-			w.ClearRect(node.X, node.Y, node.W, node.H, bg)
-		}
+		bg := findAncestorBackground(node)
+		w.ClearRect(node.X, node.Y, node.W, node.H, bg)
 		paintNodeV3(w, node, depth)
 		node.PaintDirty = false
 		clearPaintDirtyBelow(node)
