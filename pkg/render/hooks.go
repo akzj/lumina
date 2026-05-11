@@ -180,9 +180,31 @@ func (e *Engine) luaUseRef(L *lua.State) int {
 	// Push the same table every render
 	log.Printf("[DEBUG useRef] retrieving tableRef=%d", slot.ref.tableRef)
 	L.RawGetI(lua.RegistryIndex, int64(slot.ref.tableRef))
+
+	// Defensive: if registry slot is corrupted, create a new table
 	if !L.IsTable(-1) {
-		log.Printf("[DEBUG useRef] ERROR: RawGetI returned type %s (tableRef=%d)", L.Type(-1), slot.ref.tableRef)
+		log.Printf("[useRef] WARNING: tableRef=%d returned type %s (expected table), recreating",
+			slot.ref.tableRef, L.Type(-1))
+		L.Pop(1) // pop the corrupted value
+
+		// Free the corrupted ref and create a new one
+		L.Unref(lua.RegistryIndex, slot.ref.tableRef)
+
+		L.NewTable()
+		tbl := L.AbsIndex(-1)
+		if L.GetTop() >= 2 && !L.IsNoneOrNil(1) {
+			L.PushValue(1)
+		} else {
+			L.PushNil()
+		}
+		L.SetField(tbl, "current")
+		ref := L.Ref(lua.RegistryIndex)
+		slot.ref = &refSlot{tableRef: ref}
+
+		// Push the new table
+		L.RawGetI(lua.RegistryIndex, int64(slot.ref.tableRef))
 	}
+
 	return 1
 }
 
