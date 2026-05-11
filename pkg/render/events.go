@@ -3,6 +3,7 @@ package render
 import (
 	"fmt"
 	"log"
+	"math"
 	"os"
 
 	"github.com/akzj/go-lua/pkg/lua"
@@ -709,8 +710,14 @@ func findScrollableAncestor(node *Node) *Node {
 	return nil
 }
 
-// autoScroll adjusts a scroll container's TargetScrollY by delta, clamped to [0, maxScroll].
-// The actual ScrollY is animated toward TargetScrollY by TickSmoothScroll (called at 60Hz).
+// Scroll physics constants.
+const (
+	scrollImpulse  = 1.5  // velocity added per wheel tick (lines/frame)
+	scrollFriction = 0.82 // velocity multiplier per frame (lower = more friction)
+)
+
+// autoScroll adds velocity impulse for momentum-based scrolling.
+// TickSmoothScroll (called at 60Hz) applies friction and moves ScrollY.
 func (e *Engine) autoScroll(node *Node, delta int) {
 	maxScroll := computeMaxScrollY(node)
 	if maxScroll <= 0 {
@@ -722,25 +729,45 @@ func (e *Engine) autoScroll(node *Node, delta int) {
 		return
 	}
 
-	const step = 3 // scroll speed: 3 lines per wheel tick
-	newTarget := node.TargetScrollY + delta*step
-
-	// Clamp
-	if newTarget < 0 {
-		newTarget = 0
-	}
-	if newTarget > maxScroll {
-		newTarget = maxScroll
-	}
-
-	if newTarget == node.TargetScrollY {
-		return // no change
-	}
-
-	node.TargetScrollY = newTarget
-	// Don't set ScrollY directly — TickSmoothScroll will animate it
+	// Add velocity impulse (momentum-based scrolling)
+	node.ScrollVelocity += float64(delta) * scrollImpulse
+	// Sync TargetScrollY to current ScrollY so target-based animation doesn't interfere
+	node.TargetScrollY = node.ScrollY
 	e.needsRender = true
 }
+
+// predictFinalScrollY estimates where ScrollY will end up after momentum decays.
+// Simulates the exact physics to avoid mismatch with actual animation.
+func predictFinalScrollY(node *Node) int {
+	if node.ScrollVelocity == 0 {
+		return node.TargetScrollY
+	}
+	// Simulate the momentum physics exactly as tickSmoothScrollNode does
+	vel := node.ScrollVelocity
+	accum := node.ScrollAccum
+	scrollY := node.ScrollY
+	maxScroll := computeMaxScrollY(node)
+
+	for i := 0; i < 200 && math.Abs(vel) >= 0.1; i++ {
+		vel *= scrollFriction
+		accum += vel
+		lines := int(accum)
+		if lines != 0 {
+			accum -= float64(lines)
+			scrollY += lines
+			if scrollY < 0 {
+				scrollY = 0
+				break
+			}
+			if scrollY > maxScroll {
+				scrollY = maxScroll
+				break
+			}
+		}
+	}
+	return scrollY
+}
+
 
 // handleScrollbarClick walks the tree (DFS) looking for scroll containers with visible
 // scrollbars. If the click (x,y) lands on a scrollbar, it handles page up/down or
@@ -1327,10 +1354,11 @@ func (e *Engine) callLuaRefScroll(ref LuaRef, delta int, scrollNode *Node) {
 	}
 	L.SetField(tblIdx, "key")
 	// Include absolute scrollY and scrollHeight so handlers can compute visible range.
-	// Use TargetScrollY so Lua handlers see the intended scroll position (smooth scroll
-	// animates ScrollY toward TargetScrollY, but Lua logic should use the target).
+	// For velocity-based scrolling, predict the final scroll position so Lua handlers
+	// (like VList) can pre-render items at the destination.
 	if scrollNode != nil {
-		L.PushInteger(int64(scrollNode.TargetScrollY))
+		predictedScrollY := predictFinalScrollY(scrollNode)
+		L.PushInteger(int64(predictedScrollY))
 		L.SetField(tblIdx, "scrollY")
 		L.PushInteger(int64(scrollNode.ScrollHeight))
 		L.SetField(tblIdx, "scrollHeight")

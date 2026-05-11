@@ -649,9 +649,11 @@ func TestEngine_AutoScroll(t *testing.T) {
 	// Scroll down (delta=1 means scroll down)
 	e.HandleScroll(5, 2, 1)
 
-	// Animate smooth scroll to reach target
-	for i := 0; i < 10 && scrollNode.ScrollY != scrollNode.TargetScrollY; i++ {
-		e.TickSmoothScroll()
+	// Animate momentum scroll to completion
+	for i := 0; i < 100; i++ {
+		if !e.TickSmoothScroll() {
+			break
+		}
 	}
 
 	if scrollNode.ScrollY <= 0 {
@@ -663,9 +665,11 @@ func TestEngine_AutoScroll(t *testing.T) {
 	// Scroll up (delta=-1 means scroll up)
 	e.HandleScroll(5, 2, -1)
 
-	// Animate smooth scroll to reach target
-	for i := 0; i < 10 && scrollNode.ScrollY != scrollNode.TargetScrollY; i++ {
-		e.TickSmoothScroll()
+	// Animate momentum scroll to completion
+	for i := 0; i < 100; i++ {
+		if !e.TickSmoothScroll() {
+			break
+		}
 	}
 
 	if scrollNode.ScrollY >= savedY {
@@ -676,9 +680,11 @@ func TestEngine_AutoScroll(t *testing.T) {
 	for i := 0; i < 20; i++ {
 		e.HandleScroll(5, 2, -1)
 	}
-	// Animate to target
-	for i := 0; i < 100 && scrollNode.ScrollY != scrollNode.TargetScrollY; i++ {
-		e.TickSmoothScroll()
+	// Animate to completion
+	for i := 0; i < 200; i++ {
+		if !e.TickSmoothScroll() {
+			break
+		}
 	}
 	if scrollNode.ScrollY != 0 {
 		t.Errorf("after many scroll ups: ScrollY = %d, want 0", scrollNode.ScrollY)
@@ -688,9 +694,11 @@ func TestEngine_AutoScroll(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		e.HandleScroll(5, 2, 1)
 	}
-	// Animate to target
-	for i := 0; i < 200 && scrollNode.ScrollY != scrollNode.TargetScrollY; i++ {
-		e.TickSmoothScroll()
+	// Animate to completion
+	for i := 0; i < 500; i++ {
+		if !e.TickSmoothScroll() {
+			break
+		}
 	}
 	maxScroll := computeMaxScrollY(scrollNode)
 	if scrollNode.ScrollY != maxScroll {
@@ -747,22 +755,29 @@ func TestEngine_AutoScroll_CustomHandlerPriority(t *testing.T) {
 		t.Error("expected custom onScroll handler to be called")
 	}
 
-	// With smooth scroll, autoScroll sets TargetScrollY (step=3, delta=1 → TargetScrollY=3).
-	// ScrollY is animated toward target by TickSmoothScroll.
+	// With velocity-based scrolling, autoScroll adds velocity impulse.
+	// Animate momentum to completion and verify ScrollY moved.
 	scrollNode := root.RootNode
 	if len(scrollNode.Children) > 0 && scrollNode.Children[0].Style.Overflow == "scroll" {
 		scrollNode = scrollNode.Children[0]
 	}
-	if scrollNode.TargetScrollY != 3 {
-		t.Errorf("auto-scroll should have set TargetScrollY = %d, want 3", scrollNode.TargetScrollY)
+
+	// Animate until momentum stops
+	for i := 0; i < 100; i++ {
+		if !e.TickSmoothScroll() {
+			break
+		}
+	}
+	if scrollNode.ScrollY <= 0 {
+		t.Errorf("after TickSmoothScroll, ScrollY = %d, want > 0", scrollNode.ScrollY)
 	}
 
-	// Animate until ScrollY reaches target
-	for i := 0; i < 10 && scrollNode.ScrollY != scrollNode.TargetScrollY; i++ {
-		e.TickSmoothScroll()
-	}
-	if scrollNode.ScrollY != 3 {
-		t.Errorf("after TickSmoothScroll, ScrollY = %d, want 3", scrollNode.ScrollY)
+	// Verify handler received a predicted scrollY > 0
+	L.GetGlobal("scroll_received_y")
+	receivedY, _ := L.ToInteger(-1)
+	L.Pop(1)
+	if receivedY <= 0 {
+		t.Errorf("onScroll handler received scrollY = %d, want > 0", receivedY)
 	}
 }
 
@@ -815,9 +830,11 @@ func TestEngine_AutoScroll_PreservedAcrossReRender(t *testing.T) {
 	// Auto-scroll down
 	e.HandleScroll(5, 2, 1)
 	e.HandleScroll(5, 2, 1)
-	// Animate smooth scroll to reach target
-	for i := 0; i < 20 && scrollNode.ScrollY != scrollNode.TargetScrollY; i++ {
-		e.TickSmoothScroll()
+	// Animate momentum scroll to completion
+	for i := 0; i < 100; i++ {
+		if !e.TickSmoothScroll() {
+			break
+		}
 	}
 	scrollYBefore := scrollNode.ScrollY
 	if scrollYBefore <= 0 {
@@ -886,9 +903,11 @@ func TestEngine_AutoScroll_ClampWhenContentShrinks(t *testing.T) {
 	for i := 0; i < 20; i++ {
 		e.HandleScroll(5, 2, 1)
 	}
-	// Animate smooth scroll to reach target
-	for i := 0; i < 100 && scrollNode.ScrollY != scrollNode.TargetScrollY; i++ {
-		e.TickSmoothScroll()
+	// Animate momentum scroll to completion
+	for i := 0; i < 500; i++ {
+		if !e.TickSmoothScroll() {
+			break
+		}
 	}
 	if scrollNode.ScrollY <= 0 {
 		t.Fatalf("expected scrollY > 0 after scrolling, got %d", scrollNode.ScrollY)

@@ -18,7 +18,7 @@ lumina.app {
 
         -- Generate 50 lines of content
         local items = {}
-        for i = 1, 50 do
+        for i = 1, 200 do
             items[#items + 1] = lumina.createElement("text", {
                 key = "line" .. i,
                 style = {

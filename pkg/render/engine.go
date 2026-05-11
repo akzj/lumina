@@ -1,7 +1,10 @@
 package render
 
 import (
+	"fmt"
 	"log"
+	"math"
+	"os"
 	"reflect"
 	"sort"
 	"strconv"
@@ -10,6 +13,21 @@ import (
 	"github.com/akzj/lumina/pkg/buffer"
 	"github.com/akzj/lumina/pkg/perf"
 )
+
+// scrollMetricsLog is a file logger for scroll debugging.
+// Set LUMINA_SCROLL_LOG=1 to enable writing to /tmp/lumina_scroll_metrics.log.
+var scrollMetricsLog *os.File
+var scrollMetricsFrame int
+
+func init() {
+	if os.Getenv("LUMINA_SCROLL_LOG") != "" {
+		f, err := os.Create("/tmp/lumina_scroll_metrics.log")
+		if err == nil {
+			scrollMetricsLog = f
+			fmt.Fprintln(f, "frame,scrollY,velocity,linesThisFrame,accum")
+		}
+	}
+}
 
 // AnimationManager is the interface for animation management.
 // Implemented by animation.Manager to avoid import cycles (render cannot import animation).
@@ -137,10 +155,11 @@ func (e *Engine) MarkAllComponentsDirty() {
 	e.needsRender = true
 }
 
-// TickSmoothScroll advances all scroll containers by moving ScrollY toward TargetScrollY.
+// TickSmoothScroll advances all scroll containers using momentum or target-based animation.
 // Call this once per frame tick (60Hz) for smooth scrolling animation.
 // Returns true if any scroll position changed (needs render).
 func (e *Engine) TickSmoothScroll() bool {
+	scrollMetricsFrame++
 	changed := false
 	for _, layer := range e.layers {
 		if layer.Root != nil {
@@ -155,27 +174,80 @@ func (e *Engine) TickSmoothScroll() bool {
 	return changed
 }
 
-// tickSmoothScrollNode recursively finds scroll containers and moves ScrollY toward TargetScrollY.
+// tickSmoothScrollNode recursively finds scroll containers and animates scrolling.
+// Supports two modes:
+//   - Velocity-based (ScrollVelocity != 0): momentum scrolling from wheel events
+//   - Target-based (TargetScrollY != ScrollY, velocity == 0): for keyboard/scrollbar
 func tickSmoothScrollNode(node *Node) bool {
 	if node == nil {
 		return false
 	}
 	changed := false
 
-	if node.Style.Overflow == "scroll" && node.ScrollY != node.TargetScrollY {
-		diff := node.TargetScrollY - node.ScrollY
-		// Move at least 1, scale with distance for eased catch-up
-		move := abs(diff)/3 + 1
-		if move > abs(diff) {
-			move = abs(diff)
+	if node.Style.Overflow == "scroll" {
+		if node.ScrollVelocity != 0 {
+			// --- Velocity-based momentum scrolling ---
+			// Apply friction
+			node.ScrollVelocity *= scrollFriction
+
+			// Accumulate fractional movement
+			node.ScrollAccum += node.ScrollVelocity
+
+			// Extract integer lines to scroll
+			lines := int(node.ScrollAccum)
+			if lines != 0 {
+				node.ScrollAccum -= float64(lines)
+
+				// Apply scroll with clamping
+				maxScroll := computeMaxScrollY(node)
+				newScrollY := node.ScrollY + lines
+				if newScrollY < 0 {
+					newScrollY = 0
+				}
+				if newScrollY > maxScroll {
+					newScrollY = maxScroll
+				}
+
+				if newScrollY != node.ScrollY {
+					node.ScrollY = newScrollY
+					node.TargetScrollY = node.ScrollY
+					node.PaintDirty = true
+					changed = true
+					// Log scroll metrics
+					if scrollMetricsLog != nil {
+						fmt.Fprintf(scrollMetricsLog, "%d,%d,%.3f,%d,%.3f\n",
+							scrollMetricsFrame, node.ScrollY, node.ScrollVelocity, lines, node.ScrollAccum)
+					}
+				} else {
+					// Hit boundary, stop
+					node.ScrollVelocity = 0
+					node.ScrollAccum = 0
+				}
+			}
+
+			// Stop when velocity is negligible
+			if math.Abs(node.ScrollVelocity) < 0.1 {
+				node.ScrollVelocity = 0
+				node.ScrollAccum = 0
+			} else {
+				// Still animating — need render tick even if no lines moved yet
+				changed = true
+			}
+		} else if node.ScrollY != node.TargetScrollY {
+			// --- Target-based scrolling (keyboard, scrollbar, programmatic) ---
+			diff := node.TargetScrollY - node.ScrollY
+			move := abs(diff)/3 + 1
+			if move > abs(diff) {
+				move = abs(diff)
+			}
+			if diff > 0 {
+				node.ScrollY += move
+			} else {
+				node.ScrollY -= move
+			}
+			node.PaintDirty = true
+			changed = true
 		}
-		if diff > 0 {
-			node.ScrollY += move
-		} else {
-			node.ScrollY -= move
-		}
-		node.PaintDirty = true
-		changed = true
 	}
 
 	for _, child := range node.Children {
