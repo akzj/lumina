@@ -82,7 +82,7 @@ func (e *Engine) RegisterLuaAPI() {
 	// Create shared callable metatable for factory tables (__call → createElement)
 	// Release old metatable ref first (called again during hotreload full reload)
 	if e.factoryMetaRef != 0 {
-		L.Unref(lua.RegistryIndex, int(e.factoryMetaRef))
+		e.safeUnref(int(e.factoryMetaRef))
 	}
 	L.NewTable()
 	L.PushFunction(e.luaFactoryCall)
@@ -244,7 +244,7 @@ func (e *Engine) RegisterLuaAPI() {
 		}
 		// Free old ref if any
 		if e.onErrorRef != 0 {
-			L.Unref(lua.RegistryIndex, int(e.onErrorRef))
+			e.safeUnref(int(e.onErrorRef))
 		}
 		L.PushValue(1)
 		e.onErrorRef = int64(L.Ref(lua.RegistryIndex))
@@ -392,7 +392,7 @@ func (e *Engine) luaDefineComponent(L *lua.State) int {
 	ref := L.Ref(lua.RegistryIndex)
 	// Free old factory ref if redefining (prevent Lua registry leak)
 	if old, exists := e.factories[name]; exists {
-		L.Unref(lua.RegistryIndex, int(old))
+		e.safeUnref(int(old))
 	}
 	e.factories[name] = int64(ref)
 

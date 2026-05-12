@@ -125,7 +125,7 @@ func (e *Engine) luaUseEffect(L *lua.State) int {
 	} else {
 		eff := slot.effect
 		// Update callback ref (it may be a new closure each render)
-		L.Unref(lua.RegistryIndex, eff.callbackRef)
+		e.safeUnref(eff.callbackRef)
 		L.PushValue(1)
 		eff.callbackRef = L.Ref(lua.RegistryIndex)
 
@@ -188,7 +188,7 @@ func (e *Engine) luaUseRef(L *lua.State) int {
 		L.Pop(1) // pop the corrupted value
 
 		// Free the corrupted ref and create a new one
-		L.Unref(lua.RegistryIndex, slot.ref.tableRef)
+		e.safeUnref(slot.ref.tableRef)
 
 		L.NewTable()
 		tbl := L.AbsIndex(-1)
@@ -248,7 +248,7 @@ func (e *Engine) luaUseMemo(L *lua.State) int {
 		stale := !hasDeps || !depsEqual(m.deps, deps)
 		if stale {
 			// Recompute
-			L.Unref(lua.RegistryIndex, m.ref)
+			e.safeUnref(m.ref)
 			L.PushValue(1) // push factory
 			if status := L.PCall(0, 1, 0); status != lua.OK {
 				L.Error()
@@ -295,7 +295,7 @@ func (e *Engine) luaUseCallback(L *lua.State) int {
 		m := slot.memo
 		stale := !hasDeps || !depsEqual(m.deps, deps)
 		if stale {
-			L.Unref(lua.RegistryIndex, m.ref)
+			e.safeUnref(m.ref)
 			L.PushValue(1)
 			m.ref = L.Ref(lua.RegistryIndex)
 			m.deps = deps
@@ -343,7 +343,7 @@ func (e *Engine) firePendingEffects() {
 				} else {
 					L.Pop(1)
 				}
-				L.Unref(lua.RegistryIndex, eff.cleanupRef)
+				e.safeUnref(eff.cleanupRef)
 				eff.cleanupRef = 0
 			}
 
@@ -386,19 +386,19 @@ func (e *Engine) cleanupComponentHooks(comp *Component) {
 				} else {
 					L.Pop(1)
 				}
-				L.Unref(lua.RegistryIndex, eff.cleanupRef)
+				e.safeUnref(eff.cleanupRef)
 			}
 			// Free callback ref
 			if eff.callbackRef != 0 {
-				L.Unref(lua.RegistryIndex, eff.callbackRef)
+				e.safeUnref(eff.callbackRef)
 			}
 		case hookMemo:
 			if slot.memo != nil && slot.memo.ref != 0 {
-				L.Unref(lua.RegistryIndex, slot.memo.ref)
+				e.safeUnref(slot.memo.ref)
 			}
 		case hookRef:
 			if slot.ref != nil && slot.ref.tableRef != 0 {
-				L.Unref(lua.RegistryIndex, slot.ref.tableRef)
+				e.safeUnref(slot.ref.tableRef)
 			}
 		}
 	}

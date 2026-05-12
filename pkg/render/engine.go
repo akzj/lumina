@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"reflect"
+	"runtime/debug"
 	"sort"
 	"strconv"
 
@@ -245,7 +246,7 @@ func (e *Engine) drainPendingUnrefs() {
 			L.SetField(-2, "current")
 		}
 		L.Pop(1)
-		L.Unref(lua.RegistryIndex, int(ref))
+		e.safeUnref(int(ref))
 	}
 	if e.hoverLeaveRef == 0 && e.captureMoveRef == 0 && e.captureMouseUpRef == 0 {
 		e.pendingUnrefs = e.pendingUnrefs[:0]
@@ -265,6 +266,41 @@ func (e *Engine) shouldRetainPendingRef(ref LuaRef) bool {
 		(ref == e.hoverLeaveRef ||
 			ref == e.captureMoveRef ||
 			ref == e.captureMouseUpRef)
+}
+
+// isComponentRenderFn returns true if ref matches any registered component's RenderFn.
+func (e *Engine) isComponentRenderFn(ref int64) bool {
+	for _, comp := range e.components {
+		if comp.RenderFn == ref {
+			return true
+		}
+	}
+	return false
+}
+
+// safeUnref frees a Lua registry ref, but NEVER frees any component's RenderFn.
+// This prevents the catastrophic bug where ROOT's render function gets freed
+// and its slot reused for a different function (e.g. an onClick handler).
+func (e *Engine) safeUnref(ref int) {
+	if ref == 0 {
+		return
+	}
+	ref64 := int64(ref)
+	// Never free ROOT's RenderFn
+	if e.root != nil && ref64 == e.root.RenderFn {
+		log.Printf("[BUG] safeUnref: blocked attempt to free ROOT's RenderFn (ref=%d)", ref)
+		debug.PrintStack()
+		return
+	}
+	// Never free any component's RenderFn
+	for _, comp := range e.components {
+		if comp.RenderFn == ref64 {
+			log.Printf("[BUG] safeUnref: blocked attempt to free component %q RenderFn (ref=%d)", comp.ID, ref)
+			debug.PrintStack()
+			return
+		}
+	}
+	e.L.Unref(lua.RegistryIndex, ref)
 }
 
 // Destroy releases all Lua registry refs held by the engine.
@@ -296,7 +332,7 @@ func (e *Engine) Destroy() {
 
 	// Free all Lua factory refs.
 	for name, ref := range e.factories {
-		L.Unref(lua.RegistryIndex, int(ref))
+		e.safeUnref(int(ref))
 		delete(e.factories, name)
 	}
 
@@ -516,7 +552,7 @@ func (e *Engine) Layers() []*Layer {
 func (e *Engine) DefineComponent(name string, renderFnRef int64) {
 	// Free the old factory ref if redefining (e.g. module-level hot-reload).
 	if old, exists := e.factories[name]; exists {
-		e.L.Unref(lua.RegistryIndex, int(old))
+		e.safeUnref(int(old))
 	}
 	e.factories[name] = renderFnRef
 }
@@ -536,8 +572,10 @@ func (e *Engine) CreateRootComponent(id, name string, renderFnRef int64) {
 func (e *Engine) SetState(compID, key string, value any) {
 	comp := e.components[compID]
 	if comp == nil {
+		log.Printf("[DEBUG] SetState: component %q NOT FOUND (key=%q)", compID, key)
 		return
 	}
+	log.Printf("[DEBUG] SetState: comp=%q addr=%p key=%q value=%v (old=%v)", compID, comp, key, value, comp.State[key])
 	comp.SetState(key, value)
 	if comp.Dirty {
 		e.needsRender = true
@@ -691,7 +729,7 @@ func (e *Engine) cleanupRemovedHoveredNode(checkHandlerRef bool) {
 
 	e.callLuaRef(e.hoverLeaveRef, 0, 0)
 	if e.L != nil {
-		e.L.Unref(lua.RegistryIndex, int(e.hoverLeaveRef))
+		e.safeUnref(int(e.hoverLeaveRef))
 	}
 	e.removePendingUnref(e.hoverLeaveRef)
 	e.hoverLeaveRef = 0
@@ -819,6 +857,9 @@ func (e *Engine) renderComponent(comp *Component) {
 	// Set current component (for hooks like useState)
 	e.currentComp = comp
 	defer func() { e.currentComp = nil }()
+	if comp.IsRoot {
+		log.Printf("[DEBUG] renderComponent ROOT %q: addr=%p state[selAgent]=%v", comp.ID, comp, comp.State["selAgent"])
+	}
 
 	// Reset hook index for this render cycle
 	comp.hookIdx = 0
@@ -826,12 +867,21 @@ func (e *Engine) renderComponent(comp *Component) {
 	// Push render function from registry
 	L.RawGetI(lua.RegistryIndex, comp.RenderFn)
 	if !L.IsFunction(-1) {
+		log.Printf("[BUG] renderComponent %q: RenderFn=%d is not a function (type=%s)", comp.ID, comp.RenderFn, L.TypeName(L.Type(-1)))
 		L.Pop(1)
 		comp.Dirty = false
 		return
 	}
 
 	// Push props table
+	if comp.Props != nil {
+		if sa, ok := comp.Props["selectedAgent"]; ok {
+			log.Printf("[DEBUG] renderComponent %q: pushing props with selectedAgent=%v", comp.ID, sa)
+		}
+		if si, ok := comp.Props["selectedId"]; ok {
+			log.Printf("[DEBUG] renderComponent %q: pushing props with selectedId=%v", comp.ID, si)
+		}
+	}
 	pushMap(L, comp.Props)
 
 	// Clear dirty BEFORE calling render function.
@@ -928,9 +978,26 @@ func (e *Engine) reconcileChildComponents(parent *Component, node *Node) {
 		} else {
 			// Existing child: update props and mark dirty if changed.
 			if !propsEqual(child.Props, node.ComponentProps) {
-				unrefPropFuncRefsInProps(e.L, child.Props)
+				// Debug: log prop changes for selectedAgent/selectedId
+				if sa, ok := node.ComponentProps["selectedAgent"]; ok {
+					oldSa := child.Props["selectedAgent"]
+					log.Printf("[DEBUG] reconcileChild %q: selectedAgent %v -> %v (dirty=true)", child.ID, oldSa, sa)
+				}
+				if si, ok := node.ComponentProps["selectedId"]; ok {
+					oldSi := child.Props["selectedId"]
+					log.Printf("[DEBUG] reconcileChild %q: selectedId %v -> %v (dirty=true)", child.ID, oldSi, si)
+				}
+				safeUnrefPropFuncRefsInProps(e, child.Props)
 				child.Props = node.ComponentProps
 				child.Dirty = true
+			} else {
+				// Debug: log when props are EQUAL (child NOT re-dirtied)
+				if _, ok := node.ComponentProps["selectedAgent"]; ok {
+					log.Printf("[DEBUG] reconcileChild %q: propsEqual=true, NOT dirtied (selectedAgent=%v)", child.ID, child.Props["selectedAgent"])
+				}
+				if _, ok := node.ComponentProps["selectedId"]; ok {
+					log.Printf("[DEBUG] reconcileChild %q: propsEqual=true, NOT dirtied (selectedId=%v)", child.ID, child.Props["selectedId"])
+				}
 			}
 		}
 		node.Component = child
@@ -1120,7 +1187,7 @@ func (e *Engine) cleanupComponentTree(comp *Component) {
 	}
 
 	// Drop Lua function refs held in props (nested propFuncRef from readMapFromTable).
-	unrefPropFuncRefsInProps(e.L, comp.Props)
+	safeUnrefPropFuncRefsInProps(e, comp.Props)
 	comp.Props = nil
 
 	// Cleanup hook refs (effects, memos, refs) — runs effect cleanups
@@ -1131,7 +1198,7 @@ func (e *Engine) cleanupComponentTree(comp *Component) {
 	if comp.RenderFn != 0 {
 		factoryRef, isFactory := e.factories[comp.Type]
 		if !isFactory || comp.RenderFn != factoryRef {
-			e.L.Unref(lua.RegistryIndex, int(comp.RenderFn))
+			e.safeUnref(int(comp.RenderFn))
 		}
 		comp.RenderFn = 0
 	}
@@ -1153,6 +1220,11 @@ func (e *Engine) renderInOrder() int {
 	count := 0
 	// Render root first (it creates the component placeholders)
 	if e.root != nil && e.root.Dirty {
+		log.Printf("[DEBUG] renderInOrder: rendering root %q", e.root.ID)
+		// Check for pointer divergence between e.root and e.components[e.root.ID]
+		if mapComp := e.components[e.root.ID]; mapComp != e.root {
+			log.Printf("[BUG] renderInOrder: e.root=%p != e.components[%q]=%p !!!", e.root, e.root.ID, mapComp)
+		}
 		e.renderComponent(e.root)
 		count++
 	}
@@ -1188,8 +1260,10 @@ func (e *Engine) renderInOrder() int {
 			// reconcileChildComponents and rendered in a subsequent iteration
 			// with correct props.
 			if ancestorDirty(comp) {
+				log.Printf("[DEBUG] renderInOrder: SKIPPING %q (ancestorDirty)", comp.ID)
 				continue
 			}
+			log.Printf("[DEBUG] renderInOrder: rendering %q (depth=%d)", comp.ID, componentDepth(comp))
 			e.renderComponent(comp)
 			count++
 		}

@@ -715,6 +715,19 @@ func unrefPropFuncRefsInProps(L *lua.State, m map[string]any) {
 	}
 }
 
+// safeUnrefPropFuncRefsInProps releases Lua registry refs held in a props map,
+// routing all unrefs through Engine.safeUnref to protect component RenderFn refs.
+func safeUnrefPropFuncRefsInProps(e *Engine, m map[string]any) {
+	if e == nil || e.L == nil || m == nil {
+		return
+	}
+	var refs []int64
+	collectPropFuncRefsFromAny(m, &refs)
+	for _, ref := range refs {
+		e.safeUnref(int(ref))
+	}
+}
+
 func pushMap(L *lua.State, m map[string]any) {
 	if m == nil {
 		L.NewTable()
