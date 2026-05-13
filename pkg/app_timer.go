@@ -125,6 +125,11 @@ func (a *App) fireTimers() {
 	}
 }
 
+// FireTimers is the public wrapper for fireTimers, exposed for testing.
+func (a *App) FireTimers() {
+	a.fireTimers()
+}
+
 // --- Lua API implementations ---
 
 // luaSetInterval implements lumina.setInterval(fn, ms).
