@@ -339,3 +339,369 @@ func TestScrollJumpToLatest_DynamicContent(t *testing.T) {
 
 	_ = fmt.Sprintf("test complete") // suppress unused import
 }
+
+// TestScrollTo_FromSetTimeout_NestedComponent verifies that scrollTo works
+// from a setTimeout callback when the scroll container is inside a NESTED
+// child component (like the real app: ROOT → SessionPage → ChatPanel → ScrollView).
+// This specifically tests whether FindNodeByID can find nodes in child components
+// after graftChildComponents + syncMainLayer has run.
+func TestScrollTo_FromSetTimeout_NestedComponent(t *testing.T) {
+	app, _, L := newLuaApp(t, 80, 24)
+
+	err := app.RunString(`
+		-- Track results from setTimeout callback
+		_scrollTo_result = "not_called"
+		_scrollInfo_result = "not_called"
+		_scroll_id = "nested-scroll"
+
+		-- Define a child component (like ChatPanel) that has a scroll container
+		local ChatPanel = lumina.defineComponent("ChatPanel", function(props)
+			local scrollId = _scroll_id
+
+			-- Build many children to make content scrollable
+			local children = {}
+			for i = 1, 40 do
+				children[i] = lumina.createElement("text", {
+					key = "msg-" .. i,
+					style = { height = 1 },
+				}, "Message " .. i)
+			end
+
+			-- On mount, schedule scrollToBottom via setTimeout
+			lumina.useEffect(function()
+				lumina.setTimeout(function()
+					local ok = lumina.scrollTo(scrollId, 999999)
+					_scrollTo_result = tostring(ok)
+					local info = lumina.getScrollInfo(scrollId)
+					if info then
+						_scrollInfo_result = "scrollY=" .. tostring(info.scrollY) .. " maxScroll=" .. tostring(info.maxScroll)
+					else
+						_scrollInfo_result = "nil"
+					end
+				end, 0)
+			end, {})
+
+			return lumina.createElement("vbox", {
+				id = scrollId,
+				style = { overflow = "scroll", height = 20, width = 80 },
+			}, table.unpack(children))
+		end)
+
+		-- Root component (like SessionPage) that hosts the child
+		lumina.createComponent({
+			id = "nested-root",
+			name = "NestedRoot",
+			render = function(props)
+				return lumina.createElement("vbox", {
+					style = { height = 24, width = 80 },
+				},
+					lumina.createElement(ChatPanel, { key = "chat" })
+				)
+			end,
+		})
+	`)
+	if err != nil {
+		t.Fatalf("RunString: %v", err)
+	}
+
+	app.RenderAll()
+
+	// Verify the scroll node exists in the tree BEFORE timer fires
+	engine := app.Engine()
+	scrollNode := engine.FindNodeByID("nested-scroll")
+	if scrollNode == nil {
+		t.Fatal("CRITICAL: FindNodeByID('nested-scroll') returned nil BEFORE timer fire")
+	}
+	t.Logf("Before timer: FindNodeByID found node, ScrollHeight=%d H=%d", scrollNode.ScrollHeight, scrollNode.H)
+
+	// Fire the setTimeout callback
+	time.Sleep(5 * time.Millisecond)
+	app.FireTimers()
+	app.RenderDirty()
+
+	// Check what the setTimeout callback saw
+	L.GetGlobal("_scrollTo_result")
+	scrollToResult, _ := L.ToString(-1)
+	L.Pop(1)
+
+	L.GetGlobal("_scrollInfo_result")
+	scrollInfoResult, _ := L.ToString(-1)
+	L.Pop(1)
+
+	t.Logf("setTimeout callback: scrollTo=%s, scrollInfo=%s", scrollToResult, scrollInfoResult)
+
+	if scrollToResult == "not_called" {
+		t.Fatal("setTimeout callback was never called")
+	}
+	if scrollToResult != "true" {
+		t.Errorf("scrollTo returned %s (expected 'true') — FindNodeByID failed inside setTimeout!", scrollToResult)
+	}
+	if scrollInfoResult == "nil" {
+		t.Errorf("getScrollInfo returned nil — scroll container not found from setTimeout callback!")
+	}
+
+	// Also verify the actual scroll position
+	scrollNode = engine.FindNodeByID("nested-scroll")
+	if scrollNode != nil {
+		maxScroll := computeMaxScrollYPublic(scrollNode)
+		t.Logf("Final: ScrollY=%d maxScroll=%d", scrollNode.ScrollY, maxScroll)
+		if maxScroll > 0 && scrollNode.ScrollY != maxScroll {
+			t.Errorf("ScrollY=%d != maxScroll=%d — scrollTo didn't reach bottom", scrollNode.ScrollY, maxScroll)
+		}
+	}
+}
+
+// TestScrollTo_FromSetTimeout_AfterStateChange verifies scrollTo works from
+// a setTimeout callback that was registered DURING a state change re-render
+// (like: onClick → setMessages → scrollToBottomNextFrame → setTimeout).
+func TestScrollTo_FromSetTimeout_AfterStateChange(t *testing.T) {
+	app, _, L := newLuaApp(t, 80, 24)
+
+	err := app.RunString(`
+		_scrollTo_result2 = "not_called"
+		_scrollInfo_result2 = "not_called"
+
+		lumina.createComponent({
+			id = "state-change-scroll",
+			name = "StateChangeScroll",
+			render = function(props)
+				local messages, setMessages = lumina.useState("msgs", {})
+				local scrollId = "state-scroll"
+
+				local function scrollToBottomNextFrame()
+					lumina.setTimeout(function()
+						local ok = lumina.scrollTo(scrollId, 999999)
+						_scrollTo_result2 = tostring(ok)
+						local info = lumina.getScrollInfo(scrollId)
+						if info then
+							_scrollInfo_result2 = "scrollY=" .. info.scrollY .. " maxScroll=" .. info.maxScroll
+						else
+							_scrollInfo_result2 = "nil"
+						end
+					end, 0)
+				end
+
+				local function loadMessages()
+					-- Simulate loading messages (like stores.chat.listHistory)
+					local msgs = {}
+					for i = 1, 40 do
+						msgs[i] = { content = "msg " .. i }
+					end
+					setMessages(msgs)
+					scrollToBottomNextFrame()
+				end
+
+				local children = {}
+				for i, msg in ipairs(messages) do
+					children[i] = lumina.createElement("text", {
+						key = "msg-" .. i,
+						style = { height = 1 },
+					}, msg.content)
+				end
+
+				return lumina.createElement("vbox", {
+					style = { height = 24, width = 80 },
+				},
+					lumina.createElement("vbox", {
+						id = scrollId,
+						style = { overflow = "scroll", height = 20, width = 80 },
+					}, table.unpack(children)),
+					lumina.createElement("text", {
+						id = "load-btn",
+						style = { height = 1, width = 80 },
+						onClick = loadMessages,
+					}, "Load messages")
+				)
+			end,
+		})
+	`)
+	if err != nil {
+		t.Fatalf("RunString: %v", err)
+	}
+
+	app.RenderAll()
+
+	// Verify initial state: no messages, scroll container exists
+	engine := app.Engine()
+	scrollNode := engine.FindNodeByID("state-scroll")
+	if scrollNode == nil {
+		t.Fatal("scroll container not found after initial render")
+	}
+	t.Logf("Initial: ScrollHeight=%d H=%d", scrollNode.ScrollHeight, scrollNode.H)
+
+	// Click "Load messages" button
+	loadBtn := engine.FindNodeByID("load-btn")
+	if loadBtn == nil {
+		t.Fatal("load button not found")
+	}
+	engine.HandleClick(loadBtn.X+5, loadBtn.Y, "left")
+
+	// RenderDirty processes the state change (setMessages)
+	// The render will create 40 message nodes
+	// Then firePendingEffects doesn't apply here (no useEffect)
+	// BUT scrollToBottomNextFrame was called during onClick handler,
+	// which means setTimeout was registered during HandleClick
+	app.RenderDirty()
+
+	// Check scroll container has content now
+	scrollNode = engine.FindNodeByID("state-scroll")
+	if scrollNode == nil {
+		t.Fatal("scroll container not found after load")
+	}
+	maxScroll := computeMaxScrollYPublic(scrollNode)
+	t.Logf("After load+render: ScrollHeight=%d H=%d maxScroll=%d ScrollY=%d",
+		scrollNode.ScrollHeight, scrollNode.H, maxScroll, scrollNode.ScrollY)
+
+	if maxScroll <= 0 {
+		t.Fatal("maxScroll should be > 0 after loading 40 messages")
+	}
+
+	// Now fire timers — this should execute scrollToBottomNextFrame's setTimeout
+	time.Sleep(5 * time.Millisecond)
+	app.FireTimers()
+	app.RenderDirty()
+
+	// Check what the setTimeout callback saw
+	L.GetGlobal("_scrollTo_result2")
+	scrollToResult, _ := L.ToString(-1)
+	L.Pop(1)
+
+	L.GetGlobal("_scrollInfo_result2")
+	scrollInfoResult, _ := L.ToString(-1)
+	L.Pop(1)
+
+	t.Logf("setTimeout callback: scrollTo=%s, scrollInfo=%s", scrollToResult, scrollInfoResult)
+
+	if scrollToResult == "not_called" {
+		t.Fatal("setTimeout callback was never called")
+	}
+	if scrollToResult != "true" {
+		t.Errorf("CRITICAL: scrollTo returned %s — FindNodeByID failed inside setTimeout!", scrollToResult)
+	}
+	if scrollInfoResult == "nil" {
+		t.Errorf("CRITICAL: getScrollInfo returned nil from setTimeout callback!")
+	}
+
+	// Verify actual scroll position
+	scrollNode = engine.FindNodeByID("state-scroll")
+	if scrollNode != nil {
+		maxScroll = computeMaxScrollYPublic(scrollNode)
+		if scrollNode.ScrollY != maxScroll {
+			t.Errorf("ScrollY=%d != maxScroll=%d — scroll didn't reach bottom", scrollNode.ScrollY, maxScroll)
+		} else {
+			t.Logf("PASS: ScrollY=%d == maxScroll=%d — scrollTo from setTimeout works", scrollNode.ScrollY, maxScroll)
+		}
+	}
+}
+
+// TestScrollTo_ComponentPlaceholderFallback verifies that scrollTo works when
+// the scroll container is inside a defineComponent (like LuxScrollView).
+// In this case, FindNodeByID finds the component PLACEHOLDER node (type="component")
+// which does NOT have overflow=scroll. scrollTo must fall through to find the
+// actual scroll vbox child with the same ID.
+func TestScrollTo_ComponentPlaceholderFallback(t *testing.T) {
+	app, _, L := newLuaApp(t, 80, 24)
+
+	err := app.RunString(`
+		_placeholder_scrollTo = "not_called"
+		_placeholder_scrollInfo = "not_called"
+
+		-- Define a ScrollView component (like lux.scrollview)
+		-- The ID is passed through to the inner vbox
+		local ScrollView = lumina.defineComponent("TestScrollView", function(props)
+			local children = props.children or {}
+			return lumina.createElement("vbox", {
+				id = props.id,
+				style = {
+					overflow = "scroll",
+					height = props.style and props.style.height or 20,
+					width = props.style and props.style.width or 80,
+				},
+				onScroll = props.onScroll,
+			}, table.unpack(children))
+		end)
+
+		lumina.createComponent({
+			id = "placeholder-test",
+			name = "PlaceholderTest",
+			render = function(props)
+				local children = {}
+				for i = 1, 40 do
+					children[i] = lumina.createElement("text", {
+						key = "msg-" .. i,
+						style = { height = 1 },
+					}, "Message " .. i)
+				end
+
+				return lumina.createElement("vbox", {
+					style = { height = 24, width = 80 },
+				},
+					-- Use ScrollView defineComponent with id prop
+					-- This creates: placeholder(id="sc") → vbox(id="sc", overflow=scroll)
+					lumina.createElement(ScrollView, {
+						id = "test-sc",
+						style = { height = 20, width = 80, flex = 1 },
+						children = children,
+					}),
+					lumina.createElement("text", {
+						id = "scroll-btn",
+						style = { height = 1, width = 80 },
+						onClick = function()
+							local ok = lumina.scrollTo("test-sc", 999999)
+							_placeholder_scrollTo = tostring(ok)
+							local info = lumina.getScrollInfo("test-sc")
+							if info then
+								_placeholder_scrollInfo = "scrollY=" .. info.scrollY .. " maxScroll=" .. info.maxScroll
+							else
+								_placeholder_scrollInfo = "nil"
+							end
+						end,
+					}, "Scroll to bottom")
+				)
+			end,
+		})
+	`)
+	if err != nil {
+		t.Fatalf("RunString: %v", err)
+	}
+
+	app.RenderAll()
+
+	// Verify FindNodeByID finds something
+	engine := app.Engine()
+	node := engine.FindNodeByID("test-sc")
+	if node == nil {
+		t.Fatal("FindNodeByID('test-sc') returned nil")
+	}
+	t.Logf("FindNodeByID found: Type=%s Overflow=%q H=%d ScrollHeight=%d",
+		node.Type, node.Style.Overflow, node.H, node.ScrollHeight)
+
+	// Click the scroll button
+	btn := engine.FindNodeByID("scroll-btn")
+	if btn == nil {
+		t.Fatal("scroll button not found")
+	}
+	engine.HandleClick(btn.X+5, btn.Y, "left")
+	app.RenderDirty()
+
+	// Check results
+	L.GetGlobal("_placeholder_scrollTo")
+	scrollToResult, _ := L.ToString(-1)
+	L.Pop(1)
+
+	L.GetGlobal("_placeholder_scrollInfo")
+	scrollInfoResult, _ := L.ToString(-1)
+	L.Pop(1)
+
+	t.Logf("scrollTo=%s scrollInfo=%s", scrollToResult, scrollInfoResult)
+
+	if scrollToResult != "true" {
+		t.Errorf("CRITICAL: scrollTo returned %s — component placeholder fallback FAILED!", scrollToResult)
+		t.Logf("This means scrollTo found the component placeholder (overflow='') instead of the inner scroll vbox")
+	}
+	if scrollInfoResult == "nil" {
+		t.Errorf("CRITICAL: getScrollInfo returned nil — component placeholder fallback FAILED!")
+	} else {
+		t.Logf("PASS: scrollTo works through component placeholder (result=%s, info=%s)", scrollToResult, scrollInfoResult)
+	}
+}

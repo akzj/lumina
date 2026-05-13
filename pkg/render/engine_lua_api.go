@@ -105,9 +105,18 @@ func (e *Engine) RegisterLuaAPI() {
 		id := L.CheckString(1)
 		targetY := int(L.CheckInteger(2))
 		node := e.FindNodeByID(id)
-		if node == nil || node.Style.Overflow != "scroll" {
+		if node == nil {
 			L.PushBoolean(false)
 			return 1
+		}
+		// If the found node is a component placeholder (not overflow:scroll itself),
+		// search its children for the actual scroll container with the same ID.
+		if node.Style.Overflow != "scroll" {
+			node = e.findScrollNodeByID(node, id)
+			if node == nil {
+				L.PushBoolean(false)
+				return 1
+			}
 		}
 		maxScroll := computeMaxScrollY(node)
 		if targetY < 0 {
@@ -129,9 +138,18 @@ func (e *Engine) RegisterLuaAPI() {
 	L.PushFunction(func(L *lua.State) int {
 		id := L.CheckString(1)
 		node := e.FindNodeByID(id)
-		if node == nil || node.Style.Overflow != "scroll" {
+		if node == nil {
 			L.PushNil()
 			return 1
+		}
+		// If the found node is a component placeholder (not overflow:scroll itself),
+		// search its children for the actual scroll container with the same ID.
+		if node.Style.Overflow != "scroll" {
+			node = e.findScrollNodeByID(node, id)
+			if node == nil {
+				L.PushNil()
+				return 1
+			}
 		}
 		maxScroll := computeMaxScrollY(node)
 		bw := 0
