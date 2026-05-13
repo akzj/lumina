@@ -572,10 +572,8 @@ func (e *Engine) CreateRootComponent(id, name string, renderFnRef int64) {
 func (e *Engine) SetState(compID, key string, value any) {
 	comp := e.components[compID]
 	if comp == nil {
-		log.Printf("[DEBUG] SetState: component %q NOT FOUND (key=%q)", compID, key)
 		return
 	}
-	log.Printf("[DEBUG] SetState: comp=%q addr=%p key=%q value=%v (old=%v)", compID, comp, key, value, comp.State[key])
 	comp.SetState(key, value)
 	if comp.Dirty {
 		e.needsRender = true
@@ -857,9 +855,6 @@ func (e *Engine) renderComponent(comp *Component) {
 	// Set current component (for hooks like useState)
 	e.currentComp = comp
 	defer func() { e.currentComp = nil }()
-	if comp.IsRoot {
-		log.Printf("[DEBUG] renderComponent ROOT %q: addr=%p state[selAgent]=%v", comp.ID, comp, comp.State["selAgent"])
-	}
 
 	// Reset hook index for this render cycle
 	comp.hookIdx = 0
@@ -874,14 +869,6 @@ func (e *Engine) renderComponent(comp *Component) {
 	}
 
 	// Push props table
-	if comp.Props != nil {
-		if sa, ok := comp.Props["selectedAgent"]; ok {
-			log.Printf("[DEBUG] renderComponent %q: pushing props with selectedAgent=%v", comp.ID, sa)
-		}
-		if si, ok := comp.Props["selectedId"]; ok {
-			log.Printf("[DEBUG] renderComponent %q: pushing props with selectedId=%v", comp.ID, si)
-		}
-	}
 	pushMap(L, comp.Props)
 
 	// Clear dirty BEFORE calling render function.
@@ -978,26 +965,9 @@ func (e *Engine) reconcileChildComponents(parent *Component, node *Node) {
 		} else {
 			// Existing child: update props and mark dirty if changed.
 			if !propsEqual(child.Props, node.ComponentProps) {
-				// Debug: log prop changes for selectedAgent/selectedId
-				if sa, ok := node.ComponentProps["selectedAgent"]; ok {
-					oldSa := child.Props["selectedAgent"]
-					log.Printf("[DEBUG] reconcileChild %q: selectedAgent %v -> %v (dirty=true)", child.ID, oldSa, sa)
-				}
-				if si, ok := node.ComponentProps["selectedId"]; ok {
-					oldSi := child.Props["selectedId"]
-					log.Printf("[DEBUG] reconcileChild %q: selectedId %v -> %v (dirty=true)", child.ID, oldSi, si)
-				}
 				safeUnrefPropFuncRefsInProps(e, child.Props)
 				child.Props = node.ComponentProps
 				child.Dirty = true
-			} else {
-				// Debug: log when props are EQUAL (child NOT re-dirtied)
-				if _, ok := node.ComponentProps["selectedAgent"]; ok {
-					log.Printf("[DEBUG] reconcileChild %q: propsEqual=true, NOT dirtied (selectedAgent=%v)", child.ID, child.Props["selectedAgent"])
-				}
-				if _, ok := node.ComponentProps["selectedId"]; ok {
-					log.Printf("[DEBUG] reconcileChild %q: propsEqual=true, NOT dirtied (selectedId=%v)", child.ID, child.Props["selectedId"])
-				}
 			}
 		}
 		node.Component = child
@@ -1220,7 +1190,6 @@ func (e *Engine) renderInOrder() int {
 	count := 0
 	// Render root first (it creates the component placeholders)
 	if e.root != nil && e.root.Dirty {
-		log.Printf("[DEBUG] renderInOrder: rendering root %q", e.root.ID)
 		// Check for pointer divergence between e.root and e.components[e.root.ID]
 		if mapComp := e.components[e.root.ID]; mapComp != e.root {
 			log.Printf("[BUG] renderInOrder: e.root=%p != e.components[%q]=%p !!!", e.root, e.root.ID, mapComp)
@@ -1260,10 +1229,8 @@ func (e *Engine) renderInOrder() int {
 			// reconcileChildComponents and rendered in a subsequent iteration
 			// with correct props.
 			if ancestorDirty(comp) {
-				log.Printf("[DEBUG] renderInOrder: SKIPPING %q (ancestorDirty)", comp.ID)
 				continue
 			}
-			log.Printf("[DEBUG] renderInOrder: rendering %q (depth=%d)", comp.ID, componentDepth(comp))
 			e.renderComponent(comp)
 			count++
 		}
